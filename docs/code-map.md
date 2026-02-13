@@ -1,6 +1,6 @@
 # Code Map (approximate line ranges)
 
-All in `bma.html`. Line numbers shift as features are added.
+All in `index.html`. Line numbers shift as features are added.
 
 ## CSS (~1–1300)
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BMA (Block Model Atelier) is a single-file, client-side CSV block model analyzer for mining/geostatistics. Everything lives in `bma.html` (~3980 lines) — no dependencies, no build step, no server. It runs entirely in the browser using Web Workers and the File API.
+BMA (Block Model Atelier) is a single-file, client-side CSV block model analyzer for mining/geostatistics. Everything lives in `index.html` (~3980 lines) — no dependencies, no build step, no server. It runs entirely in the browser using Web Workers and the File API.
 
 Target users are resource geologists analyzing block model CSV exports from mining software (Isatis, Vulcan, Surpac, Leapfrog, Datamine).
 
@@ -17,11 +17,11 @@ There is no build system, package manager, or test suite. The entire app is one 
 node -e "..." # extract <script> content and WORKER_CODE, new Function() each
 ```
 
-**Running**: Open `bma.html` directly in a browser. No server needed.
+**Running**: Open `index.html` directly in a browser. No server needed.
 
 ## Architecture
 
-### File Layout (`bma.html`)
+### File Layout (`index.html`)
 
 | Section | Approx Lines | Description |
 |---------|-------------|-------------|
