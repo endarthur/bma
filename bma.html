@@ -1,0 +1,3981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BMA — Block Model Atelier</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='8' fill='%232d2d2d'/%3E%3Ccircle cx='32' cy='32' r='27' stroke='%23a0a0a0' fill='none' opacity='.4' transform='rotate(15,32,32)'/%3E%3Ctext x='32' y='44' font-family='Georgia,serif' font-size='28' font-weight='bold' fill='%23b87333' text-anchor='middle'%3EG%3C/text%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08090a;
+  --bg1: #0f1114;
+  --bg2: #161a1e;
+  --bg3: #1e2328;
+  --fg: #c8cdd3;
+  --fg-dim: #6b7280;
+  --fg-bright: #e8ecf0;
+  --amber: #e8a317;
+  --amber-dim: #b07a0e;
+  --amber-glow: #e8a31730;
+  --blue: #4a9eff;
+  --green: #34d399;
+  --red: #f87171;
+  --border: #252a30;
+  --mono: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
+body {
+  font-family: var(--mono);
+  background: var(--bg);
+  color: var(--fg);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+.app {
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  max-width: 800px;
+}
+.app.has-results {
+  max-width: none;
+  padding: 0;
+}
+.app.has-results > header,
+.app.has-results > .dropzone,
+.app.has-results > .about-section,
+.app.has-results > .landing-footer,
+.app.has-results > .error-msg { display: none; }
+header {
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+header h1 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--amber);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+header .sub {
+  font-size: 0.78rem;
+  color: var(--fg-dim);
+  margin-top: 0.2rem;
+}
+header .logo-mark {
+  width: 48px;
+  height: 48px;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+.about-section {
+  margin-top: 1.5rem;
+  font-size: 0.75rem;
+  color: var(--fg-dim);
+  line-height: 1.7;
+}
+.about-section h2 {
+  font-size: 0.78rem;
+  color: var(--fg-bright);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 0.6rem;
+}
+.about-section p { margin: 0 0 0.8rem; }
+.about-section code {
+  background: var(--bg1);
+  padding: 0.1rem 0.35rem;
+  border-radius: 2px;
+  font-size: 0.7rem;
+  color: var(--fg-bright);
+}
+.about-features {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem 1.5rem;
+  margin: 0.6rem 0;
+}
+.about-features span {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+.about-features span::before {
+  content: '·';
+  color: var(--amber-dim);
+  font-weight: 700;
+}
+.landing-footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.62rem;
+  color: var(--fg-dim);
+  opacity: 0.5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.landing-footer a {
+  color: var(--fg-dim);
+  text-decoration: none;
+}
+.landing-footer a:hover { color: var(--fg-bright); }
+
+/* Drop Zone */
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 6px;
+  padding: 3rem 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg1);
+  position: relative;
+}
+.dropzone:hover, .dropzone.drag-over {
+  border-color: var(--amber);
+  background: var(--amber-glow);
+}
+.dropzone.drag-over { box-shadow: 0 0 30px var(--amber-glow); }
+.dropzone .label {
+  font-size: 1rem;
+  color: var(--fg-dim);
+  font-weight: 300;
+}
+.dropzone .label strong { color: var(--amber); font-weight: 500; }
+.dropzone .hint {
+  font-size: 0.72rem;
+  color: var(--fg-dim);
+  margin-top: 0.5rem;
+  opacity: 0.6;
+}
+.dropzone.collapsed {
+  padding: 0.5rem 1rem;
+  border-style: solid;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.dropzone.collapsed .label { font-size: 0.75rem; }
+.dropzone.collapsed .hint { display: none; }
+.dropzone.collapsed .loaded-name {
+  color: var(--fg-bright);
+  font-weight: 500;
+  font-size: 0.75rem;
+}
+.dropzone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Progress */
+/* Dark scrollbars */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg1); }
+::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #2d333b; }
+::-webkit-scrollbar-corner { background: var(--bg1); }
+* { scrollbar-width: thin; scrollbar-color: var(--bg3) var(--bg1); }
+
+/* Preflight panel — full viewport overlay */
+/* Preflight panel — needs flex column for head + body to fill space */
+#panelPreflight.active { display: flex; flex-direction: column; overflow-y: hidden; }
+.preflight-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--amber);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.preflight-analyze-btn {
+  background: var(--amber);
+  color: var(--bg);
+  border: none;
+  padding: 0.4rem 1.4rem;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.preflight-analyze-btn:hover { opacity: 0.9; }
+.preflight-back-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.preflight-back-btn:hover { color: var(--fg-bright); border-color: var(--fg-dim); }
+.preflight-filename {
+  font-size: 0.7rem;
+  color: var(--fg-dim);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.preflight-zip {
+  font-size: 0.72rem;
+  color: var(--fg-dim);
+}
+.preflight-zip:empty { display: none; }
+.preflight-zip select {
+  background: var(--bg);
+  color: var(--fg-bright);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.25rem 0.4rem;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  margin: 0 0.3rem;
+}
+.preflight-zip .zip-size {
+  font-size: 0.65rem;
+  color: var(--fg-dim);
+  margin-left: 0.3rem;
+}
+
+/* Two-column body */
+.preflight-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* Left sidebar — column controls */
+.preflight-sidebar {
+  width: 300px;
+  min-width: 240px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pf-sidebar-section {
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.pf-sidebar-section-title {
+  font-size: 0.62rem;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.3rem;
+}
+.pf-xyz-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+.pf-xyz-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.68rem;
+  color: var(--fg-dim);
+}
+.pf-xyz-row .axis-label {
+  font-weight: 700;
+  color: var(--amber);
+  font-size: 0.7rem;
+}
+.pf-xyz-row select {
+  background: var(--bg);
+  color: var(--fg-bright);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.2rem 0.3rem;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  max-width: 90px;
+}
+.pf-col-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+.pf-col-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border-bottom: 1px solid var(--bg2);
+  font-size: 0.7rem;
+  transition: opacity 0.15s;
+}
+.pf-col-item:hover { background: var(--bg1); }
+.pf-col-item.skipped { opacity: 0.3; }
+.pf-col-item .col-idx {
+  color: var(--fg-dim);
+  opacity: 0.4;
+  font-size: 0.58rem;
+  min-width: 1.6em;
+  text-align: right;
+}
+.pf-col-check {
+  accent-color: var(--amber);
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.pf-col-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-bright);
+  font-weight: 500;
+}
+.pf-col-controls {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+.type-toggle {
+  font-size: 0.54rem;
+  padding: 0.06rem 0.25rem;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: none;
+  line-height: 1.2;
+}
+.type-toggle[data-type="numeric"] {
+  color: var(--blue);
+  border-color: var(--blue);
+}
+.type-toggle[data-type="categorical"] {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+.pf-filter-btn {
+  font-size: 0.5rem;
+  padding: 0.06rem 0.2rem;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-weight: 600;
+  background: none;
+  color: var(--fg-dim);
+  line-height: 1.2;
+  opacity: 0.5;
+}
+.pf-filter-btn.active {
+  opacity: 1;
+  color: var(--red, #f47067);
+  border-color: var(--red, #f47067);
+}
+.pf-filter-btn:hover { opacity: 0.8; }
+.pf-sidebar-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.pf-sidebar-actions button {
+  font-size: 0.6rem;
+  background: none;
+  border: none;
+  color: var(--blue);
+  cursor: pointer;
+  font-family: var(--mono);
+  padding: 0;
+}
+.pf-sidebar-actions button:hover { text-decoration: underline; }
+.pf-col-count {
+  font-size: 0.6rem;
+  color: var(--fg-dim);
+  margin-left: auto;
+}
+.pf-search {
+  width: 100%;
+  background: var(--bg);
+  color: var(--fg-bright);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.3rem 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  box-sizing: border-box;
+  margin-bottom: 0.3rem;
+}
+.pf-search::placeholder { color: var(--fg-dim); opacity: 0.5; }
+.pf-search:focus { outline: none; border-color: var(--amber); }
+.pf-bulk-filters {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.pf-bulk-filters button {
+  font-size: 0.58rem;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-family: var(--mono);
+  padding: 0.1rem 0.35rem;
+  border-radius: 2px;
+}
+.pf-bulk-filters button:hover { color: var(--fg-bright); border-color: var(--fg-dim); }
+.pf-filter-count {
+  font-size: 0.58rem;
+  color: var(--fg-dim);
+  margin-left: auto;
+}
+
+/* Right preview pane */
+.preflight-preview-wrap {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  min-width: 0;
+}
+.preflight-preview table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.preflight-preview th {
+  position: sticky;
+  top: 0;
+  background: var(--bg2);
+  border-bottom: 2px solid var(--border);
+  text-align: left;
+  z-index: 2;
+  color: var(--fg-bright);
+  font-weight: 500;
+}
+.preflight-preview th, .preflight-preview td {
+  padding: 0.25rem 0.6rem;
+  border-right: 1px solid var(--border);
+}
+.preflight-preview th:last-child, .preflight-preview td:last-child { border-right: none; }
+.preflight-preview tr { border-bottom: 1px solid #1a1e22; }
+.preflight-preview tr:nth-child(even) td { background: var(--bg); }
+.preflight-preview tr:nth-child(odd) td { background: var(--bg1); }
+.preflight-preview td { color: var(--fg-dim); }
+.preflight-preview td:first-child { color: var(--fg-dim); opacity: 0.5; }
+.preflight-preview .col-skipped { opacity: 0.2; }
+
+@media (max-width: 700px) {
+  .preflight-body { flex-direction: column; }
+  .preflight-sidebar {
+    width: 100%;
+    min-width: unset;
+    max-height: 35vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+/* Results */
+#results { display: none; margin-top: 0; }
+#results.active { display: flex; flex-direction: column; height: 100vh; }
+body.has-filter #results.active { height: calc(100vh - 4.5rem); }
+
+.results-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 1.2rem;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  z-index: 10;
+}
+.results-toolbar-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--amber);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.results-toolbar-right {
+  display: flex;
+  gap: 1.2rem;
+  align-items: center;
+}
+.results-toolbar-info {
+  font-size: 0.68rem;
+  color: var(--fg-dim);
+}
+
+/* Tabs */
+.results-tabs {
+  display: flex;
+  gap: 0;
+  background: var(--bg1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  padding: 0 1rem;
+}
+.results-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-dim);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 0.55rem 1rem;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: color 0.15s, border-color 0.15s;
+}
+.results-tab:hover { color: var(--fg-bright); }
+.results-tab.active {
+  color: var(--amber);
+  border-bottom-color: var(--amber);
+}
+.results-tab .tab-badge {
+  font-size: 0.58rem;
+  color: var(--fg-dim);
+  margin-left: 0.3rem;
+}
+
+/* Panels */
+.results-panels {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.results-panel {
+  display: none;
+  position: absolute;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.results-panel.active { display: block; }
+.panel-inner {
+  padding: 1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+/* Stats panel: let the table breathe */
+#panelStatistics .section { margin-bottom: 0; overflow: visible; }
+#panelStatistics .section-body { overflow: visible; }
+#panelStatistics .stats-table-wrap { max-height: none; overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch; }
+
+.section {
+  margin-bottom: 2rem;
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.section-head {
+  padding: 0.7rem 1rem;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--amber);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.section-head .badge {
+  background: var(--amber-dim);
+  color: var(--bg);
+  padding: 0.1rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+.section-body { padding: 1rem; }
+
+/* Calcol editor */
+.calcol-body { display: flex; flex-direction: column; gap: 1rem; }
+.calcol-list { display: flex; flex-direction: column; gap: 0.3rem; }
+.calcol-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 0.72rem;
+}
+.calcol-item .ci-name {
+  font-weight: 600;
+  color: var(--amber);
+  min-width: 100px;
+}
+.calcol-item .ci-expr {
+  flex: 1;
+  color: var(--fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calcol-item .ci-type {
+  font-size: 0.6rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 2px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.calcol-item .ci-type.num { color: var(--blue); }
+.calcol-item .ci-type.cat { color: var(--amber); }
+.calcol-item .ci-del {
+  background: none;
+  border: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0 0.3rem;
+  opacity: 0.5;
+}
+.calcol-item .ci-del:hover { color: var(--red); opacity: 1; }
+.calcol-item.editing { border-color: var(--amber); background: var(--amber-glow); }
+.calcol-item .ci-edit {
+  background: none;
+  border: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0 0.3rem;
+  opacity: 0.5;
+}
+.calcol-item .ci-edit:hover { color: var(--amber); opacity: 1; }
+.calcol-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.8rem;
+}
+.calcol-editor-row {
+  display: flex;
+  gap: 0.8rem;
+}
+.calcol-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.65rem;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex: 1;
+}
+.calcol-input, .calcol-select, .calcol-textarea {
+  background: var(--bg);
+  color: var(--fg-bright);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.35rem 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+}
+.calcol-input:focus, .calcol-textarea:focus { outline: none; border-color: var(--amber); }
+.calcol-textarea { resize: vertical; min-height: 2.4rem; }
+.calcol-select { max-width: 120px; }
+.calcol-preview {
+  font-size: 0.68rem;
+  color: var(--fg-dim);
+  max-height: 6rem;
+  overflow-y: auto;
+  padding: 0.3rem 0;
+}
+.calcol-preview table { width: 100%; border-collapse: collapse; }
+.calcol-preview th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--fg-dim);
+  border-bottom: 1px solid var(--border);
+  padding: 0.2rem 0.5rem;
+  font-size: 0.62rem;
+}
+.calcol-preview td {
+  padding: 0.15rem 0.5rem;
+  border-bottom: 1px solid var(--bg2);
+}
+.calcol-preview .pv-ok { color: var(--fg-bright); }
+.calcol-preview .pv-err { color: var(--red); font-style: italic; }
+.calcol-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+.calcol-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  padding: 0.3rem 0.7rem;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+}
+.calcol-btn:hover { color: var(--fg-bright); border-color: var(--fg-dim); }
+.calcol-btn-run {
+  border-color: var(--amber-dim);
+  color: var(--amber);
+}
+.calcol-btn-run:hover:not(:disabled) { background: var(--amber-glow); }
+.calcol-btn-run:disabled { opacity: 0.3; cursor: default; }
+.calcol-hint {
+  font-size: 0.65rem;
+  color: var(--red);
+}
+/* Autocomplete dropdown */
+.calcol-ac {
+  display: none;
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  max-height: 180px;
+  overflow-y: auto;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  z-index: 30;
+  min-width: 200px;
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.4);
+}
+.calcol-ac.open { display: block; }
+.ac-item {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.68rem;
+  cursor: pointer;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.ac-item:hover, .ac-item.selected { background: var(--bg1); }
+.ac-item .ac-label { color: var(--fg-bright); }
+.ac-item .ac-desc { color: var(--fg-dim); font-size: 0.55rem; }
+.ac-item.ac-fn .ac-label { color: var(--amber); }
+.ac-item.ac-calc .ac-label { color: var(--amber); font-style: italic; }
+/* Expression reference */
+.calcol-ref {
+  font-size: 0.65rem;
+  color: var(--fg-dim);
+  margin-top: 0.2rem;
+}
+.calcol-ref summary {
+  cursor: pointer;
+  color: var(--fg-dim);
+  opacity: 0.6;
+}
+.calcol-ref summary:hover { opacity: 1; }
+.calcol-ref-body {
+  padding: 0.4rem 0;
+  line-height: 1.6;
+}
+.calcol-ref-body p { margin: 0.15rem 0; }
+.calcol-ref-body code {
+  background: var(--bg);
+  padding: 0.05rem 0.25rem;
+  border-radius: 2px;
+  font-size: 0.62rem;
+}
+.calcol-tag {
+  font-size: 0.55rem;
+  color: var(--amber);
+  font-weight: 600;
+  margin-left: 0.3rem;
+  vertical-align: super;
+}
+.stats tr.calcol-row { background: rgba(184, 115, 51, 0.05); }
+
+/* Re-analysis overlay */
+.reanalysis-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 10, 0.75);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  z-index: 20;
+}
+.reanalysis-overlay .re-progress {
+  width: 200px;
+  height: 4px;
+  background: var(--bg2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.reanalysis-overlay .re-bar {
+  height: 100%;
+  background: var(--amber);
+  width: 0%;
+  transition: width 0.15s;
+}
+.reanalysis-overlay .re-label {
+  font-size: 0.72rem;
+  color: var(--fg-dim);
+}
+.reanalysis-overlay .re-cancel {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  padding: 0.25rem 0.8rem;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  margin-top: 0.3rem;
+}
+.reanalysis-overlay .re-cancel:hover { color: var(--fg-bright); border-color: var(--fg-dim); }
+
+/* File info bar */
+.file-info {
+  display: flex;
+  gap: 0.4rem 1.5rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+}
+.file-info .fi-item { display: flex; gap: 0.4rem; }
+.file-info .fi-label { color: var(--fg-dim); }
+.file-info .fi-value { color: var(--fg-bright); font-weight: 500; }
+
+/* Geometry grid */
+.geo-grid {
+  display: grid;
+  grid-template-columns: auto repeat(3, 1fr);
+  gap: 0;
+  font-size: 0.78rem;
+}
+.geo-grid .gh {
+  padding: 0.4rem 0.8rem;
+  color: var(--fg-dim);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+}
+.geo-grid .gl {
+  padding: 0.4rem 0.8rem;
+  color: var(--amber);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+.geo-grid .gc {
+  padding: 0.4rem 0.8rem;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s, color 0.15s;
+  user-select: text;
+}
+.geo-grid .gc:hover {
+  background: var(--bg3);
+  color: var(--fg-bright);
+}
+.geo-grid .gc.copied {
+  background: var(--amber-glow);
+  color: var(--amber);
+}
+.geo-grid .gc .copy-toast {
+  position: absolute;
+  top: -1.4rem;
+  right: 0.4rem;
+  font-size: 0.62rem;
+  color: var(--amber);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.geo-grid .gc.copied .copy-toast { opacity: 1; }
+.copy-table-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  padding: 0.1rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-family: var(--mono);
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-left: 0.5rem;
+}
+.copy-table-btn:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.copy-table-btn.copied {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+/* Stats table */
+.stats-table-wrap { overflow-x: auto; }
+table.stats {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+table.stats th {
+  text-align: right;
+  padding: 0.4rem 0.6rem;
+  color: var(--fg-dim);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  font-size: 0.7rem;
+}
+table.stats th:first-child { text-align: left; }
+table.stats td {
+  padding: 0.35rem 0.6rem;
+  text-align: right;
+  border-bottom: 1px solid var(--bg2);
+  white-space: nowrap;
+}
+table.stats td:first-child {
+  text-align: left;
+  color: var(--fg-bright);
+  font-weight: 500;
+}
+.cdf-link {
+  color: var(--fg-bright);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--border);
+  cursor: pointer;
+}
+.cdf-link:hover {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+table.stats tr:hover td { background: var(--bg2); }
+table.stats thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg1);
+  z-index: 2;
+}
+/* Sticky first column for horizontal scroll */
+table.stats th:first-child,
+table.stats td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--bg1);
+  z-index: 1;
+}
+table.stats thead th:first-child {
+  z-index: 3;
+}
+table.stats tr:hover td:first-child { background: var(--bg2); }
+
+/* Categories */
+.cdf-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0,0,0,0.7);
+  align-items: center;
+  justify-content: center;
+}
+.cdf-modal.active { display: flex; }
+.cdf-modal-inner {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: min(90vw, 700px);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cdf-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 1rem;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--amber);
+  letter-spacing: 0.04em;
+}
+.cdf-modal-body {
+  padding: 1rem;
+  overflow: auto;
+}
+.cdf-modal-body svg {
+  width: 100%;
+  height: auto;
+}
+.cdf-stats {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  font-size: 0.7rem;
+  color: var(--fg-dim);
+  margin-top: 0.8rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+}
+.cdf-stats span { white-space: nowrap; }
+.cdf-stats strong { color: var(--fg-bright); }
+.cat-list { display: flex; flex-direction: column; gap: 1rem; }
+.cat-item {
+  font-size: 0.78rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.cat-name {
+  color: var(--fg-bright);
+  font-weight: 500;
+  padding: 0.5rem 0.8rem;
+  display: flex;
+  justify-content: space-between;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+}
+.cat-name .unique-count { color: var(--fg-dim); font-weight: 400; }
+.cat-table-wrap {
+  max-height: 200px;
+  overflow-y: auto;
+}
+table.cat-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+table.cat-table td {
+  padding: 0.25rem 0.6rem;
+  border-bottom: 1px solid var(--bg2);
+}
+table.cat-table tr:hover td { background: var(--bg2); }
+table.cat-table tr.active td { background: var(--amber-glow); }
+table.cat-table td:first-child {
+  width: 28px;
+  text-align: center;
+  padding-right: 0;
+}
+table.cat-table td:nth-child(2) {
+  color: var(--fg);
+  word-break: break-all;
+}
+table.cat-table td:nth-child(3) {
+  text-align: right;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+table.cat-table td:nth-child(4) {
+  text-align: right;
+  color: var(--fg-dim);
+  white-space: nowrap;
+  width: 55px;
+}
+table.cat-table input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg);
+  cursor: pointer;
+  vertical-align: middle;
+  position: relative;
+}
+table.cat-table input[type="checkbox"]:hover {
+  border-color: var(--amber);
+}
+table.cat-table input[type="checkbox"]:checked {
+  background: var(--amber);
+  border-color: var(--amber);
+}
+table.cat-table input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: -1px;
+  left: 1.5px;
+  font-size: 0.65rem;
+  color: var(--bg);
+  font-weight: 700;
+}
+
+/* Filter footer - fixed at bottom */
+.filter-footer {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--bg1);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+}
+.filter-footer.active { display: block; }
+.filter-footer-inner {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+.filter-editor-body {
+  padding: 0.5rem 0;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.filter-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--amber);
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+.filter-expr-input {
+  flex: 1;
+  background: var(--bg);
+  color: var(--fg-bright);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.35rem 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  resize: none;
+  min-height: 1.6rem;
+  max-height: 4rem;
+}
+.filter-expr-input:focus {
+  outline: none;
+  border-color: var(--amber);
+}
+.filter-expr-input::placeholder { color: var(--fg-dim); opacity: 0.5; }
+.filter-btn-group { display: flex; gap: 0.4rem; flex-shrink: 0; }
+.filter-apply-btn {
+  background: var(--amber);
+  color: var(--bg);
+  border: none;
+  padding: 0.35rem 0.8rem;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.filter-apply-btn:hover { opacity: 0.9; }
+.filter-apply-btn:disabled { opacity: 0.4; cursor: default; }
+.filter-clear-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  padding: 0.35rem 0.6rem;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+}
+.filter-clear-btn:hover { border-color: var(--fg-dim); color: var(--fg); }
+.filter-hint {
+  padding: 0 0 0.4rem;
+  font-size: 0.62rem;
+  color: var(--fg-dim);
+  opacity: 0.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.filter-error {
+  padding: 0 0 0.4rem;
+  font-size: 0.7rem;
+  color: var(--red);
+  display: none;
+}
+.filter-error.active { display: block; }
+
+/* Body padding for fixed footer */
+body.has-filter { }
+
+/* XYZ column selector */
+.xyz-config {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  margin-bottom: 0.8rem;
+}
+.xyz-config label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--fg-dim);
+}
+.xyz-config .axis-label {
+  font-weight: 600;
+  color: var(--amber-dim);
+}
+.xyz-config .axis-value {
+  color: var(--fg-bright);
+}
+
+/* Timing */
+.timing { font-size: 0.7rem; color: var(--fg-dim); }
+
+/* Error */
+.error-msg {
+  color: var(--red);
+  background: #f8717115;
+  border: 1px solid #f8717140;
+  padding: 0.6rem 1rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  margin-top: 1rem;
+  display: none;
+}
+.error-msg.active { display: block; }
+
+@media (max-width: 700px) {
+  .app { padding: 1rem; }
+  .app.has-results { padding: 0; }
+  .geo-grid { font-size: 0.7rem; }
+  .geo-grid .gc, .geo-grid .gh, .geo-grid .gl { padding: 0.3rem 0.4rem; }
+  .about-features { grid-template-columns: 1fr; }
+  .landing-footer { flex-direction: column; gap: 0.2rem; text-align: center; }
+}
+
+/* Desktop layout */
+@media (min-width: 1024px) {
+  .app.has-results {
+    padding: 0;
+  }
+
+  .file-info { gap: 1.5rem; }
+
+  .filter-footer-inner { padding: 0 2.5rem; }
+  .filter-editor-body { align-items: center; }
+
+  .panel-inner {
+    padding: 1.5rem 2rem;
+    max-width: 1600px;
+  }
+
+  /* Summary panel: two-column layout */
+  #panelSummary .panel-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    align-items: start;
+  }
+}
+
+@media (min-width: 1400px) {
+  .filter-footer-inner { padding: 0 3rem; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>BMA — Block Model Atelier</h1>
+      <div class="sub">Stream-parse block model CSVs. Detect geometry, compute statistics.</div>
+    </div>
+    <svg class="logo-mark" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+      <rect width="64" height="64" rx="8" fill="var(--bg1)"/>
+      <defs><clipPath id="lc"><circle cx="300" cy="200" r="220" transform="rotate(15,300,200)"/></clipPath></defs>
+      <g opacity="0.4" stroke="var(--fg-dim)" stroke-width="7.8125" fill="none"
+         transform="translate(-6.4,6.4) scale(0.128) rotate(15,300,200)" clip-path="url(#lc)">
+        <path d="M 300.0 448.5 C 309.8 445.0, 318.9 440.5, 327.3 435.7 C 335.7 430.8, 343.3 425.2, 350.4 419.3 C 357.5 413.4, 363.9 406.9, 369.8 400.1 C 375.7 393.4, 381.0 386.2, 385.7 378.7 C 390.5 371.3, 394.7 363.6, 398.4 355.7 C 402.2 347.7, 405.3 339.5, 408.1 331.2 C 410.8 322.9, 413.1 314.4, 414.9 305.8 C 416.7 297.2, 418.1 288.4, 419.0 279.7 C 420.0 270.9, 420.4 262.0, 420.5 253.1 C 420.6 244.2, 420.3 235.3, 419.6 226.4 C 418.8 217.5, 417.7 208.6, 416.2 199.8 C 414.7 191.0, 412.8 182.2, 410.5 173.5 C 408.2 164.8, 405.5 156.2, 402.5 147.8 C 399.5 139.4, 396.1 131.0, 392.4 122.9 C 388.7 114.8, 384.6 106.8, 380.1 99.1 C 375.7 91.4, 370.9 83.9, 365.8 76.7 C 360.7 69.5, 355.2 62.5, 349.5 55.8 C 343.7 49.2, 337.6 42.8, 331.1 36.9 C 324.7 30.9, 317.9 25.3, 310.9 20.2 C 303.8 15.0, 296.4 10.3, 288.7 6.0 C 281.0 1.8, 272.9 -2.0, 264.6 -5.1 C 256.2 -8.2, 247.6 -10.9, 238.6 -12.7 C 229.7 -14.6, 220.4 -15.9, 210.8 -16.2 C 201.3 -16.6, 191.4 -16.3, 181.3 -14.8 C 171.2 -13.3, 160.8 -11.1, 150.3 -7.4 C 139.8 -3.8, 128.9 0.8, 118.2 7.2 C 107.5 13.6, 96.5 21.1, 86.0 30.7 C 75.6 40.3, 65.0 51.5, 55.7 64.8 C 46.4 78.2, 37.1 93.6, 30.2 110.9 C 23.3 128.1, 17.1 147.9, 14.2 168.4 C 11.3 188.9, 10.3 212.0, 12.7 233.9 C 15.0 255.9, 20.5 279.5, 28.4 300.3 C 36.2 321.2, 47.6 341.8, 59.8 359.2 C 71.9 376.6, 86.8 392.0, 101.3 404.7 C 115.8 417.3, 131.7 427.2, 146.6 435.2 C 161.6 443.1, 176.8 448.3, 191.0 452.2 C 205.2 456.1, 219.0 457.8, 231.9 458.5 C 244.8 459.2, 256.9 458.3, 268.3 456.6 Z"/>
+        <path d="M 300.0 448.5 C 294.4 446.5, 289.1 444.2, 284.1 441.7 C 279.0 439.3, 274.1 436.6, 269.5 433.7 C 264.8 430.9, 260.4 427.8, 256.2 424.6 C 252.0 421.4, 248.0 418.0, 244.1 414.5 C 240.3 411.0, 236.7 407.4, 233.3 403.6 C 229.9 399.9, 226.6 396.0, 223.5 392.0 C 220.5 388.0, 217.6 383.9, 214.9 379.7 C 212.2 375.5, 209.6 371.2, 207.3 366.9 C 204.9 362.5, 202.7 358.1, 200.6 353.6 C 198.6 349.1, 196.7 344.5, 194.9 339.8 C 193.2 335.2, 191.6 330.5, 190.2 325.8 C 188.8 321.0, 187.5 316.2, 186.3 311.4 C 185.2 306.6, 184.2 301.7, 183.4 296.8 C 182.5 291.9, 181.8 286.9, 181.2 282.0 C 180.7 277.0, 180.2 272.0, 179.9 267.0 C 179.6 262.0, 179.5 257.0, 179.5 252.0 C 179.4 246.9, 179.5 241.9, 179.8 236.9 C 180.0 231.8, 180.4 226.8, 180.9 221.8 C 181.3 216.7, 182.0 211.7, 182.7 206.7 C 183.5 201.7, 184.3 196.7, 185.3 191.7 C 186.3 186.8, 187.4 181.8, 188.6 176.9 C 189.9 172.0, 191.2 167.1, 192.7 162.2 C 194.2 157.4, 195.8 152.6, 197.5 147.8 C 199.2 143.0, 201.0 138.3, 202.9 133.6 C 204.9 128.9, 206.9 124.3, 209.1 119.7 C 211.2 115.2, 213.5 110.7, 215.9 106.2 C 218.3 101.8, 220.8 97.4, 223.4 93.1 C 226.0 88.8, 228.7 84.6, 231.6 80.5 C 234.4 76.3, 237.3 72.3, 240.4 68.3 C 243.4 64.3, 246.5 60.5, 249.8 56.7 C 253.0 52.9, 256.4 49.2, 259.9 45.7 C 263.3 42.1, 266.9 38.7, 270.6 35.3 C 274.2 32.0, 278.0 28.8, 281.9 25.7 C 285.7 22.6, 289.7 19.7, 293.8 16.9 C 297.9 14.1, 302.1 11.4, 306.3 8.9 C 310.6 6.4, 315.0 4.0, 319.5 1.8 C 324.0 -0.4, 328.6 -2.4, 333.2 -4.3 C 337.9 -6.1, 342.7 -7.8, 347.6 -9.2 C 352.5 -10.7, 357.5 -11.9, 362.5 -13.0 C 367.6 -14.0, 372.8 -14.8, 378.1 -15.4 C 383.3 -16.0, 388.7 -16.3, 394.2 -16.4 C 399.6 -16.4, 405.2 -16.2, 410.8 -15.7 C 416.5 -15.2, 422.2 -14.4, 428.0 -13.3 C 433.8 -12.1, 439.7 -10.7, 445.6 -8.8 C 451.5 -6.9, 457.5 -4.7, 463.6 -2.1 C 469.6 0.6, 475.7 3.6, 481.8 7.2 C 487.9 10.8, 494.0 14.7, 500.1 19.3 C 506.1 23.8, 512.2 28.9, 518.1 34.5 C 524.0 40.2, 529.8 46.4, 535.4 53.2 C 541.0 60.1, 546.5 67.6, 551.6 75.7 C 556.7 83.8, 561.6 92.6, 565.9 102.0 C 570.2 111.4, 574.2 121.5, 577.5 132.1 C 580.7 142.7, 583.5 154.0, 585.3 165.7 C 587.2 177.3, 588.4 189.6, 588.7 202.0 C 588.9 214.3, 588.3 227.2, 586.7 239.8 C 585.1 252.4, 582.5 265.3, 579.0 277.7 C 575.6 290.1, 571.1 302.4, 566.0 314.0 C 560.8 325.7, 554.7 337.0, 548.1 347.4 C 541.6 357.8, 534.2 367.7, 526.6 376.7 C 519.0 385.7, 510.8 393.9, 502.5 401.3 C 494.3 408.7, 485.7 415.3, 477.1 421.1 C 468.6 426.9, 459.9 431.9, 451.4 436.2 C 442.9 440.5, 434.3 444.0, 426.0 447.0 C 417.7 450.0, 409.5 452.2, 401.6 454.0 C 393.6 455.8, 385.9 457.0, 378.3 457.8 C 370.8 458.6, 363.6 458.8, 356.5 458.7 C 349.5 458.6, 342.7 458.1, 336.2 457.2 C 329.7 456.4, 323.4 455.2, 317.4 453.7 Z"/>
+        <path d="M 450.2 70.0 C 447.9 74.2, 445.0 78.2, 441.8 81.9 C 438.7 85.6, 435.0 89.1, 431.2 92.4 C 427.3 95.6, 423.1 98.6, 418.6 101.5 C 414.1 104.3, 409.4 106.8, 404.4 109.2 C 399.5 111.6, 394.3 113.7, 388.9 115.7 C 383.6 117.6, 378.0 119.3, 372.4 120.9 C 366.7 122.4, 360.9 123.7, 355.0 124.9 C 349.1 126.0, 343.1 127.0, 337.0 127.7 C 330.9 128.5, 324.8 129.1, 318.6 129.4 C 312.4 129.8, 306.2 130.0, 300.0 130.0 C 293.8 130.0, 287.6 129.8, 281.4 129.4 C 275.2 129.1, 269.1 128.5, 263.0 127.7 C 256.9 127.0, 250.9 126.0, 245.0 124.9 C 239.1 123.7, 233.3 122.4, 227.6 120.9 C 222.0 119.3, 216.4 117.6, 211.1 115.7 C 205.7 113.7, 200.5 111.6, 195.6 109.2 C 190.6 106.8, 185.9 104.3, 181.4 101.5 C 176.9 98.6, 172.7 95.6, 168.8 92.4 C 165.0 89.1, 161.3 85.6, 158.2 81.9 C 155.0 78.2, 152.1 74.2, 149.8 70.0 C 147.4 65.8, 145.4 61.3, 144.1 56.6 C 142.7 51.8, 141.8 46.9, 141.6 41.7 C 141.4 36.5, 141.7 31.0, 142.9 25.4 C 144.1 19.7, 145.9 13.8, 148.7 7.9 C 151.5 1.9, 155.1 -4.3, 159.7 -10.4 C 164.4 -16.4, 169.9 -22.7, 176.6 -28.5 C 183.3 -34.4, 191.0 -40.3, 199.7 -45.4 C 208.4 -50.6, 218.4 -55.5, 228.9 -59.4 C 239.5 -63.3, 251.2 -66.7, 263.0 -68.8 C 274.9 -70.9, 287.7 -72.1, 300.0 -72.1 C 312.3 -72.1, 325.1 -70.9, 337.0 -68.8 C 348.8 -66.7, 360.5 -63.3, 371.1 -59.4 C 381.6 -55.5, 391.6 -50.6, 400.3 -45.4 C 409.0 -40.3, 416.7 -34.4, 423.4 -28.5 C 430.1 -22.7, 435.6 -16.4, 440.3 -10.4 C 444.9 -4.3, 448.5 1.9, 451.3 7.9 C 454.1 13.8, 455.9 19.7, 457.1 25.4 C 458.3 31.0, 458.6 36.5, 458.4 41.7 C 458.2 46.9, 457.3 51.8, 455.9 56.6 Z"/>
+        <path d="M 119.0 356.7 C 123.1 355.7, 127.6 354.9, 132.3 354.3 C 137.0 353.6, 142.1 353.1, 147.3 352.7 C 152.5 352.3, 157.9 352.0, 163.6 351.7 C 169.2 351.4, 175.0 351.3, 181.0 351.1 C 187.0 351.0, 193.1 350.9, 199.4 350.9 C 205.7 350.8, 212.1 350.8, 218.6 350.8 C 225.1 350.7, 231.7 350.7, 238.4 350.8 C 245.1 350.8, 251.9 350.8, 258.7 350.8 C 265.5 350.8, 272.4 350.8, 279.3 350.8 C 286.1 350.8, 293.1 350.8, 300.0 350.8 C 306.9 350.8, 313.9 350.8, 320.7 350.8 C 327.6 350.8, 334.5 350.8, 341.3 350.8 C 348.1 350.8, 354.9 350.8, 361.6 350.8 C 368.3 350.7, 374.9 350.7, 381.4 350.8 C 387.9 350.8, 394.3 350.8, 400.6 350.9 C 406.9 350.9, 413.0 351.0, 419.0 351.1 C 425.0 351.3, 430.8 351.4, 436.4 351.7 C 442.1 352.0, 447.5 352.3, 452.7 352.7 C 457.9 353.1, 463.0 353.6, 467.7 354.3 C 472.4 354.9, 476.9 355.7, 481.0 356.7 C 485.2 357.7, 489.1 358.8, 492.5 360.3 C 495.9 361.7, 499.1 363.3, 501.6 365.4 C 504.2 367.5, 506.4 369.8, 507.8 372.7 C 509.3 375.6, 510.3 378.8, 510.3 382.9 C 510.2 386.9, 509.7 391.3, 507.5 396.8 C 505.3 402.2, 502.5 408.4, 497.1 415.5 C 491.8 422.6, 485.4 430.9, 475.4 439.5 C 465.4 448.2, 453.3 458.5, 436.9 467.3 C 420.5 476.2, 399.9 486.5, 377.1 492.5 C 354.3 498.4, 325.7 503.2, 300.0 503.2 C 274.3 503.2, 245.7 498.4, 222.9 492.5 C 200.1 486.5, 179.5 476.2, 163.1 467.3 C 146.7 458.5, 134.6 448.2, 124.6 439.5 C 114.6 430.9, 108.2 422.6, 102.9 415.5 C 97.5 408.4, 94.7 402.2, 92.5 396.8 C 90.3 391.3, 89.8 386.9, 89.7 382.9 C 89.7 378.8, 90.7 375.6, 92.2 372.7 C 93.6 369.8, 95.8 367.5, 98.4 365.4 C 100.9 363.3, 104.1 361.7, 107.5 360.3 Z"/>
+        <path d="M 520.0 200.0 C 515.9 202.4, 511.6 204.6, 507.3 206.7 C 502.9 208.8, 498.3 210.8, 493.7 212.7 C 489.0 214.5, 484.2 216.3, 479.3 218.0 C 474.5 219.7, 469.4 221.3, 464.3 222.7 C 459.2 224.2, 454.0 225.6, 448.7 227.0 C 443.4 228.3, 438.0 229.5, 432.5 230.6 C 427.0 231.8, 421.4 232.9, 415.8 233.8 C 410.2 234.8, 404.5 235.7, 398.7 236.5 C 393.0 237.4, 387.1 238.1, 381.3 238.8 C 375.4 239.5, 369.5 240.1, 363.5 240.6 C 357.6 241.1, 351.5 241.5, 345.5 241.9 C 339.5 242.3, 333.4 242.6, 327.4 242.8 C 321.3 243.0, 315.2 243.2, 309.1 243.2 C 303.1 243.3, 296.9 243.3, 290.9 243.2 C 284.8 243.2, 278.7 243.0, 272.6 242.8 C 266.6 242.6, 260.5 242.3, 254.5 241.9 C 248.5 241.5, 242.4 241.1, 236.5 240.6 C 230.5 240.1, 224.6 239.5, 218.7 238.8 C 212.9 238.1, 207.0 237.4, 201.3 236.5 C 195.5 235.7, 189.8 234.8, 184.2 233.8 C 178.6 232.9, 173.0 231.8, 167.5 230.6 C 162.0 229.5, 156.6 228.3, 151.3 227.0 C 146.0 225.6, 140.8 224.2, 135.7 222.7 C 130.6 221.3, 125.5 219.7, 120.7 218.0 C 115.8 216.3, 111.0 214.5, 106.3 212.7 C 101.7 210.8, 97.1 208.8, 92.7 206.7 C 88.4 204.6, 84.1 202.4, 80.0 200.0 C 75.9 197.6, 71.9 195.2, 68.2 192.5 C 64.4 189.9, 60.8 187.1, 57.4 184.1 C 53.9 181.2, 50.7 178.1, 47.7 174.7 C 44.7 171.3, 41.8 167.8, 39.3 163.9 C 36.7 160.0, 34.4 156.0, 32.4 151.5 C 30.4 147.0, 28.6 142.3, 27.4 136.9 C 26.1 131.6, 25.1 126.0, 24.7 119.6 C 24.4 113.1, 24.4 106.3, 25.4 98.3 C 26.5 90.4, 27.9 81.8, 31.2 71.7 C 34.6 61.5, 38.2 50.5, 45.6 37.5 C 53.0 24.4, 60.9 9.5, 75.7 -6.5 C 90.5 -22.5, 107.8 -42.8, 134.6 -58.6 C 161.4 -74.4, 198.2 -94.2, 236.3 -101.3 C 274.5 -108.4, 325.5 -108.4, 363.7 -101.3 C 401.8 -94.2, 438.6 -74.4, 465.4 -58.6 C 492.2 -42.8, 509.5 -22.5, 524.3 -6.5 C 539.1 9.5, 547.0 24.4, 554.4 37.5 C 561.8 50.5, 565.4 61.5, 568.8 71.7 C 572.1 81.8, 573.5 90.4, 574.6 98.3 C 575.6 106.3, 575.6 113.1, 575.3 119.6 C 574.9 126.0, 573.9 131.6, 572.6 136.9 C 571.4 142.3, 569.6 147.0, 567.6 151.5 C 565.6 156.0, 563.3 160.0, 560.7 163.9 C 558.2 167.8, 555.3 171.3, 552.3 174.7 C 549.3 178.1, 546.1 181.2, 542.6 184.1 C 539.2 187.1, 535.6 189.9, 531.8 192.5 Z"/>
+      </g>
+      <circle cx="32" cy="32" r="28.16" stroke="var(--fg-dim)" stroke-width="1" fill="none" opacity="0.4" transform="rotate(15,32,32)"/>
+      <text x="32" y="44" font-family="Georgia,serif" font-size="28" font-weight="bold" fill="var(--amber)" text-anchor="middle" opacity="0.7">GCU</text>
+    </svg>
+  </header>
+
+  <div class="dropzone" id="dropzone">
+    <div class="label">Drop a CSV file here, or <strong>click to browse</strong></div>
+    <div class="hint">Supports .csv, .txt, .dat, .zip — streamed, not loaded into memory</div>
+    <input type="file" id="fileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP">
+  </div>
+
+  <div class="about-section">
+    <h2>What is this?</h2>
+    <p>BMA is a client-side block model inspector. Drop a CSV (or zipped CSV) exported from Isatis, Vulcan, Surpac, Leapfrog, Datamine, or any other mining package and get instant summary statistics, geometry detection, and categorical breakdowns — all without uploading anything to a server.</p>
+
+    <p>Everything runs in your browser using streaming File API and Web Workers. Files are parsed row by row, never fully loaded into memory, so multi-gigabyte models work fine on modest hardware.</p>
+
+    <h2>Features</h2>
+    <div class="about-features">
+      <span>Streaming single-pass parsing</span>
+      <span>Auto-detect delimiters and types</span>
+      <span>XYZ coordinate detection</span>
+      <span>Grid geometry and fill ratio</span>
+      <span>Sub-block model detection</span>
+      <span><a href="https://doi.org/10.1080/00401706.1962.10490022" target="_blank">Welford's</a> online statistics</span>
+      <span>Approximate quantiles (<a href="https://github.com/tdunning/t-digest" target="_blank">t-digest</a>)</span>
+      <span>Skewness, kurtosis, CV%</span>
+      <span>Per-column zero/negative filters</span>
+      <span>CDF plots from centroids</span>
+      <span>Categorical value counts</span>
+      <span>Row filter expressions</span>
+      <span>ZIP streaming decompression</span>
+      <span>Preflight column controls</span>
+    </div>
+
+    <p>Columns are classified as numeric or categorical automatically. The preflight panel lets you override types, select coordinate axes, enable/disable columns, and set per-column value filters before analysis. Filter expressions use JavaScript syntax on row objects: <code>r.LITO === 'BIF' && r.fe_pct > 30</code>.</p>
+  </div>
+
+  <div class="landing-footer">
+    <span>© 2026 <a href="https://endarthur.github.io" target="_blank">Arthur Endlein</a> — <a href="https://gentropic.org" target="_blank">Geoscientific Chaos Union</a></span>
+    <span><a href="https://opensource.org/license/mit" target="_blank">MIT License</a> — use, modify, distribute freely</span>
+  </div>
+
+  <div class="error-msg" id="errorMsg"></div>
+
+  <div id="results">
+    <div class="results-toolbar" id="resultsToolbar">
+      <div style="display:flex;align-items:center;gap:0.8rem">
+        <button class="preflight-back-btn" id="backToPreflight" title="Close file">✕</button>
+        <span class="results-toolbar-title" id="resultsFilename"></span>
+      </div>
+      <div class="results-toolbar-right">
+        <span id="resultsRowInfo" class="results-toolbar-info"></span>
+        <span id="resultsTimeInfo" class="results-toolbar-info"></span>
+      </div>
+    </div>
+    <div class="results-tabs" id="resultsTabs">
+      <button class="results-tab active" data-tab="preflight">Preflight</button>
+      <button class="results-tab" data-tab="summary">Summary</button>
+      <button class="results-tab" data-tab="calcols">Calc</button>
+      <button class="results-tab" data-tab="statistics">Statistics</button>
+      <button class="results-tab" data-tab="categories">Categories</button>
+    </div>
+    <div class="results-panels">
+      <div class="results-panel active" id="panelPreflight" data-tab="preflight">
+        <div class="preflight-head">
+          <span class="preflight-zip" id="preflightZip"></span>
+          <button class="preflight-analyze-btn" id="preflightAnalyze">Analyze ▶</button>
+        </div>
+        <div class="preflight-body">
+          <div class="preflight-sidebar" id="preflightSidebar"></div>
+          <div class="preflight-preview-wrap">
+            <div class="preflight-preview" id="preflightPreview"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="results-panel" id="panelSummary" data-tab="summary">
+        <div class="panel-inner">
+          <div class="section section--geo" id="geoSection">
+            <div class="section-head">
+              Grid Geometry
+              <span><span class="badge" id="geoBadge"></span><button class="copy-table-btn" id="copyGeoBtn" title="Copy as table">Copy table</button></span>
+            </div>
+            <div class="section-body">
+              <div class="xyz-config" id="xyzConfig"></div>
+              <div id="geoContent"></div>
+            </div>
+          </div>
+
+          <div class="section section--file">
+            <div class="section-head">File Info</div>
+            <div class="section-body">
+              <div class="file-info" id="fileInfo"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="results-panel" id="panelCalcols" data-tab="calcols">
+        <div class="panel-inner">
+          <div class="section">
+            <div class="section-head">
+              Calculated Columns
+              <span class="badge" id="calcolBadge">0</span>
+            </div>
+            <div class="section-body calcol-body">
+              <div class="calcol-list" id="calcolList"></div>
+              <div class="calcol-editor" id="calcolEditor">
+                <div class="calcol-editor-row">
+                  <label class="calcol-label">Name
+                    <input type="text" id="calcolName" class="calcol-input" placeholder="e.g. fe_corrected" spellcheck="false" autocomplete="off">
+                  </label>
+                  <label class="calcol-label">Type
+                    <select id="calcolType" class="calcol-select">
+                      <option value="numeric">Numeric</option>
+                      <option value="categorical">Categorical</option>
+                    </select>
+                  </label>
+                </div>
+                <label class="calcol-label" style="position:relative">Expression
+                  <textarea id="calcolExpr" class="calcol-textarea" rows="2" placeholder="e.g. r.fe_pct * r.tonnes" spellcheck="false"></textarea>
+                  <div class="calcol-ac" id="calcolAc"></div>
+                </label>
+                <div class="calcol-preview" id="calcolPreview"></div>
+                <div class="calcol-actions">
+                  <button class="calcol-btn" id="calcolAdd">Add column</button>
+                  <button class="calcol-btn" id="calcolCancel" style="display:none">Cancel</button>
+                  <button class="calcol-btn calcol-btn-run" id="calcolRun" disabled>Re-analyze with calcols</button>
+                  <span class="calcol-hint" id="calcolError"></span>
+                </div>
+                <details class="calcol-ref">
+                  <summary>Expression reference</summary>
+                  <div class="calcol-ref-body">
+                    <p>Row object: <code>r</code> — access columns as <code>r.col</code> or <code>r["col name"]</code></p>
+                    <p><b>Math</b> (no <code>Math.</code> prefix needed): <code>abs</code> <code>sqrt</code> <code>pow</code> <code>log</code> <code>log10</code> <code>exp</code> <code>min</code> <code>max</code> <code>round</code> <code>floor</code> <code>ceil</code> <code>PI</code></p>
+                    <p><b>Helpers</b> (also as <code>fn.*</code>): <code>cap(v, hi)</code> upper cap · <code>clamp(v, lo, hi)</code> · <code>ifnull(v, fallback)</code> · <code>between(v, lo, hi)</code> boolean · <code>remap(v, {"a":1, "b":2})</code> lookup · <code>fn.round(v, decimals)</code></p>
+                    <p><b>Conditional:</b> <code>r.fe &gt; 60 ? "ore" : "waste"</code></p>
+                    <p><b>String:</b> <code>r.LITO.startsWith("BIF")</code> · <code>r.LITO.includes("x")</code></p>
+                    <p><b>Calcols can reference earlier calcols:</b> <code>r.my_calcol</code></p>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="results-panel" id="panelStatistics" data-tab="statistics">
+        <div class="panel-inner">
+          <div class="section section--stats">
+            <div class="section-head">
+              Numeric Column Statistics
+              <span class="badge" id="statsBadge"></span>
+            </div>
+            <div class="section-body">
+              <div class="stats-table-wrap" id="statsContent"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="results-panel" id="panelCategories" data-tab="categories">
+        <div class="panel-inner">
+          <div class="section section--cat" id="catSection">
+            <div class="section-head">
+              Categorical Columns
+              <span class="badge" id="catBadge"></span>
+            </div>
+            <div class="section-body">
+              <div class="cat-list" id="catContent"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="cdf-modal" id="cdfModal">
+  <div class="cdf-modal-inner">
+    <div class="cdf-modal-head">
+      <span id="cdfTitle"></span>
+      <button class="preflight-back-btn" id="cdfClose" title="Close">✕</button>
+    </div>
+    <div class="cdf-modal-body" id="cdfBody"></div>
+  </div>
+</div>
+
+<div class="filter-footer" id="filterEditor">
+  <div class="filter-footer-inner">
+    <div class="filter-editor-body">
+      <div class="filter-label">FILTER</div>
+      <textarea class="filter-expr-input" id="filterExpr" rows="1" placeholder='e.g. r.Fe > 60 && r["SiO2_%"] < 5' spellcheck="false"></textarea>
+      <div class="filter-btn-group">
+        <button class="filter-apply-btn" id="filterApply">Apply</button>
+        <button class="filter-clear-btn" id="filterClear">Clear</button>
+      </div>
+    </div>
+    <div class="filter-hint" id="filterHint">Row object: <strong>r</strong> — Pure JS expressions. Use r.col for simple names, r["col"] for special names.</div>
+    <div class="filter-error" id="filterError"></div>
+  </div>
+</div>
+
+<script>
+// ─── Worker Code (inlined as Blob) ────────────────────────────────────
+const WORKER_CODE = `
+const DELIMITERS = [',', '\\t', ';', '|', ' '];
+const MAX_UNIQUE_CAT = 500;
+
+// XYZ name patterns
+const XYZ_PATTERNS = {
+  x: [/^x$/i, /^xc$/i, /^x[_-]?cent(re|er)?$/i, /^mid[_-]?x$/i, /^centroid[_-]?x$/i, /^east(ing)?$/i, /^x[_-]?coord$/i, /^xcenter$/i, /^xmid$/i, /^xblock$/i],
+  y: [/^y$/i, /^yc$/i, /^y[_-]?cent(re|er)?$/i, /^mid[_-]?y$/i, /^centroid[_-]?y$/i, /^north(ing)?$/i, /^y[_-]?coord$/i, /^ycenter$/i, /^ymid$/i, /^yblock$/i],
+  z: [/^z$/i, /^zc$/i, /^z[_-]?cent(re|er)?$/i, /^mid[_-]?z$/i, /^centroid[_-]?z$/i, /^elev(ation)?$/i, /^rl$/i, /^z[_-]?coord$/i, /^zcenter$/i, /^zmid$/i, /^zblock$/i, /^level$/i, /^bench$/i]
+};
+
+function detectDelimiter(lines) {
+  let best = ',', bestScore = -1;
+  for (const d of DELIMITERS) {
+    const counts = lines.map(l => l.split(d).length);
+    if (counts[0] < 2) continue;
+    const allSame = counts.every(c => c === counts[0]);
+    const score = allSame ? counts[0] * 1000 + counts.length : counts[0];
+    if (score > bestScore) { bestScore = score; best = d; }
+  }
+  return best;
+}
+
+const NULL_SENTINELS = new Set(['', 'NA', 'NaN', 'na', 'nan', 'N/A', 'n/a', 'null', 'NULL', '*', '-', '-999', '-99', '#N/A', 'VOID', 'void', '-1.0e+32', '-1e+32', '1e+31', '-9999', '-99999']);
+
+function guessXYZ(header, types) {
+  const result = { x: -1, y: -1, z: -1 };
+  for (const axis of ['x', 'y', 'z']) {
+    for (const pat of XYZ_PATTERNS[axis]) {
+      const idx = header.findIndex((h, i) => types[i] === 'numeric' && pat.test(h.trim()));
+      if (idx >= 0) { result[axis] = idx; break; }
+    }
+  }
+  // Fallback: if not all found, look for first 3 numeric columns
+  if (result.x < 0 || result.y < 0 || result.z < 0) {
+    const numCols = header.map((h, i) => i).filter(i => types[i] === 'numeric');
+    if (numCols.length >= 3 && result.x < 0 && result.y < 0 && result.z < 0) {
+      result.x = numCols[0]; result.y = numCols[1]; result.z = numCols[2];
+    }
+  }
+  return result;
+}
+
+function computeGeometry(xVals, yVals, zVals, decimals) {
+  const axes = { x: xVals, y: yVals, z: zVals };
+  const result = {};
+  for (const [axis, vals] of Object.entries(axes)) {
+    if (!vals || vals.length === 0) { result[axis] = null; continue; }
+    const dp = decimals[axis];
+    const rnd = (v) => {
+      if (v === null) return null;
+      const factor = Math.pow(10, dp);
+      return Math.round(v * factor) / factor;
+    };
+    const sorted = Float64Array.from(vals).sort();
+    const min = sorted[0], max = sorted[sorted.length - 1];
+    const count = sorted.length;
+
+    // Collect all spacings and their frequencies
+    const spacingCounts = {};
+    if (count > 1) {
+      for (let i = 1; i < sorted.length; i++) {
+        const d = rnd(sorted[i] - sorted[i - 1]);
+        if (d > 0) spacingCounts[d] = (spacingCounts[d] || 0) + 1;
+      }
+    }
+
+    const spacings = Object.entries(spacingCounts)
+      .map(([s, c]) => ({ size: Number(s), count: c }))
+      .sort((a, b) => b.count - a.count);
+
+    let parentSize = null;
+    let subBlockSizes = [];
+    let isSubBlocked = false;
+
+    if (spacings.length === 0) {
+      // Single unique value
+    } else if (spacings.length === 1) {
+      // Regular grid
+      parentSize = spacings[0].size;
+    } else {
+      // Multiple spacings — check for sub-block pattern
+      // Parent block = largest spacing that appears frequently
+      // "frequently" = at least 5% of total spacings
+      const totalSpacings = spacings.reduce((s, x) => s + x.count, 0);
+      const significant = spacings.filter(s => s.count / totalSpacings > 0.02);
+
+      if (significant.length === 1) {
+        parentSize = significant[0].size;
+      } else {
+        // Find the largest significant spacing as candidate parent
+        const sorted_sig = significant.slice().sort((a, b) => b.size - a.size);
+        const candidateParent = sorted_sig[0].size;
+
+        // Check if smaller spacings are clean divisors of the parent
+        const subs = [];
+        let allDivisors = true;
+        for (const s of sorted_sig.slice(1)) {
+          const ratio = candidateParent / s.size;
+          const roundedRatio = Math.round(ratio);
+          if (roundedRatio >= 2 && Math.abs(ratio - roundedRatio) < 0.05) {
+            subs.push({ size: s.size, ratio: roundedRatio, count: s.count });
+          } else {
+            allDivisors = false;
+          }
+        }
+
+        if (subs.length > 0) {
+          // Sub-block model detected
+          parentSize = rnd(candidateParent);
+          subBlockSizes = subs.map(s => ({ size: rnd(s.size), ratio: s.ratio, count: s.count }));
+          isSubBlocked = true;
+        } else {
+          // Irregular spacings — use most frequent as best guess
+          parentSize = spacings[0].size;
+        }
+      }
+    }
+
+    const origin = rnd(min);
+    const maxR = rnd(max);
+    const nBlocks = parentSize ? Math.round((maxR - origin) / parentSize) + 1 : count;
+    const extent = parentSize ? rnd(nBlocks * parentSize) : rnd(maxR - origin);
+    const minBlockSize = spacings.length > 0 ? spacings[spacings.length - 1].size : null;
+
+    result[axis] = {
+      origin,
+      max: maxR,
+      blockSize: parentSize,
+      minBlockSize: isSubBlocked ? rnd(Math.min(...subBlockSizes.map(s => s.size))) : null,
+      subBlockSizes: isSubBlocked ? subBlockSizes : [],
+      isSubBlocked,
+      uniqueCount: count,
+      gridCount: nBlocks,
+      extent,
+      decimals: dp
+    };
+  }
+  return result;
+}
+
+// Round to n significant figures for display
+function sigfig(val, n) {
+  if (val === 0) return 0;
+  const d = Math.ceil(Math.log10(Math.abs(val)));
+  const power = n - d;
+  const mag = Math.pow(10, power);
+  return Math.round(val * mag) / mag;
+}
+
+// ─── ZIP support ──────────────────────────────────────────────────────
+const CSV_EXTENSIONS = /\\.(csv|txt|dat|tsv)$/i;
+
+async function readBytes(file, offset, length) {
+  const blob = file.slice(offset, offset + length);
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+function readUint16(buf, off) { return buf[off] | (buf[off+1] << 8); }
+function readUint32(buf, off) { return (buf[off] | (buf[off+1] << 8) | (buf[off+2] << 16) | (buf[off+3] << 24)) >>> 0; }
+
+async function extractCSVFromZip(file, targetEntry) {
+  self.postMessage({ type: 'progress', percent: 0, rowCount: 0, note: 'Reading ZIP headers...' });
+
+  // Read last 64KB to find End of Central Directory
+  const tailSize = Math.min(65557, file.size);
+  const tail = await readBytes(file, file.size - tailSize, tailSize);
+
+  let eocdPos = -1;
+  for (let i = tail.length - 22; i >= 0; i--) {
+    if (readUint32(tail, i) === 0x06054b50) { eocdPos = i; break; }
+  }
+  if (eocdPos < 0) throw new Error('Not a valid ZIP file (EOCD not found)');
+
+  const cdEntries = readUint16(tail, eocdPos + 8);
+  const cdSize = readUint32(tail, eocdPos + 12);
+  const cdOffset = readUint32(tail, eocdPos + 16);
+
+  // Read central directory
+  const cd = await readBytes(file, cdOffset, cdSize);
+  const entries = [];
+  let pos = 0;
+  for (let i = 0; i < cdEntries && pos < cd.length; i++) {
+    if (readUint32(cd, pos) !== 0x02014b50) break;
+    const method = readUint16(cd, pos + 10);
+    const compSize = readUint32(cd, pos + 20);
+    const uncompSize = readUint32(cd, pos + 24);
+    const nameLen = readUint16(cd, pos + 28);
+    const extraLen = readUint16(cd, pos + 30);
+    const commentLen = readUint16(cd, pos + 32);
+    const localOffset = readUint32(cd, pos + 42);
+    const name = new TextDecoder().decode(cd.slice(pos + 46, pos + 46 + nameLen));
+    entries.push({ name, method, compSize, uncompSize, localOffset });
+    pos += 46 + nameLen + extraLen + commentLen;
+  }
+
+  // Find CSV entry: use targetEntry if specified, otherwise first CSV
+  let csvEntry;
+  if (targetEntry) {
+    csvEntry = entries.find(e => e.name === targetEntry);
+    if (!csvEntry) throw new Error('Entry not found in ZIP: ' + targetEntry);
+  } else {
+    csvEntry = entries.find(e =>
+      !e.name.endsWith('/') &&
+      !e.name.startsWith('__MACOSX') &&
+      !e.name.startsWith('.') &&
+      CSV_EXTENSIONS.test(e.name)
+    );
+  }
+
+  if (!csvEntry) {
+    const names = entries.filter(e => !e.name.endsWith('/')).map(e => e.name).join(', ');
+    throw new Error('No CSV/TXT/DAT file found in ZIP. Contents: ' + names);
+  }
+
+  self.postMessage({ type: 'progress', percent: 0, rowCount: 0, note: 'Streaming ' + csvEntry.name + '...' });
+
+  // Read local file header (30 bytes + variable) to find data start
+  const lh = await readBytes(file, csvEntry.localOffset, 30);
+  const lhNameLen = readUint16(lh, 26);
+  const lhExtraLen = readUint16(lh, 28);
+  const dataStart = csvEntry.localOffset + 30 + lhNameLen + lhExtraLen;
+
+  // Slice compressed data directly from file — no full load
+  const compressedSlice = file.slice(dataStart, dataStart + csvEntry.compSize);
+
+  if (csvEntry.method === 0) {
+    // Stored
+    return { stream: () => compressedSlice.stream(), size: csvEntry.uncompSize, name: csvEntry.name };
+  } else if (csvEntry.method === 8) {
+    // Deflate — stream through DecompressionStream
+    return {
+      stream: () => compressedSlice.stream().pipeThrough(new DecompressionStream('deflate-raw')),
+      size: csvEntry.uncompSize,
+      name: csvEntry.name
+    };
+  } else {
+    throw new Error('Unsupported ZIP compression method: ' + csvEntry.method);
+  }
+}
+
+function isZipFile(file) {
+  return file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip';
+}
+
+async function readSample(file, maxLines) {
+  const stream = file.stream().pipeThrough(new TextDecoderStream());
+  const reader = stream.getReader();
+  let buf = '', lines = [], done = false;
+  while (!done && lines.length < maxLines + 1) {
+    const res = await reader.read();
+    if (res.done) { done = true; break; }
+    buf += res.value;
+    const parts = buf.split('\\n');
+    buf = parts.pop();
+    for (const p of parts) {
+      const trimmed = p.replace(/\\r$/, '');
+      if (trimmed.startsWith('#')) continue;
+      lines.push(trimmed);
+      if (lines.length >= maxLines + 1) break;
+    }
+  }
+  if (buf && lines.length < maxLines + 1) {
+    const trimmed = buf.replace(/\\r$/, '');
+    if (!trimmed.startsWith('#')) lines.push(trimmed);
+  }
+  reader.cancel();
+  return lines;
+}
+
+// ─── T-Digest for streaming approximate quantiles ─────────────────────
+const TD_COMPRESSION = 100;
+const TD_BUFFER_SIZE = 2000;
+
+function newTDigest() {
+  return { centroids: [], buffer: [], totalCount: 0 };
+}
+
+function tdAdd(td, value) {
+  td.buffer.push(value);
+  td.totalCount++;
+  if (td.buffer.length >= TD_BUFFER_SIZE) tdFlush(td);
+}
+
+function tdFlush(td) {
+  if (td.buffer.length === 0) return;
+  td.buffer.sort((a, b) => a - b);
+  // Merge sorted buffer with sorted centroids
+  const merged = [];
+  let bi = 0, ci = 0;
+  while (bi < td.buffer.length || ci < td.centroids.length) {
+    if (bi < td.buffer.length && (ci >= td.centroids.length || td.buffer[bi] <= td.centroids[ci].mean)) {
+      merged.push({ mean: td.buffer[bi], count: 1 });
+      bi++;
+    } else {
+      merged.push({ mean: td.centroids[ci].mean, count: td.centroids[ci].count });
+      ci++;
+    }
+  }
+  td.buffer = [];
+  td.centroids = tdCompress(merged, td.totalCount);
+}
+
+function tdCompress(centroids, totalCount) {
+  if (centroids.length <= 1) return centroids;
+  const result = [centroids[0]];
+  let cumCount = centroids[0].count;
+  for (let i = 1; i < centroids.length; i++) {
+    const c = centroids[i];
+    const last = result[result.length - 1];
+    const q = cumCount / totalCount;
+    const maxSize = Math.max(1, Math.floor(4 * TD_COMPRESSION * q * (1 - q)));
+    if (last.count + c.count <= maxSize) {
+      const newCount = last.count + c.count;
+      last.mean += (c.mean - last.mean) * c.count / newCount;
+      last.count = newCount;
+    } else {
+      result.push({ mean: c.mean, count: c.count });
+    }
+    cumCount += c.count;
+  }
+  return result;
+}
+
+function tdQuantile(td, q) {
+  tdFlush(td);
+  const centroids = td.centroids;
+  if (centroids.length === 0) return null;
+  if (centroids.length === 1) return centroids[0].mean;
+  if (q <= 0) return centroids[0].mean;
+  if (q >= 1) return centroids[centroids.length - 1].mean;
+
+  const target = q * td.totalCount;
+  let cumCount = 0;
+  for (let i = 0; i < centroids.length; i++) {
+    const c = centroids[i];
+    const lo = cumCount;
+    const mid = lo + c.count / 2;
+    if (target < mid) {
+      if (i === 0) return c.mean;
+      const prev = centroids[i - 1];
+      const prevMid = lo - prev.count / 2;
+      const t = (target - prevMid) / (mid - prevMid);
+      return prev.mean + t * (c.mean - prev.mean);
+    }
+    cumCount += c.count;
+  }
+  return centroids[centroids.length - 1].mean;
+}
+
+async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcols) {
+  const startTime = performance.now();
+
+  // ZIP extraction
+  let csvFile = file;
+  let zipName = null;
+  if (isZipFile(file)) {
+    try {
+      csvFile = await extractCSVFromZip(file, zipEntry);
+      zipName = csvFile.name;
+    } catch(e) {
+      self.postMessage({ type: 'error', message: e.message });
+      return;
+    }
+  }
+
+  // Tiny sample for delimiter + header only
+  const sampleLines = await readSample(csvFile, 50);
+  if (sampleLines.length < 2) {
+    self.postMessage({ type: 'error', message: 'File appears empty or has no data rows.' });
+    return;
+  }
+
+  const delimiter = detectDelimiter(sampleLines.slice(0, 20));
+  const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
+  const nCols = header.length;
+
+  // Pick a row variable name that doesn't collide with a column name
+  let rowVarName = 'r';
+  const colSet = new Set(header);
+  for (const candidate of ['r', 'd', 'row', '_r', '_d']) {
+    if (!colSet.has(candidate)) { rowVarName = candidate; break; }
+  }
+
+  // ── Per-column type detection state ──
+  const TYPE_MIN_NONNULL = 20;
+  const TYPE_MAX_ROWS = 100000;
+  const detect_num = new Int32Array(nCols);
+  const detect_nonNum = new Int32Array(nCols);
+  const forced = new Set(); // columns with forced types
+  let colTypes = null; // null = still detecting
+  let typesResolved = false;
+  let detectRowCount = 0;
+
+  // Apply type overrides — these columns skip detection
+  if (typeOverrides) {
+    for (const [col, type] of Object.entries(typeOverrides)) {
+      forced.add(Number(col));
+    }
+  }
+
+  function resolveTypes() {
+    const types = new Array(nCols);
+    for (let col = 0; col < nCols; col++) {
+      if (typeOverrides && typeOverrides[col]) {
+        types[col] = typeOverrides[col];
+        continue;
+      }
+      const n = detect_num[col], nn = detect_nonNum[col], total = n + nn;
+      if (total === 0) types[col] = 'numeric';
+      else if (nn === 0) types[col] = 'numeric';
+      else if (n === 0) types[col] = 'categorical';
+      else types[col] = (n / total > 0.8) ? 'numeric' : 'categorical';
+    }
+    return types;
+  }
+
+  function checkAllResolved() {
+    for (let col = 0; col < nCols; col++) {
+      if (forced.has(col)) continue;
+      if (detect_num[col] + detect_nonNum[col] < TYPE_MIN_NONNULL) return false;
+    }
+    return true;
+  }
+
+  // ── XYZ guess (name-based, no types needed) ──
+  function guessXYZByName() {
+    const result = { x: -1, y: -1, z: -1 };
+    for (const axis of ['x', 'y', 'z']) {
+      for (const pat of XYZ_PATTERNS[axis]) {
+        const idx = header.findIndex(h => pat.test(h.trim()));
+        if (idx >= 0) { result[axis] = idx; break; }
+      }
+    }
+    return result;
+  }
+  let xyzGuess = xyzOverride || guessXYZByName();
+  const xyzSets = { x: new Set(), y: new Set(), z: new Set() };
+  let hasXYZ = xyzGuess.x >= 0 && xyzGuess.y >= 0 && xyzGuess.z >= 0;
+
+  // Coordinate ordering detection
+  const ORDER_SAMPLE = 50000;
+  const prevCoord = { x: null, y: null, z: null };
+  const transitions = { x: 0, y: 0, z: 0 };
+  let orderSampleCount = 0;
+
+  // Decimal precision detection
+  const maxDecimals = { x: 0, y: 0, z: 0 };
+  const PRECISION_SAMPLE = 10000;
+  let precisionSampleCount = 0;
+
+  // ── Stats accumulators (initialized after type detection) ──
+  let stats = null;
+  let catCounts = null;
+  let numericCols = null;
+  let catCols = null;
+  let filterFn = null;
+
+  // Math convenience preamble for expressions
+  const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;';
+
+  // ── Calcol compiled expressions ──
+  let calcolFns = null;
+  let calcolNumCols = [];
+  let calcolCatCols = [];
+
+  function initStatsPhase() {
+    const skip = skipCols ? new Set(skipCols.map(Number)) : new Set();
+    numericCols = header.map((_, i) => i).filter(i => colTypes[i] === 'numeric' && !skip.has(i));
+    catCols = header.map((_, i) => i).filter(i => colTypes[i] === 'categorical' && !skip.has(i));
+    stats = {};
+    for (const i of numericCols) {
+      stats[i] = { count: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, td: newTDigest() };
+    }
+    catCounts = {};
+    for (const i of catCols) catCounts[i] = {};
+
+    // Compile calcols
+    calcolFns = [];
+    calcolNumCols = [];
+    calcolCatCols = [];
+    if (calcols && calcols.length > 0) {
+      for (let ci = 0; ci < calcols.length; ci++) {
+        const cc = calcols[ci];
+        const idx = nCols + ci;
+        try {
+          const fn = new Function(rowVarName, MATH_PREAMBLE + 'try { return (' + cc.expr + '); } catch(e) { return null; }');
+          calcolFns.push({ fn, name: cc.name, type: cc.type, idx });
+        } catch(e) {
+          calcolFns.push({ fn: null, name: cc.name, type: cc.type, idx, error: e.message });
+        }
+        if (cc.type === 'numeric') {
+          calcolNumCols.push(idx);
+          stats[idx] = { count: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, td: newTDigest() };
+        } else {
+          calcolCatCols.push(idx);
+          catCounts[idx] = {};
+        }
+      }
+    }
+
+    // Apply XYZ fallback now that types are known
+    if (!hasXYZ && !xyzOverride) {
+      xyzGuess = guessXYZ(header, colTypes);
+      hasXYZ = xyzGuess.x >= 0 && xyzGuess.y >= 0 && xyzGuess.z >= 0;
+    }
+
+    // Compile filter
+    const filterExpr = filter ? filter.expression : null;
+    if (filterExpr) {
+      try {
+        filterFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + filterExpr + '); } catch(e) { return false; }');
+      } catch(e) {
+        self.postMessage({ type: 'error', message: 'Filter expression error: ' + e.message });
+      }
+    }
+
+    // Build extended header/types for calcols
+    const extHeader = [...header];
+    const extTypes = [...colTypes];
+    if (calcols) {
+      for (const cc of calcols) {
+        extHeader.push(cc.name);
+        extTypes.push(cc.type);
+      }
+    }
+
+    self.postMessage({ type: 'header', header: extHeader, delimiter, colTypes: extTypes, xyzGuess, rowVarName, calcolCount: calcols ? calcols.length : 0, origColCount: nCols });
+  }
+
+  function buildRow(fields) {
+    const obj = {};
+    for (let i = 0; i < nCols; i++) {
+      const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? null : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+    }
+    // Evaluate calcols — chained, so later calcols see earlier ones
+    if (calcolFns) {
+      for (const cc of calcolFns) {
+        if (cc.fn) {
+          try { obj[cc.name] = cc.fn(obj); }
+          catch(e) { obj[cc.name] = null; }
+        } else {
+          obj[cc.name] = null;
+        }
+      }
+    }
+    return obj;
+  }
+
+  function processCalcolStats(row) {
+    for (const idx of calcolNumCols) {
+      const cc = calcolFns[idx - nCols];
+      const v = row[cc.name];
+      const s = stats[idx];
+      if (v === null || v === undefined || (typeof v !== 'number') || isNaN(v)) { s.nulls++; continue; }
+      // Per-column value filters
+      const cf = colFilters ? colFilters[idx] : null;
+      if (cf) {
+        if (cf.skipZeros && v === 0) { s.nulls++; continue; }
+        if (cf.skipNeg && v < 0) { s.nulls++; continue; }
+      }
+      s.count++;
+      if (v === 0) s.zeros++;
+      if (v < s.min) s.min = v;
+      if (v > s.max) s.max = v;
+      const n = s.count;
+      const delta = v - s.m1;
+      const delta_n = delta / n;
+      const delta_n2 = delta_n * delta_n;
+      const term1 = delta * delta_n * (n - 1);
+      s.m4 += term1 * delta_n2 * (n * n - 3 * n + 3) + 6 * delta_n2 * s.m2 - 4 * delta_n * s.m3;
+      s.m3 += term1 * delta_n * (n - 2) - 3 * delta_n * s.m2;
+      s.m2 += term1;
+      s.m1 += delta_n;
+      tdAdd(s.td, v);
+    }
+    for (const idx of calcolCatCols) {
+      const cc = calcolFns[idx - nCols];
+      const v = row[cc.name];
+      if (v === null || v === undefined || v === '') continue;
+      const sv = String(v);
+      const counts = catCounts[idx];
+      if (counts._overflow) continue;
+      counts[sv] = (counts[sv] || 0) + 1;
+      if (Object.keys(counts).length > MAX_UNIQUE_CAT) counts._overflow = true;
+    }
+  }
+
+  function processRowStats(fields) {
+    for (const i of numericCols) {
+      const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
+      if (NULL_SENTINELS.has(raw)) { stats[i].nulls++; continue; }
+      const v = Number(raw);
+      if (isNaN(v)) { stats[i].nulls++; continue; }
+      const s = stats[i];
+      // Per-column value filters
+      const cf = colFilters ? colFilters[i] : null;
+      if (cf) {
+        if (cf.skipZeros && v === 0) { s.nulls++; continue; }
+        if (cf.skipNeg && v < 0) { s.nulls++; continue; }
+      }
+      s.count++;
+      if (v === 0) s.zeros++;
+      if (v < s.min) s.min = v;
+      if (v > s.max) s.max = v;
+      // Extended Welford's: m1, m2, m3, m4
+      const n = s.count;
+      const delta = v - s.m1;
+      const delta_n = delta / n;
+      const delta_n2 = delta_n * delta_n;
+      const term1 = delta * delta_n * (n - 1);
+      s.m4 += term1 * delta_n2 * (n * n - 3 * n + 3) + 6 * delta_n2 * s.m2 - 4 * delta_n * s.m3;
+      s.m3 += term1 * delta_n * (n - 2) - 3 * delta_n * s.m2;
+      s.m2 += term1;
+      s.m1 += delta_n;
+      // T-digest for quantiles
+      tdAdd(s.td, v);
+    }
+    for (const i of catCols) {
+      const v = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
+      if (!v) continue;
+      const cc = catCounts[i];
+      if (cc._overflow) continue;
+      cc[v] = (cc[v] || 0) + 1;
+      if (Object.keys(cc).length > MAX_UNIQUE_CAT) cc._overflow = true;
+    }
+  }
+
+  function processRowGeometry(fields) {
+    if (!hasXYZ) return;
+    for (const axis of ['x', 'y', 'z']) {
+      const raw = (fields[xyzGuess[axis]] || '').trim();
+      const v = Number(raw);
+      if (!isNaN(v)) {
+        xyzSets[axis].add(v);
+        if (precisionSampleCount < PRECISION_SAMPLE) {
+          const dotIdx = raw.indexOf('.');
+          if (dotIdx >= 0) {
+            const dp = raw.length - dotIdx - 1;
+            if (dp > maxDecimals[axis]) maxDecimals[axis] = dp;
+          }
+        }
+        if (orderSampleCount < ORDER_SAMPLE) {
+          if (prevCoord[axis] !== null && v !== prevCoord[axis]) transitions[axis]++;
+          prevCoord[axis] = v;
+        }
+      }
+    }
+    if (orderSampleCount < ORDER_SAMPLE) orderSampleCount++;
+    if (precisionSampleCount < PRECISION_SAMPLE) precisionSampleCount++;
+  }
+
+  // ── Single-pass stream ──
+  const stream = csvFile.stream().pipeThrough(new TextDecoderStream());
+  const reader = stream.getReader();
+  let buffer = '', isFirstLine = true, rowCount = 0, totalRowCount = 0, totalChars = 0, commentCount = 0;
+  let lastProgress = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalChars += value.length;
+    buffer += value;
+
+    const parts = buffer.split('\\n');
+    buffer = parts.pop();
+
+    for (const raw of parts) {
+      const line = raw.replace(/\\r$/, '');
+      if (line.startsWith('#')) { commentCount++; continue; }
+      if (isFirstLine) { isFirstLine = false; continue; }
+      if (!line) continue;
+
+      const fields = line.split(delimiter);
+
+      // Geometry — always, unfiltered
+      processRowGeometry(fields);
+
+      totalRowCount++;
+
+      // ── Type detection phase ──
+      if (!typesResolved) {
+        detectRowCount++;
+        for (let col = 0; col < nCols && col < fields.length; col++) {
+          if (forced.has(col)) continue;
+          const v = (fields[col] || '').trim().replace(/^["']|["']$/g, '');
+          if (NULL_SENTINELS.has(v)) continue;
+          if (!isNaN(Number(v))) detect_num[col]++;
+          else detect_nonNum[col]++;
+        }
+        if (checkAllResolved() || detectRowCount >= TYPE_MAX_ROWS) {
+          typesResolved = true;
+          colTypes = resolveTypes();
+          initStatsPhase();
+        }
+        continue; // skip stats during detection — negligible row loss
+      }
+
+      // ── Stats phase (filter + accumulate) ──
+      const hasCalcols = calcolFns && calcolFns.length > 0;
+      let row = null;
+      if (hasCalcols || filterFn) row = buildRow(fields);
+      if (filterFn) {
+        if (!filterFn(row)) continue;
+      }
+      rowCount++;
+      processRowStats(fields);
+      if (hasCalcols) processCalcolStats(row);
+
+      // Progress
+      if (totalRowCount - lastProgress >= 25000) {
+        lastProgress = totalRowCount;
+        self.postMessage({ type: 'progress', percent: (totalChars / csvFile.size) * 100, rowCount: totalRowCount });
+      }
+    }
+  }
+
+  // Process last buffer line
+  if (buffer) {
+    const line = buffer.replace(/\\r$/, '');
+    if (line && !line.startsWith('#') && !isFirstLine) {
+      const fields = line.split(delimiter);
+      processRowGeometry(fields);
+      totalRowCount++;
+      if (!typesResolved) {
+        for (let col = 0; col < nCols && col < fields.length; col++) {
+          if (forced.has(col)) continue;
+          const v = (fields[col] || '').trim().replace(/^["']|["']$/g, '');
+          if (NULL_SENTINELS.has(v)) continue;
+          if (!isNaN(Number(v))) detect_num[col]++;
+          else detect_nonNum[col]++;
+        }
+        typesResolved = true;
+        colTypes = resolveTypes();
+        initStatsPhase();
+      } else {
+        const hasCalcols2 = calcolFns && calcolFns.length > 0;
+        let row2 = null;
+        if (hasCalcols2 || filterFn) row2 = buildRow(fields);
+        let passFilter = true;
+        if (filterFn) passFilter = filterFn(row2);
+        if (passFilter) {
+          rowCount++;
+          processRowStats(fields);
+          if (hasCalcols2) processCalcolStats(row2);
+        }
+      }
+    }
+  }
+
+  // Edge case: file was so small that detection never triggered
+  if (!typesResolved) {
+    typesResolved = true;
+    colTypes = resolveTypes();
+    initStatsPhase();
+  }
+
+  // Finalize stats
+  const finalStats = {};
+  const allNumCols = [...numericCols, ...calcolNumCols];
+  for (const i of allNumCols) {
+    const s = stats[i];
+    const n = s.count;
+    const variance = n > 1 ? s.m2 / (n - 1) : null;
+    const std = variance !== null ? Math.sqrt(variance) : null;
+    // Skewness: adjusted Fisher-Pearson (sample)
+    let skewness = null;
+    if (n > 2 && s.m2 > 0) {
+      skewness = (Math.sqrt(n) * s.m3) / Math.pow(s.m2, 1.5);
+      // Adjust for sample bias
+      skewness *= Math.sqrt(n * (n - 1)) / (n - 2);
+    }
+    // Excess kurtosis
+    let kurtosis = null;
+    if (n > 3 && s.m2 > 0) {
+      kurtosis = (n * s.m4) / (s.m2 * s.m2) - 3;
+      // Adjust for sample bias
+      kurtosis = ((n - 1) / ((n - 2) * (n - 3))) * ((n + 1) * kurtosis + 6);
+    }
+    // Quantiles from t-digest
+    let quantiles = null;
+    let centroids = null;
+    if (n > 0) {
+      tdFlush(s.td);
+      quantiles = {
+        p10: tdQuantile(s.td, 0.10),
+        p25: tdQuantile(s.td, 0.25),
+        p50: tdQuantile(s.td, 0.50),
+        p75: tdQuantile(s.td, 0.75),
+        p90: tdQuantile(s.td, 0.90)
+      };
+      // Export centroids for CDF plotting
+      centroids = s.td.centroids.map(c => [c.mean, c.count]);
+    }
+    finalStats[i] = {
+      count: n,
+      nulls: s.nulls,
+      zeros: s.zeros,
+      min: n > 0 ? s.min : null,
+      max: n > 0 ? s.max : null,
+      mean: n > 0 ? s.m1 : null,
+      std,
+      skewness,
+      kurtosis,
+      quantiles,
+      centroids
+    };
+  }
+
+  // Geometry
+  const geometry = hasXYZ ? computeGeometry(
+    Array.from(xyzSets.x), Array.from(xyzSets.y), Array.from(xyzSets.z), maxDecimals
+  ) : null;
+
+  // Coordinate ordering (most transitions = fastest varying = innermost loop)
+  let coordOrder = null;
+  if (hasXYZ && orderSampleCount > 10) {
+    const axes = ['x', 'y', 'z'];
+    const sorted = axes.slice().sort((a, b) => transitions[b] - transitions[a]);
+    coordOrder = {
+      fastest: sorted[0].toUpperCase(),
+      middle: sorted[1].toUpperCase(),
+      slowest: sorted[2].toUpperCase(),
+      transitions: { x: transitions.x, y: transitions.y, z: transitions.z },
+      sampleSize: orderSampleCount
+    };
+  }
+
+  // Clean category counts
+  const finalCats = {};
+  const allCatCols = [...catCols, ...calcolCatCols];
+  for (const i of allCatCols) {
+    const cc = { ...catCounts[i] };
+    const overflow = cc._overflow;
+    delete cc._overflow;
+    finalCats[i] = { counts: cc, overflow: !!overflow };
+  }
+
+  // Build extended header/types for complete message
+  const extHeaderFinal = [...header];
+  const extTypesFinal = [...colTypes];
+  if (calcols) {
+    for (const cc of calcols) {
+      extHeaderFinal.push(cc.name);
+      extTypesFinal.push(cc.type);
+    }
+  }
+
+  const elapsed = performance.now() - startTime;
+
+  self.postMessage({
+    type: 'complete',
+    stats: finalStats,
+    geometry,
+    coordOrder,
+    maxDecimals,
+    categories: finalCats,
+    rowCount,
+    totalRowCount,
+    commentCount,
+    elapsed,
+    rowVarName,
+    header: extHeaderFinal,
+    colTypes: extTypesFinal,
+    xyzGuess,
+    zipName,
+    calcolCount: calcols ? calcols.length : 0,
+    origColCount: nCols
+  });
+}
+
+self.onmessage = (e) => {
+  const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcols } = e.data;
+  analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcols);
+};
+`;
+
+// ─── Main App ──────────────────────────────────────────────────────────
+const workerBlob = new Blob([WORKER_CODE], { type: 'application/javascript' });
+const workerUrl = URL.createObjectURL(workerBlob);
+
+let currentFile = null;
+let currentHeader = [];
+let currentColTypes = [];
+let currentXYZ = { x: -1, y: -1, z: -1 };
+let detectedXYZ = { x: -1, y: -1, z: -1 };
+let currentFilter = null; // { expression: string }
+let currentRowVar = 'r';
+let worker = null;
+let preflightData = null; // { header, sampleRows, autoTypes, delimiter, zipEntries, selectedZipEntry }
+
+const $dropzone = document.getElementById('dropzone');
+const $fileInput = document.getElementById('fileInput');
+const $panelPreflight = document.getElementById('panelPreflight');
+const $preflightZip = document.getElementById('preflightZip');
+const $preflightPreview = document.getElementById('preflightPreview');
+const $preflightAnalyze = document.getElementById('preflightAnalyze');
+const $results = document.getElementById('results');
+const $fileInfo = document.getElementById('fileInfo');
+const $geoContent = document.getElementById('geoContent');
+const $geoBadge = document.getElementById('geoBadge');
+const $geoSection = document.getElementById('geoSection');
+const $xyzConfig = document.getElementById('xyzConfig');
+const $statsContent = document.getElementById('statsContent');
+const $statsBadge = document.getElementById('statsBadge');
+const $catContent = document.getElementById('catContent');
+const $catBadge = document.getElementById('catBadge');
+const $catSection = document.getElementById('catSection');
+const $filterEditor = document.getElementById('filterEditor');
+const $filterExpr = document.getElementById('filterExpr');
+const $filterApply = document.getElementById('filterApply');
+const $filterClear = document.getElementById('filterClear');
+const $filterError = document.getElementById('filterError');
+const $errorMsg = document.getElementById('errorMsg');
+const $resultsToolbar = document.getElementById('resultsToolbar');
+const $resultsFilename = document.getElementById('resultsFilename');
+const $resultsRowInfo = document.getElementById('resultsRowInfo');
+const $resultsTimeInfo = document.getElementById('resultsTimeInfo');
+const $backToPreflight = document.getElementById('backToPreflight');
+const $cdfModal = document.getElementById('cdfModal');
+const $cdfTitle = document.getElementById('cdfTitle');
+const $cdfBody = document.getElementById('cdfBody');
+const $cdfClose = document.getElementById('cdfClose');
+const $resultsTabs = document.getElementById('resultsTabs');
+let lastDisplayedStats = null;
+let lastDisplayedHeader = null;
+let currentCalcols = []; // { id, name, expr, type }
+let calcolIdCounter = 0;
+let currentOrigColCount = 0;
+let lastCompleteData = null; // snapshot for cancel
+
+const $calcolList = document.getElementById('calcolList');
+const $calcolName = document.getElementById('calcolName');
+const $calcolType = document.getElementById('calcolType');
+const $calcolExpr = document.getElementById('calcolExpr');
+const $calcolPreview = document.getElementById('calcolPreview');
+const $calcolAdd = document.getElementById('calcolAdd');
+const $calcolRun = document.getElementById('calcolRun');
+const $calcolError = document.getElementById('calcolError');
+const $calcolBadge = document.getElementById('calcolBadge');
+
+// Tab switching
+function switchTab(tabId) {
+  $resultsTabs.querySelectorAll('.results-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
+  document.querySelectorAll('.results-panel').forEach(p => p.classList.toggle('active', p.dataset.tab === tabId));
+}
+$resultsTabs.addEventListener('click', (e) => {
+  const tab = e.target.closest('.results-tab');
+  if (tab) switchTab(tab.dataset.tab);
+});
+
+// ─── Preflight: main-thread helpers ────────────────────────────────────
+
+const DELIMITERS_MAIN = [',', '\t', ';', '|', ' '];
+const NULL_SENTINELS_MAIN = new Set(['', 'NA', 'NaN', 'na', 'nan', 'N/A', 'n/a', 'null', 'NULL', '*', '-', '-999', '-99', '#N/A', 'VOID', 'void', '-1.0e+32', '-1e+32', '1e+31', '-9999', '-99999']);
+
+function detectDelimiterMain(lines) {
+  let best = ',', bestScore = -1;
+  for (const d of DELIMITERS_MAIN) {
+    const counts = lines.map(l => l.split(d).length);
+    if (counts[0] < 2) continue;
+    const allSame = counts.every(c => c === counts[0]);
+    const score = allSame ? counts[0] * 1000 + counts.length : counts[0];
+    if (score > bestScore) { bestScore = score; best = d; }
+  }
+  return best;
+}
+
+function autoDetectTypes(header, rows) {
+  const types = [];
+  for (let col = 0; col < header.length; col++) {
+    let num = 0, nonNum = 0;
+    for (const row of rows) {
+      if (col >= row.length) continue;
+      const v = row[col].trim();
+      if (NULL_SENTINELS_MAIN.has(v)) continue;
+      if (!isNaN(Number(v))) num++;
+      else nonNum++;
+    }
+    const total = num + nonNum;
+    if (total === 0) types.push('numeric');
+    else if (nonNum === 0) types.push('numeric');
+    else if (num === 0) types.push('categorical');
+    else types.push((num / total > 0.8) ? 'numeric' : 'categorical');
+  }
+  return types;
+}
+
+function readUint16(buf, off) { return buf[off] | (buf[off+1] << 8); }
+function readUint32(buf, off) { return (buf[off] | (buf[off+1] << 8) | (buf[off+2] << 16) | (buf[off+3] << 24)) >>> 0; }
+
+async function listZipEntries(file) {
+  const tailSize = Math.min(65557, file.size);
+  const tail = new Uint8Array(await file.slice(file.size - tailSize).arrayBuffer());
+  let eocdPos = -1;
+  for (let i = tail.length - 22; i >= 0; i--) {
+    if (readUint32(tail, i) === 0x06054b50) { eocdPos = i; break; }
+  }
+  if (eocdPos < 0) throw new Error('Not a valid ZIP file');
+  const cdEntries = readUint16(tail, eocdPos + 8);
+  const cdSize = readUint32(tail, eocdPos + 12);
+  const cdOffset = readUint32(tail, eocdPos + 16);
+  const cd = new Uint8Array(await file.slice(cdOffset, cdOffset + cdSize).arrayBuffer());
+  const entries = [];
+  let pos = 0;
+  for (let i = 0; i < cdEntries && pos < cd.length; i++) {
+    if (readUint32(cd, pos) !== 0x02014b50) break;
+    const method = readUint16(cd, pos + 10);
+    const compSize = readUint32(cd, pos + 20);
+    const uncompSize = readUint32(cd, pos + 24);
+    const nameLen = readUint16(cd, pos + 28);
+    const extraLen = readUint16(cd, pos + 30);
+    const commentLen = readUint16(cd, pos + 32);
+    const localOffset = readUint32(cd, pos + 42);
+    const name = new TextDecoder().decode(cd.slice(pos + 46, pos + 46 + nameLen));
+    if (!name.endsWith('/') && !name.startsWith('__MACOSX') && !name.startsWith('.')) {
+      entries.push({ name, method, compSize, uncompSize, localOffset });
+    }
+    pos += 46 + nameLen + extraLen + commentLen;
+  }
+  return entries;
+}
+
+async function readPreviewFromZipEntry(file, entry, maxLines) {
+  const lh = new Uint8Array(await file.slice(entry.localOffset, entry.localOffset + 30).arrayBuffer());
+  const lhNameLen = readUint16(lh, 26);
+  const lhExtraLen = readUint16(lh, 28);
+  const dataStart = entry.localOffset + 30 + lhNameLen + lhExtraLen;
+  const compSlice = file.slice(dataStart, dataStart + entry.compSize);
+  let stream;
+  if (entry.method === 0) stream = compSlice.stream();
+  else if (entry.method === 8) stream = compSlice.stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  else throw new Error('Unsupported compression method');
+  return readLinesFromStream(stream, maxLines);
+}
+
+async function readLinesFromStream(stream, maxLines) {
+  const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
+  let buf = '', lines = [];
+  while (lines.length < maxLines + 1) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += value;
+    const parts = buf.split('\n');
+    buf = parts.pop();
+    for (const p of parts) {
+      const trimmed = p.replace(/\r$/, '');
+      if (trimmed.startsWith('#')) continue;
+      lines.push(trimmed);
+      if (lines.length >= maxLines + 1) break;
+    }
+  }
+  if (buf && lines.length < maxLines + 1) {
+    const trimmed = buf.replace(/\r$/, '');
+    if (!trimmed.startsWith('#')) lines.push(trimmed);
+  }
+  reader.cancel();
+  return lines;
+}
+
+const CSV_EXTENSIONS_MAIN = /\.(csv|txt|dat|tsv)$/i;
+
+// Columns that should NOT get default >0 filtering
+const NOFILT_RE = /^(id|index|row|block.?id|parent|d[xyz]|dim[xyz]?|size[xyz]?|n[xyz]|i[xyz]|ij[k]?|count|flag|code|mask|domain)$/i;
+
+function buildDefaultColFilters(header, autoTypes, xyz) {
+  const xyzSet = new Set([xyz.x, xyz.y, xyz.z].filter(v => v >= 0));
+  const filters = {};
+  for (let i = 0; i < header.length; i++) {
+    if (autoTypes[i] !== 'numeric') continue;
+    if (xyzSet.has(i)) continue;
+    if (NOFILT_RE.test(header[i])) continue;
+    filters[i] = { skipZeros: true, skipNeg: true };
+  }
+  return filters;
+}
+
+function isFilterableCol(header, i, autoTypes, typeOverrides, xyz, skipCols) {
+  const t = typeOverrides[i] || autoTypes[i];
+  if (t !== 'numeric') return false;
+  if (skipCols.has(i)) return false;
+  const xyzSet = new Set([xyz.x, xyz.y, xyz.z].filter(v => v >= 0));
+  if (xyzSet.has(i)) return false;
+  if (NOFILT_RE.test(header[i])) return false;
+  return true;
+}
+
+const XYZ_PATTERNS_MAIN = {
+  x: [/^x$/i, /^xc$/i, /^x[_-]?cent/i, /^mid[_-]?x$/i, /^centroid[_-]?x$/i, /^east/i, /^x[_-]?coord$/i],
+  y: [/^y$/i, /^yc$/i, /^y[_-]?cent/i, /^mid[_-]?y$/i, /^centroid[_-]?y$/i, /^north/i, /^y[_-]?coord$/i],
+  z: [/^z$/i, /^zc$/i, /^z[_-]?cent/i, /^mid[_-]?z$/i, /^centroid[_-]?z$/i, /^elev/i, /^rl$/i, /^z[_-]?coord$/i, /^level$/i, /^bench$/i]
+};
+
+function guessXYZMain(header, types) {
+  const result = { x: -1, y: -1, z: -1 };
+  for (const axis of ['x', 'y', 'z']) {
+    for (const pat of XYZ_PATTERNS_MAIN[axis]) {
+      const idx = header.findIndex((h, i) => types[i] === 'numeric' && pat.test(h.trim()));
+      if (idx >= 0) { result[axis] = idx; break; }
+    }
+  }
+  if (result.x < 0 || result.y < 0 || result.z < 0) {
+    const numCols = header.map((_, i) => i).filter(i => types[i] === 'numeric');
+    if (numCols.length >= 3 && result.x < 0 && result.y < 0 && result.z < 0) {
+      result.x = numCols[0]; result.y = numCols[1]; result.z = numCols[2];
+    }
+  }
+  return result;
+}
+
+async function runPreflight(file) {
+  const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip';
+  let zipEntries = null;
+  let lines;
+
+  if (isZip) {
+    zipEntries = await listZipEntries(file);
+    const csvEntries = zipEntries.filter(e => CSV_EXTENSIONS_MAIN.test(e.name));
+    if (csvEntries.length === 0) throw new Error('No CSV/TXT/DAT files found in ZIP. Contents: ' + zipEntries.map(e => e.name).join(', '));
+    // Preview the first CSV entry
+    lines = await readPreviewFromZipEntry(file, csvEntries[0], 100);
+  } else {
+    // Read first ~64KB for preview
+    lines = await readLinesFromStream(file.slice(0, 256 * 1024).stream(), 100);
+  }
+
+  if (lines.length < 2) throw new Error('File appears empty or has no data rows.');
+
+  const delimiter = detectDelimiterMain(lines.slice(0, 20));
+  const header = lines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
+  const sampleRows = lines.slice(1)
+    .filter(l => l.trim())
+    .map(l => l.split(delimiter).map(f => f.trim().replace(/^["']|["']$/g, '')));
+  const autoTypes = autoDetectTypes(header, sampleRows);
+  const xyzGuess = guessXYZMain(header, autoTypes);
+
+  // Determine which numeric columns should default to >0 filtering
+  const defaultFilters = buildDefaultColFilters(header, autoTypes, xyzGuess);
+
+  return {
+    header,
+    sampleRows,
+    autoTypes,
+    delimiter,
+    zipEntries: zipEntries ? zipEntries.filter(e => CSV_EXTENSIONS_MAIN.test(e.name)) : null,
+    selectedZipEntry: zipEntries ? zipEntries.filter(e => CSV_EXTENSIONS_MAIN.test(e.name))[0]?.name : null,
+    typeOverrides: {},
+    xyz: { ...xyzGuess },
+    skipCols: new Set(),
+    colFilters: defaultFilters
+  };
+}
+
+function renderPreflight(data) {
+  preflightData = data;
+  if (!data.colFilters) data.colFilters = {};
+
+  // ZIP file selector
+  if (data.zipEntries && data.zipEntries.length > 1) {
+    const opts = data.zipEntries.map(e =>
+      `<option value="${esc(e.name)}" ${e.name === data.selectedZipEntry ? 'selected' : ''}>${esc(e.name)}</option>`
+    ).join('');
+    $preflightZip.innerHTML = `ZIP: <select id="zipSelect">${opts}</select>` +
+      `<span class="zip-size">${data.zipEntries.length} files</span>`;
+    document.getElementById('zipSelect').addEventListener('change', async (e) => {
+      const name = e.target.value;
+      data.selectedZipEntry = name;
+      const entry = data.zipEntries.find(z => z.name === name);
+      try {
+        const lines = await readPreviewFromZipEntry(currentFile, entry, 100);
+        const delimiter = detectDelimiterMain(lines.slice(0, 20));
+        data.header = lines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
+        data.sampleRows = lines.slice(1).filter(l => l.trim())
+          .map(l => l.split(delimiter).map(f => f.trim().replace(/^["']|["']$/g, '')));
+        data.delimiter = delimiter;
+        data.autoTypes = autoDetectTypes(data.header, data.sampleRows);
+        data.typeOverrides = {};
+        data.skipCols = new Set();
+        data.xyz = guessXYZMain(data.header, data.autoTypes);
+        data.colFilters = buildDefaultColFilters(data.header, data.autoTypes, data.xyz);
+        renderPreflightSidebar(data);
+        renderPreflightTable(data);
+      } catch(err) {
+        $preflightPreview.innerHTML = `<div style="padding:1rem;color:var(--red)">${esc(err.message)}</div>`;
+      }
+    });
+  } else if (data.zipEntries && data.zipEntries.length === 1) {
+    $preflightZip.innerHTML = `ZIP: <strong style="color:var(--fg-bright)">${esc(data.zipEntries[0].name)}</strong>` +
+      `<span class="zip-size">${formatSize(data.zipEntries[0].uncompSize)}</span>`;
+  } else {
+    $preflightZip.innerHTML = '';
+  }
+
+  renderPreflightSidebar(data);
+  renderPreflightTable(data);
+}
+
+const $preflightSidebar = document.getElementById('preflightSidebar');
+
+function renderPreflightSidebar(data) {
+  const { header, autoTypes, typeOverrides, skipCols, colFilters } = data;
+  const types = header.map((_, i) => typeOverrides[i] || autoTypes[i]);
+  const numCols = header.map((_, i) => i).filter(i => types[i] === 'numeric' && !skipCols.has(i));
+  const enabledCount = header.length - skipCols.size;
+
+  // Count filterable columns and active filters
+  const filterableCols = header.map((_, i) => i).filter(i => isFilterableCol(header, i, autoTypes, typeOverrides, data.xyz, skipCols));
+  const activeFilterCount = filterableCols.filter(i => colFilters[i] && (colFilters[i].skipZeros || colFilters[i].skipNeg)).length;
+
+  // XYZ section
+  function makeAxisSelect(axis) {
+    const current = data.xyz[axis];
+    let opts = `<option value="-1" ${current < 0 ? 'selected' : ''}>—</option>`;
+    for (const i of numCols) {
+      opts += `<option value="${i}" ${i === current ? 'selected' : ''}>${esc(header[i])}</option>`;
+    }
+    return `<label><span class="axis-label">${axis.toUpperCase()}</span><select data-axis="${axis}">${opts}</select></label>`;
+  }
+
+  let html = `<div class="pf-sidebar-section">
+    <div class="pf-sidebar-section-title">Coordinate Axes</div>
+    <div class="pf-xyz-row">${makeAxisSelect('x')}${makeAxisSelect('y')}${makeAxisSelect('z')}</div>
+  </div>`;
+
+  // Column list header with search
+  html += `<div class="pf-sidebar-section" style="padding-bottom:0.3rem">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem">
+      <div class="pf-sidebar-section-title" style="margin:0">Columns</div>
+      <div class="pf-sidebar-actions">
+        <button id="pfSelectAll">all</button>
+        <button id="pfSelectNone">none</button>
+        <span class="pf-col-count"><span id="pfEnabledCount">${enabledCount}</span>/${header.length}</span>
+      </div>
+    </div>
+    <input type="text" class="pf-search" id="pfSearch" placeholder="Search columns…" autocomplete="off" spellcheck="false">
+    <div class="pf-bulk-filters">
+      <button id="pfFilterAllGt0" title="Set >0 filter on all grade columns">&gt;0 all</button>
+      <button id="pfFilterClear" title="Clear all value filters">clear filters</button>
+      <span class="pf-filter-count">${activeFilterCount}/${filterableCols.length} filtered</span>
+    </div>
+  </div>`;
+
+  // Column list
+  html += '<div class="pf-col-list">';
+  for (let i = 0; i < header.length; i++) {
+    const currentType = typeOverrides[i] || autoTypes[i];
+    const label = currentType === 'numeric' ? 'NUM' : 'CAT';
+    const isSkipped = skipCols.has(i);
+    const cf = colFilters[i] || {};
+    const filterable = isFilterableCol(header, i, autoTypes, typeOverrides, data.xyz, skipCols);
+    html += `<div class="pf-col-item${isSkipped ? ' skipped' : ''}" data-col="${i}" data-name="${esc(header[i]).toLowerCase()}">
+      <span class="col-idx">${i}</span>
+      <input type="checkbox" class="pf-col-check" data-col="${i}" ${!isSkipped ? 'checked' : ''}>
+      <span class="pf-col-name" title="${esc(header[i])}">${esc(header[i])}</span>
+      <div class="pf-col-controls">
+        ${filterable ? `<button class="pf-filter-btn${cf.skipNeg ? ' active' : ''}" data-col="${i}" data-filter="skipNeg" title="Exclude negatives">≥0</button>` : ''}
+        ${filterable ? `<button class="pf-filter-btn${cf.skipZeros ? ' active' : ''}" data-col="${i}" data-filter="skipZeros" title="Exclude zeros">≠0</button>` : ''}
+        <button class="type-toggle" data-col="${i}" data-type="${currentType}">${label}</button>
+      </div>
+    </div>`;
+  }
+  html += '</div>';
+
+  $preflightSidebar.innerHTML = html;
+
+  // === Wire up event handlers ===
+
+  // Search
+  const $search = document.getElementById('pfSearch');
+  $search.addEventListener('input', () => {
+    const q = $search.value.toLowerCase().trim();
+    $preflightSidebar.querySelectorAll('.pf-col-item').forEach(el => {
+      const name = el.dataset.name;
+      el.style.display = (!q || name.includes(q)) ? '' : 'none';
+    });
+  });
+  // Don't let Enter in search trigger Analyze
+  $search.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.stopPropagation(); });
+
+  // XYZ selects
+  $preflightSidebar.querySelectorAll('.pf-xyz-row select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      data.xyz[sel.dataset.axis] = parseInt(sel.value);
+    });
+  });
+
+  // Select all / none
+  document.getElementById('pfSelectAll').addEventListener('click', () => {
+    skipCols.clear();
+    renderPreflightSidebar(data);
+    updatePreviewDimming(data);
+  });
+  document.getElementById('pfSelectNone').addEventListener('click', () => {
+    for (let i = 0; i < header.length; i++) skipCols.add(i);
+    data.xyz = { x: -1, y: -1, z: -1 };
+    renderPreflightSidebar(data);
+    updatePreviewDimming(data);
+  });
+
+  // Bulk filter buttons
+  document.getElementById('pfFilterAllGt0').addEventListener('click', () => {
+    for (const i of filterableCols) {
+      colFilters[i] = { skipZeros: true, skipNeg: true };
+    }
+    renderPreflightSidebar(data);
+  });
+  document.getElementById('pfFilterClear').addEventListener('click', () => {
+    for (const key of Object.keys(colFilters)) delete colFilters[key];
+    renderPreflightSidebar(data);
+  });
+
+  // Column checkboxes
+  $preflightSidebar.querySelectorAll('.pf-col-check').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const col = parseInt(cb.dataset.col);
+      if (cb.checked) {
+        skipCols.delete(col);
+      } else {
+        skipCols.add(col);
+        for (const axis of ['x', 'y', 'z']) {
+          if (data.xyz[axis] === col) data.xyz[axis] = -1;
+        }
+        delete colFilters[col];
+      }
+      cb.closest('.pf-col-item').classList.toggle('skipped', !cb.checked);
+      document.getElementById('pfEnabledCount').textContent = header.length - skipCols.size;
+      updatePreviewDimming(data);
+      renderPreflightSidebar(data);
+    });
+  });
+
+  // Type toggles
+  $preflightSidebar.querySelectorAll('.type-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const col = parseInt(btn.dataset.col);
+      const current = btn.dataset.type;
+      const next = current === 'numeric' ? 'categorical' : 'numeric';
+      if (next !== autoTypes[col]) {
+        typeOverrides[col] = next;
+      } else {
+        delete typeOverrides[col];
+      }
+      if (next === 'categorical') {
+        for (const axis of ['x', 'y', 'z']) {
+          if (data.xyz[axis] === col) data.xyz[axis] = -1;
+        }
+        delete colFilters[col];
+      }
+      renderPreflightSidebar(data);
+    });
+  });
+
+  // Filter buttons
+  $preflightSidebar.querySelectorAll('.pf-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const col = parseInt(btn.dataset.col);
+      const filter = btn.dataset.filter;
+      if (!colFilters[col]) colFilters[col] = {};
+      colFilters[col][filter] = !colFilters[col][filter];
+      if (!colFilters[col][filter]) delete colFilters[col][filter];
+      if (Object.keys(colFilters[col]).length === 0) delete colFilters[col];
+      btn.classList.toggle('active');
+      // Update counter
+      const newActive = filterableCols.filter(i => colFilters[i] && (colFilters[i].skipZeros || colFilters[i].skipNeg)).length;
+      const countEl = $preflightSidebar.querySelector('.pf-filter-count');
+      if (countEl) countEl.textContent = `${newActive}/${filterableCols.length} filtered`;
+    });
+  });
+}
+
+function updatePreviewDimming(data) {
+  const table = $preflightPreview.querySelector('table');
+  if (!table) return;
+  for (let c = 0; c < data.header.length; c++) {
+    const colIdx = c + 1;
+    const isSkipped = data.skipCols.has(c);
+    table.querySelectorAll(`th:nth-child(${colIdx + 1}), td:nth-child(${colIdx + 1})`).forEach(el => {
+      el.classList.toggle('col-skipped', isSkipped);
+    });
+  }
+}
+
+function renderPreflightTable(data) {
+  const { header, sampleRows, skipCols } = data;
+
+  let thead = '<tr><th style="color:var(--fg-dim);opacity:0.5">#</th>';
+  for (let i = 0; i < header.length; i++) {
+    const dimClass = skipCols.has(i) ? ' class="col-skipped"' : '';
+    thead += `<th${dimClass}>${esc(header[i])}</th>`;
+  }
+  thead += '</tr>';
+
+  let tbody = '';
+  for (let r = 0; r < sampleRows.length; r++) {
+    tbody += `<tr><td>${r}</td>`;
+    for (let c = 0; c < header.length; c++) {
+      const val = (sampleRows[r] && sampleRows[r][c]) || '';
+      const dimClass = skipCols.has(c) ? ' class="col-skipped"' : '';
+      tbody += `<td${dimClass}>${esc(val)}</td>`;
+    }
+    tbody += '</tr>';
+  }
+
+  $preflightPreview.innerHTML = `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+}
+
+function formatNum(v, decimals) {
+  if (v === null || v === undefined) return '—';
+  if (Math.abs(v) >= 1e6 || (Math.abs(v) < 0.001 && v !== 0)) return v.toExponential(decimals ?? 3);
+  if (Number.isInteger(v)) return v.toLocaleString();
+  return v.toLocaleString(undefined, { minimumFractionDigits: decimals ?? 2, maximumFractionDigits: decimals ?? 4 });
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+
+function delimName(d) {
+  if (d === ',') return 'comma';
+  if (d === '\t') return 'tab';
+  if (d === ';') return 'semicolon';
+  if (d === '|') return 'pipe';
+  if (d === ' ') return 'space';
+  return JSON.stringify(d);
+}
+
+function handleFile(file) {
+  if (!file) return;
+  currentFile = file;
+  currentFilter = null;
+  hasResults = false;
+  $filterExpr.value = '';
+  $filterEditor.classList.remove('active');
+  document.body.classList.remove('has-filter');
+  $filterError.classList.remove('active');
+  $errorMsg.classList.remove('active');
+
+  // Collapse dropzone
+  $dropzone.classList.add('collapsed');
+  $dropzone.querySelector('.label').innerHTML = 'Load different file:';
+  let loadedSpan = $dropzone.querySelector('.loaded-name');
+  if (!loadedSpan) {
+    loadedSpan = document.createElement('span');
+    loadedSpan.className = 'loaded-name';
+    $dropzone.insertBefore(loadedSpan, $dropzone.querySelector('input'));
+  }
+  loadedSpan.textContent = file.name;
+
+  // Show results container with preflight tab
+  $results.classList.add('active');
+  document.querySelector('.app').classList.add('has-results');
+  $resultsFilename.textContent = file.name;
+  $resultsRowInfo.textContent = '';
+  $resultsTimeInfo.textContent = '';
+  switchTab('preflight');
+
+  // Set placeholder content for tabs before first analysis
+  const placeholder = '<div style="color:var(--fg-dim);font-size:0.78rem;padding:2rem;text-align:center;opacity:0.5;">Run analysis from the Preflight tab first.</div>';
+  $geoContent.innerHTML = placeholder;
+  $geoBadge.textContent = '';
+  $fileInfo.innerHTML = '';
+  $statsContent.innerHTML = placeholder;
+  $statsBadge.textContent = '';
+  $catContent.innerHTML = placeholder;
+  $catBadge.textContent = '';
+  renderCalcolList();
+
+  // Run preflight
+  runPreflight(file).then(data => {
+    renderPreflight(data);
+  }).catch(err => {
+    $errorMsg.textContent = err.message;
+    $errorMsg.classList.add('active');
+  });
+}
+
+$preflightAnalyze.addEventListener('click', () => {
+  if (!preflightData || !currentFile) return;
+  const typeOv = Object.keys(preflightData.typeOverrides).length > 0 ? preflightData.typeOverrides : null;
+  const zipEntry = preflightData.selectedZipEntry || null;
+  const xyz = preflightData.xyz;
+  const xyzOv = (xyz.x >= 0 && xyz.y >= 0 && xyz.z >= 0) ? xyz : null;
+  const skip = preflightData.skipCols.size > 0 ? Array.from(preflightData.skipCols) : null;
+  const colFilters = Object.keys(preflightData.colFilters).length > 0 ? preflightData.colFilters : null;
+  startAnalysis(xyzOv, null, typeOv, zipEntry, skip, colFilters);
+});
+
+let hasResults = false; // Track whether analysis has been run
+
+// Back button in toolbar — go back to dropzone
+$backToPreflight.addEventListener('click', () => {
+  $results.classList.remove('active');
+  document.querySelector('.app').classList.remove('has-results');
+  $filterEditor.classList.remove('active');
+  document.body.classList.remove('has-filter');
+  $dropzone.classList.remove('collapsed');
+  const loadedSpan = $dropzone.querySelector('.loaded-name');
+  if (loadedSpan) loadedSpan.remove();
+  $dropzone.querySelector('.label').innerHTML = 'Drop a CSV file here, or <strong>click to browse</strong>';
+  currentFile = null;
+  preflightData = null;
+  hasResults = false;
+  currentCalcols = [];
+});
+
+// Allow dropping new files onto results area
+$results.addEventListener('dragover', (e) => { e.preventDefault(); });
+$results.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  // Enter in preflight tab triggers Analyze
+  const pfActive = $panelPreflight.classList.contains('active');
+  if (pfActive && e.key === 'Enter' && !e.shiftKey && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
+    e.preventDefault();
+    $preflightAnalyze.click();
+  }
+});
+
+let currentTypeOverrides = null;
+let currentZipEntry = null;
+let currentSkipCols = null;
+let currentColFilters = null;
+
+function startAnalysis(xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters) {
+  if (!currentFile) return;
+
+  // Store for re-analysis (filters, xyz changes)
+  if (typeOverrides !== undefined) currentTypeOverrides = typeOverrides;
+  if (zipEntry !== undefined) currentZipEntry = zipEntry;
+  if (skipCols !== undefined) currentSkipCols = skipCols;
+  if (colFilters !== undefined) currentColFilters = colFilters;
+
+  if (worker) worker.terminate();
+  worker = new Worker(workerUrl);
+
+  // Always use overlay on the results panels
+  const panelsEl = $results.querySelector('.results-panels');
+  // Remove any stale overlay
+  const old = panelsEl.querySelector('.reanalysis-overlay');
+  if (old) old.remove();
+  const $overlay = document.createElement('div');
+  $overlay.className = 'reanalysis-overlay';
+  $overlay.innerHTML = `
+    <div class="re-label">Analyzing…</div>
+    <div class="re-progress"><div class="re-bar"></div></div>
+    <button class="re-cancel">Cancel</button>
+  `;
+  panelsEl.appendChild($overlay);
+  const $reBar = $overlay.querySelector('.re-bar');
+  const $reLabel = $overlay.querySelector('.re-label');
+  $overlay.querySelector('.re-cancel').addEventListener('click', () => {
+    if (worker) worker.terminate();
+    $overlay.remove();
+    if (lastCompleteData) displayResults(lastCompleteData);
+  });
+
+  worker.onmessage = (e) => {
+    const msg = e.data;
+    if (msg.type === 'header') {
+      currentHeader = msg.header;
+      currentColTypes = msg.colTypes;
+      currentRowVar = msg.rowVarName || 'r';
+      if (msg.origColCount) currentOrigColCount = msg.origColCount;
+      if (!xyzOverride) {
+        currentXYZ = { ...msg.xyzGuess };
+        detectedXYZ = { ...msg.xyzGuess };
+      } else {
+        currentXYZ = { ...xyzOverride };
+        detectedXYZ = { ...xyzOverride };
+      }
+    } else if (msg.type === 'progress') {
+      const pct = Math.min(99, msg.percent);
+      $reBar.style.width = pct.toFixed(1) + '%';
+      $reLabel.textContent = 'Analyzing… ' + pct.toFixed(0) + '%';
+    } else if (msg.type === 'complete') {
+      if (msg.origColCount) currentOrigColCount = msg.origColCount;
+      $overlay.remove();
+      lastCompleteData = msg;
+      displayResults(msg);
+    } else if (msg.type === 'error') {
+      $overlay.remove();
+      if (msg.message.startsWith('Filter expression')) {
+        $filterError.textContent = msg.message;
+        $filterError.classList.add('active');
+      } else {
+        $errorMsg.textContent = msg.message;
+        $errorMsg.classList.add('active');
+      }
+    }
+  };
+
+  const filterPayload = filter ? { expression: filter.expression } : null;
+  const calcolPayload = currentCalcols.length > 0 ? currentCalcols.map(c => ({ name: c.name, expr: c.expr, type: c.type })) : null;
+  worker.postMessage({
+    file: currentFile,
+    xyzOverride: xyzOverride || null,
+    filter: filterPayload,
+    typeOverrides: currentTypeOverrides || null,
+    zipEntry: currentZipEntry || null,
+    skipCols: currentSkipCols || null,
+    colFilters: currentColFilters || null,
+    calcols: calcolPayload
+  });
+}
+
+function displayResults(data) {
+  hasResults = true;
+  const { stats, geometry, coordOrder, maxDecimals, categories, rowCount, totalRowCount, commentCount, elapsed, header, colTypes, xyzGuess, rowVarName, zipName } = data;
+  currentRowVar = rowVarName || 'r';
+  $results.classList.add('active');
+  document.querySelector('.app').classList.add('has-results');
+
+  // Toolbar info
+  const dispName = zipName ? `${currentFile.name} / ${zipName}` : currentFile.name;
+  $resultsFilename.textContent = dispName;
+
+  const isFiltered = currentFilter !== null;
+  const rowsDisplay = isFiltered
+    ? `${rowCount.toLocaleString()} / ${totalRowCount.toLocaleString()}`
+    : totalRowCount.toLocaleString();
+  $resultsRowInfo.textContent = rowsDisplay + ' rows · ' + header.length + ' cols';
+  $resultsTimeInfo.textContent = (elapsed / 1000).toFixed(1) + 's';
+
+  // Default to statistics tab
+  switchTab('statistics');
+
+  // Show filter footer
+  $filterEditor.classList.add('active');
+  document.body.classList.add('has-filter');
+  // Update hint with column names using r.col / r["col"] syntax
+  const v = currentRowVar;
+  const colRefHint = (name) => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) ? `<strong>${v}.${esc(name)}</strong>` : `<strong>${v}["${esc(name)}"]</strong>`;
+  const numNames = header.filter((h, i) => colTypes[i] === 'numeric').slice(0, 6);
+  const catNames = header.filter((h, i) => colTypes[i] === 'categorical').slice(0, 3);
+  let hintParts = ['Row object: <strong>' + v + '</strong>', 'Pure JS: && || ! == != > < >= <='];
+  if (numNames.length) hintParts.push('e.g. ' + numNames.slice(0, 3).map(colRefHint).join(', '));
+  if (catNames.length) hintParts.push('Strings: ' + catNames.slice(0, 2).map(n => colRefHint(n) + ` == "…"`).join(', '));
+  hintParts.push(`Arrays: ["a","b"].includes(${v}.col)`);
+  document.getElementById('filterHint').innerHTML = hintParts.join(' — ');
+  const infoItems = [
+    fi('File', currentFile.name),
+  ];
+  if (zipName) infoItems.push(fi('Inner', zipName));
+  infoItems.push(
+    fi('Size', formatSize(currentFile.size)),
+    fi('Rows', rowsDisplay),
+    fi('Columns', header.length),
+    fi('Delimiter', delimName(data.delimiter || ',')),
+    fi('Time', (elapsed / 1000).toFixed(2) + 's'),
+  );
+  if (commentCount > 0) infoItems.splice(zipName ? 4 : 3, 0, fi('Comments', commentCount.toLocaleString()));
+  $fileInfo.innerHTML = infoItems.join('');
+
+  // XYZ Config
+  renderXYZConfig(header, colTypes, xyzGuess);
+
+  // Geometry
+  if (geometry && geometry.x && geometry.y && geometry.z) {
+    $geoSection.style.display = '';
+    lastGeoData = geometry;
+    const gx = geometry.x, gy = geometry.y, gz = geometry.z;
+    const anySubBlocked = gx.isSubBlocked || gy.isSubBlocked || gz.isSubBlocked;
+    const totalGrid = gx.gridCount * gy.gridCount * gz.gridCount;
+    const fillPct = totalGrid > 0 ? (totalRowCount / totalGrid * 100) : 0;
+    $geoBadge.textContent = anySubBlocked ? 'SUB-BLOCKED' : fillPct.toFixed(1) + '% filled';
+    if (anySubBlocked) $geoBadge.style.background = 'var(--blue)';
+    else $geoBadge.style.background = '';
+
+    // Build sub-block row if needed
+    const subRow = anySubBlocked
+      ? geoRowT('Min Block',
+          gx.isSubBlocked ? gx.minBlockSize : '—',
+          gy.isSubBlocked ? gy.minBlockSize : '—',
+          gz.isSubBlocked ? gz.minBlockSize : '—')
+      : '';
+
+    // Sub-block detail text
+    let subDetail = '';
+    if (anySubBlocked) {
+      const parts = [];
+      for (const [label, g] of [['X', gx], ['Y', gy], ['Z', gz]]) {
+        if (g.isSubBlocked) {
+          const ratios = g.subBlockSizes.map(s => `1/${s.ratio}`).join(', ');
+          parts.push(`${label}: ${g.blockSize} → ${ratios}`);
+        }
+      }
+      subDetail = `<div style="margin-top:0.5rem; font-size:0.75rem; color:var(--blue)">
+        Sub-blocks: ${parts.join(' &nbsp;|&nbsp; ')}
+      </div>`;
+    }
+
+    $geoContent.innerHTML = `
+      <div class="geo-grid geo-grid-t">
+        <div class="gh"></div><div class="gh">X</div><div class="gh">Y</div><div class="gh">Z</div>
+        ${geoRowT('Origin', gx.origin, gy.origin, gz.origin)}
+        ${geoRowT('Block Size', gx.blockSize, gy.blockSize, gz.blockSize)}
+        ${subRow}
+        ${geoRowT('Unique', gx.uniqueCount, gy.uniqueCount, gz.uniqueCount)}
+        ${geoRowT('Grid Count', gx.gridCount, gy.gridCount, gz.gridCount)}
+        ${geoRowT('Extent', gx.extent, gy.extent, gz.extent)}
+      </div>
+      <div style="margin-top:0.8rem; font-size:0.75rem; color:var(--fg-dim)">
+        Parent grid cells: <strong style="color:var(--fg)">${totalGrid.toLocaleString()}</strong> &nbsp;|&nbsp;
+        Total blocks: <strong style="color:var(--fg)">${totalRowCount.toLocaleString()}</strong>
+        ${!anySubBlocked ? `&nbsp;|&nbsp; Fill ratio: <strong style="color:var(--amber)">${fillPct.toFixed(1)}%</strong>` : ''}
+      </div>
+      ${subDetail}
+      ${coordOrder ? `<div style="margin-top:0.5rem; font-size:0.75rem; color:var(--fg-dim)">
+        Loop order: <strong style="color:var(--fg)">${coordOrder.slowest}</strong> <span style="color:var(--fg-dim)">→</span> <strong style="color:var(--fg)">${coordOrder.middle}</strong> <span style="color:var(--fg-dim)">→</span> <strong style="color:var(--fg)">${coordOrder.fastest}</strong>
+        <span style="opacity:0.6">&nbsp;(${coordOrder.slowest} slowest, ${coordOrder.fastest} fastest)</span>
+      </div>` : ''}
+      ${maxDecimals ? `<div style="margin-top:0.5rem; font-size:0.75rem; color:var(--fg-dim)">
+        Rounding: X=${maxDecimals.x}dp, Y=${maxDecimals.y}dp, Z=${maxDecimals.z}dp <span style="opacity:0.5">(detected from data)</span>
+      </div>` : ''}`;
+  } else {
+    lastGeoData = null;
+    $geoSection.style.display = (xyzGuess.x < 0 || xyzGuess.y < 0 || xyzGuess.z < 0) ? '' : 'none';
+    $geoBadge.textContent = '';
+    $geoContent.innerHTML = '<div style="color:var(--fg-dim);font-size:0.78rem;">Could not detect XYZ columns — select them manually above.</div>';
+  }
+
+  // Stats
+  const origColCount = data.origColCount || header.length;
+  const numCols = Object.keys(stats).map(Number).sort((a, b) => a - b);
+  lastDisplayedStats = stats;
+  lastDisplayedHeader = header;
+  $statsBadge.textContent = numCols.length + ' columns' + (isFiltered ? ` · ${rowCount.toLocaleString()} rows` : '');
+  if (numCols.length > 0) {
+    let html = '<table class="stats"><thead><tr><th>Column</th><th>Count</th><th>Nulls</th><th>Zeros</th><th>Min</th><th>P10</th><th>P25</th><th>P50</th><th>P75</th><th>P90</th><th>Max</th><th>Mean</th><th>Std</th><th>CV%</th><th>Skew</th><th>Kurt</th></tr></thead><tbody>';
+    for (const i of numCols) {
+      const s = stats[i];
+      const cv = (s.mean && s.std && s.mean !== 0) ? Math.abs(s.std / s.mean * 100) : null;
+      const q = s.quantiles;
+      const zeroPct = s.count > 0 ? (s.zeros / s.count * 100) : 0;
+      const zerosDisplay = s.zeros > 0 ? `<span title="${zeroPct.toFixed(1)}% zeros">${s.zeros.toLocaleString()}</span>` : '—';
+      const isCalcol = i >= origColCount;
+      const nameHtml = `<a class="cdf-link" data-col="${i}" href="#">${esc(header[i])}</a>${isCalcol ? '<span class="calcol-tag">CALC</span>' : ''}`;
+      html += `<tr${isCalcol ? ' class="calcol-row"' : ''}>
+        <td>${nameHtml}</td>
+        <td>${s.count.toLocaleString()}</td>
+        <td>${s.nulls > 0 ? s.nulls.toLocaleString() : '—'}</td>
+        <td>${zerosDisplay}</td>
+        <td>${formatNum(s.min)}</td>
+        <td>${q ? formatNum(q.p10) : '—'}</td>
+        <td>${q ? formatNum(q.p25) : '—'}</td>
+        <td>${q ? formatNum(q.p50) : '—'}</td>
+        <td>${q ? formatNum(q.p75) : '—'}</td>
+        <td>${q ? formatNum(q.p90) : '—'}</td>
+        <td>${formatNum(s.max)}</td>
+        <td>${formatNum(s.mean)}</td>
+        <td>${formatNum(s.std)}</td>
+        <td>${cv !== null ? cv.toFixed(1) : '—'}</td>
+        <td>${s.skewness !== null ? s.skewness.toFixed(2) : '—'}</td>
+        <td>${s.kurtosis !== null ? s.kurtosis.toFixed(2) : '—'}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    $statsContent.innerHTML = html;
+
+    // CDF click handlers
+    $statsContent.querySelectorAll('.cdf-link').forEach(a => {
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        const col = parseInt(a.dataset.col);
+        showCDF(col);
+      });
+    });
+  } else {
+    $statsContent.innerHTML = '<div style="color:var(--fg-dim);">No numeric columns detected.</div>';
+  }
+
+  // Categories
+  const catCols = Object.keys(categories).map(Number).sort((a, b) => a - b);
+  $catBadge.textContent = catCols.length + ' columns';
+  if (catCols.length > 0) {
+    $catSection.style.display = '';
+    let html = '';
+    for (const i of catCols) {
+      const cat = categories[i];
+      const entries = Object.entries(cat.counts).sort((a, b) => b[1] - a[1]);
+      const uniqueCount = entries.length + (cat.overflow ? '+' : '');
+      const total = entries.reduce((s, [, c]) => s + c, 0);
+      const isCalcolCat = i >= origColCount;
+      html += `<div class="cat-item" data-col="${i}">
+        <div class="cat-name">${esc(header[i])}${isCalcolCat ? '<span class="calcol-tag">CALC</span>' : ''}<span class="unique-count">${uniqueCount} unique</span></div>
+        <div class="cat-table-wrap"><table class="cat-table"><tbody>`;
+      const show = entries.slice(0, 100);
+      for (const [val, count] of show) {
+        const pct = total > 0 ? (count / total * 100).toFixed(1) : '0';
+        html += `<tr>
+          <td><input type="checkbox" data-col="${i}" data-val="${esc(val)}"></td>
+          <td>${esc(val)}</td>
+          <td>${count.toLocaleString()}</td>
+          <td>${pct}%</td>
+        </tr>`;
+      }
+      if (entries.length > 100) {
+        html += `<tr><td colspan="4" style="color:var(--fg-dim);text-align:center;font-size:0.7rem;">+${entries.length - 100} more values</td></tr>`;
+      }
+      html += `</tbody></table></div></div>`;
+    }
+    $catContent.innerHTML = html;
+
+    // Checkbox changes → rebuild expression
+    $catContent.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        cb.closest('tr').classList.toggle('active', cb.checked);
+        rebuildFilterExpression();
+      });
+    });
+  } else {
+    $catSection.style.display = 'none';
+  }
+
+  // Update tab badges
+  const statsTab = $resultsTabs.querySelector('[data-tab="statistics"]');
+  const catTab = $resultsTabs.querySelector('[data-tab="categories"]');
+  const calcolTab = $resultsTabs.querySelector('[data-tab="calcols"]');
+  statsTab.innerHTML = `Statistics <span class="tab-badge">${numCols.length}</span>`;
+  catTab.innerHTML = `Categories <span class="tab-badge">${catCols.length}</span>`;
+  calcolTab.innerHTML = `Calc <span class="tab-badge">${currentCalcols.length}</span>`;
+
+  // Render calcol list
+  renderCalcolList();
+}
+
+function renderXYZConfig(header, colTypes, xyzGuess) {
+  const label = (axis) => {
+    const idx = currentXYZ[axis];
+    const name = idx >= 0 ? esc(header[idx]) : '—';
+    return `<label><span class="axis-label">${axis.toUpperCase()}:</span> <span class="axis-value">${name}</span></label>`;
+  };
+  $xyzConfig.innerHTML = label('x') + label('y') + label('z');
+}
+
+// ─── Calcol UI ────────────────────────────────────────────────────────
+
+const MATH_PREAMBLE_MAIN = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;';
+
+// Math functions available in expressions (for autocomplete)
+const MATH_COMPLETIONS = [
+  { label: 'abs(x)', insert: 'abs(', desc: 'absolute value' },
+  { label: 'sqrt(x)', insert: 'sqrt(', desc: 'square root' },
+  { label: 'pow(x, n)', insert: 'pow(', desc: 'x to the power n' },
+  { label: 'log(x)', insert: 'log(', desc: 'natural log' },
+  { label: 'log2(x)', insert: 'log2(', desc: 'log base 2' },
+  { label: 'log10(x)', insert: 'log10(', desc: 'log base 10' },
+  { label: 'exp(x)', insert: 'exp(', desc: 'e^x' },
+  { label: 'min(a, b)', insert: 'min(', desc: 'minimum' },
+  { label: 'max(a, b)', insert: 'max(', desc: 'maximum' },
+  { label: 'round(x)', insert: 'round(', desc: 'round to integer' },
+  { label: 'floor(x)', insert: 'floor(', desc: 'round down' },
+  { label: 'ceil(x)', insert: 'ceil(', desc: 'round up' },
+  { label: 'sign(x)', insert: 'sign(', desc: '-1, 0, or 1' },
+  { label: 'trunc(x)', insert: 'trunc(', desc: 'integer part' },
+  { label: 'clamp(v, lo, hi)', insert: 'clamp(', desc: 'constrain to range' },
+  { label: 'cap(v, hi)', insert: 'cap(', desc: 'cap at maximum' },
+  { label: 'ifnull(v, default)', insert: 'ifnull(', desc: 'default for null/NaN' },
+  { label: 'between(v, lo, hi)', insert: 'between(', desc: 'boolean range test' },
+  { label: 'remap(v, map)', insert: 'remap(', desc: 'lookup table' },
+  { label: 'fn.round(v, n)', insert: 'fn.round(', desc: 'round to n decimals' },
+  { label: 'PI', insert: 'PI', desc: '3.14159…' },
+  { label: 'E', insert: 'E', desc: '2.71828…' },
+];
+
+const $calcolCancel = document.getElementById('calcolCancel');
+let editingCalcolId = null; // null = adding, id = editing
+
+function renderCalcolList() {
+  if (currentCalcols.length === 0) {
+    $calcolList.innerHTML = '<div style="color:var(--fg-dim);font-size:0.72rem;">No calculated columns defined yet.</div>';
+  } else {
+    let html = '';
+    for (const cc of currentCalcols) {
+      const isEditing = editingCalcolId === cc.id;
+      html += `<div class="calcol-item${isEditing ? ' editing' : ''}" data-id="${cc.id}">
+        <span class="ci-name">${esc(cc.name)}</span>
+        <span class="ci-expr" title="${esc(cc.expr)}">${esc(cc.expr)}</span>
+        <span class="ci-type ${cc.type === 'numeric' ? 'num' : 'cat'}">${cc.type === 'numeric' ? 'NUM' : 'CAT'}</span>
+        <button class="ci-edit" data-id="${cc.id}" title="Edit">✎</button>
+        <button class="ci-del" data-id="${cc.id}" title="Remove">✕</button>
+      </div>`;
+    }
+    $calcolList.innerHTML = html;
+
+    // Edit handlers
+    $calcolList.querySelectorAll('.ci-edit').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = parseInt(btn.dataset.id);
+        const cc = currentCalcols.find(c => c.id === id);
+        if (!cc) return;
+        editingCalcolId = id;
+        $calcolName.value = cc.name;
+        $calcolName.disabled = false;
+        $calcolExpr.value = cc.expr;
+        $calcolType.value = cc.type;
+        $calcolAdd.textContent = 'Update column';
+        $calcolCancel.style.display = '';
+        $calcolError.textContent = '';
+        previewCalcol(cc.expr);
+        renderCalcolList(); // re-render to highlight editing item
+        $calcolExpr.focus();
+      });
+    });
+
+    // Delete handlers
+    $calcolList.querySelectorAll('.ci-del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = parseInt(btn.dataset.id);
+        currentCalcols = currentCalcols.filter(c => c.id !== id);
+        if (editingCalcolId === id) cancelCalcolEdit();
+        renderCalcolList();
+        updateCalcolRunBtn();
+        updateCalcolBadge();
+      });
+    });
+  }
+}
+
+function cancelCalcolEdit() {
+  editingCalcolId = null;
+  $calcolName.value = '';
+  $calcolName.disabled = false;
+  $calcolExpr.value = '';
+  $calcolType.value = 'numeric';
+  $calcolAdd.textContent = 'Add column';
+  $calcolCancel.style.display = 'none';
+  $calcolPreview.innerHTML = '';
+  $calcolError.textContent = '';
+  renderCalcolList();
+}
+
+function updateCalcolBadge() {
+  $calcolBadge.textContent = currentCalcols.length;
+  const calcolTab = $resultsTabs.querySelector('[data-tab="calcols"]');
+  if (calcolTab) calcolTab.innerHTML = `Calc <span class="tab-badge">${currentCalcols.length}</span>`;
+}
+
+function updateCalcolRunBtn() {
+  // Enable if calcols changed since last analysis
+  const lastCount = lastCompleteData ? (lastCompleteData.calcolCount || 0) : 0;
+  const changed = currentCalcols.length !== lastCount || currentCalcols.length > 0;
+  $calcolRun.disabled = !changed;
+}
+
+function previewCalcol(expr) {
+  if (!preflightData || !preflightData.sampleRows || !expr.trim()) {
+    $calcolPreview.innerHTML = '';
+    return;
+  }
+  const header = preflightData.header;
+  const rows = preflightData.sampleRows;
+  const autoTypes = preflightData.autoTypes;
+  const typeOverrides = preflightData.typeOverrides || {};
+  const rv = currentRowVar || 'r';
+
+  let fn;
+  try {
+    fn = new Function(rv, MATH_PREAMBLE_MAIN + 'try { return (' + expr + '); } catch(e) { return "⚠ " + e.message; }');
+  } catch(e) {
+    $calcolPreview.innerHTML = `<span class="pv-err">Syntax: ${esc(e.message)}</span>`;
+    return;
+  }
+
+  // Build preview rows (up to 5)
+  const preview = rows.slice(0, 5).map(fields => {
+    const obj = {};
+    for (let i = 0; i < header.length; i++) {
+      const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
+      const type = typeOverrides[i] || autoTypes[i];
+      obj[header[i]] = type === 'numeric' ? (raw === '' ? null : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+    }
+    // Also inject existing calcols (except the one being edited)
+    for (const cc of currentCalcols) {
+      if (editingCalcolId === cc.id) continue;
+      try {
+        const ccFn = new Function(rv, MATH_PREAMBLE_MAIN + 'try { return (' + cc.expr + '); } catch(e) { return null; }');
+        obj[cc.name] = ccFn(obj);
+      } catch(e) { obj[cc.name] = null; }
+    }
+    let result;
+    try { result = fn(obj); } catch(e) { result = '⚠ ' + e.message; }
+    return result;
+  });
+
+  let html = '<table><thead><tr><th>Row</th><th>Result</th></tr></thead><tbody>';
+  preview.forEach((v, i) => {
+    const isErr = typeof v === 'string' && v.startsWith('⚠');
+    html += `<tr><td>${i + 1}</td><td class="${isErr ? 'pv-err' : 'pv-ok'}">${v === null || v === undefined ? '<i>null</i>' : esc(String(v))}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  $calcolPreview.innerHTML = html;
+}
+
+// ── Autocomplete ──────────────────────────────────────────────────────
+const $acDropdown = document.getElementById('calcolAc');
+let acItems = [];
+let acSelected = -1;
+
+function getTokenAtCursor(textarea) {
+  const pos = textarea.selectionStart;
+  const text = textarea.value.substring(0, pos);
+  // Find start of current token (identifier chars or r. prefix)
+  const match = text.match(/(?:r\.)?([a-zA-Z_][a-zA-Z0-9_]*)$/);
+  if (!match) return { token: '', start: pos, hasPrefix: false };
+  const full = match[0];
+  const hasPrefix = full.startsWith('r.');
+  const token = match[1];
+  const start = pos - full.length;
+  return { token, start, hasPrefix, fullLen: full.length };
+}
+
+function buildAcItems() {
+  const items = [];
+  // Column names
+  const hdr = preflightData ? preflightData.header : currentHeader;
+  if (hdr) {
+    for (const name of hdr) {
+      items.push({ label: name, insert: 'r.' + name, kind: 'col' });
+    }
+  }
+  // Calcol names (that aren't the one being edited)
+  for (const cc of currentCalcols) {
+    if (cc.id === editingCalcolId) continue;
+    items.push({ label: cc.name, insert: 'r.' + cc.name, kind: 'calc' });
+  }
+  // Math functions
+  for (const m of MATH_COMPLETIONS) {
+    items.push({ label: m.label, insert: m.insert, kind: 'fn', desc: m.desc });
+  }
+  return items;
+}
+
+function showAutocomplete() {
+  const { token, start, hasPrefix, fullLen } = getTokenAtCursor($calcolExpr);
+  if (!token || token.length < 1) { hideAutocomplete(); return; }
+  const lc = token.toLowerCase();
+  acItems = buildAcItems().filter(it => {
+    // For column names, match against the column name (after r.)
+    const matchTarget = it.kind === 'col' || it.kind === 'calc' ? it.label : it.insert;
+    return matchTarget.toLowerCase().startsWith(lc) || it.label.toLowerCase().startsWith(lc);
+  }).slice(0, 10);
+  if (acItems.length === 0) { hideAutocomplete(); return; }
+  acSelected = 0;
+  renderAcDropdown();
+  $acDropdown.classList.add('open');
+}
+
+function hideAutocomplete() {
+  $acDropdown.classList.remove('open');
+  acItems = [];
+  acSelected = -1;
+}
+
+function renderAcDropdown() {
+  $acDropdown.innerHTML = acItems.map((it, i) => {
+    const kindCls = it.kind === 'col' ? 'ac-col' : it.kind === 'calc' ? 'ac-calc' : 'ac-fn';
+    return `<div class="ac-item ${kindCls}${i === acSelected ? ' selected' : ''}" data-idx="${i}">
+      <span class="ac-label">${esc(it.label)}</span>
+      ${it.desc ? `<span class="ac-desc">${esc(it.desc)}</span>` : ''}
+    </div>`;
+  }).join('');
+  $acDropdown.querySelectorAll('.ac-item').forEach(el => {
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      acceptAutocomplete(parseInt(el.dataset.idx));
+    });
+  });
+}
+
+function acceptAutocomplete(idx) {
+  const item = acItems[idx];
+  if (!item) return;
+  const { token, start, hasPrefix, fullLen } = getTokenAtCursor($calcolExpr);
+  const before = $calcolExpr.value.substring(0, start);
+  const after = $calcolExpr.value.substring(start + fullLen);
+  $calcolExpr.value = before + item.insert + after;
+  const newPos = before.length + item.insert.length;
+  $calcolExpr.setSelectionRange(newPos, newPos);
+  hideAutocomplete();
+  previewCalcol($calcolExpr.value);
+  $calcolExpr.focus();
+}
+
+// Wire up calcol editor
+$calcolExpr.addEventListener('input', () => {
+  previewCalcol($calcolExpr.value);
+  $calcolError.textContent = '';
+  showAutocomplete();
+});
+
+$calcolExpr.addEventListener('blur', () => {
+  setTimeout(hideAutocomplete, 150);
+});
+
+$calcolExpr.addEventListener('keydown', (e) => {
+  if ($acDropdown.classList.contains('open') && acItems.length > 0) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      acSelected = (acSelected + 1) % acItems.length;
+      renderAcDropdown();
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      acSelected = (acSelected - 1 + acItems.length) % acItems.length;
+      renderAcDropdown();
+      return;
+    }
+    if (e.key === 'Tab' || (e.key === 'Enter' && acSelected >= 0)) {
+      e.preventDefault();
+      acceptAutocomplete(acSelected);
+      return;
+    }
+    if (e.key === 'Escape') {
+      hideAutocomplete();
+      return;
+    }
+  }
+  if (e.key === 'Enter' && !e.shiftKey) e.stopPropagation();
+});
+
+$calcolAdd.addEventListener('click', () => {
+  const name = $calcolName.value.trim();
+  const expr = $calcolExpr.value.trim();
+  const type = $calcolType.value;
+
+  if (!name) { $calcolError.textContent = 'Name is required.'; return; }
+  if (!expr) { $calcolError.textContent = 'Expression is required.'; return; }
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) { $calcolError.textContent = 'Name must be a valid identifier (letters, digits, _).'; return; }
+
+  // Check for name collision (allow same name when editing that column)
+  const otherNames = new Set([
+    ...currentHeader,
+    ...currentCalcols.filter(c => c.id !== editingCalcolId).map(c => c.name)
+  ]);
+  if (otherNames.has(name)) { $calcolError.textContent = `Column "${name}" already exists.`; return; }
+
+  // Validate expression compiles
+  try { new Function(currentRowVar || 'r', MATH_PREAMBLE_MAIN + 'return (' + expr + ')'); }
+  catch(e) { $calcolError.textContent = 'Expression error: ' + e.message; return; }
+
+  if (editingCalcolId !== null) {
+    // Update existing
+    const cc = currentCalcols.find(c => c.id === editingCalcolId);
+    if (cc) { cc.name = name; cc.expr = expr; cc.type = type; }
+  } else {
+    // Add new
+    currentCalcols.push({ id: ++calcolIdCounter, name, expr, type });
+  }
+  cancelCalcolEdit();
+  renderCalcolList();
+  updateCalcolRunBtn();
+  updateCalcolBadge();
+});
+
+$calcolRun.addEventListener('click', () => {
+  if ($calcolRun.disabled) return;
+  startAnalysis(currentXYZ, currentFilter, undefined, undefined, undefined, undefined);
+});
+
+$calcolCancel.addEventListener('click', cancelCalcolEdit);
+
+// Enter in calcol name jumps to expression
+$calcolName.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); $calcolExpr.focus(); }
+});
+
+function fi(label, value) {
+  return `<div class="fi-item"><span class="fi-label">${label}:</span><span class="fi-value">${value}</span></div>`;
+}
+
+function geoRowT(label, vx, vy, vz) {
+  const fmt = (v) => (v != null && v !== undefined) ? String(v) : '—';
+  const cell = (v) => {
+    const s = fmt(v);
+    return s === '—'
+      ? `<div class="gc">${s}</div>`
+      : `<div class="gc" data-value="${s}">${s}<span class="copy-toast">copied</span></div>`;
+  };
+  return `<div class="gl">${label}</div>${cell(vx)}${cell(vy)}${cell(vz)}`;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ─── Event Handlers ──────────────────────────────────────────────────
+$dropzone.addEventListener('dragover', (e) => { e.preventDefault(); $dropzone.classList.add('drag-over'); });
+$dropzone.addEventListener('dragleave', () => $dropzone.classList.remove('drag-over'));
+$dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  $dropzone.classList.remove('drag-over');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+$fileInput.addEventListener('change', (e) => { if (e.target.files.length) handleFile(e.target.files[0]); });
+
+// ─── Filter Expression System ────────────────────────────────────────
+function rebuildFilterExpression() {
+  // Gather checked values grouped by column
+  const groups = {};
+  $catContent.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
+    const col = cb.dataset.col;
+    if (!groups[col]) groups[col] = [];
+    groups[col].push(cb.dataset.val);
+  });
+
+  // Helper: proper JS accessor for column name
+  const colRef = (name) => {
+    const v = currentRowVar;
+    return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) ? `${v}.${name}` : `${v}["${name}"]`;
+  };
+
+  // Build expression: OR within column, AND across columns
+  const parts = [];
+  for (const [colIdx, vals] of Object.entries(groups)) {
+    const col = colRef(currentHeader[parseInt(colIdx)]);
+    const conditions = vals.map(v => `${col} == "${v}"`);
+    parts.push(conditions.length === 1 ? conditions[0] : `(${conditions.join(' || ')})`);
+  }
+
+  // Get any existing manual/numeric parts the user typed
+  const currentExpr = $filterExpr.value.trim();
+  const autoExpr = parts.join(' && ');
+
+  // If user hasn't manually edited, just replace entirely
+  if (!currentExpr || currentExpr === lastAutoExpr) {
+    $filterExpr.value = autoExpr;
+  } else {
+    // User has custom content — try to replace the auto-generated portion
+    if (lastAutoExpr && currentExpr.includes(lastAutoExpr)) {
+      $filterExpr.value = autoExpr
+        ? currentExpr.replace(lastAutoExpr, autoExpr)
+        : currentExpr.replace(lastAutoExpr, '').replace(/^\s*&&\s*|\s*&&\s*$/, '').trim();
+    } else if (autoExpr) {
+      // Can't find old auto part — append
+      $filterExpr.value = currentExpr ? `${currentExpr} && ${autoExpr}` : autoExpr;
+    }
+  }
+  lastAutoExpr = autoExpr;
+}
+let lastAutoExpr = '';
+
+// Apply filter
+$filterApply.addEventListener('click', () => {
+  const expr = $filterExpr.value.trim();
+  $filterError.classList.remove('active');
+  if (!expr) {
+    currentFilter = null;
+    startAnalysis(currentXYZ, null, undefined, undefined, undefined, undefined);
+    return;
+  }
+  currentFilter = { expression: expr };
+  startAnalysis(currentXYZ, currentFilter, undefined, undefined, undefined, undefined);
+});
+
+// Enter key applies
+$filterExpr.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    $filterApply.click();
+  }
+});
+
+// Clear filter
+$filterClear.addEventListener('click', () => {
+  $filterExpr.value = '';
+  lastAutoExpr = '';
+  currentFilter = null;
+  $filterError.classList.remove('active');
+  // Uncheck all checkboxes
+  $catContent.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
+    cb.checked = false;
+    cb.closest('tr').classList.remove('active');
+  });
+  startAnalysis(currentXYZ, null, undefined, undefined, undefined, undefined);
+});
+
+// Click-to-copy on geometry cells (event delegation)
+$geoContent.addEventListener('click', (e) => {
+  const cell = e.target.closest('.gc[data-value]');
+  if (!cell) return;
+  const val = cell.dataset.value;
+  navigator.clipboard.writeText(val).then(() => {
+    cell.classList.add('copied');
+    setTimeout(() => cell.classList.remove('copied'), 800);
+  });
+});
+
+// Copy full geometry table
+let lastGeoData = null;
+document.getElementById('copyGeoBtn').addEventListener('click', (e) => {
+  if (!lastGeoData) return;
+  const btn = e.currentTarget;
+  const g = lastGeoData;
+  const fmt = (v) => (v != null && v !== undefined) ? String(v) : '';
+  const anySubBlocked = g.x.isSubBlocked || g.y.isSubBlocked || g.z.isSubBlocked;
+  const rows = [
+    ['', 'X', 'Y', 'Z'],
+    ['Origin', fmt(g.x.origin), fmt(g.y.origin), fmt(g.z.origin)],
+    ['Block Size', fmt(g.x.blockSize), fmt(g.y.blockSize), fmt(g.z.blockSize)],
+  ];
+  if (anySubBlocked) {
+    rows.push(['Min Block', fmt(g.x.minBlockSize), fmt(g.y.minBlockSize), fmt(g.z.minBlockSize)]);
+  }
+  rows.push(
+    ['Unique', fmt(g.x.uniqueCount), fmt(g.y.uniqueCount), fmt(g.z.uniqueCount)],
+    ['Grid Count', fmt(g.x.gridCount), fmt(g.y.gridCount), fmt(g.z.gridCount)],
+    ['Extent', fmt(g.x.extent), fmt(g.y.extent), fmt(g.z.extent)],
+  );
+  const tsv = rows.map(r => r.join('\t')).join('\n');
+  navigator.clipboard.writeText(tsv).then(() => {
+    btn.classList.add('copied');
+    btn.textContent = 'Copied!';
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.textContent = 'Copy table';
+    }, 1200);
+  });
+});
+
+// ─── CDF Plot ─────────────────────────────────────────────────────────
+$cdfClose.addEventListener('click', () => $cdfModal.classList.remove('active'));
+$cdfModal.addEventListener('click', (e) => { if (e.target === $cdfModal) $cdfModal.classList.remove('active'); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $cdfModal.classList.contains('active')) $cdfModal.classList.remove('active'); });
+
+function showCDF(colIdx) {
+  const s = lastDisplayedStats[colIdx];
+  const name = lastDisplayedHeader[colIdx];
+  if (!s || !s.centroids || s.centroids.length === 0) return;
+
+  $cdfTitle.textContent = `CDF — ${name}`;
+  $cdfModal.classList.add('active');
+
+  // Build cumulative data from centroids
+  const centroids = s.centroids; // [[mean, count], ...]
+  const totalCount = s.count;
+  const points = [];
+  let cumCount = 0;
+  for (const [mean, count] of centroids) {
+    cumCount += count;
+    points.push({ x: mean, y: cumCount / totalCount });
+  }
+
+  // SVG dimensions
+  const W = 660, H = 360;
+  const pad = { top: 20, right: 30, bottom: 50, left: 60 };
+  const plotW = W - pad.left - pad.right;
+  const plotH = H - pad.top - pad.bottom;
+
+  const xMin = s.min, xMax = s.max;
+  const xRange = xMax - xMin || 1;
+
+  function sx(v) { return pad.left + ((v - xMin) / xRange) * plotW; }
+  function sy(v) { return pad.top + (1 - v) * plotH; }
+
+  // Build polyline
+  const pathParts = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`);
+  const pathD = pathParts.join(' ');
+
+  // Grid lines and labels
+  const yTicks = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0];
+  let gridSvg = '';
+  for (const yt of yTicks) {
+    const y = sy(yt);
+    gridSvg += `<line x1="${pad.left}" y1="${y}" x2="${W - pad.right}" y2="${y}" stroke="#1e2228" stroke-width="1"/>`;
+    gridSvg += `<text x="${pad.left - 8}" y="${y + 3.5}" text-anchor="end" fill="#6a737d" font-size="10">${(yt * 100).toFixed(0)}%</text>`;
+  }
+
+  // X axis ticks (auto)
+  const nxTicks = 6;
+  for (let i = 0; i <= nxTicks; i++) {
+    const v = xMin + (xRange * i / nxTicks);
+    const x = sx(v);
+    gridSvg += `<line x1="${x}" y1="${pad.top}" x2="${x}" y2="${H - pad.bottom}" stroke="#1e2228" stroke-width="1"/>`;
+    const label = Math.abs(v) >= 1e5 || (Math.abs(v) < 0.01 && v !== 0) ? v.toExponential(1) : v.toFixed(Math.abs(v) < 10 ? 2 : 0);
+    gridSvg += `<text x="${x}" y="${H - pad.bottom + 16}" text-anchor="middle" fill="#6a737d" font-size="10">${label}</text>`;
+  }
+
+  // Percentile markers
+  const q = s.quantiles;
+  let markerSvg = '';
+  if (q) {
+    const pctiles = [
+      { v: q.p10, label: 'P10' }, { v: q.p25, label: 'P25' },
+      { v: q.p50, label: 'P50' }, { v: q.p75, label: 'P75' },
+      { v: q.p90, label: 'P90' }
+    ];
+    for (const p of pctiles) {
+      if (p.v === null || p.v === undefined) continue;
+      const x = sx(p.v);
+      const pVal = parseFloat(p.label.slice(1)) / 100;
+      const y = sy(pVal);
+      markerSvg += `<circle cx="${x}" cy="${y}" r="3" fill="#f0b232"/>`;
+    }
+  }
+  // Mean marker
+  if (s.mean !== null) {
+    const mx = sx(s.mean);
+    markerSvg += `<line x1="${mx}" y1="${pad.top}" x2="${mx}" y2="${H - pad.bottom}" stroke="#58a6ff" stroke-width="1" stroke-dasharray="4,3"/>`;
+    markerSvg += `<text x="${mx}" y="${H - pad.bottom + 30}" text-anchor="middle" fill="#58a6ff" font-size="9">mean</text>`;
+  }
+
+  const svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)">
+    <rect width="${W}" height="${H}" fill="var(--bg)" rx="4"/>
+    ${gridSvg}
+    <path d="${pathD}" fill="none" stroke="var(--amber)" stroke-width="1.5"/>
+    ${markerSvg}
+    <text x="${W / 2}" y="${H - 4}" text-anchor="middle" fill="#6a737d" font-size="10">${esc(name)}</text>
+    <text x="12" y="${H / 2}" text-anchor="middle" fill="#6a737d" font-size="10" transform="rotate(-90, 12, ${H / 2})">Cumulative %</text>
+  </svg>`;
+
+  // Stats summary
+  const cv = (s.mean && s.std && s.mean !== 0) ? Math.abs(s.std / s.mean * 100) : null;
+  const zeroPct = s.count > 0 ? (s.zeros / s.count * 100) : 0;
+  let statsHtml = `<div class="cdf-stats">`;
+  statsHtml += `<span>n=<strong>${s.count.toLocaleString()}</strong></span>`;
+  if (s.nulls > 0) statsHtml += `<span>nulls=<strong>${s.nulls.toLocaleString()}</strong></span>`;
+  if (s.zeros > 0) statsHtml += `<span>zeros=<strong>${s.zeros.toLocaleString()}</strong> (${zeroPct.toFixed(1)}%)</span>`;
+  statsHtml += `<span>min=<strong>${formatNum(s.min)}</strong></span>`;
+  if (q) statsHtml += `<span>P50=<strong>${formatNum(q.p50)}</strong></span>`;
+  statsHtml += `<span>mean=<strong>${formatNum(s.mean)}</strong></span>`;
+  statsHtml += `<span>max=<strong>${formatNum(s.max)}</strong></span>`;
+  if (cv !== null) statsHtml += `<span>CV=<strong>${cv.toFixed(1)}%</strong></span>`;
+  if (s.skewness !== null) statsHtml += `<span>skew=<strong>${s.skewness.toFixed(2)}</strong></span>`;
+  statsHtml += `</div>`;
+
+  $cdfBody.innerHTML = svg + statsHtml;
+}
+</script>
+</body>
+</html>
