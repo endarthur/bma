@@ -542,7 +542,14 @@ body.has-filter #results.active { height: calc(100vh - 4.5rem); }
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   padding: 0 1rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
+.results-tabs::-webkit-scrollbar { height: 3px; }
+.results-tabs::-webkit-scrollbar-track { background: transparent; }
+.results-tabs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .results-tab {
   background: none;
   border: none;
@@ -555,6 +562,8 @@ body.has-filter #results.active { height: calc(100vh - 4.5rem); }
   cursor: pointer;
   letter-spacing: 0.03em;
   transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .results-tab:hover { color: var(--fg-bright); }
 .results-tab.active {

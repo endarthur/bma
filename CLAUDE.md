@@ -45,7 +45,10 @@ node -e "..." # extract <script> content and WORKER_CODE, new Function() each
 - **Web Worker** — all analysis runs off main thread
 - **Single-pass** — type detection, stats, geometry, and calculated columns all computed in one file read
 - **Worker code is a template literal** — the `WORKER_CODE` constant is a backtick-delimited string. Watch for unescaped backticks or `${` inside it (currently avoided via string concat)
+- **Preflight is a tab** — the tabbed workspace appears as soon as a file is dropped, before any analysis runs
+- **Overlay for re-analysis** — semi-transparent overlay with progress bar + cancel. Cancel terminates worker, restores previous results from `lastCompleteData`
 - **Expression DSL** — filters and calcols use `r.column_name` syntax compiled to JS via `new Function()`. A `MATH_PREAMBLE` injects destructured Math functions and helpers (`clamp`, `cap`, `ifnull`, `between`, `remap`, `fn.round`)
+- **Filters can reference calcols** — `buildRow()` evaluates calcols before the filter runs, so filter expressions can use calculated column values
 
 ### Worker Protocol
 
@@ -89,10 +92,8 @@ Messages **from** worker:
 - **Name collisions**: calcol names matching Math preamble functions (`abs`, `sqrt`, etc.) will be shadowed by the preamble `const` declarations
 - **Autocomplete positioning**: uses `position: absolute; bottom: 100%` inside a relative label — may clip in some layouts
 
-## V1 Roadmap (next features)
+## Reference Docs
 
-Tabs: `Preflight · Summary · Calc · Statistics · StatsCat · Swath · Categories · Export`
-
-1. **StatsCat** — statistics grouped by categorical variable (per-group Welford + t-digest in worker)
-2. **Swath** — spatial binning along direction vector with per-bin stats and line charts
-3. **Export** — CSV export with column selection, reordering, renaming
+- [`docs/worker-protocol.md`](docs/worker-protocol.md) — full worker message schemas and stats object structure
+- [`docs/v1-roadmap.md`](docs/v1-roadmap.md) — V1 feature architecture (StatsCat, Swath, Export)
+- [`docs/code-map.md`](docs/code-map.md) — detailed line ranges, HTML structure, CSS variables, state variables
