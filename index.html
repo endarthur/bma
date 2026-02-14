@@ -49,8 +49,9 @@ body {
 .app.has-results > header,
 .app.has-results > .dropzone,
 .app.has-results > .about-section,
-.app.has-results > .landing-footer,
+.app.has-results > .landing-footer { display: none; }
 .app.has-results > .error-msg { display: none; }
+.app.has-results > .error-msg.active { display: block; }
 header {
   margin-bottom: 2rem;
   border-bottom: 1px solid var(--border);
@@ -504,11 +505,25 @@ body.has-footer.has-filter #results.active { height: calc(100vh - 4.5rem); }
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.5rem 1.2rem;
+  padding: 0.4rem 1.2rem;
   background: var(--bg2);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   z-index: 10;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  position: relative;
+}
+.toolbar-left {
+  display: flex; align-items: center; gap: 0.8rem;
+  min-width: 0; flex-shrink: 1;
+}
+.toolbar-center {
+  display: flex; gap: 1rem; align-items: center;
+}
+.toolbar-right {
+  display: flex; gap: 0.5rem; align-items: center;
+  position: relative;
 }
 .results-toolbar-title {
   font-size: 0.78rem;
@@ -517,14 +532,45 @@ body.has-footer.has-filter #results.active { height: calc(100vh - 4.5rem); }
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.results-toolbar-right {
-  display: flex;
-  gap: 1.2rem;
-  align-items: center;
-}
 .results-toolbar-info {
   font-size: 0.68rem;
   color: var(--fg-dim);
+}
+.toolbar-btn {
+  background: none; border: 1px solid var(--border); color: var(--fg-dim);
+  font: 0.68rem var(--mono); padding: 0.2rem 0.6rem;
+  cursor: pointer; border-radius: 3px; text-transform: uppercase;
+  letter-spacing: 0.04em; white-space: nowrap;
+}
+.toolbar-btn:hover { color: var(--amber); border-color: var(--amber); }
+.toolbar-overflow {
+  display: none;
+  background: none; border: none; color: var(--fg-dim);
+  font-size: 1.1rem; cursor: pointer; padding: 0.2rem 0.4rem;
+}
+.toolbar-overflow:hover { color: var(--fg-bright); }
+.toolbar-menu {
+  display: none; position: absolute; right: 0; top: 100%;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 4px; z-index: 20; min-width: 150px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.toolbar-menu.open { display: block; }
+.toolbar-menu-item {
+  display: block; width: 100%; text-align: left;
+  background: none; border: none; color: var(--fg);
+  font: 0.75rem var(--mono); padding: 0.5rem 0.8rem;
+  cursor: pointer;
+}
+.toolbar-menu-item:hover { background: var(--bg3); color: var(--amber); }
+
+@media (max-width: 700px) {
+  .toolbar-btn { display: none; }
+  .toolbar-overflow { display: block; }
+  .toolbar-center {
+    order: 3; width: 100%;
+    font-size: 0.62rem; padding-left: 2rem;
+  }
 }
 
 /* Tabs */
@@ -1810,13 +1856,25 @@ body.has-footer { }
 
   <div id="results">
     <div class="results-toolbar" id="resultsToolbar">
-      <div style="display:flex;align-items:center;gap:0.8rem">
+      <div class="toolbar-left">
         <button class="preflight-back-btn" id="backToPreflight" title="Close file">✕</button>
         <span class="results-toolbar-title" id="resultsFilename"></span>
       </div>
-      <div class="results-toolbar-right">
+      <div class="toolbar-center">
         <span id="resultsRowInfo" class="results-toolbar-info"></span>
         <span id="resultsTimeInfo" class="results-toolbar-info"></span>
+      </div>
+      <div class="toolbar-right">
+        <button class="toolbar-btn" id="projectSave" title="Save project (.bma.json)">Save</button>
+        <button class="toolbar-btn" id="projectLoad" title="Load project (.bma.json)">Load</button>
+        <button class="toolbar-btn" id="projectClear" title="Clear saved config, revert to defaults">Clear</button>
+        <input type="file" id="projectFileInput" accept=".bma.json,.json" style="display:none">
+        <button class="toolbar-overflow" id="toolbarOverflow" title="More">⋮</button>
+        <div class="toolbar-menu" id="toolbarMenu">
+          <button class="toolbar-menu-item" data-action="save">Save project</button>
+          <button class="toolbar-menu-item" data-action="load">Load project</button>
+          <button class="toolbar-menu-item" data-action="clear">Clear project</button>
+        </div>
       </div>
     </div>
     <div class="results-tabs" id="resultsTabs">
@@ -2177,14 +2235,6 @@ function computeGeometry(xVals, yVals, zVals, decimals) {
 }
 
 // Round to n significant figures for display
-function sigfig(val, n) {
-  if (val === 0) return 0;
-  const d = Math.ceil(Math.log10(Math.abs(val)));
-  const power = n - d;
-  const mag = Math.pow(10, power);
-  return Math.round(val * mag) / mag;
-}
-
 // ─── ZIP support ──────────────────────────────────────────────────────
 const CSV_EXTENSIONS = /\\.(csv|txt|dat|tsv)$/i;
 
@@ -3164,6 +3214,12 @@ const $resultsFilename = document.getElementById('resultsFilename');
 const $resultsRowInfo = document.getElementById('resultsRowInfo');
 const $resultsTimeInfo = document.getElementById('resultsTimeInfo');
 const $backToPreflight = document.getElementById('backToPreflight');
+const $projectSave = document.getElementById('projectSave');
+const $projectLoad = document.getElementById('projectLoad');
+const $projectClear = document.getElementById('projectClear');
+const $projectFileInput = document.getElementById('projectFileInput');
+const $toolbarOverflow = document.getElementById('toolbarOverflow');
+const $toolbarMenu = document.getElementById('toolbarMenu');
 const $cdfModal = document.getElementById('cdfModal');
 const $cdfTitle = document.getElementById('cdfTitle');
 const $cdfBody = document.getElementById('cdfBody');
@@ -3211,6 +3267,10 @@ const $exportInfo = document.getElementById('exportInfo');
 const $exportProgress = document.getElementById('exportProgress');
 const $exportProgressLabel = document.getElementById('exportProgressLabel');
 const $exportProgressFill = document.getElementById('exportProgressFill');
+
+// Project save/load
+let pendingProjectRestore = null;
+let autoSaveTimer = null;
 
 const STATSCAT_PALETTE = [
   '#4a9eff','#34d399','#f87171','#a78bfa','#fb923c',
@@ -3859,6 +3919,201 @@ function delimName(d) {
   return JSON.stringify(d);
 }
 
+// ─── Project Save/Load ─────────────────────────────────────────────────
+
+function projectKey(f) { return 'bma:' + f.name + ':' + f.size; }
+
+function serializeProject() {
+  return {
+    _bma: 1,
+    _ts: Date.now(),
+    file: { name: currentFile.name, size: currentFile.size },
+    preflight: {
+      typeOverrides: preflightData?.typeOverrides || {},
+      skipCols: preflightData ? Array.from(preflightData.skipCols) : [],
+      colFilters: preflightData?.colFilters || {},
+      xyz: preflightData?.xyz || { x: -1, y: -1, z: -1 },
+      selectedZipEntry: preflightData?.selectedZipEntry || null
+    },
+    calcols: currentCalcols.map(c => ({ name: c.name, expr: c.expr, type: c.type })),
+    calcolIdCounter,
+    filter: currentFilter,
+    filterText: $filterExpr.value,
+    statsCat: {
+      groupBy: currentGroupBy,
+      selectedVars: Array.from(statsCatSelectedVars),
+      sortMode: statsCatGroupSortMode,
+      cdfScale: statsCatCdfScale,
+      crossMode: statsCatCrossMode
+    },
+    exportCols: exportColumns.map(c => ({
+      name: c.name, outputName: c.outputName, selected: c.selected
+    }))
+  };
+}
+
+function autoSaveProject() {
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => {
+    if (!currentFile || !preflightData) return;
+    try {
+      localStorage.setItem(projectKey(currentFile), JSON.stringify(serializeProject()));
+    } catch (e) { /* quota — silent fail */ }
+  }, 2000);
+}
+
+async function applyProject(project) {
+  if (!project || !project._bma) return;
+
+  // Restore preflight config
+  if (preflightData) {
+    const pf = project.preflight || {};
+
+    // If saved project used a different zip entry, re-read its preview first
+    if (pf.selectedZipEntry && preflightData.zipEntries &&
+        pf.selectedZipEntry !== preflightData.selectedZipEntry) {
+      const entry = preflightData.zipEntries.find(z => z.name === pf.selectedZipEntry);
+      if (entry) {
+        try {
+          const lines = await readPreviewFromZipEntry(currentFile, entry, 100);
+          const delimiter = detectDelimiterMain(lines.slice(0, 20));
+          preflightData.header = lines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
+          preflightData.sampleRows = lines.slice(1).filter(l => l.trim())
+            .map(l => l.split(delimiter).map(f => f.trim().replace(/^["']|["']$/g, '')));
+          preflightData.delimiter = delimiter;
+          preflightData.autoTypes = autoDetectTypes(preflightData.header, preflightData.sampleRows);
+          preflightData.selectedZipEntry = pf.selectedZipEntry;
+          // Update zip dropdown to reflect restored selection
+          const zipSelect = document.getElementById('zipSelect');
+          if (zipSelect) zipSelect.value = pf.selectedZipEntry;
+        } catch (e) { /* failed to read entry — continue with current */ }
+      }
+    }
+
+    preflightData.typeOverrides = pf.typeOverrides || {};
+    preflightData.skipCols = new Set(pf.skipCols || []);
+    preflightData.colFilters = pf.colFilters || {};
+    if (pf.xyz) preflightData.xyz = pf.xyz;
+    renderPreflightSidebar(preflightData);
+    renderPreflightTable(preflightData);
+  }
+
+  // Restore calcols
+  currentCalcols = (project.calcols || []).map((c, i) => ({
+    id: i, name: c.name, expr: c.expr, type: c.type || 'numeric'
+  }));
+  calcolIdCounter = project.calcolIdCounter || currentCalcols.length;
+  renderCalcolList();
+
+  // Restore filter
+  currentFilter = project.filter || null;
+  $filterExpr.value = project.filterText || '';
+
+  // Stash post-analysis config for when analysis runs
+  pendingProjectRestore = project;
+}
+
+function applyExportRestore(savedCols) {
+  const reordered = [];
+  const used = new Set();
+  for (const sc of savedCols) {
+    const idx = exportColumns.findIndex(c => c.name === sc.name);
+    if (idx >= 0) {
+      exportColumns[idx].outputName = sc.outputName || exportColumns[idx].name;
+      exportColumns[idx].selected = sc.selected !== false;
+      reordered.push(exportColumns[idx]);
+      used.add(idx);
+    }
+  }
+  for (let i = 0; i < exportColumns.length; i++) {
+    if (!used.has(i)) reordered.push(exportColumns[i]);
+  }
+  exportColumns = reordered;
+  renderExportColumns();
+}
+
+function saveProjectFile() {
+  if (!currentFile || !preflightData) return;
+  const json = JSON.stringify(serializeProject(), null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = currentFile.name.replace(/\.[^.]+$/, '') + '.bma.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function clearProject() {
+  if (!currentFile) return;
+  try { localStorage.removeItem(projectKey(currentFile)); } catch (e) {}
+
+  currentCalcols = [];
+  calcolIdCounter = 0;
+  currentFilter = null;
+  $filterExpr.value = '';
+  currentGroupBy = null;
+  currentStatsCatVar = null;
+  currentStatsCatChecked = null;
+  statsCatGroupSortMode = 'count';
+  statsCatSelectedVars = new Set();
+  statsCatCdfScale = 'linear';
+  statsCatCdfManual = false;
+  statsCatCdfMin = null;
+  statsCatCdfMax = null;
+  statsCatCrossMode = 'count';
+  statsCatShowSelectedOnly = false;
+  exportColumns = [];
+  pendingProjectRestore = null;
+
+  runPreflight(currentFile).then(data => {
+    renderPreflight(data);
+    renderCalcolList();
+    markAnalysisStale();
+    switchTab('preflight');
+  });
+}
+
+// Toolbar overflow menu
+$toolbarOverflow.addEventListener('click', (e) => {
+  e.stopPropagation();
+  $toolbarMenu.classList.toggle('open');
+});
+document.addEventListener('click', () => $toolbarMenu.classList.remove('open'));
+
+// Toolbar menu items
+$toolbarMenu.addEventListener('click', (e) => {
+  const item = e.target.closest('.toolbar-menu-item');
+  if (!item) return;
+  $toolbarMenu.classList.remove('open');
+  const action = item.dataset.action;
+  if (action === 'save') saveProjectFile();
+  else if (action === 'load') $projectFileInput.click();
+  else if (action === 'clear') clearProject();
+});
+
+// Toolbar buttons
+$projectSave.addEventListener('click', saveProjectFile);
+$projectLoad.addEventListener('click', () => $projectFileInput.click());
+$projectClear.addEventListener('click', clearProject);
+
+// Load project file
+$projectFileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const project = JSON.parse(reader.result);
+      applyProject(project);
+    } catch (err) {
+      $errorMsg.textContent = 'Invalid project file: ' + err.message;
+      $errorMsg.classList.add('active');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
 function handleFile(file) {
   if (!file) return;
   currentFile = file;
@@ -3876,6 +4131,12 @@ function handleFile(file) {
   statsCatCdfMax = null;
   statsCatCrossMode = 'count';
   exportColumns = [];
+  pendingProjectRestore = null;
+  currentTypeOverrides = null;
+  currentZipEntry = null;
+  currentSkipCols = null;
+  currentColFilters = null;
+  lastCompleteData = null;
   if (exportWorker) { exportWorker.terminate(); exportWorker = null; }
   hasResults = false;
   $filterExpr.value = '';
@@ -3936,6 +4197,14 @@ function handleFile(file) {
   // Run preflight
   runPreflight(file).then(data => {
     renderPreflight(data);
+    // Auto-restore saved project config
+    const saved = localStorage.getItem(projectKey(file));
+    if (saved) {
+      try {
+        const project = JSON.parse(saved);
+        applyProject(project);
+      } catch (e) { /* corrupt — ignore */ }
+    }
   }).catch(err => {
     $errorMsg.textContent = err.message;
     $errorMsg.classList.add('active');
@@ -3959,10 +4228,6 @@ function executeAnalysis() {
   const skip = preflightData.skipCols.size > 0 ? Array.from(preflightData.skipCols) : null;
   const colFilters = Object.keys(preflightData.colFilters).length > 0 ? preflightData.colFilters : null;
   startAnalysis(xyzOv, currentFilter, typeOv, zipEntry, skip, colFilters);
-}
-
-function triggerPreflightAnalysis() {
-  executeAnalysis();
 }
 
 let hasResults = false; // Track whether analysis has been run
@@ -3991,6 +4256,7 @@ $backToPreflight.addEventListener('click', () => {
   statsCatSelectedVars = new Set();
   statsCatShowSelectedOnly = false;
   exportColumns = [];
+  pendingProjectRestore = null;
   if (exportWorker) { exportWorker.terminate(); exportWorker = null; }
 });
 
@@ -4053,6 +4319,12 @@ function startAnalysis(xyzOverride, filter, typeOverrides, zipEntry, skipCols, c
     $overlay.remove();
     if (lastCompleteData) displayResults(lastCompleteData);
   });
+
+  worker.onerror = (e) => {
+    $overlay.remove();
+    $errorMsg.textContent = 'Worker error: ' + (e.message || 'unknown error');
+    $errorMsg.classList.add('active');
+  };
 
   worker.onmessage = (e) => {
     const msg = e.data;
@@ -4431,6 +4703,24 @@ function displayResults(data) {
 
   // Export
   initExportColumns();
+
+  // Restore pending project state (phase 2 — post-analysis)
+  if (pendingProjectRestore) {
+    const p = pendingProjectRestore;
+    pendingProjectRestore = null;
+
+    const sc = p.statsCat || {};
+    if (sc.groupBy != null) currentGroupBy = sc.groupBy;
+    if (sc.selectedVars) statsCatSelectedVars = new Set(sc.selectedVars);
+    if (sc.sortMode) statsCatGroupSortMode = sc.sortMode;
+    if (sc.cdfScale) statsCatCdfScale = sc.cdfScale;
+    if (sc.crossMode) statsCatCrossMode = sc.crossMode;
+
+    if (p.exportCols) applyExportRestore(p.exportCols);
+  }
+
+  // Auto-save project
+  autoSaveProject();
 
   // Update tab badges
   const statsTab = $resultsTabs.querySelector('[data-tab="statistics"]');
