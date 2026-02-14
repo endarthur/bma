@@ -4,7 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BMA — Block Model Atelier</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='8' fill='%232d2d2d'/%3E%3Ccircle cx='32' cy='32' r='27' stroke='%23a0a0a0' fill='none' opacity='.4' transform='rotate(15,32,32)'/%3E%3Ctext x='32' y='44' font-family='Georgia,serif' font-size='28' font-weight='bold' fill='%23b87333' text-anchor='middle'%3EG%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='8' fill='%232d2d2d'/%3E%3Ccircle cx='32' cy='32' r='27' stroke='%23a0a0a0' fill='none' opacity='.4' transform='rotate(15,32,32)'/%3E%3Ctext x='32' y='43' font-family='Georgia,serif' font-size='24' font-weight='bold' fill='%23b87333' text-anchor='middle'%3EBMA%3C/text%3E%3C/svg%3E">
+<meta name="theme-color" content="#08090a">
+<meta name="description" content="Client-side CSV block model analyzer for mining and geostatistics">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -3984,6 +3988,10 @@ function showCDF(colIdx) {
   statsHtml += `</div>`;
 
   $cdfBody.innerHTML = svg + statsHtml;
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
 }
 </script>
 </body>
