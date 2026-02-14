@@ -207,19 +207,6 @@ header .logo-mark {
   text-transform: uppercase;
   flex-shrink: 0;
 }
-.preflight-analyze-btn {
-  background: var(--amber);
-  color: var(--bg);
-  border: none;
-  padding: 0.4rem 1.4rem;
-  border-radius: 3px;
-  cursor: pointer;
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-.preflight-analyze-btn:hover { opacity: 0.9; }
 .preflight-back-btn {
   background: none;
   border: 1px solid var(--border);
@@ -403,6 +390,7 @@ header .logo-mark {
   border-color: var(--red, #f47067);
 }
 .pf-filter-btn:hover { opacity: 0.8; }
+.pf-filter-hidden { display: none !important; }
 .pf-sidebar-actions {
   display: flex;
   gap: 0.5rem;
@@ -509,7 +497,8 @@ header .logo-mark {
 /* Results */
 #results { display: none; margin-top: 0; }
 #results.active { display: flex; flex-direction: column; height: 100vh; }
-body.has-filter #results.active { height: calc(100vh - 4.5rem); }
+body.has-footer #results.active { height: calc(100vh - 3rem); }
+body.has-footer.has-filter #results.active { height: calc(100vh - 4.5rem); }
 
 .results-toolbar {
   display: flex;
@@ -762,12 +751,6 @@ body.has-filter #results.active { height: calc(100vh - 4.5rem); }
   font-size: 0.68rem;
 }
 .calcol-btn:hover { color: var(--fg-bright); border-color: var(--fg-dim); }
-.calcol-btn-run {
-  border-color: var(--amber-dim);
-  color: var(--amber);
-}
-.calcol-btn-run:hover:not(:disabled) { background: var(--amber-glow); }
-.calcol-btn-run:disabled { opacity: 0.3; cursor: default; }
 .calcol-hint {
   font-size: 0.65rem;
   color: var(--red);
@@ -1152,8 +1135,281 @@ table.cat-table input[type="checkbox"]:checked::after {
   font-weight: 700;
 }
 
-/* Filter footer - fixed at bottom */
-.filter-footer {
+/* StatsCat */
+#panelStatsCat.active { display: flex; flex-direction: column; }
+.statscat-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.statscat-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg1);
+}
+.statscat-sidebar-section {
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.statscat-sidebar-section--grow {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+}
+.statscat-sidebar-title {
+  font-size: 0.62rem;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.3rem;
+}
+.statscat-select {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  width: 100%;
+}
+.statscat-select:focus { border-color: var(--amber); outline: none; }
+.statscat-search {
+  width: 100%;
+  background: var(--bg);
+  color: var(--fg-bright);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.3rem 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  margin-bottom: 0.3rem;
+}
+.statscat-search::placeholder { color: var(--fg-dim); opacity: 0.5; }
+.statscat-search:focus { outline: none; border-color: var(--amber); }
+.statscat-var-list, .statscat-group-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+.statscat-var-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border-bottom: 1px solid var(--bg2);
+  font-size: 0.7rem;
+  cursor: pointer;
+  color: var(--fg);
+  transition: background 0.1s;
+}
+.statscat-var-item:hover { background: var(--bg2); }
+.statscat-var-item.active {
+  background: var(--amber-glow);
+  border-left: 2px solid var(--amber);
+  color: var(--fg-bright);
+}
+.statscat-var-item input[type="checkbox"] { flex-shrink: 0; margin: 0; cursor: pointer; }
+.statscat-var-item .var-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.statscat-var-item .calcol-tag { margin-left: 0.3rem; }
+.statscat-var-item.unchecked { opacity: 0.4; }
+.statscat-group-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.7rem;
+  border-bottom: 1px solid var(--bg2);
+}
+.statscat-group-item label {
+  flex: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.statscat-group-item .gname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.statscat-group-item .gcount {
+  color: var(--fg-dim);
+  font-size: 0.6rem;
+  flex-shrink: 0;
+}
+.statscat-group-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.3rem;
+}
+.statscat-group-actions button {
+  font-size: 0.6rem;
+  background: none;
+  border: none;
+  color: var(--blue);
+  cursor: pointer;
+  font-family: var(--mono);
+  padding: 0;
+}
+.statscat-group-actions button:hover { text-decoration: underline; }
+.statscat-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.2rem;
+  min-width: 0;
+}
+.statscat-empty {
+  color: var(--fg-dim);
+  font-size: 0.78rem;
+  padding: 2rem;
+  text-align: center;
+  opacity: 0.6;
+}
+.statscat-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+.statscat-copy-btn {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  background: var(--bg2);
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
+.statscat-copy-btn:hover { color: var(--fg-bright); border-color: var(--amber); }
+.statscat-cdf-plot svg {
+  width: 100%;
+  height: auto;
+  max-height: 450px;
+}
+.statscat-var-item .var-type-tag {
+  font-size: 0.55rem;
+  padding: 0 0.3rem;
+  border-radius: 2px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.statscat-var-item .var-type-tag.num { color: var(--blue); border: 1px solid var(--blue); opacity: 0.5; }
+.statscat-var-item .var-type-tag.cat { color: var(--green); border: 1px solid var(--green); opacity: 0.5; }
+.statscat-filter-toggle {
+  font-size: 0.55rem;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+.statscat-filter-toggle.active { color: var(--amber); border-color: var(--amber); }
+.statscat-cdf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+  font-size: 0.65rem;
+}
+.statscat-cdf-toolbar .tb-group {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.statscat-cdf-toolbar button {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  background: var(--bg2);
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.15rem 0.5rem;
+  cursor: pointer;
+}
+.statscat-cdf-toolbar button:hover { color: var(--fg-bright); border-color: var(--amber); }
+.statscat-cdf-toolbar button.active { color: var(--amber); border-color: var(--amber); background: var(--amber-glow); }
+.statscat-cdf-toolbar input[type="number"] {
+  width: 70px;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.15rem 0.3rem;
+}
+.statscat-cdf-toolbar input[type="number"]:focus { border-color: var(--amber); outline: none; }
+.statscat-cdf-toolbar label { color: var(--fg-dim); cursor: pointer; display: flex; align-items: center; gap: 0.2rem; }
+.statscat-crosstab-mode {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0.5rem;
+}
+.statscat-crosstab-mode button {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  background: var(--bg2);
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+}
+.statscat-crosstab-mode button:first-child { border-radius: 3px 0 0 3px; }
+.statscat-crosstab-mode button:last-child { border-radius: 0 3px 3px 0; }
+.statscat-crosstab-mode button + button { border-left: none; }
+.statscat-crosstab-mode button.active { color: var(--amber); border-color: var(--amber); background: var(--amber-glow); }
+@media (max-width: 700px) {
+  .statscat-body { flex-direction: column; }
+  .statscat-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: none;
+    overflow-y: auto;
+  }
+  .statscat-sidebar-section--grow {
+    max-height: none;
+    overflow: hidden;
+  }
+  .statscat-sidebar-title {
+    cursor: pointer;
+    user-select: none;
+  }
+  .statscat-sidebar-title::after {
+    content: ' \25BE';
+    font-size: 0.6em;
+  }
+  .statscat-sidebar-section--grow.collapsed {
+    flex: none;
+  }
+  .statscat-sidebar-section--grow.collapsed > *:not(.statscat-sidebar-title) {
+    display: none;
+  }
+  .statscat-sidebar-section--grow.collapsed .statscat-sidebar-title::after {
+    content: ' \25B8';
+  }
+}
+
+/* App footer - fixed at bottom */
+.app-footer {
   display: none;
   position: fixed;
   bottom: 0;
@@ -1164,14 +1420,42 @@ table.cat-table input[type="checkbox"]:checked::after {
   border-top: 1px solid var(--border);
   box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
 }
-.filter-footer.active { display: block; }
-.filter-footer-inner {
+.app-footer.active { display: block; }
+.app-footer-inner {
   max-width: 1600px;
   margin: 0 auto;
   padding: 0 1.5rem;
 }
-.filter-editor-body {
+.app-footer-main {
   padding: 0.5rem 0;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+.execute-btn {
+  background: var(--amber);
+  color: var(--bg);
+  border: none;
+  padding: 0.4rem 1.2rem;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.execute-btn:hover { opacity: 0.9; }
+.execute-btn.clean {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+}
+.execute-btn.clean:hover { border-color: var(--fg-dim); color: var(--fg); }
+.filter-section { display: none; flex: 1; min-width: 0; }
+.filter-section.active { display: block; }
+.filter-editor-body {
   display: flex;
   gap: 0.5rem;
   align-items: center;
@@ -1245,7 +1529,11 @@ table.cat-table input[type="checkbox"]:checked::after {
 .filter-error.active { display: block; }
 
 /* Body padding for fixed footer */
-body.has-filter { }
+body.has-footer { }
+@media (max-width: 700px) {
+  .app-footer-main { flex-direction: column; align-items: stretch; }
+  .execute-btn { text-align: center; }
+}
 
 /* XYZ column selector */
 .xyz-config {
@@ -1303,7 +1591,7 @@ body.has-filter { }
 
   .file-info { gap: 1.5rem; }
 
-  .filter-footer-inner { padding: 0 2.5rem; }
+  .app-footer-inner { padding: 0 2.5rem; }
   .filter-editor-body { align-items: center; }
 
   .panel-inner {
@@ -1321,7 +1609,7 @@ body.has-filter { }
 }
 
 @media (min-width: 1400px) {
-  .filter-footer-inner { padding: 0 3rem; }
+  .app-footer-inner { padding: 0 3rem; }
 }
 </style>
 </head>
@@ -1404,13 +1692,13 @@ body.has-filter { }
       <button class="results-tab" data-tab="summary">Summary</button>
       <button class="results-tab" data-tab="calcols">Calc</button>
       <button class="results-tab" data-tab="statistics">Statistics</button>
+      <button class="results-tab" data-tab="statscat">StatsCat</button>
       <button class="results-tab" data-tab="categories">Categories</button>
     </div>
     <div class="results-panels">
       <div class="results-panel active" id="panelPreflight" data-tab="preflight">
-        <div class="preflight-head">
+        <div class="preflight-head" id="preflightHead">
           <span class="preflight-zip" id="preflightZip"></span>
-          <button class="preflight-analyze-btn" id="preflightAnalyze">Analyze ▶</button>
         </div>
         <div class="preflight-body">
           <div class="preflight-sidebar" id="preflightSidebar"></div>
@@ -1471,7 +1759,6 @@ body.has-filter { }
                 <div class="calcol-actions">
                   <button class="calcol-btn" id="calcolAdd">Add column</button>
                   <button class="calcol-btn" id="calcolCancel" style="display:none">Cancel</button>
-                  <button class="calcol-btn calcol-btn-run" id="calcolRun" disabled>Re-analyze with calcols</button>
                   <span class="calcol-hint" id="calcolError"></span>
                 </div>
                 <details class="calcol-ref">
@@ -1505,6 +1792,40 @@ body.has-filter { }
         </div>
       </div>
 
+      <div class="results-panel" id="panelStatsCat" data-tab="statscat">
+        <div class="statscat-body">
+          <div class="statscat-sidebar">
+            <div class="statscat-sidebar-section">
+              <div class="statscat-sidebar-title">Group By <span class="badge" id="statsCatBadge"></span></div>
+              <select class="statscat-select" id="statsCatGroupBy">
+                <option value="">— select grouping column —</option>
+              </select>
+            </div>
+            <div class="statscat-sidebar-section--grow">
+              <div class="statscat-sidebar-title">Variables <button id="statsCatVarFilter" class="statscat-filter-toggle" title="Show only selected variables">All</button></div>
+              <input type="text" class="statscat-search" id="statsCatVarSearch" placeholder="Search variables…" autocomplete="off" spellcheck="false">
+              <div class="statscat-group-actions">
+                <button id="statsCatVarAll">All</button>
+                <button id="statsCatVarNone">None</button>
+              </div>
+              <div class="statscat-var-list" id="statsCatVarList"></div>
+            </div>
+            <div class="statscat-sidebar-section--grow">
+              <div class="statscat-sidebar-title">Groups</div>
+              <div class="statscat-group-actions">
+                <button id="statsCatGroupAll">All</button>
+                <button id="statsCatGroupNone">None</button>
+                <span style="margin-left:auto"></span>
+                <button id="statsCatGroupSort" title="Toggle sort: count / name">Sort: count</button>
+              </div>
+              <input type="text" class="statscat-search" id="statsCatGroupSearch" placeholder="Search groups…" autocomplete="off" spellcheck="false">
+              <div class="statscat-group-list" id="statsCatGroupList"></div>
+            </div>
+          </div>
+          <div class="statscat-content" id="statsCatContent"></div>
+        </div>
+      </div>
+
       <div class="results-panel" id="panelCategories" data-tab="categories">
         <div class="panel-inner">
           <div class="section section--cat" id="catSection">
@@ -1532,18 +1853,23 @@ body.has-filter { }
   </div>
 </div>
 
-<div class="filter-footer" id="filterEditor">
-  <div class="filter-footer-inner">
-    <div class="filter-editor-body">
-      <div class="filter-label">FILTER</div>
-      <textarea class="filter-expr-input" id="filterExpr" rows="1" placeholder='e.g. r.Fe > 60 && r["SiO2_%"] < 5' spellcheck="false"></textarea>
-      <div class="filter-btn-group">
-        <button class="filter-apply-btn" id="filterApply">Apply</button>
-        <button class="filter-clear-btn" id="filterClear">Clear</button>
+<div class="app-footer" id="appFooter">
+  <div class="app-footer-inner">
+    <div class="app-footer-main">
+      <button class="execute-btn" id="executeBtn">Analyze &#9654;</button>
+      <div class="filter-section" id="filterSection">
+        <div class="filter-editor-body">
+          <div class="filter-label">FILTER</div>
+          <textarea class="filter-expr-input" id="filterExpr" rows="1" placeholder='e.g. r.Fe > 60 && r["SiO2_%"] < 5' spellcheck="false"></textarea>
+          <div class="filter-btn-group">
+            <button class="filter-apply-btn" id="filterApply">Apply</button>
+            <button class="filter-clear-btn" id="filterClear">Clear</button>
+          </div>
+        </div>
+        <div class="filter-hint" id="filterHint">Row object: <strong>r</strong> — Pure JS expressions. Use r.col for simple names, r["col"] for special names.</div>
+        <div class="filter-error" id="filterError"></div>
       </div>
     </div>
-    <div class="filter-hint" id="filterHint">Row object: <strong>r</strong> — Pure JS expressions. Use r.col for simple names, r["col"] for special names.</div>
-    <div class="filter-error" id="filterError"></div>
   </div>
 </div>
 
@@ -1552,6 +1878,7 @@ body.has-filter { }
 const WORKER_CODE = `
 const DELIMITERS = [',', '\\t', ';', '|', ' '];
 const MAX_UNIQUE_CAT = 500;
+const MAX_GROUPS = 500;
 
 // XYZ name patterns
 const XYZ_PATTERNS = {
@@ -1899,7 +2226,7 @@ function tdQuantile(td, q) {
   return centroids[centroids.length - 1].mean;
 }
 
-async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcols) {
+async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcols, groupBy, groupStatsCols) {
   const startTime = performance.now();
 
   // ZIP extraction
@@ -2006,6 +2333,10 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   let numericCols = null;
   let catCols = null;
   let filterFn = null;
+  let groupByCol = (groupBy !== null && groupBy !== undefined) ? groupBy : null;
+  let groupByColName = null;
+  let groupStats = {};
+  let groupCategories = {};
 
   // Math convenience preamble for expressions
   const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;';
@@ -2047,6 +2378,26 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
           calcolCatCols.push(idx);
           catCounts[idx] = {};
         }
+      }
+    }
+
+    // GroupBy init
+    if (groupByCol !== null) {
+      // Resolve groupBy column name (may be a calcol)
+      if (groupByCol < nCols) {
+        groupByColName = header[groupByCol];
+      } else if (calcols && groupByCol - nCols < calcols.length) {
+        groupByColName = calcols[groupByCol - nCols].name;
+      }
+      const allNum = [...numericCols, ...calcolNumCols];
+      const allCat = [...catCols, ...calcolCatCols];
+      const gsColSet = groupStatsCols ? new Set(groupStatsCols) : null;
+      for (const i of allNum) {
+        if (!gsColSet || gsColSet.has(i)) groupStats[i] = new Map();
+      }
+      for (const i of allCat) {
+        if (i === groupByCol) continue;
+        if (!gsColSet || gsColSet.has(i)) groupCategories[i] = new Map();
       }
     }
 
@@ -2099,32 +2450,88 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     return obj;
   }
 
+  function welfordAdd(s, v) {
+    s.count++;
+    if (v === 0) s.zeros++;
+    if (v < s.min) s.min = v;
+    if (v > s.max) s.max = v;
+    const n = s.count;
+    const delta = v - s.m1;
+    const delta_n = delta / n;
+    const delta_n2 = delta_n * delta_n;
+    const term1 = delta * delta_n * (n - 1);
+    s.m4 += term1 * delta_n2 * (n * n - 3 * n + 3) + 6 * delta_n2 * s.m2 - 4 * delta_n * s.m3;
+    s.m3 += term1 * delta_n * (n - 2) - 3 * delta_n * s.m2;
+    s.m2 += term1;
+    s.m1 += delta_n;
+    tdAdd(s.td, v);
+  }
+
+  function newAcc() {
+    return { count: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, td: newTDigest() };
+  }
+
+  function getGroupAcc(map, gv) {
+    let acc = map.get(gv);
+    if (acc) return acc;
+    if (map.size >= MAX_GROUPS) return null;
+    acc = newAcc();
+    map.set(gv, acc);
+    return acc;
+  }
+
+  function finalizeAcc(s) {
+    const n = s.count;
+    const variance = n > 1 ? s.m2 / (n - 1) : null;
+    const std = variance !== null ? Math.sqrt(variance) : null;
+    let skewness = null;
+    if (n > 2 && s.m2 > 0) {
+      skewness = (Math.sqrt(n) * s.m3) / Math.pow(s.m2, 1.5);
+      skewness *= Math.sqrt(n * (n - 1)) / (n - 2);
+    }
+    let kurtosis = null;
+    if (n > 3 && s.m2 > 0) {
+      kurtosis = (n * s.m4) / (s.m2 * s.m2) - 3;
+      kurtosis = ((n - 1) / ((n - 2) * (n - 3))) * ((n + 1) * kurtosis + 6);
+    }
+    let quantiles = null;
+    let centroids = null;
+    if (n > 0) {
+      tdFlush(s.td);
+      quantiles = {
+        p10: tdQuantile(s.td, 0.10),
+        p25: tdQuantile(s.td, 0.25),
+        p50: tdQuantile(s.td, 0.50),
+        p75: tdQuantile(s.td, 0.75),
+        p90: tdQuantile(s.td, 0.90)
+      };
+      centroids = s.td.centroids.map(c => [c.mean, c.count]);
+    }
+    return {
+      count: n, nulls: s.nulls, zeros: s.zeros,
+      min: n > 0 ? s.min : null, max: n > 0 ? s.max : null,
+      mean: n > 0 ? s.m1 : null, std, skewness, kurtosis, quantiles, centroids
+    };
+  }
+
   function processCalcolStats(row) {
+    const gv = groupByCol !== null ? String(row[groupByColName] ?? '') : null;
     for (const idx of calcolNumCols) {
       const cc = calcolFns[idx - nCols];
       const v = row[cc.name];
       const s = stats[idx];
-      if (v === null || v === undefined || (typeof v !== 'number') || isNaN(v)) { s.nulls++; continue; }
+      if (v === null || v === undefined || (typeof v !== 'number') || isNaN(v)) { s.nulls++; if (gv !== null && groupStats[idx]) { const ga = getGroupAcc(groupStats[idx], gv); if (ga) ga.nulls++; } continue; }
       // Per-column value filters
       const cf = colFilters ? colFilters[idx] : null;
       if (cf) {
-        if (cf.skipZeros && v === 0) { s.nulls++; continue; }
-        if (cf.skipNeg && v < 0) { s.nulls++; continue; }
+        if (cf.skipZeros && v === 0) { s.nulls++; if (gv !== null && groupStats[idx]) { const ga = getGroupAcc(groupStats[idx], gv); if (ga) ga.nulls++; } continue; }
+        if (cf.skipNeg && v < 0) { s.nulls++; if (gv !== null && groupStats[idx]) { const ga = getGroupAcc(groupStats[idx], gv); if (ga) ga.nulls++; } continue; }
       }
-      s.count++;
-      if (v === 0) s.zeros++;
-      if (v < s.min) s.min = v;
-      if (v > s.max) s.max = v;
-      const n = s.count;
-      const delta = v - s.m1;
-      const delta_n = delta / n;
-      const delta_n2 = delta_n * delta_n;
-      const term1 = delta * delta_n * (n - 1);
-      s.m4 += term1 * delta_n2 * (n * n - 3 * n + 3) + 6 * delta_n2 * s.m2 - 4 * delta_n * s.m3;
-      s.m3 += term1 * delta_n * (n - 2) - 3 * delta_n * s.m2;
-      s.m2 += term1;
-      s.m1 += delta_n;
-      tdAdd(s.td, v);
+      welfordAdd(s, v);
+      if (gv !== null && groupStats[idx]) {
+        const ga = getGroupAcc(groupStats[idx], gv);
+        if (ga) welfordAdd(ga, v);
+      }
     }
     for (const idx of calcolCatCols) {
       const cc = calcolFns[idx - nCols];
@@ -2135,38 +2542,34 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       if (counts._overflow) continue;
       counts[sv] = (counts[sv] || 0) + 1;
       if (Object.keys(counts).length > MAX_UNIQUE_CAT) counts._overflow = true;
+      // Cross-tab counting
+      if (gv !== null && groupCategories[idx]) {
+        let gm = groupCategories[idx].get(gv);
+        if (!gm) { gm = {}; groupCategories[idx].set(gv, gm); }
+        gm[sv] = (gm[sv] || 0) + 1;
+      }
     }
   }
 
-  function processRowStats(fields) {
+  function processRowStats(fields, row) {
+    const gv = groupByCol !== null ? (groupByCol >= nCols && row ? String(row[groupByColName] ?? '') : (fields[groupByCol] || '').trim().replace(/^["']|["']$/g, '')) : null;
     for (const i of numericCols) {
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      if (NULL_SENTINELS.has(raw)) { stats[i].nulls++; continue; }
+      if (NULL_SENTINELS.has(raw)) { stats[i].nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
       const v = Number(raw);
-      if (isNaN(v)) { stats[i].nulls++; continue; }
+      if (isNaN(v)) { stats[i].nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
       const s = stats[i];
       // Per-column value filters
       const cf = colFilters ? colFilters[i] : null;
       if (cf) {
-        if (cf.skipZeros && v === 0) { s.nulls++; continue; }
-        if (cf.skipNeg && v < 0) { s.nulls++; continue; }
+        if (cf.skipZeros && v === 0) { s.nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
+        if (cf.skipNeg && v < 0) { s.nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
       }
-      s.count++;
-      if (v === 0) s.zeros++;
-      if (v < s.min) s.min = v;
-      if (v > s.max) s.max = v;
-      // Extended Welford's: m1, m2, m3, m4
-      const n = s.count;
-      const delta = v - s.m1;
-      const delta_n = delta / n;
-      const delta_n2 = delta_n * delta_n;
-      const term1 = delta * delta_n * (n - 1);
-      s.m4 += term1 * delta_n2 * (n * n - 3 * n + 3) + 6 * delta_n2 * s.m2 - 4 * delta_n * s.m3;
-      s.m3 += term1 * delta_n * (n - 2) - 3 * delta_n * s.m2;
-      s.m2 += term1;
-      s.m1 += delta_n;
-      // T-digest for quantiles
-      tdAdd(s.td, v);
+      welfordAdd(s, v);
+      if (gv !== null && groupStats[i]) {
+        const ga = getGroupAcc(groupStats[i], gv);
+        if (ga) welfordAdd(ga, v);
+      }
     }
     for (const i of catCols) {
       const v = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
@@ -2175,6 +2578,12 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       if (cc._overflow) continue;
       cc[v] = (cc[v] || 0) + 1;
       if (Object.keys(cc).length > MAX_UNIQUE_CAT) cc._overflow = true;
+      // Cross-tab counting
+      if (gv !== null && groupCategories[i]) {
+        let gm = groupCategories[i].get(gv);
+        if (!gm) { gm = {}; groupCategories[i].set(gv, gm); }
+        gm[v] = (gm[v] || 0) + 1;
+      }
     }
   }
 
@@ -2250,13 +2659,14 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
 
       // ── Stats phase (filter + accumulate) ──
       const hasCalcols = calcolFns && calcolFns.length > 0;
+      const needsRow = hasCalcols || filterFn || (groupByCol !== null && groupByCol >= nCols);
       let row = null;
-      if (hasCalcols || filterFn) row = buildRow(fields);
+      if (needsRow) row = buildRow(fields);
       if (filterFn) {
         if (!filterFn(row)) continue;
       }
       rowCount++;
-      processRowStats(fields);
+      processRowStats(fields, row);
       if (hasCalcols) processCalcolStats(row);
 
       // Progress
@@ -2287,13 +2697,14 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         initStatsPhase();
       } else {
         const hasCalcols2 = calcolFns && calcolFns.length > 0;
+        const needsRow2 = hasCalcols2 || filterFn || (groupByCol !== null && groupByCol >= nCols);
         let row2 = null;
-        if (hasCalcols2 || filterFn) row2 = buildRow(fields);
+        if (needsRow2) row2 = buildRow(fields);
         let passFilter = true;
         if (filterFn) passFilter = filterFn(row2);
         if (passFilter) {
           rowCount++;
-          processRowStats(fields);
+          processRowStats(fields, row2);
           if (hasCalcols2) processCalcolStats(row2);
         }
       }
@@ -2311,52 +2722,30 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   const finalStats = {};
   const allNumCols = [...numericCols, ...calcolNumCols];
   for (const i of allNumCols) {
-    const s = stats[i];
-    const n = s.count;
-    const variance = n > 1 ? s.m2 / (n - 1) : null;
-    const std = variance !== null ? Math.sqrt(variance) : null;
-    // Skewness: adjusted Fisher-Pearson (sample)
-    let skewness = null;
-    if (n > 2 && s.m2 > 0) {
-      skewness = (Math.sqrt(n) * s.m3) / Math.pow(s.m2, 1.5);
-      // Adjust for sample bias
-      skewness *= Math.sqrt(n * (n - 1)) / (n - 2);
+    finalStats[i] = finalizeAcc(stats[i]);
+  }
+
+  // Finalize group stats
+  const finalGroupStats = {};
+  const finalGroupCategories = {};
+  if (groupByCol !== null) {
+    for (const i of allNumCols) {
+      if (!groupStats[i]) continue;
+      const gMap = {};
+      for (const [gv, acc] of groupStats[i]) {
+        gMap[gv] = finalizeAcc(acc);
+      }
+      finalGroupStats[i] = gMap;
     }
-    // Excess kurtosis
-    let kurtosis = null;
-    if (n > 3 && s.m2 > 0) {
-      kurtosis = (n * s.m4) / (s.m2 * s.m2) - 3;
-      // Adjust for sample bias
-      kurtosis = ((n - 1) / ((n - 2) * (n - 3))) * ((n + 1) * kurtosis + 6);
+    const gcCatCols = [...catCols, ...calcolCatCols];
+    for (const i of gcCatCols) {
+      if (!groupCategories[i]) continue;
+      const gMap = {};
+      for (const [gv, counts] of groupCategories[i]) {
+        gMap[gv] = counts;
+      }
+      finalGroupCategories[i] = gMap;
     }
-    // Quantiles from t-digest
-    let quantiles = null;
-    let centroids = null;
-    if (n > 0) {
-      tdFlush(s.td);
-      quantiles = {
-        p10: tdQuantile(s.td, 0.10),
-        p25: tdQuantile(s.td, 0.25),
-        p50: tdQuantile(s.td, 0.50),
-        p75: tdQuantile(s.td, 0.75),
-        p90: tdQuantile(s.td, 0.90)
-      };
-      // Export centroids for CDF plotting
-      centroids = s.td.centroids.map(c => [c.mean, c.count]);
-    }
-    finalStats[i] = {
-      count: n,
-      nulls: s.nulls,
-      zeros: s.zeros,
-      min: n > 0 ? s.min : null,
-      max: n > 0 ? s.max : null,
-      mean: n > 0 ? s.m1 : null,
-      std,
-      skewness,
-      kurtosis,
-      quantiles,
-      centroids
-    };
   }
 
   // Geometry
@@ -2417,13 +2806,16 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     xyzGuess,
     zipName,
     calcolCount: calcols ? calcols.length : 0,
-    origColCount: nCols
+    origColCount: nCols,
+    groupStats: groupByCol !== null ? finalGroupStats : null,
+    groupCategories: groupByCol !== null ? finalGroupCategories : null,
+    groupBy: groupByCol
   });
 }
 
 self.onmessage = (e) => {
-  const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcols } = e.data;
-  analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcols);
+  const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcols, groupBy, groupStatsCols } = e.data;
+  analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcols, groupBy, groupStatsCols);
 };
 `;
 
@@ -2445,8 +2837,8 @@ const $dropzone = document.getElementById('dropzone');
 const $fileInput = document.getElementById('fileInput');
 const $panelPreflight = document.getElementById('panelPreflight');
 const $preflightZip = document.getElementById('preflightZip');
+const $preflightHead = document.getElementById('preflightHead');
 const $preflightPreview = document.getElementById('preflightPreview');
-const $preflightAnalyze = document.getElementById('preflightAnalyze');
 const $results = document.getElementById('results');
 const $fileInfo = document.getElementById('fileInfo');
 const $geoContent = document.getElementById('geoContent');
@@ -2458,7 +2850,8 @@ const $statsBadge = document.getElementById('statsBadge');
 const $catContent = document.getElementById('catContent');
 const $catBadge = document.getElementById('catBadge');
 const $catSection = document.getElementById('catSection');
-const $filterEditor = document.getElementById('filterEditor');
+const $appFooter = document.getElementById('appFooter');
+const $filterSection = document.getElementById('filterSection');
 const $filterExpr = document.getElementById('filterExpr');
 const $filterApply = document.getElementById('filterApply');
 const $filterClear = document.getElementById('filterClear');
@@ -2474,12 +2867,44 @@ const $cdfTitle = document.getElementById('cdfTitle');
 const $cdfBody = document.getElementById('cdfBody');
 const $cdfClose = document.getElementById('cdfClose');
 const $resultsTabs = document.getElementById('resultsTabs');
+const $statsCatContent = document.getElementById('statsCatContent');
+const $statsCatBadge = document.getElementById('statsCatBadge');
+const $statsCatGroupBy = document.getElementById('statsCatGroupBy');
+const $statsCatVarList = document.getElementById('statsCatVarList');
+const $statsCatGroupList = document.getElementById('statsCatGroupList');
+const $statsCatVarSearch = document.getElementById('statsCatVarSearch');
+const $statsCatGroupSearch = document.getElementById('statsCatGroupSearch');
+const $statsCatGroupAll = document.getElementById('statsCatGroupAll');
+const $statsCatGroupNone = document.getElementById('statsCatGroupNone');
+const $statsCatGroupSort = document.getElementById('statsCatGroupSort');
+const $statsCatVarAll = document.getElementById('statsCatVarAll');
+const $statsCatVarNone = document.getElementById('statsCatVarNone');
+const $statsCatVarFilter = document.getElementById('statsCatVarFilter');
 let lastDisplayedStats = null;
 let lastDisplayedHeader = null;
 let currentCalcols = []; // { id, name, expr, type }
 let calcolIdCounter = 0;
 let currentOrigColCount = 0;
 let lastCompleteData = null; // snapshot for cancel
+let currentGroupBy = null; // column index for StatsCat grouping
+let currentStatsCatVar = null; // selected numeric column index
+let currentStatsCatChecked = null; // Set<string> of checked group values (null = all)
+let lastStatsCatData = null; // cached full data for re-render
+let statsCatGroupSortMode = 'count'; // 'count' or 'name'
+let statsCatSelectedVars = new Set(); // col indices selected for group stats analysis
+let statsCatCdfScale = 'linear'; // 'linear' or 'log'
+let statsCatCdfManual = false;
+let statsCatCdfMin = null;
+let statsCatCdfMax = null;
+let statsCatCrossMode = 'count'; // 'count', 'row', 'col'
+let statsCatShowSelectedOnly = false;
+
+const STATSCAT_PALETTE = [
+  '#4a9eff','#34d399','#f87171','#a78bfa','#fb923c',
+  '#22d3ee','#f472b6','#facc15','#818cf8','#2dd4bf',
+  '#e879f9','#84cc16','#f97316','#38bdf8','#c084fc',
+  '#a3e635','#fb7185','#67e8f9','#d946ef','#fbbf24'
+];
 
 const $calcolList = document.getElementById('calcolList');
 const $calcolName = document.getElementById('calcolName');
@@ -2487,7 +2912,6 @@ const $calcolType = document.getElementById('calcolType');
 const $calcolExpr = document.getElementById('calcolExpr');
 const $calcolPreview = document.getElementById('calcolPreview');
 const $calcolAdd = document.getElementById('calcolAdd');
-const $calcolRun = document.getElementById('calcolRun');
 const $calcolError = document.getElementById('calcolError');
 const $calcolBadge = document.getElementById('calcolBadge');
 
@@ -2742,6 +3166,7 @@ function renderPreflight(data) {
   } else {
     $preflightZip.innerHTML = '';
   }
+  $preflightHead.style.display = $preflightZip.innerHTML ? '' : 'none';
 
   renderPreflightSidebar(data);
   renderPreflightTable(data);
@@ -2751,27 +3176,11 @@ const $preflightSidebar = document.getElementById('preflightSidebar');
 
 function renderPreflightSidebar(data) {
   const { header, autoTypes, typeOverrides, skipCols, colFilters } = data;
-  const types = header.map((_, i) => typeOverrides[i] || autoTypes[i]);
-  const numCols = header.map((_, i) => i).filter(i => types[i] === 'numeric' && !skipCols.has(i));
   const enabledCount = header.length - skipCols.size;
-
-  // Count filterable columns and active filters
-  const filterableCols = header.map((_, i) => i).filter(i => isFilterableCol(header, i, autoTypes, typeOverrides, data.xyz, skipCols));
-  const activeFilterCount = filterableCols.filter(i => colFilters[i] && (colFilters[i].skipZeros || colFilters[i].skipNeg)).length;
-
-  // XYZ section
-  function makeAxisSelect(axis) {
-    const current = data.xyz[axis];
-    let opts = `<option value="-1" ${current < 0 ? 'selected' : ''}>—</option>`;
-    for (const i of numCols) {
-      opts += `<option value="${i}" ${i === current ? 'selected' : ''}>${esc(header[i])}</option>`;
-    }
-    return `<label><span class="axis-label">${axis.toUpperCase()}</span><select data-axis="${axis}">${opts}</select></label>`;
-  }
 
   let html = `<div class="pf-sidebar-section">
     <div class="pf-sidebar-section-title">Coordinate Axes</div>
-    <div class="pf-xyz-row">${makeAxisSelect('x')}${makeAxisSelect('y')}${makeAxisSelect('z')}</div>
+    <div id="pfXyzWrap"></div>
   </div>`;
 
   // Column list header with search
@@ -2788,136 +3197,294 @@ function renderPreflightSidebar(data) {
     <div class="pf-bulk-filters">
       <button id="pfFilterAllGt0" title="Set >0 filter on all grade columns">&gt;0 all</button>
       <button id="pfFilterClear" title="Clear all value filters">clear filters</button>
-      <span class="pf-filter-count">${activeFilterCount}/${filterableCols.length} filtered</span>
+      <span class="pf-filter-count"></span>
     </div>
   </div>`;
 
-  // Column list
-  html += '<div class="pf-col-list">';
+  // Column list — always render both filter buttons; hide via class when not filterable
+  html += '<div class="pf-col-list" id="pfColList">';
   for (let i = 0; i < header.length; i++) {
     const currentType = typeOverrides[i] || autoTypes[i];
     const label = currentType === 'numeric' ? 'NUM' : 'CAT';
     const isSkipped = skipCols.has(i);
     const cf = colFilters[i] || {};
     const filterable = isFilterableCol(header, i, autoTypes, typeOverrides, data.xyz, skipCols);
+    const hideCls = filterable ? '' : ' pf-filter-hidden';
     html += `<div class="pf-col-item${isSkipped ? ' skipped' : ''}" data-col="${i}" data-name="${esc(header[i]).toLowerCase()}">
       <span class="col-idx">${i}</span>
       <input type="checkbox" class="pf-col-check" data-col="${i}" ${!isSkipped ? 'checked' : ''}>
       <span class="pf-col-name" title="${esc(header[i])}">${esc(header[i])}</span>
       <div class="pf-col-controls">
-        ${filterable ? `<button class="pf-filter-btn${cf.skipNeg ? ' active' : ''}" data-col="${i}" data-filter="skipNeg" title="Exclude negatives">≥0</button>` : ''}
-        ${filterable ? `<button class="pf-filter-btn${cf.skipZeros ? ' active' : ''}" data-col="${i}" data-filter="skipZeros" title="Exclude zeros">≠0</button>` : ''}
+        <button class="pf-filter-btn${cf.skipNeg ? ' active' : ''}${hideCls}" data-col="${i}" data-filter="skipNeg" title="Exclude negatives">≥0</button>
+        <button class="pf-filter-btn${cf.skipZeros ? ' active' : ''}${hideCls}" data-col="${i}" data-filter="skipZeros" title="Exclude zeros">≠0</button>
         <button class="type-toggle" data-col="${i}" data-type="${currentType}">${label}</button>
       </div>
     </div>`;
   }
   html += '</div>';
 
+
   $preflightSidebar.innerHTML = html;
 
-  // === Wire up event handlers ===
+  // Build XYZ dropdowns and update counts
+  rebuildPfXyz(data);
+  updatePfCounts(data);
+
+  // === Wire event delegation (once per render) ===
+
+  const $pfColList = document.getElementById('pfColList');
+
+  // Delegated click on column list: type toggles + filter buttons
+  $pfColList.addEventListener('click', (e) => {
+    const btn = e.target.closest('.type-toggle');
+    if (btn) { handlePfTypeToggle(btn, data); return; }
+    const fbtn = e.target.closest('.pf-filter-btn');
+    if (fbtn) { handlePfFilterBtn(fbtn, data); return; }
+  });
+
+  // Delegated change on column list: checkboxes
+  $pfColList.addEventListener('change', (e) => {
+    const cb = e.target.closest('.pf-col-check');
+    if (cb) handlePfCheckbox(cb, data);
+  });
 
   // Search
   const $search = document.getElementById('pfSearch');
   $search.addEventListener('input', () => {
     const q = $search.value.toLowerCase().trim();
-    $preflightSidebar.querySelectorAll('.pf-col-item').forEach(el => {
-      const name = el.dataset.name;
-      el.style.display = (!q || name.includes(q)) ? '' : 'none';
+    $pfColList.querySelectorAll('.pf-col-item').forEach(el => {
+      el.style.display = (!q || el.dataset.name.includes(q)) ? '' : 'none';
     });
+    // Update All/None labels based on search state
+    const $all = document.getElementById('pfSelectAll');
+    const $none = document.getElementById('pfSelectNone');
+    if ($all) $all.textContent = q ? 'all visible' : 'all';
+    if ($none) $none.textContent = q ? 'none visible' : 'none';
   });
-  // Don't let Enter in search trigger Analyze
   $search.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.stopPropagation(); });
 
-  // XYZ selects
-  $preflightSidebar.querySelectorAll('.pf-xyz-row select').forEach(sel => {
-    sel.addEventListener('change', () => {
-      data.xyz[sel.dataset.axis] = parseInt(sel.value);
-    });
-  });
-
-  // Select all / none
-  document.getElementById('pfSelectAll').addEventListener('click', () => {
-    skipCols.clear();
-    renderPreflightSidebar(data);
-    updatePreviewDimming(data);
-  });
-  document.getElementById('pfSelectNone').addEventListener('click', () => {
-    for (let i = 0; i < header.length; i++) skipCols.add(i);
-    data.xyz = { x: -1, y: -1, z: -1 };
-    renderPreflightSidebar(data);
-    updatePreviewDimming(data);
-  });
+  // Select all / none — search-aware
+  document.getElementById('pfSelectAll').addEventListener('click', () => handlePfSelectAll(data));
+  document.getElementById('pfSelectNone').addEventListener('click', () => handlePfSelectNone(data));
 
   // Bulk filter buttons
-  document.getElementById('pfFilterAllGt0').addEventListener('click', () => {
-    for (const i of filterableCols) {
-      colFilters[i] = { skipZeros: true, skipNeg: true };
+  document.getElementById('pfFilterAllGt0').addEventListener('click', () => handlePfBulkFilterAll(data));
+  document.getElementById('pfFilterClear').addEventListener('click', () => handlePfBulkFilterClear(data));
+
+}
+
+// --- Preflight sidebar helper functions ---
+
+function rebuildPfXyz(data) {
+  const { header, autoTypes, typeOverrides, skipCols } = data;
+  const types = header.map((_, i) => typeOverrides[i] || autoTypes[i]);
+  const numCols = header.map((_, i) => i).filter(i => types[i] === 'numeric' && !skipCols.has(i));
+
+  function makeAxisSelect(axis) {
+    const current = data.xyz[axis];
+    let opts = `<option value="-1" ${current < 0 ? 'selected' : ''}>—</option>`;
+    for (const i of numCols) {
+      opts += `<option value="${i}" ${i === current ? 'selected' : ''}>${esc(header[i])}</option>`;
     }
-    renderPreflightSidebar(data);
-  });
-  document.getElementById('pfFilterClear').addEventListener('click', () => {
-    for (const key of Object.keys(colFilters)) delete colFilters[key];
-    renderPreflightSidebar(data);
-  });
+    return `<label><span class="axis-label">${axis.toUpperCase()}</span><select data-axis="${axis}">${opts}</select></label>`;
+  }
 
-  // Column checkboxes
-  $preflightSidebar.querySelectorAll('.pf-col-check').forEach(cb => {
-    cb.addEventListener('change', () => {
-      const col = parseInt(cb.dataset.col);
-      if (cb.checked) {
-        skipCols.delete(col);
-      } else {
-        skipCols.add(col);
-        for (const axis of ['x', 'y', 'z']) {
-          if (data.xyz[axis] === col) data.xyz[axis] = -1;
-        }
-        delete colFilters[col];
-      }
-      cb.closest('.pf-col-item').classList.toggle('skipped', !cb.checked);
-      document.getElementById('pfEnabledCount').textContent = header.length - skipCols.size;
-      updatePreviewDimming(data);
-      renderPreflightSidebar(data);
+  const wrap = document.getElementById('pfXyzWrap');
+  if (!wrap) return;
+  wrap.innerHTML = `<div class="pf-xyz-row">${makeAxisSelect('x')}${makeAxisSelect('y')}${makeAxisSelect('z')}</div>`;
+  wirePfXyzHandlers(data);
+}
+
+function wirePfXyzHandlers(data) {
+  const wrap = document.getElementById('pfXyzWrap');
+  if (!wrap) return;
+  wrap.querySelectorAll('select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      data.xyz[sel.dataset.axis] = parseInt(sel.value);
+      updateAllFilterButtonVisibility(data);
+      updatePfCounts(data);
+      markAnalysisStale();
     });
   });
+}
 
-  // Type toggles
-  $preflightSidebar.querySelectorAll('.type-toggle').forEach(btn => {
-    btn.addEventListener('click', () => {
+function updatePfCounts(data) {
+  const { header, autoTypes, typeOverrides, skipCols, colFilters } = data;
+  // Enabled count
+  const $en = document.getElementById('pfEnabledCount');
+  if ($en) $en.textContent = header.length - skipCols.size;
+  // Filter count
+  const filterableCols = header.map((_, i) => i).filter(i => isFilterableCol(header, i, autoTypes, typeOverrides, data.xyz, skipCols));
+  const activeFilterCount = filterableCols.filter(i => colFilters[i] && (colFilters[i].skipZeros || colFilters[i].skipNeg)).length;
+  const $fc = $preflightSidebar.querySelector('.pf-filter-count');
+  if ($fc) $fc.textContent = `${activeFilterCount}/${filterableCols.length} filtered`;
+}
+
+function updateAllFilterButtonVisibility(data) {
+  const { header, autoTypes, typeOverrides, skipCols } = data;
+  const $pfColList = document.getElementById('pfColList');
+  if (!$pfColList) return;
+  $pfColList.querySelectorAll('.pf-col-item').forEach(item => {
+    const col = parseInt(item.dataset.col);
+    const filterable = isFilterableCol(header, col, autoTypes, typeOverrides, data.xyz, skipCols);
+    item.querySelectorAll('.pf-filter-btn').forEach(btn => {
+      btn.classList.toggle('pf-filter-hidden', !filterable);
+    });
+  });
+}
+
+function updateItemFilterability(item, col, data) {
+  const { header, autoTypes, typeOverrides, skipCols } = data;
+  const filterable = isFilterableCol(header, col, autoTypes, typeOverrides, data.xyz, skipCols);
+  item.querySelectorAll('.pf-filter-btn').forEach(btn => {
+    btn.classList.toggle('pf-filter-hidden', !filterable);
+  });
+}
+
+// --- Preflight sidebar handler functions ---
+
+function handlePfTypeToggle(btn, data) {
+  const { autoTypes, typeOverrides, colFilters } = data;
+  const col = parseInt(btn.dataset.col);
+  const current = btn.dataset.type;
+  const next = current === 'numeric' ? 'categorical' : 'numeric';
+  if (next !== autoTypes[col]) {
+    typeOverrides[col] = next;
+  } else {
+    delete typeOverrides[col];
+  }
+  if (next === 'categorical') {
+    for (const axis of ['x', 'y', 'z']) {
+      if (data.xyz[axis] === col) data.xyz[axis] = -1;
+    }
+    delete colFilters[col];
+    // Clear active state on filter buttons for this column
+    const item = btn.closest('.pf-col-item');
+    item.querySelectorAll('.pf-filter-btn').forEach(fb => fb.classList.remove('active'));
+  }
+  // Update button text and data attribute
+  btn.dataset.type = next;
+  btn.textContent = next === 'numeric' ? 'NUM' : 'CAT';
+  // Update filter button visibility for this item
+  updateItemFilterability(btn.closest('.pf-col-item'), col, data);
+  rebuildPfXyz(data);
+  updatePfCounts(data);
+  markAnalysisStale();
+}
+
+function handlePfCheckbox(cb, data) {
+  const { header, skipCols, colFilters } = data;
+  const col = parseInt(cb.dataset.col);
+  if (cb.checked) {
+    skipCols.delete(col);
+  } else {
+    skipCols.add(col);
+    for (const axis of ['x', 'y', 'z']) {
+      if (data.xyz[axis] === col) data.xyz[axis] = -1;
+    }
+    delete colFilters[col];
+    // Clear active state on filter buttons
+    const item = cb.closest('.pf-col-item');
+    item.querySelectorAll('.pf-filter-btn').forEach(fb => fb.classList.remove('active'));
+  }
+  cb.closest('.pf-col-item').classList.toggle('skipped', !cb.checked);
+  updateItemFilterability(cb.closest('.pf-col-item'), col, data);
+  rebuildPfXyz(data);
+  updatePfCounts(data);
+  updatePreviewDimming(data);
+  markAnalysisStale();
+}
+
+function handlePfFilterBtn(btn, data) {
+  const { colFilters } = data;
+  const col = parseInt(btn.dataset.col);
+  const filter = btn.dataset.filter;
+  if (!colFilters[col]) colFilters[col] = {};
+  colFilters[col][filter] = !colFilters[col][filter];
+  if (!colFilters[col][filter]) delete colFilters[col][filter];
+  if (Object.keys(colFilters[col]).length === 0) delete colFilters[col];
+  btn.classList.toggle('active');
+  updatePfCounts(data);
+  markAnalysisStale();
+}
+
+function handlePfSelectAll(data) {
+  const { header, skipCols } = data;
+  const $pfColList = document.getElementById('pfColList');
+  if (!$pfColList) return;
+  // Only affect visible (search-matched) items
+  $pfColList.querySelectorAll('.pf-col-item').forEach(item => {
+    if (item.style.display === 'none') return; // hidden by search
+    const col = parseInt(item.dataset.col);
+    skipCols.delete(col);
+    item.classList.remove('skipped');
+    const cb = item.querySelector('.pf-col-check');
+    if (cb) cb.checked = true;
+    updateItemFilterability(item, col, data);
+  });
+  rebuildPfXyz(data);
+  updatePfCounts(data);
+  updatePreviewDimming(data);
+  markAnalysisStale();
+}
+
+function handlePfSelectNone(data) {
+  const { header, skipCols, colFilters } = data;
+  const $pfColList = document.getElementById('pfColList');
+  if (!$pfColList) return;
+  // Only affect visible (search-matched) items
+  $pfColList.querySelectorAll('.pf-col-item').forEach(item => {
+    if (item.style.display === 'none') return; // hidden by search
+    const col = parseInt(item.dataset.col);
+    skipCols.add(col);
+    // Clear XYZ assignments for this column
+    for (const axis of ['x', 'y', 'z']) {
+      if (data.xyz[axis] === col) data.xyz[axis] = -1;
+    }
+    delete colFilters[col];
+    item.classList.add('skipped');
+    const cb = item.querySelector('.pf-col-check');
+    if (cb) cb.checked = false;
+    // Clear filter active states and hide buttons
+    item.querySelectorAll('.pf-filter-btn').forEach(fb => {
+      fb.classList.remove('active');
+      fb.classList.add('pf-filter-hidden');
+    });
+  });
+  rebuildPfXyz(data);
+  updatePfCounts(data);
+  updatePreviewDimming(data);
+  markAnalysisStale();
+}
+
+function handlePfBulkFilterAll(data) {
+  const { header, autoTypes, typeOverrides, skipCols, colFilters } = data;
+  const filterableCols = header.map((_, i) => i).filter(i => isFilterableCol(header, i, autoTypes, typeOverrides, data.xyz, skipCols));
+  for (const i of filterableCols) {
+    colFilters[i] = { skipZeros: true, skipNeg: true };
+  }
+  // Set active class on all visible filter buttons for filterable cols
+  const $pfColList = document.getElementById('pfColList');
+  if ($pfColList) {
+    $pfColList.querySelectorAll('.pf-filter-btn').forEach(btn => {
       const col = parseInt(btn.dataset.col);
-      const current = btn.dataset.type;
-      const next = current === 'numeric' ? 'categorical' : 'numeric';
-      if (next !== autoTypes[col]) {
-        typeOverrides[col] = next;
-      } else {
-        delete typeOverrides[col];
-      }
-      if (next === 'categorical') {
-        for (const axis of ['x', 'y', 'z']) {
-          if (data.xyz[axis] === col) data.xyz[axis] = -1;
-        }
-        delete colFilters[col];
-      }
-      renderPreflightSidebar(data);
+      if (filterableCols.includes(col)) btn.classList.add('active');
     });
-  });
+  }
+  updatePfCounts(data);
+  markAnalysisStale();
+}
 
-  // Filter buttons
-  $preflightSidebar.querySelectorAll('.pf-filter-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const col = parseInt(btn.dataset.col);
-      const filter = btn.dataset.filter;
-      if (!colFilters[col]) colFilters[col] = {};
-      colFilters[col][filter] = !colFilters[col][filter];
-      if (!colFilters[col][filter]) delete colFilters[col][filter];
-      if (Object.keys(colFilters[col]).length === 0) delete colFilters[col];
-      btn.classList.toggle('active');
-      // Update counter
-      const newActive = filterableCols.filter(i => colFilters[i] && (colFilters[i].skipZeros || colFilters[i].skipNeg)).length;
-      const countEl = $preflightSidebar.querySelector('.pf-filter-count');
-      if (countEl) countEl.textContent = `${newActive}/${filterableCols.length} filtered`;
-    });
-  });
+function handlePfBulkFilterClear(data) {
+  const { colFilters } = data;
+  for (const key of Object.keys(colFilters)) delete colFilters[key];
+  // Remove active class from all filter buttons
+  const $pfColList = document.getElementById('pfColList');
+  if ($pfColList) {
+    $pfColList.querySelectorAll('.pf-filter-btn').forEach(btn => btn.classList.remove('active'));
+  }
+  updatePfCounts(data);
+  markAnalysisStale();
 }
 
 function updatePreviewDimming(data) {
@@ -2983,10 +3550,24 @@ function handleFile(file) {
   if (!file) return;
   currentFile = file;
   currentFilter = null;
+  currentGroupBy = null;
+  currentStatsCatVar = null;
+  currentStatsCatChecked = null;
+  lastStatsCatData = null;
+  statsCatGroupSortMode = 'count';
+  statsCatSelectedVars = new Set();
+  statsCatShowSelectedOnly = false;
+  statsCatCdfScale = 'linear';
+  statsCatCdfManual = false;
+  statsCatCdfMin = null;
+  statsCatCdfMax = null;
+  statsCatCrossMode = 'count';
   hasResults = false;
   $filterExpr.value = '';
-  $filterEditor.classList.remove('active');
+  $filterSection.classList.remove('active');
+  $appFooter.classList.remove('active');
   document.body.classList.remove('has-filter');
+  document.body.classList.remove('has-footer');
   $filterError.classList.remove('active');
   $errorMsg.classList.remove('active');
 
@@ -3009,13 +3590,24 @@ function handleFile(file) {
   $resultsTimeInfo.textContent = '';
   switchTab('preflight');
 
+  // Show app footer with execute button
+  $appFooter.classList.add('active');
+  document.body.classList.add('has-footer');
+  markAnalysisStale();
+
   // Set placeholder content for tabs before first analysis
-  const placeholder = '<div style="color:var(--fg-dim);font-size:0.78rem;padding:2rem;text-align:center;opacity:0.5;">Run analysis from the Preflight tab first.</div>';
+  const placeholder = '<div style="color:var(--fg-dim);font-size:0.78rem;padding:2rem;text-align:center;opacity:0.5;">Click Analyze to run analysis.</div>';
   $geoContent.innerHTML = placeholder;
   $geoBadge.textContent = '';
   $fileInfo.innerHTML = '';
   $statsContent.innerHTML = placeholder;
   $statsBadge.textContent = '';
+  $statsCatContent.innerHTML = placeholder;
+  $statsCatBadge.textContent = '';
+  $statsCatVarList.innerHTML = '';
+  $statsCatGroupList.innerHTML = '';
+  $statsCatVarSearch.value = '';
+  $statsCatGroupSearch.value = '';
   $catContent.innerHTML = placeholder;
   $catBadge.textContent = '';
   renderCalcolList();
@@ -3029,7 +3621,15 @@ function handleFile(file) {
   });
 }
 
-$preflightAnalyze.addEventListener('click', () => {
+let analysisStale = true;
+
+function markAnalysisStale() {
+  analysisStale = true;
+  const btn = document.getElementById('executeBtn');
+  if (btn) btn.classList.remove('clean');
+}
+
+function executeAnalysis() {
   if (!preflightData || !currentFile) return;
   const typeOv = Object.keys(preflightData.typeOverrides).length > 0 ? preflightData.typeOverrides : null;
   const zipEntry = preflightData.selectedZipEntry || null;
@@ -3037,8 +3637,12 @@ $preflightAnalyze.addEventListener('click', () => {
   const xyzOv = (xyz.x >= 0 && xyz.y >= 0 && xyz.z >= 0) ? xyz : null;
   const skip = preflightData.skipCols.size > 0 ? Array.from(preflightData.skipCols) : null;
   const colFilters = Object.keys(preflightData.colFilters).length > 0 ? preflightData.colFilters : null;
-  startAnalysis(xyzOv, null, typeOv, zipEntry, skip, colFilters);
-});
+  startAnalysis(xyzOv, currentFilter, typeOv, zipEntry, skip, colFilters);
+}
+
+function triggerPreflightAnalysis() {
+  executeAnalysis();
+}
 
 let hasResults = false; // Track whether analysis has been run
 
@@ -3046,8 +3650,10 @@ let hasResults = false; // Track whether analysis has been run
 $backToPreflight.addEventListener('click', () => {
   $results.classList.remove('active');
   document.querySelector('.app').classList.remove('has-results');
-  $filterEditor.classList.remove('active');
+  $appFooter.classList.remove('active');
+  $filterSection.classList.remove('active');
   document.body.classList.remove('has-filter');
+  document.body.classList.remove('has-footer');
   $dropzone.classList.remove('collapsed');
   const loadedSpan = $dropzone.querySelector('.loaded-name');
   if (loadedSpan) loadedSpan.remove();
@@ -3056,6 +3662,13 @@ $backToPreflight.addEventListener('click', () => {
   preflightData = null;
   hasResults = false;
   currentCalcols = [];
+  currentGroupBy = null;
+  currentStatsCatVar = null;
+  currentStatsCatChecked = null;
+  lastStatsCatData = null;
+  statsCatGroupSortMode = 'count';
+  statsCatSelectedVars = new Set();
+  statsCatShowSelectedOnly = false;
 });
 
 // Allow dropping new files onto results area
@@ -3068,13 +3681,17 @@ $results.addEventListener('drop', (e) => {
 
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
-  // Enter in preflight tab triggers Analyze
-  const pfActive = $panelPreflight.classList.contains('active');
-  if (pfActive && e.key === 'Enter' && !e.shiftKey && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
-    e.preventDefault();
-    $preflightAnalyze.click();
+  // Enter triggers Analyze (when not in text fields)
+  if (e.key === 'Enter' && !e.shiftKey && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
+    if (preflightData && currentFile) {
+      e.preventDefault();
+      executeAnalysis();
+    }
   }
 });
+
+// Wire unified execute button
+document.getElementById('executeBtn').addEventListener('click', executeAnalysis);
 
 let currentTypeOverrides = null;
 let currentZipEntry = null;
@@ -3159,11 +3776,14 @@ function startAnalysis(xyzOverride, filter, typeOverrides, zipEntry, skipCols, c
     zipEntry: currentZipEntry || null,
     skipCols: currentSkipCols || null,
     colFilters: currentColFilters || null,
-    calcols: calcolPayload
+    calcols: calcolPayload,
+    groupBy: currentGroupBy,
+    groupStatsCols: currentGroupBy !== null && statsCatSelectedVars.size > 0 ? Array.from(statsCatSelectedVars) : null
   });
 }
 
 function displayResults(data) {
+  const isFirstAnalysis = !hasResults;
   hasResults = true;
   const { stats, geometry, coordOrder, maxDecimals, categories, rowCount, totalRowCount, commentCount, elapsed, header, colTypes, xyzGuess, rowVarName, zipName } = data;
   currentRowVar = rowVarName || 'r';
@@ -3181,11 +3801,16 @@ function displayResults(data) {
   $resultsRowInfo.textContent = rowsDisplay + ' rows · ' + header.length + ' cols';
   $resultsTimeInfo.textContent = (elapsed / 1000).toFixed(1) + 's';
 
-  // Default to statistics tab
-  switchTab('statistics');
+  // Default to summary tab only on first analysis
+  if (isFirstAnalysis) switchTab('summary');
 
-  // Show filter footer
-  $filterEditor.classList.add('active');
+  // Mark analysis as clean
+  analysisStale = false;
+  const execBtn = document.getElementById('executeBtn');
+  if (execBtn) execBtn.classList.add('clean');
+
+  // Show filter section (footer already visible from handleFile)
+  $filterSection.classList.add('active');
   document.body.classList.add('has-filter');
   // Update hint with column names using r.col / r["col"] syntax
   const v = currentRowVar;
@@ -3372,16 +3997,866 @@ function displayResults(data) {
     $catSection.style.display = 'none';
   }
 
+  // StatsCat
+  renderStatsCat(data);
+
   // Update tab badges
   const statsTab = $resultsTabs.querySelector('[data-tab="statistics"]');
   const catTab = $resultsTabs.querySelector('[data-tab="categories"]');
   const calcolTab = $resultsTabs.querySelector('[data-tab="calcols"]');
+  const statsCatTab = $resultsTabs.querySelector('[data-tab="statscat"]');
   statsTab.innerHTML = `Statistics <span class="tab-badge">${numCols.length}</span>`;
   catTab.innerHTML = `Categories <span class="tab-badge">${catCols.length}</span>`;
   calcolTab.innerHTML = `Calc <span class="tab-badge">${currentCalcols.length}</span>`;
+  if (currentGroupBy !== null && (data.groupStats || data.groupCategories)) {
+    const gbName = header[currentGroupBy] || '?';
+    const firstGS = data.groupStats && Object.keys(data.groupStats)[0] ? data.groupStats[Object.keys(data.groupStats)[0]] : null;
+    const firstGC = data.groupCategories && Object.keys(data.groupCategories)[0] ? data.groupCategories[Object.keys(data.groupCategories)[0]] : null;
+    const groupCount = firstGS ? Object.keys(firstGS).length : (firstGC ? Object.keys(firstGC).length : 0);
+    statsCatTab.innerHTML = `StatsCat <span class="tab-badge">${groupCount}</span>`;
+    $statsCatBadge.textContent = gbName + ' \u00B7 ' + groupCount + ' groups';
+  } else {
+    statsCatTab.innerHTML = 'StatsCat';
+    $statsCatBadge.textContent = '';
+  }
 
   // Render calcol list
   renderCalcolList();
+}
+
+function renderStatsCat(data) {
+  const { header, colTypes, groupStats, groupCategories } = data;
+  const origColCount = data.origColCount || header.length;
+  lastStatsCatData = data;
+
+  // Populate dropdown with categorical columns
+  const catColIdxs = [];
+  for (let i = 0; i < header.length; i++) {
+    if (colTypes[i] === 'categorical') catColIdxs.push(i);
+  }
+  let opts = '<option value="">— select grouping column —</option>';
+  for (const i of catColIdxs) {
+    const sel = currentGroupBy === i ? ' selected' : '';
+    const isCalcol = i >= origColCount;
+    opts += '<option value="' + i + '"' + sel + '>' + esc(header[i]) + (isCalcol ? ' (calc)' : '') + '</option>';
+  }
+  $statsCatGroupBy.innerHTML = opts;
+
+  // If no groupBy selected or no groupStats, show empty states
+  if (currentGroupBy === null || !groupStats) {
+    $statsCatVarList.innerHTML = '';
+    $statsCatGroupList.innerHTML = '';
+    $statsCatContent.innerHTML = '<div class="statscat-empty">Select a categorical column to see statistics broken down by group.</div>';
+    return;
+  }
+
+  // Build combined variable list: numeric + categorical (excluding groupBy)
+  const numCols = Object.keys(data.stats).map(Number).sort((a, b) => a - b);
+  const catVarCols = [];
+  for (let i = 0; i < header.length; i++) {
+    if (colTypes[i] === 'categorical' && i !== currentGroupBy) catVarCols.push(i);
+  }
+  const allVarCols = [...numCols, ...catVarCols].sort((a, b) => a - b);
+
+  if (allVarCols.length === 0) {
+    $statsCatVarList.innerHTML = '';
+    $statsCatGroupList.innerHTML = '';
+    $statsCatContent.innerHTML = '<div class="statscat-empty">No variables available for analysis.</div>';
+    return;
+  }
+
+  // Initialize selected vars if empty (first time or after file change)
+  if (statsCatSelectedVars.size === 0) {
+    for (const i of allVarCols) statsCatSelectedVars.add(i);
+  }
+
+  // Auto-select first variable that has data for display
+  if (currentStatsCatVar === null || (!groupStats[currentStatsCatVar] && !(groupCategories && groupCategories[currentStatsCatVar]))) {
+    const analyzed = allVarCols.filter(i => groupStats[i] || (groupCategories && groupCategories[i]));
+    currentStatsCatVar = analyzed.length > 0 ? analyzed[0] : allVarCols[0];
+  }
+
+  // Populate variable list
+  renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
+
+  // Determine group values from selected variable (use whichever data source exists)
+  const gs = groupStats[currentStatsCatVar];
+  const gc = groupCategories && groupCategories[currentStatsCatVar];
+  let allGroupKeys;
+  if (gs) {
+    allGroupKeys = Object.keys(gs);
+  } else if (gc) {
+    allGroupKeys = Object.keys(gc);
+  } else {
+    allGroupKeys = [];
+  }
+
+  // Build allGroups with counts for group list
+  const allGroups = allGroupKeys.map(gv => {
+    if (gs && gs[gv]) return [gv, gs[gv]];
+    if (gc && gc[gv]) {
+      const total = Object.values(gc[gv]).reduce((s, c) => s + c, 0);
+      return [gv, { count: total }];
+    }
+    return [gv, { count: 0 }];
+  });
+
+  // Initialize checked set to all if null
+  if (currentStatsCatChecked === null) {
+    currentStatsCatChecked = new Set(allGroupKeys);
+  }
+
+  // Populate group list
+  renderStatsCatGroupList(allGroups);
+
+  // Wire sidebar events
+  wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+
+  // Render right content
+  renderStatsCatContent();
+}
+
+function renderStatsCatVarList(allVarCols, header, origColCount, colTypes) {
+  const search = $statsCatVarSearch.value.toLowerCase();
+  let html = '';
+  for (const colIdx of allVarCols) {
+    if (statsCatShowSelectedOnly && !statsCatSelectedVars.has(colIdx)) continue;
+    const name = header[colIdx];
+    if (search && name.toLowerCase().indexOf(search) === -1) continue;
+    const isCalcol = colIdx >= origColCount;
+    const isCat = colTypes[colIdx] === 'categorical';
+    const active = colIdx === currentStatsCatVar ? ' active' : '';
+    const checked = statsCatSelectedVars.has(colIdx) ? ' checked' : '';
+    const unchecked = !statsCatSelectedVars.has(colIdx) ? ' unchecked' : '';
+    html += '<div class="statscat-var-item' + active + unchecked + '" data-col="' + colIdx + '">';
+    html += '<input type="checkbox"' + checked + ' data-col="' + colIdx + '">';
+    html += '<span class="var-name">' + esc(name) + '</span>';
+    if (isCalcol) html += '<span class="calcol-tag">CALC</span>';
+    html += '<span class="var-type-tag ' + (isCat ? 'cat' : 'num') + '">' + (isCat ? 'CAT' : 'NUM') + '</span>';
+    html += '</div>';
+  }
+  $statsCatVarList.innerHTML = html;
+  // Update filter toggle state
+  $statsCatVarFilter.textContent = statsCatShowSelectedOnly ? 'Selected' : 'All';
+  $statsCatVarFilter.classList.toggle('active', statsCatShowSelectedOnly);
+}
+
+function sortStatsCatGroups(groups) {
+  if (statsCatGroupSortMode === 'name') {
+    return groups.slice().sort((a, b) => (a[0] || '').localeCompare(b[0] || ''));
+  }
+  return groups.slice().sort((a, b) => b[1].count - a[1].count);
+}
+
+function renderStatsCatGroupList(allGroups) {
+  const sorted = sortStatsCatGroups(allGroups);
+  const search = $statsCatGroupSearch.value.toLowerCase();
+  let html = '';
+  for (const [gv, s] of sorted) {
+    const label = gv || '(empty)';
+    if (search && label.toLowerCase().indexOf(search) === -1) continue;
+    const checked = currentStatsCatChecked && currentStatsCatChecked.has(gv) ? ' checked' : '';
+    html += '<div class="statscat-group-item">';
+    html += '<label><input type="checkbox"' + checked + ' data-gv="' + esc(gv) + '"> <span class="gname">' + esc(label) + '</span></label>';
+    html += '<span class="gcount">' + s.count.toLocaleString() + '</span>';
+    html += '</div>';
+  }
+  $statsCatGroupList.innerHTML = html;
+}
+
+function getStatsCatGroupEntries() {
+  const data = lastStatsCatData;
+  if (!data) return [];
+  const gs = data.groupStats[currentStatsCatVar];
+  const gc = data.groupCategories && data.groupCategories[currentStatsCatVar];
+  if (gs) return Object.entries(gs);
+  if (gc) return Object.entries(gc).map(([gv, counts]) => [gv, { count: Object.values(counts).reduce((s, c) => s + c, 0) }]);
+  return [];
+}
+
+function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
+  // Variable row click — select for display (ignore if click was on checkbox)
+  $statsCatVarList.querySelectorAll('.statscat-var-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      const colIdx = parseInt(el.dataset.col);
+      if (colIdx === currentStatsCatVar) return;
+      currentStatsCatVar = colIdx;
+
+      renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
+      renderStatsCatGroupList(getStatsCatGroupEntries());
+      wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+      renderStatsCatContent();
+    });
+  });
+
+  // Variable checkboxes — toggle inclusion for analysis
+  $statsCatVarList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const colIdx = parseInt(cb.dataset.col);
+      if (cb.checked) {
+        statsCatSelectedVars.add(colIdx);
+      } else {
+        statsCatSelectedVars.delete(colIdx);
+      }
+      renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
+      wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+      markAnalysisStale();
+    });
+  });
+
+  // Variable All/None — affect only search-filtered results
+  $statsCatVarAll.onclick = () => {
+    $statsCatVarList.querySelectorAll('.statscat-var-item').forEach(el => {
+      statsCatSelectedVars.add(parseInt(el.dataset.col));
+    });
+    renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
+    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+    markAnalysisStale();
+  };
+  $statsCatVarNone.onclick = () => {
+    $statsCatVarList.querySelectorAll('.statscat-var-item').forEach(el => {
+      statsCatSelectedVars.delete(parseInt(el.dataset.col));
+    });
+    renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
+    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+    markAnalysisStale();
+  };
+
+  // Variable filter toggle (All / Selected)
+  $statsCatVarFilter.onclick = () => {
+    statsCatShowSelectedOnly = !statsCatShowSelectedOnly;
+    renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
+    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+  };
+
+  // Group checkboxes
+  $statsCatGroupList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const gv = cb.dataset.gv;
+      if (cb.checked) { currentStatsCatChecked.add(gv); } else { currentStatsCatChecked.delete(gv); }
+      renderStatsCatContent();
+    });
+  });
+
+  // All/None buttons
+  $statsCatGroupAll.onclick = () => {
+    const entries = getStatsCatGroupEntries();
+    currentStatsCatChecked = new Set(entries.map(e => e[0]));
+    renderStatsCatGroupList(entries);
+    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+    renderStatsCatContent();
+  };
+  $statsCatGroupNone.onclick = () => {
+    currentStatsCatChecked = new Set();
+    renderStatsCatGroupList(getStatsCatGroupEntries());
+    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+    renderStatsCatContent();
+  };
+
+  // Sort toggle
+  $statsCatGroupSort.onclick = () => {
+    statsCatGroupSortMode = statsCatGroupSortMode === 'count' ? 'name' : 'count';
+    $statsCatGroupSort.textContent = 'Sort: ' + statsCatGroupSortMode;
+    renderStatsCatGroupList(getStatsCatGroupEntries());
+    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+    renderStatsCatContent();
+  };
+
+  // Variable search
+  $statsCatVarSearch.oninput = () => {
+    renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
+    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+  };
+
+  // Group search
+  $statsCatGroupSearch.oninput = () => {
+    renderStatsCatGroupList(getStatsCatGroupEntries());
+    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+  };
+
+}
+
+function renderStatsCatContent() {
+  const data = lastStatsCatData;
+  if (!data) {
+    $statsCatContent.innerHTML = '<div class="statscat-empty">No grouped statistics available.</div>';
+    return;
+  }
+  if (currentStatsCatVar === null) {
+    $statsCatContent.innerHTML = '<div class="statscat-empty">Select a variable from the sidebar.</div>';
+    return;
+  }
+  if (!currentStatsCatChecked || currentStatsCatChecked.size === 0) {
+    $statsCatContent.innerHTML = '<div class="statscat-empty">No groups selected. Check groups in the sidebar to view statistics.</div>';
+    return;
+  }
+
+  const header = data.header;
+  const colTypes = data.colTypes;
+  const origColCount = data.origColCount || header.length;
+  const varName = header[currentStatsCatVar];
+  const isCalcol = currentStatsCatVar >= origColCount;
+  const isCatVar = colTypes[currentStatsCatVar] === 'categorical';
+
+  if (isCatVar) {
+    renderStatsCatCrossTab(data, varName, isCalcol);
+  } else {
+    renderStatsCatNumeric(data, varName, isCalcol);
+  }
+}
+
+function renderStatsCatNumeric(data, varName, isCalcol) {
+  const gs = data.groupStats[currentStatsCatVar];
+  if (!gs) {
+    $statsCatContent.innerHTML = '<div class="statscat-empty">This variable was not included in the analysis. Check its checkbox and click Analyze.</div>';
+    return;
+  }
+
+  // Filter entries to checked groups, apply current sort
+  const entries = sortStatsCatGroups(
+    Object.entries(gs).filter(([gv]) => currentStatsCatChecked.has(gv))
+  );
+
+  // Header with copy button
+  let html = '<div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.5rem;">';
+  html += '<span style="font-size:0.82rem;font-weight:600;color:var(--fg-bright);">' + esc(varName) + (isCalcol ? ' <span class="calcol-tag">CALC</span>' : '') + '</span>';
+  html += '<button class="statscat-copy-btn" id="statsCatCopyBtn">Copy table</button>';
+  html += '</div>';
+
+  html += '<div class="statscat-table-wrap"><table class="stats"><thead><tr><th>Group</th><th>Count</th><th>Nulls</th><th>Min</th><th>P10</th><th>P25</th><th>P50</th><th>P75</th><th>P90</th><th>Max</th><th>Mean</th><th>Std</th><th>CV%</th><th>Skew</th><th>Kurt</th></tr></thead><tbody>';
+
+  for (const [gv, s] of entries) {
+    const cv = (s.mean && s.std && s.mean !== 0) ? Math.abs(s.std / s.mean * 100) : null;
+    const q = s.quantiles;
+    html += '<tr>';
+    html += '<td>' + esc(gv || '(empty)') + '</td>';
+    html += '<td>' + s.count.toLocaleString() + '</td>';
+    html += '<td>' + (s.nulls > 0 ? s.nulls.toLocaleString() : '\u2014') + '</td>';
+    html += '<td>' + formatNum(s.min) + '</td>';
+    html += '<td>' + (q ? formatNum(q.p10) : '\u2014') + '</td>';
+    html += '<td>' + (q ? formatNum(q.p25) : '\u2014') + '</td>';
+    html += '<td>' + (q ? formatNum(q.p50) : '\u2014') + '</td>';
+    html += '<td>' + (q ? formatNum(q.p75) : '\u2014') + '</td>';
+    html += '<td>' + (q ? formatNum(q.p90) : '\u2014') + '</td>';
+    html += '<td>' + formatNum(s.max) + '</td>';
+    html += '<td>' + formatNum(s.mean) + '</td>';
+    html += '<td>' + formatNum(s.std) + '</td>';
+    html += '<td>' + (cv !== null ? cv.toFixed(1) : '\u2014') + '</td>';
+    html += '<td>' + (s.skewness !== null ? s.skewness.toFixed(2) : '\u2014') + '</td>';
+    html += '<td>' + (s.kurtosis !== null ? s.kurtosis.toFixed(2) : '\u2014') + '</td>';
+    html += '</tr>';
+  }
+  html += '</tbody></table></div>';
+
+  // CDF toolbar
+  html += '<div class="statscat-cdf-toolbar">';
+  html += '<div class="tb-group"><button class="sc-scale' + (statsCatCdfScale === 'linear' ? ' active' : '') + '" data-scale="linear">Linear</button>';
+  html += '<button class="sc-scale' + (statsCatCdfScale === 'log' ? ' active' : '') + '" data-scale="log">Log</button></div>';
+  html += '<div class="tb-group"><label><input type="checkbox" id="scManualCb"' + (statsCatCdfManual ? ' checked' : '') + '> Manual</label>';
+  if (statsCatCdfManual) {
+    html += '<input type="number" id="scManualMin" placeholder="min" step="any"' + (statsCatCdfMin !== null ? ' value="' + statsCatCdfMin + '"' : '') + '>';
+    html += '<input type="number" id="scManualMax" placeholder="max" step="any"' + (statsCatCdfMax !== null ? ' value="' + statsCatCdfMax + '"' : '') + '>';
+  }
+  html += '</div>';
+  html += '<div class="tb-group" style="margin-left:auto"><button id="scCopySvg">Copy SVG</button><button id="scDownloadPng">Download PNG</button></div>';
+  html += '</div>';
+
+  // CDF plot
+  html += renderOverlaidCDF(entries, varName);
+
+  $statsCatContent.innerHTML = html;
+  wireStatsCatCopyBtn();
+  wireStatsCatCdfToolbar();
+}
+
+function renderStatsCatCrossTab(data, varName, isCalcol) {
+  const gc = data.groupCategories && data.groupCategories[currentStatsCatVar];
+  if (!gc) {
+    $statsCatContent.innerHTML = '<div class="statscat-empty">This variable was not included in the analysis. Check its checkbox and click Analyze.</div>';
+    return;
+  }
+
+  // Get checked groups
+  const groupKeys = sortStatsCatGroups(
+    Object.entries(gc).filter(([gv]) => currentStatsCatChecked.has(gv)).map(([gv, counts]) => [gv, { count: Object.values(counts).reduce((s, c) => s + c, 0) }])
+  ).map(([gv]) => gv);
+
+  // Collect all unique values across checked groups
+  const allVals = new Set();
+  for (const gv of groupKeys) {
+    if (gc[gv]) for (const v of Object.keys(gc[gv])) allVals.add(v);
+  }
+  const valList = Array.from(allVals).sort();
+
+  // Header
+  let html = '<div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.5rem;">';
+  html += '<span style="font-size:0.82rem;font-weight:600;color:var(--fg-bright);">' + esc(varName) + (isCalcol ? ' <span class="calcol-tag">CALC</span>' : '') + '</span>';
+  html += '<button class="statscat-copy-btn" id="statsCatCopyBtn">Copy table</button>';
+  html += '</div>';
+
+  // Mode toggle
+  html += '<div class="statscat-crosstab-mode">';
+  html += '<button class="ct-mode' + (statsCatCrossMode === 'count' ? ' active' : '') + '" data-mode="count">Count</button>';
+  html += '<button class="ct-mode' + (statsCatCrossMode === 'row' ? ' active' : '') + '" data-mode="row">Row %</button>';
+  html += '<button class="ct-mode' + (statsCatCrossMode === 'col' ? ' active' : '') + '" data-mode="col">Col %</button>';
+  html += '</div>';
+
+  // Compute totals
+  const rowTotals = {};
+  const colTotals = {};
+  let grandTotal = 0;
+  for (const gv of groupKeys) {
+    rowTotals[gv] = 0;
+    for (const v of valList) {
+      const c = (gc[gv] && gc[gv][v]) || 0;
+      rowTotals[gv] += c;
+      colTotals[v] = (colTotals[v] || 0) + c;
+      grandTotal += c;
+    }
+  }
+
+  // Find max value for heatmap
+  let maxPct = 0;
+  if (statsCatCrossMode !== 'count') {
+    for (const gv of groupKeys) {
+      for (const v of valList) {
+        const c = (gc[gv] && gc[gv][v]) || 0;
+        const pct = statsCatCrossMode === 'row' ? (rowTotals[gv] > 0 ? c / rowTotals[gv] : 0) : (colTotals[v] > 0 ? c / colTotals[v] : 0);
+        if (pct > maxPct) maxPct = pct;
+      }
+    }
+  }
+
+  // Table
+  html += '<div class="statscat-table-wrap"><table class="stats"><thead><tr><th>Group</th>';
+  for (const v of valList) html += '<th>' + esc(v) + '</th>';
+  html += '<th>Total</th></tr></thead><tbody>';
+
+  for (const gv of groupKeys) {
+    html += '<tr><td>' + esc(gv || '(empty)') + '</td>';
+    for (const v of valList) {
+      const c = (gc[gv] && gc[gv][v]) || 0;
+      let display, bg = '';
+      if (statsCatCrossMode === 'count') {
+        display = c > 0 ? c.toLocaleString() : '\u2014';
+      } else if (statsCatCrossMode === 'row') {
+        const pct = rowTotals[gv] > 0 ? c / rowTotals[gv] * 100 : 0;
+        display = c > 0 ? pct.toFixed(1) + '%' : '\u2014';
+        if (c > 0) bg = 'background:rgba(232,163,23,' + (pct / 100 * 0.35).toFixed(2) + ')';
+      } else {
+        const pct = colTotals[v] > 0 ? c / colTotals[v] * 100 : 0;
+        display = c > 0 ? pct.toFixed(1) + '%' : '\u2014';
+        if (c > 0) bg = 'background:rgba(232,163,23,' + (pct / 100 * 0.35).toFixed(2) + ')';
+      }
+      html += '<td' + (bg ? ' style="' + bg + '"' : '') + '>' + display + '</td>';
+    }
+    html += '<td>' + rowTotals[gv].toLocaleString() + '</td></tr>';
+  }
+
+  // Column totals row
+  html += '<tr style="border-top:2px solid var(--border);font-weight:600"><td>Total</td>';
+  for (const v of valList) html += '<td>' + (colTotals[v] || 0).toLocaleString() + '</td>';
+  html += '<td>' + grandTotal.toLocaleString() + '</td></tr>';
+
+  html += '</tbody></table></div>';
+
+  $statsCatContent.innerHTML = html;
+  wireStatsCatCopyBtn();
+  wireStatsCatCrossMode();
+}
+
+function wireStatsCatCrossMode() {
+  $statsCatContent.querySelectorAll('.ct-mode').forEach(btn => {
+    btn.addEventListener('click', () => {
+      statsCatCrossMode = btn.dataset.mode;
+      renderStatsCatContent();
+    });
+  });
+}
+
+function renderOverlaidCDF(entries, varName) {
+  const plotEntries = entries.filter(([, s]) => s.centroids && s.centroids.length > 0);
+  if (plotEntries.length === 0) return '';
+
+  const isLog = statsCatCdfScale === 'log';
+  const W = 700, plotBaseH = 380;
+  const pad = { top: 20, right: 30, bottom: 50, left: 60 };
+  const plotW = W - pad.left - pad.right;
+  const plotH = plotBaseH - pad.top - pad.bottom;
+
+  // Legend layout: 3 columns, wrapping rows
+  const legCols = 3;
+  const legRowH = 16;
+  const legPadTop = 12;
+  const legRows = Math.ceil(plotEntries.length / legCols);
+  const legendH = legPadTop + legRows * legRowH + 6;
+  const H = plotBaseH + legendH;
+
+  // Determine x-axis range
+  let globalMin = Infinity, globalMax = -Infinity;
+  for (const [, s] of plotEntries) {
+    if (s.min < globalMin) globalMin = s.min;
+    if (s.max > globalMax) globalMax = s.max;
+  }
+  if (statsCatCdfManual) {
+    if (statsCatCdfMin !== null) globalMin = statsCatCdfMin;
+    if (statsCatCdfMax !== null) globalMax = statsCatCdfMax;
+  }
+
+  // For log scale, clamp min to positive
+  let logMin, logMax;
+  if (isLog) {
+    logMin = Math.log10(Math.max(globalMin, 1e-10));
+    logMax = Math.log10(Math.max(globalMax, 1e-9));
+    if (logMax <= logMin) logMax = logMin + 1;
+  }
+  const xRange = isLog ? (logMax - logMin) : (globalMax - globalMin || 1);
+
+  function sx(v) {
+    if (isLog) {
+      const lv = Math.log10(Math.max(v, 1e-10));
+      return pad.left + ((lv - logMin) / xRange) * plotW;
+    }
+    return pad.left + ((v - globalMin) / xRange) * plotW;
+  }
+  function sy(v) { return pad.top + (1 - v) * plotH; }
+
+  // Grid
+  const yTicks = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0];
+  let gridSvg = '';
+  for (const yt of yTicks) {
+    const y = sy(yt);
+    gridSvg += '<line x1="' + pad.left + '" y1="' + y + '" x2="' + (W - pad.right) + '" y2="' + y + '" stroke="#1e2228" stroke-width="1"/>';
+    gridSvg += '<text x="' + (pad.left - 8) + '" y="' + (y + 3.5) + '" text-anchor="end" fill="#6a737d" font-size="10">' + (yt * 100).toFixed(0) + '%</text>';
+  }
+  const nxTicks = 6;
+  for (let i = 0; i <= nxTicks; i++) {
+    let v;
+    if (isLog) {
+      v = Math.pow(10, logMin + (xRange * i / nxTicks));
+    } else {
+      v = globalMin + ((globalMax - globalMin || 1) * i / nxTicks);
+    }
+    const x = sx(v);
+    gridSvg += '<line x1="' + x + '" y1="' + pad.top + '" x2="' + x + '" y2="' + (plotBaseH - pad.bottom) + '" stroke="#1e2228" stroke-width="1"/>';
+    const label = Math.abs(v) >= 1e5 || (Math.abs(v) < 0.01 && v !== 0) ? v.toExponential(1) : v.toFixed(Math.abs(v) < 10 ? 2 : 0);
+    gridSvg += '<text x="' + x + '" y="' + (plotBaseH - pad.bottom + 16) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + label + '</text>';
+  }
+
+  let curvesSvg = '';
+  let meansSvg = '';
+  for (let gi = 0; gi < plotEntries.length; gi++) {
+    const [gv, s] = plotEntries[gi];
+    const color = STATSCAT_PALETTE[gi % STATSCAT_PALETTE.length];
+    const points = [];
+    let cumCount = 0;
+    for (const [mean, count] of s.centroids) {
+      if (isLog && mean <= 0) { cumCount += count; continue; }
+      cumCount += count;
+      const px = sx(mean);
+      if (px < pad.left || px > W - pad.right) continue;
+      points.push({ x: px, y: sy(cumCount / s.count) });
+    }
+    if (points.length > 0) {
+      const pathParts = points.map((p, i) => (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1));
+      curvesSvg += '<path d="' + pathParts.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="1.5" opacity="0.85"/>';
+    }
+    if (s.mean !== null && (!isLog || s.mean > 0)) {
+      const mx = sx(s.mean);
+      if (mx >= pad.left && mx <= W - pad.right) {
+        meansSvg += '<line x1="' + mx + '" y1="' + pad.top + '" x2="' + mx + '" y2="' + (plotBaseH - pad.bottom) + '" stroke="' + color + '" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>';
+      }
+    }
+  }
+
+  // Legend inside SVG
+  const legTop = plotBaseH + legPadTop;
+  const colW = (W - pad.left - pad.right) / legCols;
+  let legendSvg = '';
+  for (let gi = 0; gi < plotEntries.length; gi++) {
+    const [gv] = plotEntries[gi];
+    const color = STATSCAT_PALETTE[gi % STATSCAT_PALETTE.length];
+    const col = gi % legCols;
+    const row = Math.floor(gi / legCols);
+    const lx = pad.left + col * colW;
+    const ly = legTop + row * legRowH;
+    legendSvg += '<line x1="' + lx + '" y1="' + (ly + 5) + '" x2="' + (lx + 18) + '" y2="' + (ly + 5) + '" stroke="' + color + '" stroke-width="2.5"/>';
+    legendSvg += '<text x="' + (lx + 24) + '" y="' + (ly + 9) + '" fill="#6a737d" font-size="9.5">' + esc(gv || '(empty)') + '</text>';
+  }
+
+  const scaleLabel = isLog ? ' (log)' : '';
+  const svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)" id="statsCatCdfSvg">' +
+    '<rect width="' + W + '" height="' + H + '" fill="var(--bg)" rx="4"/>' +
+    gridSvg + meansSvg + curvesSvg +
+    '<text x="' + (W / 2) + '" y="' + (plotBaseH - 4) + '" text-anchor="middle" fill="#6a737d" font-size="10">CDF' + scaleLabel + ' \u2014 ' + esc(varName) + '</text>' +
+    '<text x="12" y="' + (plotBaseH / 2) + '" text-anchor="middle" fill="#6a737d" font-size="10" transform="rotate(-90, 12, ' + (plotBaseH / 2) + ')">Cumulative %</text>' +
+    legendSvg +
+    '</svg>';
+
+  return '<div class="statscat-cdf-plot">' + svg + '</div>';
+}
+
+function wireStatsCatCdfToolbar() {
+  // Scale buttons
+  $statsCatContent.querySelectorAll('.sc-scale').forEach(btn => {
+    btn.addEventListener('click', () => {
+      statsCatCdfScale = btn.dataset.scale;
+      renderStatsCatContent();
+    });
+  });
+  // Manual checkbox
+  const manualCb = document.getElementById('scManualCb');
+  if (manualCb) {
+    manualCb.addEventListener('change', () => {
+      statsCatCdfManual = manualCb.checked;
+      if (!statsCatCdfManual) { statsCatCdfMin = null; statsCatCdfMax = null; }
+      renderStatsCatContent();
+    });
+  }
+  // Manual min/max inputs
+  const minInput = document.getElementById('scManualMin');
+  const maxInput = document.getElementById('scManualMax');
+  if (minInput) {
+    minInput.addEventListener('change', () => {
+      statsCatCdfMin = minInput.value !== '' ? parseFloat(minInput.value) : null;
+      renderStatsCatContent();
+    });
+  }
+  if (maxInput) {
+    maxInput.addEventListener('change', () => {
+      statsCatCdfMax = maxInput.value !== '' ? parseFloat(maxInput.value) : null;
+      renderStatsCatContent();
+    });
+  }
+  // Copy SVG
+  const copySvg = document.getElementById('scCopySvg');
+  if (copySvg) {
+    copySvg.addEventListener('click', () => {
+      const svgEl = document.getElementById('statsCatCdfSvg');
+      if (!svgEl) return;
+      navigator.clipboard.writeText(svgEl.outerHTML).then(() => {
+        copySvg.textContent = 'Copied!';
+        setTimeout(() => { copySvg.textContent = 'Copy SVG'; }, 1500);
+      });
+    });
+  }
+  // Download PNG — light theme for documents
+  const dlPng = document.getElementById('scDownloadPng');
+  if (dlPng) {
+    dlPng.addEventListener('click', () => {
+      const svgEl = document.getElementById('statsCatCdfSvg');
+      if (!svgEl) return;
+      let svgData = new XMLSerializer().serializeToString(svgEl);
+      // Retheme for light background: white bg, dark text/lines
+      svgData = svgData.replace(/fill="var\(--bg\)"/g, 'fill="white"');
+      svgData = svgData.replace(/fill="#6a737d"/g, 'fill="#333"');
+      svgData = svgData.replace(/stroke="#1e2228"/g, 'stroke="#ddd"');
+      svgData = svgData.replace(/style="font-family:var\(--mono\)"/g, 'style="font-family:monospace"');
+      const canvas = document.createElement('canvas');
+      const scale = 2;
+      const vb = svgEl.getAttribute('viewBox').split(' ').map(Number);
+      canvas.width = vb[2] * scale;
+      canvas.height = vb[3] * scale;
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(blob => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'cdf_plot.png';
+          a.click();
+          URL.revokeObjectURL(url);
+        }, 'image/png');
+      };
+      img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+    });
+  }
+}
+
+function wireStatsCatCopyBtn() {
+  const btn = document.getElementById('statsCatCopyBtn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const table = $statsCatContent.querySelector('table.stats');
+    if (!table) return;
+    const rows = table.querySelectorAll('tr');
+    const lines = [];
+    rows.forEach(row => {
+      const cells = row.querySelectorAll('th, td');
+      const vals = [];
+      cells.forEach(c => vals.push(c.textContent));
+      lines.push(vals.join('\t'));
+    });
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy table'; }, 1500);
+    });
+  });
+}
+
+// Pre-populate variable list from known column metadata (no analysis needed)
+function prePopulateStatsCatVars() {
+  const header = currentHeader;
+  const colTypes = currentColTypes;
+  const origColCount = currentOrigColCount || header.length;
+  if (header.length === 0) return;
+
+  // Build combined variable list: numeric + categorical (excluding groupBy)
+  const allVarCols = [];
+  for (let i = 0; i < header.length; i++) {
+    if (i === currentGroupBy) continue;
+    if (colTypes[i] === 'numeric' || colTypes[i] === 'categorical') allVarCols.push(i);
+  }
+  allVarCols.sort((a, b) => a - b);
+
+  // Initialize selected vars if empty
+  if (statsCatSelectedVars.size === 0) {
+    for (const i of allVarCols) statsCatSelectedVars.add(i);
+  }
+
+  // Auto-select first variable for display
+  if (currentStatsCatVar === null) {
+    currentStatsCatVar = allVarCols.length > 0 ? allVarCols[0] : null;
+  }
+
+  // Render variable list
+  renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
+
+  // Clear group list (no data yet)
+  $statsCatGroupList.innerHTML = '';
+
+  // Show prompt in content
+  $statsCatContent.innerHTML = '<div class="statscat-empty">Configure variables and click Analyze to compute grouped statistics.</div>';
+
+  // Wire sidebar events (variable clicks, checkboxes, search, analyze button)
+  wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+}
+
+// StatsCat dropdown handler
+$statsCatGroupBy.addEventListener('change', () => {
+  const val = $statsCatGroupBy.value;
+  currentGroupBy = val ? parseInt(val) : null;
+  currentStatsCatVar = null;
+  currentStatsCatChecked = null;
+  statsCatShowSelectedOnly = false;
+  $statsCatVarSearch.value = '';
+  $statsCatGroupSearch.value = '';
+  if (currentGroupBy !== null) {
+    prePopulateStatsCatVars();
+  } else {
+    $statsCatVarList.innerHTML = '';
+    $statsCatGroupList.innerHTML = '';
+    $statsCatContent.innerHTML = '<div class="statscat-empty">Select a categorical column to see statistics broken down by group.</div>';
+  }
+  markAnalysisStale();
+});
+
+// Mobile collapsible StatsCat sections (one-time delegation)
+if (window.matchMedia('(max-width: 700px)').matches) {
+  document.querySelector('.statscat-sidebar').addEventListener('click', (e) => {
+    const title = e.target.closest('.statscat-sidebar-section--grow > .statscat-sidebar-title');
+    if (!title) return;
+    const section = title.closest('.statscat-sidebar-section--grow');
+    const wasCollapsed = section.classList.contains('collapsed');
+    document.querySelectorAll('.statscat-sidebar-section--grow').forEach(s => s.classList.add('collapsed'));
+    if (wasCollapsed) section.classList.remove('collapsed');
+  });
+}
+
+function renderCDFModal(s, name) {
+  $cdfTitle.textContent = 'CDF \u2014 ' + name;
+  $cdfModal.classList.add('active');
+
+  const centroids = s.centroids;
+  const totalCount = s.count;
+  const points = [];
+  let cumCount = 0;
+  for (const [mean, count] of centroids) {
+    cumCount += count;
+    points.push({ x: mean, y: cumCount / totalCount });
+  }
+
+  const W = 660, H = 360;
+  const pad = { top: 20, right: 30, bottom: 50, left: 60 };
+  const plotW = W - pad.left - pad.right;
+  const plotH = H - pad.top - pad.bottom;
+
+  const xMin = s.min, xMax = s.max;
+  const xRange = xMax - xMin || 1;
+
+  function sx(v) { return pad.left + ((v - xMin) / xRange) * plotW; }
+  function sy(v) { return pad.top + (1 - v) * plotH; }
+
+  const pathParts = points.map((p, i) => (i === 0 ? 'M' : 'L') + sx(p.x).toFixed(1) + ',' + sy(p.y).toFixed(1));
+  const pathD = pathParts.join(' ');
+
+  const yTicks = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0];
+  let gridSvg = '';
+  for (const yt of yTicks) {
+    const y = sy(yt);
+    gridSvg += '<line x1="' + pad.left + '" y1="' + y + '" x2="' + (W - pad.right) + '" y2="' + y + '" stroke="#1e2228" stroke-width="1"/>';
+    gridSvg += '<text x="' + (pad.left - 8) + '" y="' + (y + 3.5) + '" text-anchor="end" fill="#6a737d" font-size="10">' + (yt * 100).toFixed(0) + '%</text>';
+  }
+
+  const nxTicks = 6;
+  for (let i = 0; i <= nxTicks; i++) {
+    const v = xMin + (xRange * i / nxTicks);
+    const x = sx(v);
+    gridSvg += '<line x1="' + x + '" y1="' + pad.top + '" x2="' + x + '" y2="' + (H - pad.bottom) + '" stroke="#1e2228" stroke-width="1"/>';
+    const label = Math.abs(v) >= 1e5 || (Math.abs(v) < 0.01 && v !== 0) ? v.toExponential(1) : v.toFixed(Math.abs(v) < 10 ? 2 : 0);
+    gridSvg += '<text x="' + x + '" y="' + (H - pad.bottom + 16) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + label + '</text>';
+  }
+
+  const q = s.quantiles;
+  let markerSvg = '';
+  if (q) {
+    const pctiles = [
+      { v: q.p10, label: 'P10' }, { v: q.p25, label: 'P25' },
+      { v: q.p50, label: 'P50' }, { v: q.p75, label: 'P75' },
+      { v: q.p90, label: 'P90' }
+    ];
+    for (const p of pctiles) {
+      if (p.v === null || p.v === undefined) continue;
+      const x = sx(p.v);
+      const pVal = parseFloat(p.label.slice(1)) / 100;
+      const y = sy(pVal);
+      markerSvg += '<circle cx="' + x + '" cy="' + y + '" r="3" fill="#f0b232"/>';
+    }
+  }
+  if (s.mean !== null) {
+    const mx = sx(s.mean);
+    markerSvg += '<line x1="' + mx + '" y1="' + pad.top + '" x2="' + mx + '" y2="' + (H - pad.bottom) + '" stroke="#58a6ff" stroke-width="1" stroke-dasharray="4,3"/>';
+    markerSvg += '<text x="' + mx + '" y="' + (H - pad.bottom + 30) + '" text-anchor="middle" fill="#58a6ff" font-size="9">mean</text>';
+  }
+
+  const svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)">' +
+    '<rect width="' + W + '" height="' + H + '" fill="var(--bg)" rx="4"/>' +
+    gridSvg +
+    '<path d="' + pathD + '" fill="none" stroke="var(--amber)" stroke-width="1.5"/>' +
+    markerSvg +
+    '<text x="' + (W / 2) + '" y="' + (H - 4) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + esc(name) + '</text>' +
+    '<text x="12" y="' + (H / 2) + '" text-anchor="middle" fill="#6a737d" font-size="10" transform="rotate(-90, 12, ' + (H / 2) + ')">Cumulative %</text>' +
+    '</svg>';
+
+  const cv = (s.mean && s.std && s.mean !== 0) ? Math.abs(s.std / s.mean * 100) : null;
+  const zeroPct = s.count > 0 ? (s.zeros / s.count * 100) : 0;
+  let statsHtml = '<div class="cdf-stats">';
+  statsHtml += '<span>n=<strong>' + s.count.toLocaleString() + '</strong></span>';
+  if (s.nulls > 0) statsHtml += '<span>nulls=<strong>' + s.nulls.toLocaleString() + '</strong></span>';
+  if (s.zeros > 0) statsHtml += '<span>zeros=<strong>' + s.zeros.toLocaleString() + '</strong> (' + zeroPct.toFixed(1) + '%)</span>';
+  statsHtml += '<span>min=<strong>' + formatNum(s.min) + '</strong></span>';
+  if (q) statsHtml += '<span>P50=<strong>' + formatNum(q.p50) + '</strong></span>';
+  statsHtml += '<span>mean=<strong>' + formatNum(s.mean) + '</strong></span>';
+  statsHtml += '<span>max=<strong>' + formatNum(s.max) + '</strong></span>';
+  if (cv !== null) statsHtml += '<span>CV=<strong>' + cv.toFixed(1) + '%</strong></span>';
+  if (s.skewness !== null) statsHtml += '<span>skew=<strong>' + s.skewness.toFixed(2) + '</strong></span>';
+  statsHtml += '</div>';
+
+  $cdfBody.innerHTML = svg + statsHtml;
 }
 
 function renderXYZConfig(header, colTypes, xyzGuess) {
@@ -3470,7 +4945,7 @@ function renderCalcolList() {
         currentCalcols = currentCalcols.filter(c => c.id !== id);
         if (editingCalcolId === id) cancelCalcolEdit();
         renderCalcolList();
-        updateCalcolRunBtn();
+        markAnalysisStale();
         updateCalcolBadge();
       });
     });
@@ -3494,13 +4969,6 @@ function updateCalcolBadge() {
   $calcolBadge.textContent = currentCalcols.length;
   const calcolTab = $resultsTabs.querySelector('[data-tab="calcols"]');
   if (calcolTab) calcolTab.innerHTML = `Calc <span class="tab-badge">${currentCalcols.length}</span>`;
-}
-
-function updateCalcolRunBtn() {
-  // Enable if calcols changed since last analysis
-  const lastCount = lastCompleteData ? (lastCompleteData.calcolCount || 0) : 0;
-  const changed = currentCalcols.length !== lastCount || currentCalcols.length > 0;
-  $calcolRun.disabled = !changed;
 }
 
 function previewCalcol(expr) {
@@ -3710,13 +5178,8 @@ $calcolAdd.addEventListener('click', () => {
   }
   cancelCalcolEdit();
   renderCalcolList();
-  updateCalcolRunBtn();
+  markAnalysisStale();
   updateCalcolBadge();
-});
-
-$calcolRun.addEventListener('click', () => {
-  if ($calcolRun.disabled) return;
-  startAnalysis(currentXYZ, currentFilter, undefined, undefined, undefined, undefined);
 });
 
 $calcolCancel.addEventListener('click', cancelCalcolEdit);
@@ -3890,104 +5353,7 @@ function showCDF(colIdx) {
   const s = lastDisplayedStats[colIdx];
   const name = lastDisplayedHeader[colIdx];
   if (!s || !s.centroids || s.centroids.length === 0) return;
-
-  $cdfTitle.textContent = `CDF — ${name}`;
-  $cdfModal.classList.add('active');
-
-  // Build cumulative data from centroids
-  const centroids = s.centroids; // [[mean, count], ...]
-  const totalCount = s.count;
-  const points = [];
-  let cumCount = 0;
-  for (const [mean, count] of centroids) {
-    cumCount += count;
-    points.push({ x: mean, y: cumCount / totalCount });
-  }
-
-  // SVG dimensions
-  const W = 660, H = 360;
-  const pad = { top: 20, right: 30, bottom: 50, left: 60 };
-  const plotW = W - pad.left - pad.right;
-  const plotH = H - pad.top - pad.bottom;
-
-  const xMin = s.min, xMax = s.max;
-  const xRange = xMax - xMin || 1;
-
-  function sx(v) { return pad.left + ((v - xMin) / xRange) * plotW; }
-  function sy(v) { return pad.top + (1 - v) * plotH; }
-
-  // Build polyline
-  const pathParts = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`);
-  const pathD = pathParts.join(' ');
-
-  // Grid lines and labels
-  const yTicks = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0];
-  let gridSvg = '';
-  for (const yt of yTicks) {
-    const y = sy(yt);
-    gridSvg += `<line x1="${pad.left}" y1="${y}" x2="${W - pad.right}" y2="${y}" stroke="#1e2228" stroke-width="1"/>`;
-    gridSvg += `<text x="${pad.left - 8}" y="${y + 3.5}" text-anchor="end" fill="#6a737d" font-size="10">${(yt * 100).toFixed(0)}%</text>`;
-  }
-
-  // X axis ticks (auto)
-  const nxTicks = 6;
-  for (let i = 0; i <= nxTicks; i++) {
-    const v = xMin + (xRange * i / nxTicks);
-    const x = sx(v);
-    gridSvg += `<line x1="${x}" y1="${pad.top}" x2="${x}" y2="${H - pad.bottom}" stroke="#1e2228" stroke-width="1"/>`;
-    const label = Math.abs(v) >= 1e5 || (Math.abs(v) < 0.01 && v !== 0) ? v.toExponential(1) : v.toFixed(Math.abs(v) < 10 ? 2 : 0);
-    gridSvg += `<text x="${x}" y="${H - pad.bottom + 16}" text-anchor="middle" fill="#6a737d" font-size="10">${label}</text>`;
-  }
-
-  // Percentile markers
-  const q = s.quantiles;
-  let markerSvg = '';
-  if (q) {
-    const pctiles = [
-      { v: q.p10, label: 'P10' }, { v: q.p25, label: 'P25' },
-      { v: q.p50, label: 'P50' }, { v: q.p75, label: 'P75' },
-      { v: q.p90, label: 'P90' }
-    ];
-    for (const p of pctiles) {
-      if (p.v === null || p.v === undefined) continue;
-      const x = sx(p.v);
-      const pVal = parseFloat(p.label.slice(1)) / 100;
-      const y = sy(pVal);
-      markerSvg += `<circle cx="${x}" cy="${y}" r="3" fill="#f0b232"/>`;
-    }
-  }
-  // Mean marker
-  if (s.mean !== null) {
-    const mx = sx(s.mean);
-    markerSvg += `<line x1="${mx}" y1="${pad.top}" x2="${mx}" y2="${H - pad.bottom}" stroke="#58a6ff" stroke-width="1" stroke-dasharray="4,3"/>`;
-    markerSvg += `<text x="${mx}" y="${H - pad.bottom + 30}" text-anchor="middle" fill="#58a6ff" font-size="9">mean</text>`;
-  }
-
-  const svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)">
-    <rect width="${W}" height="${H}" fill="var(--bg)" rx="4"/>
-    ${gridSvg}
-    <path d="${pathD}" fill="none" stroke="var(--amber)" stroke-width="1.5"/>
-    ${markerSvg}
-    <text x="${W / 2}" y="${H - 4}" text-anchor="middle" fill="#6a737d" font-size="10">${esc(name)}</text>
-    <text x="12" y="${H / 2}" text-anchor="middle" fill="#6a737d" font-size="10" transform="rotate(-90, 12, ${H / 2})">Cumulative %</text>
-  </svg>`;
-
-  // Stats summary
-  const cv = (s.mean && s.std && s.mean !== 0) ? Math.abs(s.std / s.mean * 100) : null;
-  const zeroPct = s.count > 0 ? (s.zeros / s.count * 100) : 0;
-  let statsHtml = `<div class="cdf-stats">`;
-  statsHtml += `<span>n=<strong>${s.count.toLocaleString()}</strong></span>`;
-  if (s.nulls > 0) statsHtml += `<span>nulls=<strong>${s.nulls.toLocaleString()}</strong></span>`;
-  if (s.zeros > 0) statsHtml += `<span>zeros=<strong>${s.zeros.toLocaleString()}</strong> (${zeroPct.toFixed(1)}%)</span>`;
-  statsHtml += `<span>min=<strong>${formatNum(s.min)}</strong></span>`;
-  if (q) statsHtml += `<span>P50=<strong>${formatNum(q.p50)}</strong></span>`;
-  statsHtml += `<span>mean=<strong>${formatNum(s.mean)}</strong></span>`;
-  statsHtml += `<span>max=<strong>${formatNum(s.max)}</strong></span>`;
-  if (cv !== null) statsHtml += `<span>CV=<strong>${cv.toFixed(1)}%</strong></span>`;
-  if (s.skewness !== null) statsHtml += `<span>skew=<strong>${s.skewness.toFixed(2)}</strong></span>`;
-  statsHtml += `</div>`;
-
-  $cdfBody.innerHTML = svg + statsHtml;
+  renderCDFModal(s, name);
 }
 
 if ('serviceWorker' in navigator) {
