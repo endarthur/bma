@@ -1462,6 +1462,84 @@ table.cat-table tr::before {
   }
 }
 
+/* Export */
+#panelExport.active { display: block; }
+.export-body { padding: 1rem; }
+.export-toolbar {
+  display: flex; gap: 0.4rem; margin-bottom: 0.75rem; flex-wrap: wrap;
+}
+.export-toolbar button {
+  background: var(--bg2); border: 1px solid var(--border); color: var(--fg-dim);
+  font: 0.72rem var(--mono); padding: 0.25rem 0.6rem; cursor: pointer; border-radius: 3px;
+}
+.export-toolbar button:hover { color: var(--fg-bright); border-color: var(--amber); }
+.export-col-list {
+  max-height: 420px; overflow-y: auto; border: 1px solid var(--border);
+  border-radius: 4px; background: var(--bg1); margin-bottom: 0.75rem;
+}
+.export-col-item {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid var(--border); font-size: 0.78rem;
+}
+.export-col-item:last-child { border-bottom: none; }
+.export-col-item:hover { background: var(--bg2); }
+.export-col-item input[type="checkbox"] { flex-shrink: 0; cursor: pointer; }
+.export-col-item .ecol-name {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--fg); flex: 1;
+}
+.export-col-item .ecol-rename {
+  width: 120px; background: var(--bg); border: 1px solid var(--border); color: var(--fg);
+  font: 0.72rem var(--mono); padding: 0.15rem 0.4rem; border-radius: 3px;
+}
+.export-col-item .ecol-rename:focus { border-color: var(--amber); outline: none; }
+.export-col-item .ecol-type {
+  font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 3px;
+  text-transform: uppercase; flex-shrink: 0;
+}
+.export-col-item .ecol-type.num { color: var(--blue); border: 1px solid var(--blue); opacity: 0.5; }
+.export-col-item .ecol-type.cat { color: var(--green); border: 1px solid var(--green); opacity: 0.5; }
+.export-col-item .ecol-type.calcol { color: var(--amber); border: 1px solid var(--amber); opacity: 0.5; }
+.export-col-item .ecol-grip {
+  cursor: grab; flex-shrink: 0; user-select: none;
+  width: 8px; height: 14px;
+  background-image: radial-gradient(circle, var(--fg-dim) 1px, transparent 1px);
+  background-size: 4px 4px; background-position: 0 1px;
+  opacity: 0.5;
+}
+.export-col-item:hover .ecol-grip {
+  background-image: radial-gradient(circle, var(--amber) 1px, transparent 1px);
+  opacity: 1;
+}
+.export-col-item.dragging {
+  opacity: 0.25;
+}
+.export-col-item.drag-over-top {
+  box-shadow: 0 -2px 0 0 var(--amber);
+}
+.export-col-item.drag-over-bottom {
+  box-shadow: 0 2px 0 0 var(--amber);
+}
+.export-actions {
+  display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;
+}
+.export-btn {
+  background: var(--amber); color: var(--bg); border: none; font: 600 0.82rem var(--mono);
+  padding: 0.5rem 1.4rem; border-radius: 4px; cursor: pointer;
+}
+.export-btn:hover { filter: brightness(1.15); }
+.export-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.export-info { font-size: 0.72rem; color: var(--fg-dim); }
+.export-progress { display: none; margin-top: 0.5rem; }
+.export-progress.active { display: block; }
+.export-progress-label { font-size: 0.72rem; color: var(--fg-dim); margin-bottom: 0.3rem; }
+.export-progress-bar {
+  height: 4px; background: var(--bg2); border-radius: 2px; overflow: hidden;
+}
+.export-progress-fill {
+  height: 100%; width: 0; background: var(--amber); transition: width 0.15s;
+}
+
 /* App footer - fixed at bottom */
 .app-footer {
   display: none;
@@ -1748,6 +1826,7 @@ body.has-footer { }
       <button class="results-tab" data-tab="statistics">Statistics</button>
       <button class="results-tab" data-tab="categories">Categories</button>
       <button class="results-tab" data-tab="statscat">StatsCat</button>
+      <button class="results-tab" data-tab="export">Export</button>
     </div>
     <div class="results-panels">
       <div class="results-panel active" id="panelPreflight" data-tab="preflight">
@@ -1891,6 +1970,32 @@ body.has-footer { }
             </div>
           </div>
           <div class="statscat-content" id="statsCatContent"></div>
+        </div>
+      </div>
+      <div class="results-panel" id="panelExport" data-tab="export">
+        <div class="panel-inner">
+          <div class="section">
+            <div class="section-head">
+              Export Columns <span class="badge" id="exportBadge">0</span>
+            </div>
+            <div class="section-body export-body">
+              <div class="export-toolbar">
+                <button id="exportSelAll">All</button>
+                <button id="exportSelNone">None</button>
+                <button id="exportSelOrig">Original</button>
+                <button id="exportSelCalc">Calcols</button>
+              </div>
+              <div class="export-col-list" id="exportColList"></div>
+              <div class="export-actions">
+                <button class="export-btn" id="exportDownload">Download CSV</button>
+                <span class="export-info" id="exportInfo"></span>
+              </div>
+              <div class="export-progress" id="exportProgress">
+                <div class="export-progress-label" id="exportProgressLabel"></div>
+                <div class="export-progress-bar"><div class="export-progress-fill" id="exportProgressFill"></div></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -2280,6 +2385,8 @@ function tdQuantile(td, q) {
   return centroids[centroids.length - 1].mean;
 }
 
+const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;';
+
 async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcols, groupBy, groupStatsCols) {
   const startTime = performance.now();
 
@@ -2391,9 +2498,6 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   let groupByColName = null;
   let groupStats = {};
   let groupCategories = {};
-
-  // Math convenience preamble for expressions
-  const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;';
 
   // ── Calcol compiled expressions ──
   let calcolFns = null;
@@ -2867,9 +2971,153 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   });
 }
 
+async function exportCSV(data) {
+  const { file, filter, zipEntry, calcols, resolvedTypes, exportCols } = data;
+  const startTime = performance.now();
+
+  let csvFile = file;
+  if (isZipFile(file)) {
+    try { csvFile = await extractCSVFromZip(file, zipEntry); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  }
+
+  const sampleLines = await readSample(csvFile, 50);
+  if (sampleLines.length < 2) {
+    self.postMessage({ type: 'error', message: 'File appears empty or has no data rows.' });
+    return;
+  }
+
+  const delimiter = detectDelimiter(sampleLines.slice(0, 20));
+  const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
+  const nCols = header.length;
+
+  let rowVarName = 'r';
+  const colSet = new Set(header);
+  for (const candidate of ['r', 'd', 'row', '_r', '_d']) {
+    if (!colSet.has(candidate)) { rowVarName = candidate; break; }
+  }
+
+  const colTypes = resolvedTypes;
+
+  // Compile calcols
+  let calcolFns = [];
+  if (calcols && calcols.length > 0) {
+    for (const cc of calcols) {
+      try {
+        const fn = new Function(rowVarName, MATH_PREAMBLE + 'try { return (' + cc.expr + '); } catch(e) { return null; }');
+        calcolFns.push({ fn, name: cc.name });
+      } catch(e) {
+        calcolFns.push({ fn: null, name: cc.name });
+      }
+    }
+  }
+
+  // Compile filter
+  let filterFn = null;
+  const filterExpr = filter ? filter.expression : null;
+  if (filterExpr) {
+    try {
+      filterFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + filterExpr + '); } catch(e) { return false; }');
+    } catch(e) {
+      self.postMessage({ type: 'error', message: 'Filter expression error: ' + e.message });
+      return;
+    }
+  }
+
+  function buildRow(fields) {
+    const obj = {};
+    for (let i = 0; i < nCols; i++) {
+      const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? null : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+    }
+    for (const cc of calcolFns) {
+      if (cc.fn) { try { obj[cc.name] = cc.fn(obj); } catch(e) { obj[cc.name] = null; } }
+      else { obj[cc.name] = null; }
+    }
+    return obj;
+  }
+
+  function csvEscape(v) {
+    if (v === null || v === undefined) return '';
+    const s = String(v);
+    if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\\n') >= 0 || s.indexOf('\\r') >= 0) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+
+  // CSV header row
+  const headerLine = exportCols.map(c => csvEscape(c.outputName)).join(',') + '\\n';
+  self.postMessage({ type: 'export-chunk', csv: headerLine });
+
+  const stream = csvFile.stream().pipeThrough(new TextDecoderStream());
+  const reader = stream.getReader();
+  let buffer = '', isFirstLine = true, rowCount = 0, totalChars = 0;
+  let lastProgress = 0;
+  let chunkLines = [];
+  const CHUNK_SIZE = 5000;
+
+  function flushChunk() {
+    if (chunkLines.length === 0) return;
+    self.postMessage({ type: 'export-chunk', csv: chunkLines.join('') });
+    chunkLines = [];
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalChars += value.length;
+    buffer += value;
+
+    const parts = buffer.split('\\n');
+    buffer = parts.pop();
+
+    for (const raw of parts) {
+      const line = raw.replace(/\\r$/, '');
+      if (line.startsWith('#')) continue;
+      if (isFirstLine) { isFirstLine = false; continue; }
+      if (!line) continue;
+
+      const fields = line.split(delimiter);
+      const row = buildRow(fields);
+      if (filterFn && !filterFn(row)) continue;
+
+      rowCount++;
+      const csvLine = exportCols.map(c => csvEscape(row[c.name])).join(',') + '\\n';
+      chunkLines.push(csvLine);
+
+      if (chunkLines.length >= CHUNK_SIZE) {
+        flushChunk();
+        self.postMessage({ type: 'export-progress', percent: (totalChars / csvFile.size) * 100, rowCount });
+      }
+    }
+  }
+
+  // Last buffer line
+  if (buffer) {
+    const line = buffer.replace(/\\r$/, '');
+    if (line && !line.startsWith('#') && !isFirstLine) {
+      const fields = line.split(delimiter);
+      const row = buildRow(fields);
+      if (!filterFn || filterFn(row)) {
+        rowCount++;
+        chunkLines.push(exportCols.map(c => csvEscape(row[c.name])).join(',') + '\\n');
+      }
+    }
+  }
+  flushChunk();
+
+  const elapsed = performance.now() - startTime;
+  self.postMessage({ type: 'export-complete', rowCount, elapsed });
+}
+
 self.onmessage = (e) => {
-  const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcols, groupBy, groupStatsCols } = e.data;
-  analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcols, groupBy, groupStatsCols);
+  if (e.data.mode === 'export') {
+    exportCSV(e.data);
+  } else {
+    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcols, groupBy, groupStatsCols } = e.data;
+    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcols, groupBy, groupStatsCols);
+  }
 };
 `;
 
@@ -2952,6 +3200,17 @@ let statsCatCdfMin = null;
 let statsCatCdfMax = null;
 let statsCatCrossMode = 'count'; // 'count', 'row', 'col'
 let statsCatShowSelectedOnly = false;
+
+// Export
+let exportWorker = null;
+let exportColumns = []; // [{name, outputName, type, selected, isCalcol}]
+const $exportColList = document.getElementById('exportColList');
+const $exportBadge = document.getElementById('exportBadge');
+const $exportDownload = document.getElementById('exportDownload');
+const $exportInfo = document.getElementById('exportInfo');
+const $exportProgress = document.getElementById('exportProgress');
+const $exportProgressLabel = document.getElementById('exportProgressLabel');
+const $exportProgressFill = document.getElementById('exportProgressFill');
 
 const STATSCAT_PALETTE = [
   '#4a9eff','#34d399','#f87171','#a78bfa','#fb923c',
@@ -3616,6 +3875,8 @@ function handleFile(file) {
   statsCatCdfMin = null;
   statsCatCdfMax = null;
   statsCatCrossMode = 'count';
+  exportColumns = [];
+  if (exportWorker) { exportWorker.terminate(); exportWorker = null; }
   hasResults = false;
   $filterExpr.value = '';
   $filterSection.classList.remove('active');
@@ -3666,6 +3927,10 @@ function handleFile(file) {
   $statsCatGroupSearch.value = '';
   $catContent.innerHTML = placeholder;
   $catBadge.textContent = '';
+  $exportColList.innerHTML = '';
+  $exportBadge.textContent = '0';
+  $exportInfo.textContent = '';
+  $exportProgress.classList.remove('active');
   renderCalcolList();
 
   // Run preflight
@@ -3725,6 +3990,8 @@ $backToPreflight.addEventListener('click', () => {
   statsCatGroupSortMode = 'count';
   statsCatSelectedVars = new Set();
   statsCatShowSelectedOnly = false;
+  exportColumns = [];
+  if (exportWorker) { exportWorker.terminate(); exportWorker = null; }
 });
 
 // Allow dropping new files onto results area
@@ -4162,14 +4429,19 @@ function displayResults(data) {
   // StatsCat
   renderStatsCat(data);
 
+  // Export
+  initExportColumns();
+
   // Update tab badges
   const statsTab = $resultsTabs.querySelector('[data-tab="statistics"]');
   const catTab = $resultsTabs.querySelector('[data-tab="categories"]');
   const calcolTab = $resultsTabs.querySelector('[data-tab="calcols"]');
   const statsCatTab = $resultsTabs.querySelector('[data-tab="statscat"]');
+  const exportTab = $resultsTabs.querySelector('[data-tab="export"]');
   statsTab.innerHTML = `Statistics <span class="tab-badge">${numCols.length}</span>`;
   catTab.innerHTML = `Categories <span class="tab-badge">${catCols.length}</span>`;
   calcolTab.innerHTML = `Calc <span class="tab-badge">${currentCalcols.length}</span>`;
+  exportTab.innerHTML = `Export <span class="tab-badge">${currentHeader.length}</span>`;
   if (currentGroupBy !== null && (data.groupStats || data.groupCategories)) {
     const gbName = header[currentGroupBy] || '?';
     const firstGS = data.groupStats && Object.keys(data.groupStats)[0] ? data.groupStats[Object.keys(data.groupStats)[0]] : null;
@@ -4928,6 +5200,236 @@ if (window.matchMedia('(max-width: 700px)').matches) {
     if (wasCollapsed) section.classList.remove('collapsed');
   });
 }
+
+// ─── Export Tab ────────────────────────────────────────────────────────
+
+function initExportColumns() {
+  exportColumns = [];
+  for (let i = 0; i < currentHeader.length; i++) {
+    const isCalcol = i >= currentOrigColCount;
+    exportColumns.push({
+      name: currentHeader[i],
+      outputName: currentHeader[i],
+      type: currentColTypes[i] || 'numeric',
+      selected: true,
+      isCalcol
+    });
+  }
+  renderExportColumns();
+}
+
+function renderExportColumns() {
+  let html = '';
+  for (let i = 0; i < exportColumns.length; i++) {
+    const col = exportColumns[i];
+    const checked = col.selected ? ' checked' : '';
+    const typeClass = col.isCalcol ? 'calcol' : (col.type === 'numeric' ? 'num' : 'cat');
+    const typeLabel = col.isCalcol ? 'calc' : (col.type === 'numeric' ? 'num' : 'cat');
+    html += '<div class="export-col-item" data-idx="' + i + '" draggable="true">';
+    html += '<span class="ecol-grip" title="Drag to reorder"></span>';
+    html += '<input type="checkbox"' + checked + '>';
+    html += '<span class="ecol-name" title="' + esc(col.name) + '">' + esc(col.name) + '</span>';
+    html += '<input type="text" class="ecol-rename" value="' + esc(col.outputName) + '" placeholder="output name">';
+    html += '<span class="ecol-type ' + typeClass + '">' + typeLabel + '</span>';
+    html += '</div>';
+  }
+  $exportColList.innerHTML = html;
+  updateExportBadge();
+  wireExportColumnEvents();
+}
+
+function updateExportBadge() {
+  const sel = exportColumns.filter(c => c.selected).length;
+  $exportBadge.textContent = sel + ' / ' + exportColumns.length;
+}
+
+let exportDragIdx = null;
+
+function wireExportColumnEvents() {
+  $exportColList.querySelectorAll('.export-col-item').forEach(el => {
+    const idx = parseInt(el.dataset.idx);
+    const cb = el.querySelector('input[type="checkbox"]');
+    cb.addEventListener('change', () => {
+      exportColumns[idx].selected = cb.checked;
+      updateExportBadge();
+    });
+    const renameInput = el.querySelector('.ecol-rename');
+    renameInput.addEventListener('input', () => {
+      exportColumns[idx].outputName = renameInput.value || exportColumns[idx].name;
+    });
+
+    el.addEventListener('dragstart', (e) => {
+      exportDragIdx = idx;
+      el.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    el.addEventListener('dragend', () => {
+      el.classList.remove('dragging');
+      $exportColList.querySelectorAll('.drag-over-top,.drag-over-bottom').forEach(x => {
+        x.classList.remove('drag-over-top', 'drag-over-bottom');
+      });
+      exportDragIdx = null;
+    });
+    el.addEventListener('dragover', (e) => {
+      if (exportDragIdx === null || exportDragIdx === idx) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = el.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      el.classList.toggle('drag-over-top', e.clientY < midY);
+      el.classList.toggle('drag-over-bottom', e.clientY >= midY);
+    });
+    el.addEventListener('dragleave', () => {
+      el.classList.remove('drag-over-top', 'drag-over-bottom');
+    });
+    el.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (exportDragIdx === null || exportDragIdx === idx) return;
+      const rect = el.getBoundingClientRect();
+      const dropAfter = e.clientY >= rect.top + rect.height / 2;
+      const item = exportColumns.splice(exportDragIdx, 1)[0];
+      let targetIdx = dropAfter ? idx : idx;
+      if (exportDragIdx < idx) targetIdx--;
+      const insertAt = dropAfter ? targetIdx + 1 : targetIdx;
+      exportColumns.splice(insertAt, 0, item);
+      exportDragIdx = null;
+      renderExportColumns();
+    });
+  });
+}
+
+// Selection buttons
+document.getElementById('exportSelAll').addEventListener('click', () => {
+  exportColumns.forEach(c => c.selected = true);
+  renderExportColumns();
+});
+document.getElementById('exportSelNone').addEventListener('click', () => {
+  exportColumns.forEach(c => c.selected = false);
+  renderExportColumns();
+});
+document.getElementById('exportSelOrig').addEventListener('click', () => {
+  exportColumns.forEach(c => c.selected = !c.isCalcol);
+  renderExportColumns();
+});
+document.getElementById('exportSelCalc').addEventListener('click', () => {
+  exportColumns.forEach(c => c.selected = c.isCalcol);
+  renderExportColumns();
+});
+
+function startExport() {
+  const selected = exportColumns.filter(c => c.selected);
+  if (selected.length === 0) {
+    $exportInfo.textContent = 'No columns selected.';
+    return;
+  }
+
+  const exportCols = selected.map(c => ({ name: c.name, outputName: c.outputName }));
+  const baseName = currentFile.name.replace(/\.[^.]+$/, '');
+  const suggestedName = baseName + '_export.csv';
+
+  // Resolve types: only original column types (no calcol types needed for resolvedTypes)
+  const resolvedTypes = currentColTypes.slice(0, currentOrigColCount);
+
+  const filterPayload = currentFilter ? { expression: currentFilter.expression } : null;
+  const calcolPayload = currentCalcols.length > 0 ? currentCalcols.map(c => ({ name: c.name, expr: c.expr, type: c.type })) : null;
+  const zipEntry = preflightData ? (preflightData.selectedZipEntry || null) : null;
+
+  const msg = {
+    mode: 'export',
+    file: currentFile,
+    filter: filterPayload,
+    zipEntry,
+    calcols: calcolPayload,
+    resolvedTypes,
+    exportCols
+  };
+
+  $exportDownload.disabled = true;
+  $exportProgress.classList.add('active');
+  $exportProgressFill.style.width = '0%';
+  $exportProgressLabel.textContent = 'Exporting...';
+  $exportInfo.textContent = '';
+
+  if (exportWorker) exportWorker.terminate();
+
+  if (window.showSaveFilePicker) {
+    // FSAA path
+    window.showSaveFilePicker({
+      suggestedName,
+      types: [{ description: 'CSV', accept: { 'text/csv': ['.csv'] } }]
+    }).then(async (handle) => {
+      const writable = await handle.createWritable();
+      exportWorker = new Worker(workerUrl);
+      exportWorker.onmessage = async (e) => {
+        const m = e.data;
+        if (m.type === 'export-chunk') {
+          await writable.write(m.csv);
+        } else if (m.type === 'export-progress') {
+          const pct = Math.min(99, m.percent);
+          $exportProgressFill.style.width = pct.toFixed(1) + '%';
+          $exportProgressLabel.textContent = 'Exporting... ' + pct.toFixed(0) + '% (' + m.rowCount.toLocaleString() + ' rows)';
+        } else if (m.type === 'export-complete') {
+          await writable.close();
+          $exportProgressFill.style.width = '100%';
+          $exportProgressLabel.textContent = 'Done — ' + m.rowCount.toLocaleString() + ' rows in ' + (m.elapsed / 1000).toFixed(1) + 's';
+          $exportDownload.disabled = false;
+          exportWorker.terminate();
+          exportWorker = null;
+        } else if (m.type === 'error') {
+          await writable.abort();
+          $exportInfo.textContent = 'Error: ' + m.message;
+          $exportProgress.classList.remove('active');
+          $exportDownload.disabled = false;
+          exportWorker.terminate();
+          exportWorker = null;
+        }
+      };
+      exportWorker.postMessage(msg);
+    }).catch((err) => {
+      // User cancelled picker
+      $exportProgress.classList.remove('active');
+      $exportDownload.disabled = false;
+    });
+  } else {
+    // Blob fallback
+    const chunks = [];
+    exportWorker = new Worker(workerUrl);
+    exportWorker.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === 'export-chunk') {
+        chunks.push(m.csv);
+      } else if (m.type === 'export-progress') {
+        const pct = Math.min(99, m.percent);
+        $exportProgressFill.style.width = pct.toFixed(1) + '%';
+        $exportProgressLabel.textContent = 'Exporting... ' + pct.toFixed(0) + '% (' + m.rowCount.toLocaleString() + ' rows)';
+      } else if (m.type === 'export-complete') {
+        const blob = new Blob(chunks, { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = suggestedName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        $exportProgressFill.style.width = '100%';
+        $exportProgressLabel.textContent = 'Done — ' + m.rowCount.toLocaleString() + ' rows in ' + (m.elapsed / 1000).toFixed(1) + 's';
+        $exportDownload.disabled = false;
+        exportWorker.terminate();
+        exportWorker = null;
+      } else if (m.type === 'error') {
+        $exportInfo.textContent = 'Error: ' + m.message;
+        $exportProgress.classList.remove('active');
+        $exportDownload.disabled = false;
+        exportWorker.terminate();
+        exportWorker = null;
+      }
+    };
+    exportWorker.postMessage(msg);
+  }
+}
+
+$exportDownload.addEventListener('click', startExport);
 
 function renderCDFModal(s, name) {
   $cdfTitle.textContent = 'CDF \u2014 ' + name;
