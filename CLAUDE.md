@@ -4,31 +4,47 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BMA (Block Model Atelier) is a single-file, client-side CSV block model analyzer for mining/geostatistics. Everything lives in `index.html` (~3980 lines) — no dependencies, no build step, no server. It runs entirely in the browser using Web Workers and the File API.
+BMA (Block Model Atelier) is a client-side CSV block model analyzer for mining/geostatistics. The distributable is a single `index.html` — no dependencies, no server. It runs entirely in the browser using Web Workers and the File API. Source code lives in `src/` and is assembled by `node build.js`.
 
 Target users are resource geologists analyzing block model CSV exports from mining software (Isatis, Vulcan, Surpac, Leapfrog, Datamine).
 
 ## Development
 
-There is no build system, package manager, or test suite. The entire app is one HTML file.
+Source is split into `src/` files. `index.html` is generated — do not hand-edit it.
 
-**Syntax checking** (extract and verify JS):
+**Build** (requires Node.js):
 ```bash
-node -e "..." # extract <script> content and WORKER_CODE, new Function() each
+node build.js    # assembles src/ → index.html
+node check.js    # syntax-checks src/ files and built output
 ```
 
 **Running**: Open `index.html` directly in a browser. No server needed.
 
 ## Architecture
 
-### File Layout (`index.html`)
+### File Layout
 
-| Section | Approx Lines | Description |
-|---------|-------------|-------------|
-| CSS | 1–1300 | Dark amber theme, all styles |
-| HTML body | 1300–1530 | Landing page, tabbed workspace, filter bar, CDF modal |
-| WORKER_CODE | ~1539–2415 | Web Worker as template literal string |
-| Main thread JS | ~2417–3981 | App state, UI, event wiring |
+```
+src/
+├── template.html   # HTML skeleton with __INJECT_CSS/WORKER/APP__ markers
+├── styles.css      # All CSS (no <style> tags)
+├── worker.js       # Web Worker code (normal JS, not escaped)
+├── core.js         # App state, DOM refs, tab switching (loaded first)
+├── preflight.js    # File sampling, preflight UI, sidebar config
+├── project.js      # Save/load projects, autosave, restore
+├── export.js       # Export tab — column selection, CSV download
+├── swath.js        # Swath plot tab
+├── section.js      # Section view tab
+├── calcol.js       # Calculated columns editor UI
+├── events.js       # File drop/input event handlers
+├── filter.js       # Filter expression system, category checkboxes
+└── cdf.js          # CDF modal, service worker registration
+build.js            # Node.js build script: src/ → index.html
+check.js            # Syntax checker for src/ and built output
+index.html          # Generated output — do not edit directly
+```
+
+`build.js` reads `src/template.html`, injects CSS, wraps `worker.js` in a template literal (escaping `\`, `` ` ``, `${`), then concatenates the app modules in the order listed in `APP_MODULES` (core.js first). To add a new module, create the file in `src/` and add it to `APP_MODULES` in `build.js`.
 
 ### Data Flow
 
@@ -40,11 +56,11 @@ node -e "..." # extract <script> content and WORKER_CODE, new Function() each
 
 ### Key Architecture Decisions
 
-- **Single file, vanilla JS** — no frameworks, no bundler
+- **Single distributable, vanilla JS** — no frameworks, no bundler; `build.js` concatenates `src/` into one HTML file
 - **Streaming** — uses `File.stream()` + `TextDecoderStream`, never loads full file into memory
 - **Web Worker** — all analysis runs off main thread
 - **Single-pass** — type detection, stats, geometry, and calculated columns all computed in one file read
-- **Worker code is a template literal** — the `WORKER_CODE` constant is a backtick-delimited string. Watch for unescaped backticks or `${` inside it (currently avoided via string concat)
+- **Worker code** — `src/worker.js` is normal JS; `build.js` escapes and wraps it in a template literal as `WORKER_CODE`. Avoid backticks and `${` in worker code (use string concat instead)
 - **Preflight is a tab** — the tabbed workspace appears as soon as a file is dropped, before any analysis runs
 - **Overlay for re-analysis** — semi-transparent overlay with progress bar + cancel. Cancel terminates worker, restores previous results from `lastCompleteData`
 - **Expression DSL** — filters and calcols use `r.column_name` syntax compiled to JS via `new Function()`. A `MATH_PREAMBLE` injects destructured Math functions and helpers (`clamp`, `cap`, `ifnull`, `between`, `remap`, `fn.round`)
@@ -69,18 +85,18 @@ Messages **from** worker:
 - `lastCompleteData` — snapshot of last successful analysis (used for cancel restore)
 - `currentRowVar` — variable name for row expressions (default `'r'`, changes if column named `r` exists)
 
-### Key Functions (approximate line numbers)
+### Key Functions
 
-| Function | ~Line | Purpose |
-|----------|-------|---------|
-| `runPreflight()` | 2650 | Main-thread file sampling |
-| `renderPreflight()` | 2693 | Build preflight UI |
-| `renderPreflightSidebar()` | 2739 | Column config sidebar |
-| `handleFile()` | 2969 | File drop entry point |
-| `startAnalysis()` | 3071 | Spawn worker, begin analysis |
-| `displayResults()` | 3153 | Populate results tabs |
-| `esc()` | 3731 | HTML escaping utility |
-| `formatNum()` | — | Significant figures formatting for stats |
+| Function | File | Purpose |
+|----------|------|---------|
+| `runPreflight()` | preflight.js | Main-thread file sampling |
+| `renderPreflight()` | preflight.js | Build preflight UI |
+| `renderPreflightSidebar()` | preflight.js | Column config sidebar |
+| `handleFile()` | project.js | File drop entry point |
+| `startAnalysis()` | project.js | Spawn worker, begin analysis |
+| `displayResults()` | project.js | Populate results tabs |
+| `esc()` | calcol.js | HTML escaping utility |
+| `formatNum()` | preflight.js | Significant figures formatting for stats |
 
 ## Theme
 
@@ -97,3 +113,4 @@ Messages **from** worker:
 - [`docs/worker-protocol.md`](docs/worker-protocol.md) — full worker message schemas and stats object structure
 - [`docs/v1-roadmap.md`](docs/v1-roadmap.md) — V1 feature architecture (StatsCat, Swath, Export)
 - [`docs/code-map.md`](docs/code-map.md) — detailed line ranges, HTML structure, CSS variables, state variables
+- [`docs/ui-design-system.md`](docs/ui-design-system.md) — UI/UX design system: layout patterns, component library, color tokens, naming conventions, new tab checklist
