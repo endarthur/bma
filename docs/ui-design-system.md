@@ -42,7 +42,7 @@ Dark terminal aesthetic with amber accent. Monospace-only. "Geoscientific Chaos 
 
 ### Pattern A: Sidebar + Content (preferred for data exploration tabs)
 
-Used by: **Preflight, StatsCat, Swath**
+Used by: **Preflight, Statistics, StatsCat, Swath**
 
 ```
 .tab-body {
@@ -98,7 +98,7 @@ Appropriate when: full-viewport interactive canvas, controls are few and flat.
 
 ### Pattern C: Scrollable Card Layout (for output/results)
 
-Used by: **Summary, Statistics, Categories, Export**
+Used by: **Summary, Categories, Export**
 
 ```
 .panel-inner {
@@ -352,6 +352,7 @@ if (myController) { const r = myController.validate(); if (!r.valid) return; }
 | `calcol-` | Calculated Columns |
 | `filter-` | Footer Filter |
 | `toolbar-` | Results Toolbar |
+| `stats-` | Statistics |
 | `cdf-` | CDF Modal |
 | `geo-` | Geometry |
 

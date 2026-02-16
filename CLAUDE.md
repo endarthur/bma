@@ -32,6 +32,7 @@ src/
 ├── core.js         # App state, DOM refs, tab switching (loaded first)
 ├── preflight.js    # File sampling, preflight UI, sidebar config
 ├── project.js      # Save/load projects, autosave, restore
+├── statistics.js   # Statistics tab — sidebar, percentiles, CDF panel
 ├── export.js       # Export tab — column selection, CSV download
 ├── swath.js        # Swath plot tab
 ├── section.js      # Section view tab
@@ -84,6 +85,7 @@ Messages **from** worker:
 - `preflightData` — preflight sampling results
 - `lastCompleteData` — snapshot of last successful analysis (used for cancel restore)
 - `currentRowVar` — variable name for row expressions (default `'r'`, changes if column named `r` exists)
+- `statsSelectedVars`, `statsVisibleMetrics`, `statsPercentiles`, `statsCdfSelected`, `statsCdfScale` — Statistics tab UI state
 
 ### Key Functions
 
@@ -95,6 +97,8 @@ Messages **from** worker:
 | `handleFile()` | project.js | File drop entry point |
 | `startAnalysis()` | project.js | Spawn worker, begin analysis |
 | `displayResults()` | project.js | Populate results tabs |
+| `renderStatsTab()` | statistics.js | Build statistics sidebar + table + CDF panel |
+| `tdQuantileFromCentroids()` | statistics.js | Client-side quantile from t-digest centroids |
 | `esc()` | calcol.js | HTML escaping utility |
 | `formatNum()` | preflight.js | Significant figures formatting for stats |
 

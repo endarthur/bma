@@ -26,6 +26,10 @@ const $geoSection = document.getElementById('geoSection');
 const $xyzConfig = document.getElementById('xyzConfig');
 const $statsContent = document.getElementById('statsContent');
 const $statsBadge = document.getElementById('statsBadge');
+const $statsBody = document.getElementById('statsBody');
+const $statsSidebar = document.getElementById('statsSidebar');
+const $statsMain = document.getElementById('statsMain');
+const $statsCdfPanel = document.getElementById('statsCdfPanel');
 const $catContent = document.getElementById('catContent');
 const $catBadge = document.getElementById('catBadge');
 const $catSection = document.getElementById('catSection');
@@ -83,6 +87,13 @@ let statsCatCdfMin = null;
 let statsCatCdfMax = null;
 let statsCatCrossMode = 'count'; // 'count', 'row', 'col'
 let statsCatShowSelectedOnly = false;
+
+// Statistics tab state
+let statsSelectedVars = null;     // Set<colIdx> or null (= all)
+let statsVisibleMetrics = null;   // Set<string> or null (= all)
+let statsPercentiles = [25, 50, 75]; // current percentile list
+let statsCdfSelected = new Set(); // Set<colIdx> toggled for CDF overlay
+let statsCdfScale = 'linear';     // 'linear' | 'log'
 
 // Export
 let exportWorker = null;

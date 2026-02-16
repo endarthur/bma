@@ -235,14 +235,53 @@
       </div>
 
       <div class="results-panel" id="panelStatistics" data-tab="statistics">
-        <div class="panel-inner">
-          <div class="section section--stats">
-            <div class="section-head">
-              Numeric Column Statistics
-              <span class="badge" id="statsBadge"></span>
+        <div class="stats-body" id="statsBody">
+          <div class="stats-sidebar" id="statsSidebar">
+            <div class="stats-sidebar-section">
+              <div class="stats-sidebar-title">Percentiles</div>
+              <div class="stats-preset-btns" id="statsPresetBtns">
+                <button class="stats-preset active" data-preset="quartiles">Quartiles</button>
+                <button class="stats-preset" data-preset="deciles">Deciles</button>
+                <button class="stats-preset" data-preset="ventiles">Ventiles</button>
+                <button class="stats-preset" data-preset="custom">Custom</button>
+              </div>
+              <input type="text" class="stats-custom-input" id="statsCustomPct" placeholder="e.g. 5,10,25,50,75,90,95" style="display:none" autocomplete="off" spellcheck="false">
             </div>
-            <div class="section-body">
+            <div class="stats-sidebar-section">
+              <div class="stats-sidebar-title">Metrics</div>
+              <div class="stats-metric-toggles" id="statsMetricToggles"></div>
+            </div>
+            <div class="stats-sidebar-section--grow">
+              <div class="stats-sidebar-title">Variables <span class="badge" id="statsBadge"></span></div>
+              <input type="text" class="stats-search" id="statsVarSearch" placeholder="Search variables…" autocomplete="off" spellcheck="false">
+              <div class="stats-var-actions">
+                <button id="statsVarAll">All</button>
+                <button id="statsVarNone">None</button>
+              </div>
+              <div class="stats-var-list" id="statsVarList"></div>
+            </div>
+          </div>
+          <div class="stats-main" id="statsMain">
+            <div class="stats-table-area">
+              <div class="stats-table-toolbar">
+                <button class="stats-copy-btn" id="statsCopyBtn">Copy table</button>
+              </div>
               <div class="stats-table-wrap" id="statsContent"></div>
+            </div>
+            <div class="stats-cdf-panel" id="statsCdfPanel">
+              <div class="stats-cdf-toolbar" id="statsCdfToolbar">
+                <div class="tb-group">
+                  <button class="stats-scale active" data-scale="linear">Linear</button>
+                  <button class="stats-scale" data-scale="log">Log</button>
+                </div>
+                <div class="tb-group" style="margin-left:auto">
+                  <button id="statsDownloadSvg">SVG</button>
+                  <button id="statsDownloadPng">PNG</button>
+                </div>
+              </div>
+              <div class="stats-cdf-chart" id="statsCdfChart">
+                <div class="stats-cdf-hint">Click column names to add CDF curves</div>
+              </div>
             </div>
           </div>
         </div>

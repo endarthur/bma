@@ -15,6 +15,7 @@ const APP_MODULES = [
   'core.js',
   'preflight.js',
   'project.js',
+  'statistics.js',
   'export.js',
   'swath.js',
   'section.js',

@@ -26,6 +26,13 @@ function serializeProject() {
       cdfScale: statsCatCdfScale,
       crossMode: statsCatCrossMode
     },
+    statsTab: {
+      selectedVars: statsSelectedVars ? Array.from(statsSelectedVars) : null,
+      visibleMetrics: statsVisibleMetrics ? Array.from(statsVisibleMetrics) : null,
+      percentiles: statsPercentiles,
+      cdfSelected: Array.from(statsCdfSelected),
+      cdfScale: statsCdfScale
+    },
     exportCols: exportColumns.map(c => ({
       name: c.name, outputName: c.outputName, selected: c.selected
     }))
@@ -152,6 +159,11 @@ function clearProject() {
   statsCatCdfMax = null;
   statsCatCrossMode = 'count';
   statsCatShowSelectedOnly = false;
+  statsSelectedVars = null;
+  statsVisibleMetrics = null;
+  statsPercentiles = [25, 50, 75];
+  statsCdfSelected = new Set();
+  statsCdfScale = 'linear';
   exportColumns = [];
   pendingProjectRestore = null;
 
@@ -221,6 +233,11 @@ function handleFile(file) {
   statsCatCdfMin = null;
   statsCatCdfMax = null;
   statsCatCrossMode = 'count';
+  statsSelectedVars = null;
+  statsVisibleMetrics = null;
+  statsPercentiles = [25, 50, 75];
+  statsCdfSelected = new Set();
+  statsCdfScale = 'linear';
   exportColumns = [];
   pendingProjectRestore = null;
   currentTypeOverrides = null;
@@ -274,6 +291,10 @@ function handleFile(file) {
   $fileInfo.innerHTML = '';
   $statsContent.innerHTML = placeholder;
   $statsBadge.textContent = '';
+  document.getElementById('statsVarList').innerHTML = '';
+  document.getElementById('statsVarSearch').value = '';
+  document.getElementById('statsMetricToggles').innerHTML = '';
+  document.getElementById('statsCdfChart').innerHTML = '<div class="stats-cdf-hint">Click column names to add CDF curves</div>';
   $statsCatContent.innerHTML = placeholder;
   $statsCatBadge.textContent = '';
   $statsCatVarList.innerHTML = '';
@@ -352,6 +373,11 @@ $backToPreflight.addEventListener('click', () => {
   statsCatGroupSortMode = 'count';
   statsCatSelectedVars = new Set();
   statsCatShowSelectedOnly = false;
+  statsSelectedVars = null;
+  statsVisibleMetrics = null;
+  statsPercentiles = [25, 50, 75];
+  statsCdfSelected = new Set();
+  statsCdfScale = 'linear';
   exportColumns = [];
   pendingProjectRestore = null;
   if (exportWorker) { exportWorker.terminate(); exportWorker = null; }
@@ -652,52 +678,7 @@ function displayResults(data) {
   // Stats
   const origColCount = data.origColCount || header.length;
   const numCols = Object.keys(stats).map(Number).sort((a, b) => a - b);
-  lastDisplayedStats = stats;
-  lastDisplayedHeader = header;
-  $statsBadge.textContent = numCols.length + ' columns' + (isFiltered ? ` · ${rowCount.toLocaleString()} rows` : '');
-  if (numCols.length > 0) {
-    let html = '<table class="stats"><thead><tr><th>Column</th><th>Count</th><th>Nulls</th><th>Zeros</th><th>Min</th><th>P10</th><th>P25</th><th>P50</th><th>P75</th><th>P90</th><th>Max</th><th>Mean</th><th>Std</th><th>CV%</th><th>Skew</th><th>Kurt</th></tr></thead><tbody>';
-    for (const i of numCols) {
-      const s = stats[i];
-      const cv = (s.mean && s.std && s.mean !== 0) ? Math.abs(s.std / s.mean * 100) : null;
-      const q = s.quantiles;
-      const zeroPct = s.count > 0 ? (s.zeros / s.count * 100) : 0;
-      const zerosDisplay = s.zeros > 0 ? `<span title="${zeroPct.toFixed(1)}% zeros">${s.zeros.toLocaleString()}</span>` : '—';
-      const isCalcol = i >= origColCount;
-      const nameHtml = `<a class="cdf-link" data-col="${i}" href="#">${esc(header[i])}</a>${isCalcol ? '<span class="calcol-tag">CALC</span>' : ''}`;
-      html += `<tr${isCalcol ? ' class="calcol-row"' : ''}>
-        <td>${nameHtml}</td>
-        <td>${s.count.toLocaleString()}</td>
-        <td>${s.nulls > 0 ? s.nulls.toLocaleString() : '—'}</td>
-        <td>${zerosDisplay}</td>
-        <td>${formatNum(s.min)}</td>
-        <td>${q ? formatNum(q.p10) : '—'}</td>
-        <td>${q ? formatNum(q.p25) : '—'}</td>
-        <td>${q ? formatNum(q.p50) : '—'}</td>
-        <td>${q ? formatNum(q.p75) : '—'}</td>
-        <td>${q ? formatNum(q.p90) : '—'}</td>
-        <td>${formatNum(s.max)}</td>
-        <td>${formatNum(s.mean)}</td>
-        <td>${formatNum(s.std)}</td>
-        <td>${cv !== null ? cv.toFixed(1) : '—'}</td>
-        <td>${s.skewness !== null ? s.skewness.toFixed(2) : '—'}</td>
-        <td>${s.kurtosis !== null ? s.kurtosis.toFixed(2) : '—'}</td>
-      </tr>`;
-    }
-    html += '</tbody></table>';
-    $statsContent.innerHTML = html;
-
-    // CDF click handlers
-    $statsContent.querySelectorAll('.cdf-link').forEach(a => {
-      a.addEventListener('click', (e) => {
-        e.preventDefault();
-        const col = parseInt(a.dataset.col);
-        showCDF(col);
-      });
-    });
-  } else {
-    $statsContent.innerHTML = '<div style="color:var(--fg-dim);">No numeric columns detected.</div>';
-  }
+  renderStatsTab(stats, header, origColCount, isFiltered, rowCount);
 
   // Categories
   const catCols = Object.keys(categories).map(Number).sort((a, b) => a - b);
@@ -869,6 +850,18 @@ function displayResults(data) {
     if (sc.sortMode) statsCatGroupSortMode = sc.sortMode;
     if (sc.cdfScale) statsCatCdfScale = sc.cdfScale;
     if (sc.crossMode) statsCatCrossMode = sc.crossMode;
+
+    const st = p.statsTab || {};
+    if (st.selectedVars) statsSelectedVars = new Set(st.selectedVars);
+    if (st.visibleMetrics) statsVisibleMetrics = new Set(st.visibleMetrics);
+    if (st.percentiles) statsPercentiles = st.percentiles;
+    if (st.cdfSelected) statsCdfSelected = new Set(st.cdfSelected);
+    if (st.cdfScale) statsCdfScale = st.cdfScale;
+
+    // Re-render stats tab with restored state
+    if (lastDisplayedStats && lastDisplayedHeader) {
+      renderStatsTab(lastDisplayedStats, lastDisplayedHeader, currentOrigColCount || lastDisplayedHeader.length, currentFilter !== null, data.rowCount);
+    }
 
     if (p.exportCols) applyExportRestore(p.exportCols);
   }

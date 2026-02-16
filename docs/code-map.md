@@ -29,7 +29,7 @@ All styles including responsive breakpoints and theme variables.
     #panelPreflight     Column config, preview table, Analyze button
     #panelSummary       Geometry, file info
     #panelCalcols       Calculated columns editor
-    #panelStatistics    Numeric stats table
+    #panelStatistics    Statistics: sidebar + table + CDF panel
     #panelCategories    Categorical value counts
 .filter-footer    Global filter expression bar (bottom)
 #cdfModal         CDF plot modal
@@ -60,8 +60,9 @@ Template literal string containing the Web Worker.
 | `renderPreflightSidebar()` | ~2739 | Column config sidebar |
 | `handleFile()` | ~2969 | File drop entry point |
 | `startAnalysis()` | ~3071 | Spawn worker, begin analysis |
-| `displayResults()` | ~3153 | Populate results tabs |
-| Calcol UI | ~3416–3630 | Editor, validation, preview |
+| `displayResults()` | ~3153 | Populate results tabs (calls `renderStatsTab()`) |
+| Statistics tab | ~3260–3920 | Sidebar, percentile config, stats table, CDF panel with tooltip |
+| Calcol UI | ~3920–4130 | Editor, validation, preview |
 | Autocomplete | ~3540–3630 | Column name + math function completions |
 | `esc()` | ~3731 | HTML escaping utility |
 | Filter system | ~3748–3870 | Expression bar, apply/clear |
@@ -85,4 +86,11 @@ lastCompleteData     // last worker 'complete' message — snapshot for cancel
 hasResults           // boolean — has analysis been run at least once
 editingCalcolId      // null | id — calcol currently being edited
 worker               // Worker instance
+
+// Statistics tab state
+statsSelectedVars    // Set<colIdx> | null — selected variables (null = all)
+statsVisibleMetrics  // Set<string> | null — visible metric columns (null = defaults)
+statsPercentiles     // number[] — e.g. [25, 50, 75]
+statsCdfSelected     // Set<colIdx> — columns shown in CDF overlay
+statsCdfScale        // 'linear' | 'log'
 ```
