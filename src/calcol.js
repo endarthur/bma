@@ -1,6 +1,6 @@
 // ─── Calcol UI — Code Editor with Variable Browser ───────────────────
 
-const MATH_PREAMBLE_MAIN = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;';
+const MATH_PREAMBLE_MAIN = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi),isnum:(v)=>Number.isFinite(v),ifnum:(v,d)=>Number.isFinite(v)?v:(d!==undefined?d:NaN)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;const isnum=fn.isnum;const ifnum=fn.ifnum;';
 
 // Math functions available in expressions (for autocomplete and sidebar)
 const MATH_COMPLETIONS = [
@@ -21,6 +21,8 @@ const MATH_COMPLETIONS = [
   { label: 'clamp(v, lo, hi)', insert: 'clamp(', desc: 'constrain to range' },
   { label: 'cap(v, hi)', insert: 'cap(', desc: 'cap at maximum' },
   { label: 'ifnull(v, default)', insert: 'ifnull(', desc: 'default for null/NaN' },
+  { label: 'ifnum(v, default)', insert: 'ifnum(', desc: 'default for non-finite' },
+  { label: 'isnum(v)', insert: 'isnum(', desc: 'true if finite number' },
   { label: 'between(v, lo, hi)', insert: 'between(', desc: 'boolean range test' },
   { label: 'remap(v, map)', insert: 'remap(', desc: 'lookup table' },
   { label: 'fn.round(v, n)', insert: 'fn.round(', desc: 'round to n decimals' },
@@ -30,7 +32,7 @@ const MATH_COMPLETIONS = [
 
 // ── Syntax Highlighter ────────────────────────────────────────────────
 const HL_KEYWORDS = new Set(['if','else','for','while','do','switch','case','break','continue','return','const','let','var','of','in','new','typeof','instanceof','null','undefined','true','false','NaN','Infinity']);
-const HL_BUILTINS = new Set(['abs','sqrt','pow','log','log2','log10','exp','min','max','round','floor','ceil','sign','trunc','hypot','clamp','cap','ifnull','between','remap','PI','E','fn','String','Number','Boolean','parseInt','parseFloat','isNaN','isFinite','Math']);
+const HL_BUILTINS = new Set(['abs','sqrt','pow','log','log2','log10','exp','min','max','round','floor','ceil','sign','trunc','hypot','clamp','cap','ifnull','ifnum','isnum','between','remap','PI','E','fn','String','Number','Boolean','parseInt','parseFloat','isNaN','isFinite','Math']);
 
 function highlightCode(code) {
   if (!code) return '\n'; // ensure pre has content for sizing

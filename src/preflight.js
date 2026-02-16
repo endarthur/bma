@@ -649,9 +649,13 @@ function renderPreflightTable(data) {
 
 function formatNum(v, decimals) {
   if (v === null || v === undefined) return '—';
-  if (Math.abs(v) >= 1e6 || (Math.abs(v) < 0.001 && v !== 0)) return v.toExponential(decimals ?? 3);
+  var d = decimals;
+  if (d === undefined && typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.sigFigs !== null) {
+    d = bmaSettings.sigFigs;
+  }
+  if (Math.abs(v) >= 1e6 || (Math.abs(v) < 0.001 && v !== 0)) return v.toExponential(d != null ? d : 3);
   if (Number.isInteger(v)) return v.toLocaleString();
-  return v.toLocaleString(undefined, { minimumFractionDigits: decimals ?? 2, maximumFractionDigits: decimals ?? 4 });
+  return v.toLocaleString(undefined, { minimumFractionDigits: d != null ? d : 2, maximumFractionDigits: d != null ? d : 4 });
 }
 
 function formatSize(bytes) {

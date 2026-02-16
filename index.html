@@ -27,7 +27,128 @@
   --red: #f87171;
   --border: #252a30;
   --mono: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  --hl-keyword: #c678dd;
+  --hl-string: #98c379;
+  --hl-number: #d19a66;
+  --hl-comment: #5c6370;
+  --hl-function: #61afef;
+  --hl-operator: #56b6c2;
+  --hl-punct: #abb2bf;
 }
+
+/* ─── Built-in Themes ─────────────────────────────────────────────── */
+[data-theme="teal"] {
+  --bg: #070b0c; --bg1: #0c1315; --bg2: #13191d; --bg3: #1a2226;
+  --fg: #c2d1d6; --fg-dim: #5f7a80; --fg-bright: #e0eff4;
+  --amber: #2dd4bf; --amber-dim: #14b8a6; --amber-glow: #2dd4bf30;
+  --border: #1e2e32;
+}
+[data-theme="blue"] {
+  --bg: #080a0f; --bg1: #0c1019; --bg2: #131825; --bg3: #1a2130;
+  --fg: #c4ccdb; --fg-dim: #6878a0; --fg-bright: #e2e8f5;
+  --amber: #4a9eff; --amber-dim: #2d7ad4; --amber-glow: #4a9eff30;
+  --border: #202840;
+}
+[data-theme="mocha"] {
+  --bg: #1e1e2e; --bg1: #181825; --bg2: #252540; --bg3: #313244;
+  --fg: #cdd6f4; --fg-dim: #6c7086; --fg-bright: #f5e0dc;
+  --amber: #f9e2af; --amber-dim: #e2c88c; --amber-glow: #f9e2af30;
+  --border: #45475a;
+  --hl-keyword: #cba6f7; --hl-string: #a6e3a1; --hl-number: #fab387;
+  --hl-comment: #6c7086; --hl-function: #89b4fa; --hl-operator: #94e2d5; --hl-punct: #9399b2;
+}
+[data-theme="light"] {
+  --bg: #f5f5f0; --bg1: #eaeae5; --bg2: #ddddd8; --bg3: #d0d0cb;
+  --fg: #2c2c2c; --fg-dim: #808080; --fg-bright: #1a1a1a;
+  --amber: #c07800; --amber-dim: #996000; --amber-glow: #c0780020;
+  --border: #c8c8c0; --blue: #2563eb; --green: #059669; --red: #dc2626;
+  --hl-keyword: #a626a4; --hl-string: #50a14f; --hl-number: #c76b29;
+  --hl-comment: #a0a1a7; --hl-function: #2563eb; --hl-operator: #0184bc; --hl-punct: #5a5a5a;
+}
+[data-theme="cream"] {
+  --bg: #ece8e0; --bg1: #e2ded6; --bg2: #d8d4cc; --bg3: #cecac2;
+  --fg: #3a3530; --fg-dim: #8a8278; --fg-bright: #22201c;
+  --amber: #9a7320; --amber-dim: #7a5b18; --amber-glow: #9a732025;
+  --border: #c4bfb5; --blue: #2d6abf; --green: #1a7a52; --red: #c43030;
+  --hl-keyword: #8b5e1a; --hl-string: #3a7a3a; --hl-number: #a85d20;
+  --hl-comment: #9a9590; --hl-function: #2d6abf; --hl-operator: #1a7a52; --hl-punct: #6a6560;
+}
+[data-theme="bm77"] {
+  --bg: #262335; --bg1: #2a2139; --bg2: #34294f; --bg3: #3e3357;
+  --fg: #b6b1c4; --fg-dim: #6d5f8a; --fg-bright: #f0e8ff;
+  --amber: #ff7edb; --amber-dim: #d66bb5; --amber-glow: #ff7edb30;
+  --border: #463b5e; --blue: #36f9f6; --green: #72f1b8; --red: #fe4450;
+  --hl-keyword: #fede5d; --hl-string: #72f1b8; --hl-number: #f97e72;
+  --hl-comment: #6d5f8a; --hl-function: #36f9f6; --hl-operator: #ff7edb; --hl-punct: #8a7eaa;
+}
+/* BM77 neon glow effects */
+[data-theme="bm77"] header h1 {
+  text-shadow: 0 0 10px #ff7edb80, 0 0 25px #ff7edb40, 0 0 50px #ff7edb20;
+}
+[data-theme="bm77"] .results-tab.active {
+  text-shadow: 0 0 8px #ff7edb90, 0 0 20px #ff7edb40;
+}
+[data-theme="bm77"] .section-head {
+  text-shadow: 0 0 8px #ff7edb60, 0 0 18px #ff7edb30;
+}
+[data-theme="bm77"] .badge {
+  box-shadow: 0 0 6px #ff7edb60, 0 0 14px #ff7edb30;
+}
+[data-theme="bm77"] .toolbar-btn:hover,
+[data-theme="bm77"] .toolbar-icon-btn:hover {
+  box-shadow: 0 0 8px #ff7edb50;
+  text-shadow: 0 0 6px #ff7edb80;
+}
+[data-theme="bm77"] .execute-btn {
+  box-shadow: 0 0 10px #ff7edb50, 0 0 25px #ff7edb25;
+  text-shadow: 0 0 6px #ff7edb80;
+}
+[data-theme="bm77"] .stats-sidebar-title,
+[data-theme="bm77"] .statscat-sidebar-title,
+[data-theme="bm77"] .calcol-editor-head span,
+[data-theme="bm77"] .calcol-sb-title,
+[data-theme="bm77"] .settings-section-title,
+[data-theme="bm77"] .preflight-head {
+  text-shadow: 0 0 8px #ff7edb50, 0 0 16px #ff7edb25;
+}
+[data-theme="bm77"] .type-toggle[data-type="numeric"] {
+  text-shadow: 0 0 6px #36f9f680;
+}
+[data-theme="bm77"] .type-toggle[data-type="categorical"] {
+  text-shadow: 0 0 6px #ff7edb80;
+}
+[data-theme="bm77"] .stats-preset.active,
+[data-theme="bm77"] .settings-preset-btn.active {
+  box-shadow: 0 0 6px #ff7edb50;
+  text-shadow: 0 0 6px #ff7edb80;
+}
+[data-theme="bm77"] .filter-apply-btn {
+  box-shadow: 0 0 6px #36f9f640;
+  text-shadow: 0 0 6px #36f9f680;
+}
+[data-theme="bm77"] .dropzone:hover,
+[data-theme="bm77"] .dropzone.drag-over {
+  box-shadow: 0 0 30px #ff7edb30, 0 0 60px #ff7edb15;
+}
+[data-theme="bm77"] .settings-swatch.selected {
+  box-shadow: 0 0 8px #ff7edb60;
+}
+[data-theme="bm77"] .results-toolbar {
+  border-bottom-color: #463b5e;
+  box-shadow: 0 1px 12px #ff7edb10;
+}
+[data-theme="bm77"] ::-webkit-scrollbar-thumb {
+  background: #4e3d6e;
+}
+[data-theme="bm77"] ::-webkit-scrollbar-thumb:hover {
+  background: #5f4d80;
+}
+[data-theme="bm77"] .hl-keyword { text-shadow: 0 0 8px #fede5d80, 0 0 18px #fede5d30; }
+[data-theme="bm77"] .hl-function { text-shadow: 0 0 8px #36f9f680, 0 0 18px #36f9f630; }
+[data-theme="bm77"] .hl-string { text-shadow: 0 0 6px #72f1b860; }
+[data-theme="bm77"] .hl-operator { text-shadow: 0 0 6px #ff7edb60; }
+[data-theme="bm77"] .hl-rowaccess { text-shadow: 0 0 8px #ff7edb80, 0 0 16px #ff7edb30; }
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 14px; }
 body {
@@ -544,6 +665,12 @@ header .logo-mark {
   letter-spacing: 0.04em; white-space: nowrap;
 }
 .toolbar-btn:hover { color: var(--amber); border-color: var(--amber); }
+.toolbar-icon-btn {
+  background: none; border: 1px solid var(--border); color: var(--fg-dim);
+  border-radius: 3px; cursor: pointer; padding: 0.15rem 0.35rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.toolbar-icon-btn:hover { color: var(--amber); border-color: var(--amber); }
 .toolbar-overflow {
   display: none;
   background: none; border: none; color: var(--fg-dim);
@@ -567,6 +694,7 @@ header .logo-mark {
 
 @media (max-width: 700px) {
   .toolbar-btn { display: none; }
+  .toolbar-icon-btn { display: none; }
   .toolbar-overflow { display: block; }
   .toolbar-center {
     order: 3; width: 100%;
@@ -1115,14 +1243,14 @@ header .logo-mark {
   opacity: 0.4;
 }
 /* Syntax highlighting tokens */
-.hl-keyword { color: #c678dd; }
-.hl-string { color: #98c379; }
-.hl-number { color: #d19a66; }
-.hl-comment { color: #5c6370; font-style: italic; }
+.hl-keyword { color: var(--hl-keyword); }
+.hl-string { color: var(--hl-string); }
+.hl-number { color: var(--hl-number); }
+.hl-comment { color: var(--hl-comment); font-style: italic; }
 .hl-rowaccess { color: var(--amber); }
-.hl-function { color: #61afef; }
-.hl-operator { color: #56b6c2; }
-.hl-punct { color: #abb2bf; }
+.hl-function { color: var(--hl-function); }
+.hl-operator { color: var(--hl-operator); }
+.hl-punct { color: var(--hl-punct); }
 .hl-text { color: var(--fg); }
 
 /* Calcol autocomplete popup */
@@ -1569,6 +1697,253 @@ table.stats tr:hover td:first-child { background: var(--bg2); }
   width: 100%;
   height: auto;
 }
+
+/* ─── Settings Modal ──────────────────────────────────────────────── */
+.settings-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0,0,0,0.6);
+  align-items: center;
+  justify-content: center;
+}
+.settings-modal.active { display: flex; }
+.settings-modal-inner {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 90vw;
+  max-width: 540px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.settings-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--amber);
+  letter-spacing: 0.04em;
+}
+.settings-modal-body {
+  padding: 0.8rem 1rem;
+  overflow-y: auto;
+  flex: 1;
+}
+.settings-section {
+  margin-bottom: 1.2rem;
+}
+.settings-section-title {
+  font-size: 0.68rem;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+.settings-theme-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.settings-swatch {
+  background: none;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  padding: 0.35rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 64px;
+}
+.settings-swatch:hover { border-color: var(--fg-dim); }
+.settings-swatch.selected { border-color: var(--amber); }
+.settings-swatch-colors {
+  display: flex;
+  gap: 2px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.settings-swatch-colors > div {
+  width: 14px;
+  height: 20px;
+}
+.settings-swatch-name {
+  font-size: 0.58rem;
+  color: var(--fg-dim);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.settings-swatch.selected .settings-swatch-name { color: var(--amber); }
+.settings-custom-details {
+  margin-top: 0.6rem;
+}
+.settings-custom-details summary {
+  font-size: 0.65rem;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-family: var(--mono);
+}
+.settings-custom-details summary:hover { color: var(--fg-bright); }
+.settings-custom-themes {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.settings-custom-slot label {
+  font-size: 0.62rem;
+  color: var(--fg-dim);
+  display: block;
+  margin-bottom: 0.2rem;
+  font-family: var(--mono);
+}
+.settings-custom-input {
+  width: 100%;
+  background: var(--bg1);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.3rem 0.4rem;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  resize: vertical;
+}
+.settings-custom-input:focus { border-color: var(--amber); outline: none; }
+.settings-custom-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+}
+.settings-custom-actions button {
+  font-size: 0.62rem;
+  font-family: var(--mono);
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--fg-dim);
+}
+.settings-custom-actions button:hover { color: var(--amber); border-color: var(--amber); }
+.settings-preset-btns {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+.settings-preset-btn {
+  font-size: 0.65rem;
+  font-family: var(--mono);
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--fg-dim);
+}
+.settings-preset-btn:hover { color: var(--fg-bright); border-color: var(--fg-dim); }
+.settings-preset-btn.active { color: var(--amber); border-color: var(--amber); background: var(--amber-glow); }
+.settings-custom-pct {
+  width: 100%;
+  margin-top: 0.4rem;
+  background: var(--bg1);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.3rem 0.4rem;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+}
+.settings-custom-pct:focus { border-color: var(--amber); outline: none; }
+.settings-sigfigs-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.settings-sigfigs-row label {
+  font-size: 0.68rem;
+  color: var(--fg-dim);
+  font-family: var(--mono);
+}
+.settings-sigfigs-row select {
+  background: var(--bg1);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.2rem 0.4rem;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+}
+.settings-cache-loading {
+  font-size: 0.65rem;
+  color: var(--fg-dim);
+}
+.settings-cache-empty {
+  font-size: 0.65rem;
+  color: var(--fg-dim);
+}
+.settings-cache-summary {
+  font-size: 0.68rem;
+  color: var(--fg);
+  margin-bottom: 0.4rem;
+}
+.settings-cache-list {
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  margin-bottom: 0.4rem;
+}
+.settings-cache-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--bg2);
+  font-size: 0.62rem;
+}
+.settings-cache-item:last-child { border-bottom: none; }
+.settings-cache-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+.settings-cache-size {
+  color: var(--fg-dim);
+  flex-shrink: 0;
+}
+.settings-cache-del {
+  background: none;
+  border: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 0 0.2rem;
+  flex-shrink: 0;
+}
+.settings-cache-del:hover { color: var(--red); }
+.settings-cache-clear-all {
+  font-size: 0.62rem;
+  font-family: var(--mono);
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--fg-dim);
+}
+.settings-cache-clear-all:hover { color: var(--red); border-color: var(--red); }
 .cdf-stats {
   display: flex;
   gap: 1.5rem;
@@ -2485,6 +2860,7 @@ table.cat-table tr::before {
 @media (min-width: 1400px) {
 }
 </style>
+<script>try{var t=JSON.parse(localStorage.getItem('bma:settings')||'{}').theme;if(t&&t!=='default')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 </head>
 <body>
 <div class="app">
@@ -2565,11 +2941,18 @@ table.cat-table tr::before {
         <button class="toolbar-btn" id="projectLoad" title="Load project (.bma.json)">Load</button>
         <button class="toolbar-btn" id="projectClear" title="Clear saved config, revert to defaults">Clear</button>
         <input type="file" id="projectFileInput" accept=".bma.json,.json" style="display:none">
+        <button class="toolbar-icon-btn" id="settingsBtn" title="Settings">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="8" cy="8" r="2.5"/>
+            <path d="M8 1.5v1.2M8 13.3v1.2M1.5 8h1.2M13.3 8h1.2M3.4 3.4l.85.85M11.75 11.75l.85.85M3.4 12.6l.85-.85M11.75 4.25l.85-.85"/>
+          </svg>
+        </button>
         <button class="toolbar-overflow" id="toolbarOverflow" title="More">⋮</button>
         <div class="toolbar-menu" id="toolbarMenu">
           <button class="toolbar-menu-item" data-action="save">Save project</button>
           <button class="toolbar-menu-item" data-action="load">Load project</button>
           <button class="toolbar-menu-item" data-action="clear">Clear project</button>
+          <button class="toolbar-menu-item" data-action="settings">Settings</button>
         </div>
       </div>
     </div>
@@ -2679,7 +3062,7 @@ table.cat-table tr::before {
                 <p>Row object: <code>r</code> — mutate it to create columns: <code>r.name = expr;</code></p>
                 <p>Access columns: <code>r.col</code> or <code>r["col name"]</code></p>
                 <p><b>Math:</b> <code>abs</code> <code>sqrt</code> <code>pow</code> <code>log</code> <code>log10</code> <code>exp</code> <code>min</code> <code>max</code> <code>round</code> <code>floor</code> <code>ceil</code> <code>PI</code></p>
-                <p><b>Helpers:</b> <code>cap(v, hi)</code> · <code>clamp(v, lo, hi)</code> · <code>ifnull(v, d)</code> · <code>between(v, lo, hi)</code> · <code>remap(v, map)</code> · <code>fn.round(v, n)</code></p>
+                <p><b>Helpers:</b> <code>cap(v, hi)</code> · <code>clamp(v, lo, hi)</code> · <code>ifnull(v, d)</code> · <code>ifnum(v, d)</code> · <code>isnum(v)</code> · <code>between(v, lo, hi)</code> · <code>remap(v, map)</code> · <code>fn.round(v, n)</code></p>
                 <p><b>Loops &amp; conditionals:</b> <code>for</code>, <code>if/else</code>, ternary — full JS</p>
                 <p><b>String:</b> <code>r.LITO.startsWith("BIF")</code> · <code>r.LITO.includes("x")</code></p>
                 <p><b>Type forcing:</b> <code>r.META.cat.push('name')</code> force categorical · <code>r.META.num.push('name')</code> force numeric</p>
@@ -2871,6 +3254,15 @@ table.cat-table tr::before {
   </div>
 </div>
 
+<div class="settings-modal" id="settingsModal">
+  <div class="settings-modal-inner">
+    <div class="settings-modal-head">
+      <span>Settings</span>
+      <button class="preflight-back-btn" id="settingsClose" title="Close">✕</button>
+    </div>
+    <div class="settings-modal-body" id="settingsBody"></div>
+  </div>
+</div>
 
 <script>
 // ─── Worker Code (inlined as Blob) ────────────────────────────────────
@@ -3252,7 +3644,7 @@ function tdQuantile(td, q) {
   return centroids[centroids.length - 1].mean;
 }
 
-const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;';
+const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi),isnum:(v)=>Number.isFinite(v),ifnum:(v,d)=>Number.isFinite(v)?v:(d!==undefined?d:NaN)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;const isnum=fn.isnum;const ifnum=fn.ifnum;';
 
 async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride) {
   const startTime = performance.now();
@@ -3473,7 +3865,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     const obj = {};
     for (let i = 0; i < nCols; i++) {
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? null : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
     }
     // Evaluate calcol code block — mutates obj, adding new properties
     if (calcolFn) {
@@ -3555,7 +3947,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       let v = row[cm.name];
       if (typeof v === 'boolean') v = v ? 1 : 0;
       const s = stats[idx];
-      if (v === null || v === undefined || (typeof v !== 'number') || isNaN(v)) { s.nulls++; if (gv !== null && groupStats[idx]) { const ga = getGroupAcc(groupStats[idx], gv); if (ga) ga.nulls++; } continue; }
+      if (v === null || v === undefined || (typeof v !== 'number') || !isFinite(v)) { s.nulls++; if (gv !== null && groupStats[idx]) { const ga = getGroupAcc(groupStats[idx], gv); if (ga) ga.nulls++; } continue; }
       // Per-column value filters
       const cf = colFilters ? colFilters[idx] : null;
       if (cf) {
@@ -3592,7 +3984,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
       if (NULL_SENTINELS.has(raw)) { stats[i].nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
       const v = Number(raw);
-      if (isNaN(v)) { stats[i].nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
+      if (!isFinite(v)) { stats[i].nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
       const s = stats[i];
       // Per-column value filters
       const cf = colFilters ? colFilters[i] : null;
@@ -3627,7 +4019,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     for (const axis of ['x', 'y', 'z']) {
       const raw = (fields[xyzGuess[axis]] || '').trim();
       const v = Number(raw);
-      if (!isNaN(v)) {
+      if (isFinite(v)) {
         xyzSets[axis].add(v);
         if (precisionSampleCount < PRECISION_SAMPLE) {
           const dotIdx = raw.indexOf('.');
@@ -3648,7 +4040,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         if (dxyzGuess[dAxis] >= 0) {
           const raw = (fields[dxyzGuess[dAxis]] || '').trim();
           const v = Number(raw);
-          if (!isNaN(v) && v > 0) dxyzSets[dAxis].push(v);
+          if (isFinite(v) && v > 0) dxyzSets[dAxis].push(v);
         }
       }
     }
@@ -3917,7 +4309,7 @@ async function exportCSV(data) {
     const obj = {};
     for (let i = 0; i < nCols; i++) {
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? null : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
     }
     if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) { /* skip */ } delete obj.META; }
     return obj;
@@ -4040,7 +4432,7 @@ async function swathAnalysis(data) {
     const obj = {};
     for (let i = 0; i < nCols; i++) {
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? null : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
     }
     if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) { /* skip */ } delete obj.META; }
     return obj;
@@ -4191,7 +4583,7 @@ async function sectionAnalysis(data) {
     const obj = {};
     for (let i = 0; i < nCols; i++) {
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? null : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
     }
     if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) { /* skip */ } delete obj.META; }
     return obj;
@@ -4257,7 +4649,7 @@ async function sectionAnalysis(data) {
 
       const h = row[hName];
       const v = row[vName];
-      if (h == null || isNaN(h) || v == null || isNaN(v)) continue;
+      if (h == null || !isFinite(h) || v == null || !isFinite(v)) continue;
 
       const val = row[varName];
       const dh = dhName ? row[dhName] : 0;
@@ -4286,7 +4678,7 @@ async function sectionAnalysis(data) {
         const nv = row[normalName];
         if (nv != null && !isNaN(nv) && nv >= slicePos - halfTol && nv <= slicePos + halfTol) {
           const h = row[hName]; const v = row[vName];
-          if (h != null && !isNaN(h) && v != null && !isNaN(v)) {
+          if (h != null && isFinite(h) && v != null && isFinite(v)) {
             const val = row[varName];
             const dh = dhName ? row[dhName] : 0;
             const dv = dvName ? row[dvName] : 0;
@@ -4384,6 +4776,9 @@ const $cdfModal = document.getElementById('cdfModal');
 const $cdfTitle = document.getElementById('cdfTitle');
 const $cdfBody = document.getElementById('cdfBody');
 const $cdfClose = document.getElementById('cdfClose');
+const $settingsModal = document.getElementById('settingsModal');
+const $settingsClose = document.getElementById('settingsClose');
+const $settingsBtn = document.getElementById('settingsBtn');
 const $resultsTabs = document.getElementById('resultsTabs');
 const $statsCatContent = document.getElementById('statsCatContent');
 const $statsCatBadge = document.getElementById('statsCatBadge');
@@ -5137,9 +5532,13 @@ function renderPreflightTable(data) {
 
 function formatNum(v, decimals) {
   if (v === null || v === undefined) return '—';
-  if (Math.abs(v) >= 1e6 || (Math.abs(v) < 0.001 && v !== 0)) return v.toExponential(decimals ?? 3);
+  var d = decimals;
+  if (d === undefined && typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.sigFigs !== null) {
+    d = bmaSettings.sigFigs;
+  }
+  if (Math.abs(v) >= 1e6 || (Math.abs(v) < 0.001 && v !== 0)) return v.toExponential(d != null ? d : 3);
   if (Number.isInteger(v)) return v.toLocaleString();
-  return v.toLocaleString(undefined, { minimumFractionDigits: decimals ?? 2, maximumFractionDigits: decimals ?? 4 });
+  return v.toLocaleString(undefined, { minimumFractionDigits: d != null ? d : 2, maximumFractionDigits: d != null ? d : 4 });
 }
 
 function formatSize(bytes) {
@@ -5156,6 +5555,66 @@ function delimName(d) {
   if (d === '|') return 'pipe';
   if (d === ' ') return 'space';
   return JSON.stringify(d);
+}
+
+// ─── Result Cache (IndexedDB) ──────────────────────────────────────────
+
+function openCacheDB() {
+  return new Promise(function(resolve, reject) {
+    var req = indexedDB.open('bma-cache', 1);
+    req.onupgradeneeded = function() {
+      req.result.createObjectStore('results');
+    };
+    req.onsuccess = function() { resolve(req.result); };
+    req.onerror = function() { reject(req.error); };
+  });
+}
+
+function cacheGet(key) {
+  return openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('results', 'readonly');
+      var req = tx.objectStore('results').get(key);
+      req.onsuccess = function() { resolve(req.result || null); };
+      req.onerror = function() { reject(req.error); };
+    });
+  });
+}
+
+function cachePut(key, value) {
+  return openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('results', 'readwrite');
+      tx.objectStore('results').put(value, key);
+      tx.oncomplete = function() { resolve(); };
+      tx.onerror = function() { reject(tx.error); };
+    });
+  });
+}
+
+function cacheDelete(key) {
+  return openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('results', 'readwrite');
+      tx.objectStore('results').delete(key);
+      tx.oncomplete = function() { resolve(); };
+      tx.onerror = function() { reject(tx.error); };
+    });
+  });
+}
+
+function analysisFingerprint() {
+  return JSON.stringify({
+    filter: currentFilter,
+    typeOverrides: currentTypeOverrides || null,
+    skipCols: currentSkipCols || null,
+    colFilters: currentColFilters || null,
+    zipEntry: currentZipEntry || null,
+    calcolCode: currentCalcolCode || '',
+    calcolMeta: currentCalcolMeta || [],
+    groupBy: currentGroupBy,
+    groupStatsCols: currentGroupBy !== null && statsCatSelectedVars.size > 0 ? Array.from(statsCatSelectedVars).sort() : null
+  });
 }
 
 // ─── Project Save/Load ─────────────────────────────────────────────────
@@ -5365,6 +5824,7 @@ function saveProjectFile() {
 function clearProject() {
   if (!currentFile) return;
   try { localStorage.removeItem(projectKey(currentFile)); } catch (e) {}
+  cacheDelete(projectKey(currentFile)).catch(function() {});
 
   currentCalcolCode = '';
   currentCalcolMeta = [];
@@ -5414,6 +5874,7 @@ $toolbarMenu.addEventListener('click', (e) => {
   if (action === 'save') saveProjectFile();
   else if (action === 'load') $projectFileInput.click();
   else if (action === 'clear') clearProject();
+  else if (action === 'settings') openSettings();
 });
 
 // Toolbar buttons
@@ -5649,6 +6110,37 @@ function startAnalysis(xyzOverride, filter, typeOverrides, zipEntry, skipCols, c
   if (skipCols !== undefined) currentSkipCols = skipCols;
   if (colFilters !== undefined) currentColFilters = colFilters;
 
+  var cacheKey = projectKey(currentFile);
+  var fingerprint = analysisFingerprint();
+
+  // Check IndexedDB cache before spawning worker
+  cacheGet(cacheKey).then(function(cached) {
+    if (cached && cached.fingerprint === fingerprint && cached.lastModified === currentFile.lastModified) {
+      // Cache hit — restore results without re-analysis
+      var msg = cached.data;
+      currentHeader = msg.header;
+      currentColTypes = msg.colTypes;
+      currentRowVar = msg.rowVarName || 'r';
+      if (msg.origColCount) currentOrigColCount = msg.origColCount;
+      if (!xyzOverride) {
+        currentXYZ = { ...msg.xyzGuess };
+        detectedXYZ = { ...msg.xyzGuess };
+      } else {
+        currentXYZ = { ...xyzOverride };
+        detectedXYZ = { ...xyzOverride };
+      }
+      lastCompleteData = msg;
+      msg._cached = true;
+      displayResults(msg);
+      return;
+    }
+    runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerprint);
+  }).catch(function() {
+    runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerprint);
+  });
+}
+
+function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerprint) {
   if (worker) worker.terminate();
   worker = new Worker(workerUrl);
 
@@ -5702,6 +6194,12 @@ function startAnalysis(xyzOverride, filter, typeOverrides, zipEntry, skipCols, c
       $overlay.remove();
       lastCompleteData = msg;
       displayResults(msg);
+      // Store in IndexedDB cache (async, fire-and-forget)
+      cachePut(cacheKey, {
+        fingerprint: fingerprint,
+        lastModified: currentFile.lastModified,
+        data: msg
+      }).catch(function() { /* ignore cache write errors */ });
     } else if (msg.type === 'error') {
       $overlay.remove();
       if (msg.message.startsWith('Filter expression')) {
@@ -5748,8 +6246,18 @@ function displayResults(data) {
     ? `${rowCount.toLocaleString()} / ${totalRowCount.toLocaleString()}`
     : totalRowCount.toLocaleString();
   $resultsRowInfo.textContent = rowsDisplay + ' rows · ' + header.length + ' cols';
-  $resultsTimeInfo.textContent = (elapsed / 1000).toFixed(1) + 's';
+  $resultsTimeInfo.textContent = data._cached ? 'cached' : (elapsed / 1000).toFixed(1) + 's';
   $resultsMemInfo.textContent = '~' + formatBytes(estimateResultBytes(data));
+
+  // Apply default percentile preset from settings (only on first analysis, not project restore)
+  if (isFirstAnalysis && !pendingProjectRestore && typeof bmaSettings !== 'undefined' && bmaSettings) {
+    var preset = bmaSettings.defaultPercentilePreset;
+    if (preset === 'custom' && bmaSettings.customPercentiles) {
+      statsPercentiles = bmaSettings.customPercentiles.slice();
+    } else if (STATS_PRESETS[preset]) {
+      statsPercentiles = STATS_PRESETS[preset].slice();
+    }
+  }
 
   // Default to summary tab only on first analysis
   if (isFirstAnalysis) switchTab('summary');
@@ -8721,7 +9229,7 @@ function renderXYZConfig(header, colTypes, xyzGuess) {
 
 // ─── Calcol UI — Code Editor with Variable Browser ───────────────────
 
-const MATH_PREAMBLE_MAIN = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;';
+const MATH_PREAMBLE_MAIN = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi),isnum:(v)=>Number.isFinite(v),ifnum:(v,d)=>Number.isFinite(v)?v:(d!==undefined?d:NaN)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;const isnum=fn.isnum;const ifnum=fn.ifnum;';
 
 // Math functions available in expressions (for autocomplete and sidebar)
 const MATH_COMPLETIONS = [
@@ -8742,6 +9250,8 @@ const MATH_COMPLETIONS = [
   { label: 'clamp(v, lo, hi)', insert: 'clamp(', desc: 'constrain to range' },
   { label: 'cap(v, hi)', insert: 'cap(', desc: 'cap at maximum' },
   { label: 'ifnull(v, default)', insert: 'ifnull(', desc: 'default for null/NaN' },
+  { label: 'ifnum(v, default)', insert: 'ifnum(', desc: 'default for non-finite' },
+  { label: 'isnum(v)', insert: 'isnum(', desc: 'true if finite number' },
   { label: 'between(v, lo, hi)', insert: 'between(', desc: 'boolean range test' },
   { label: 'remap(v, map)', insert: 'remap(', desc: 'lookup table' },
   { label: 'fn.round(v, n)', insert: 'fn.round(', desc: 'round to n decimals' },
@@ -8751,7 +9261,7 @@ const MATH_COMPLETIONS = [
 
 // ── Syntax Highlighter ────────────────────────────────────────────────
 const HL_KEYWORDS = new Set(['if','else','for','while','do','switch','case','break','continue','return','const','let','var','of','in','new','typeof','instanceof','null','undefined','true','false','NaN','Infinity']);
-const HL_BUILTINS = new Set(['abs','sqrt','pow','log','log2','log10','exp','min','max','round','floor','ceil','sign','trunc','hypot','clamp','cap','ifnull','between','remap','PI','E','fn','String','Number','Boolean','parseInt','parseFloat','isNaN','isFinite','Math']);
+const HL_BUILTINS = new Set(['abs','sqrt','pow','log','log2','log10','exp','min','max','round','floor','ceil','sign','trunc','hypot','clamp','cap','ifnull','ifnum','isnum','between','remap','PI','E','fn','String','Number','Boolean','parseInt','parseFloat','isNaN','isFinite','Math']);
 
 function highlightCode(code) {
   if (!code) return '\n'; // ensure pre has content for sizing
@@ -9865,6 +10375,439 @@ f 4 8 5 1
   a.click();
   URL.revokeObjectURL(a.href);
 });
+
+// ─── Settings Modal — Themes, Cache, Defaults ─────────────────────────
+
+var bmaSettings = null;
+
+var SETTINGS_DEFAULTS = {
+  theme: 'default',
+  customThemes: [null, null, null],
+  defaultPercentilePreset: 'quartiles',
+  customPercentiles: null,
+  sigFigs: null
+};
+
+var THEME_META_COLORS = {
+  'default': '#08090a',
+  'teal': '#070b0c',
+  'blue': '#080a0f',
+  'mocha': '#1e1e2e',
+  'light': '#f5f5f0',
+  'cream': '#ece8e0',
+  'bm77': '#262335'
+};
+
+var THEME_NAMES = {
+  'default': 'Default',
+  'teal': 'Teal',
+  'blue': 'Blue',
+  'mocha': 'Mocha',
+  'light': 'Light',
+  'cream': 'Cream',
+  'bm77': 'BM77'
+};
+
+var THEME_SWATCHES = {
+  'default': ['#08090a', '#161a1e', '#e8a317', '#b07a0e'],
+  'teal':    ['#070b0c', '#13191d', '#2dd4bf', '#14b8a6'],
+  'blue':    ['#080a0f', '#131825', '#4a9eff', '#2d7ad4'],
+  'mocha':   ['#1e1e2e', '#252540', '#f9e2af', '#e2c88c'],
+  'light':   ['#f5f5f0', '#ddddd8', '#c07800', '#996000'],
+  'cream':   ['#ece8e0', '#d8d4cc', '#9a7320', '#7a5b18'],
+  'bm77':    ['#262335', '#34294f', '#ff7edb', '#36f9f6']
+};
+
+var CUSTOM_THEME_KEYS = ['name','bg','bg1','bg2','bg3','fg','fgDim','fgBright','accent','accentDim','border'];
+
+function loadSettings() {
+  try {
+    var raw = localStorage.getItem('bma:settings');
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      bmaSettings = {};
+      for (var k in SETTINGS_DEFAULTS) {
+        bmaSettings[k] = parsed[k] !== undefined ? parsed[k] : SETTINGS_DEFAULTS[k];
+      }
+      return;
+    }
+  } catch (e) {}
+  bmaSettings = JSON.parse(JSON.stringify(SETTINGS_DEFAULTS));
+}
+
+function saveSettings() {
+  try {
+    localStorage.setItem('bma:settings', JSON.stringify(bmaSettings));
+  } catch (e) {}
+}
+
+function applyTheme(name) {
+  bmaSettings.theme = name;
+  saveSettings();
+
+  // Remove custom theme style if present
+  var customStyle = document.getElementById('customThemeStyle');
+
+  if (name && name.startsWith('custom-')) {
+    var idx = parseInt(name.split('-')[1], 10);
+    var ct = bmaSettings.customThemes[idx];
+    if (ct) {
+      document.documentElement.removeAttribute('data-theme');
+      var css = ':root {\n';
+      css += '  --bg: ' + ct.bg + ';\n';
+      css += '  --bg1: ' + ct.bg1 + ';\n';
+      css += '  --bg2: ' + ct.bg2 + ';\n';
+      css += '  --bg3: ' + ct.bg3 + ';\n';
+      css += '  --fg: ' + ct.fg + ';\n';
+      css += '  --fg-dim: ' + ct.fgDim + ';\n';
+      css += '  --fg-bright: ' + ct.fgBright + ';\n';
+      css += '  --amber: ' + ct.accent + ';\n';
+      css += '  --amber-dim: ' + ct.accentDim + ';\n';
+      css += '  --amber-glow: ' + ct.accent + '30;\n';
+      css += '  --border: ' + ct.border + ';\n';
+      css += '}\n';
+      if (!customStyle) {
+        customStyle = document.createElement('style');
+        customStyle.id = 'customThemeStyle';
+        document.head.appendChild(customStyle);
+      }
+      customStyle.textContent = css;
+      updateThemeColor(ct.bg);
+    }
+    return;
+  }
+
+  // Built-in theme
+  if (customStyle) customStyle.textContent = '';
+  if (name && name !== 'default') {
+    document.documentElement.setAttribute('data-theme', name);
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+  updateThemeColor(THEME_META_COLORS[name] || THEME_META_COLORS['default']);
+}
+
+function updateThemeColor(color) {
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', color);
+}
+
+// ─── Cache Enumeration ───────────────────────────────────────────────
+
+function cacheList() {
+  return openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('results', 'readonly');
+      var store = tx.objectStore('results');
+      var req = store.openCursor();
+      var items = [];
+      req.onsuccess = function() {
+        var cursor = req.result;
+        if (cursor) {
+          var key = cursor.key;
+          var val = cursor.value;
+          var size = 0;
+          try { size = estimateResultBytes(val.data || val); } catch (e) {}
+          items.push({ key: key, size: size });
+          cursor.continue();
+        } else {
+          resolve(items);
+        }
+      };
+      req.onerror = function() { reject(req.error); };
+    });
+  });
+}
+
+function cacheDeleteAll() {
+  return openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('results', 'readwrite');
+      tx.objectStore('results').clear();
+      tx.oncomplete = function() { resolve(); };
+      tx.onerror = function() { reject(tx.error); };
+    });
+  });
+}
+
+// ─── Settings Modal Rendering ────────────────────────────────────────
+
+function openSettings() {
+  renderSettingsBody();
+  $settingsModal.classList.add('active');
+}
+
+function closeSettings() {
+  $settingsModal.classList.remove('active');
+}
+
+function renderSettingsBody() {
+  var body = document.getElementById('settingsBody');
+  if (!body) return;
+  var html = '';
+
+  // ── Theme section ──
+  html += '<div class="settings-section"><div class="settings-section-title">Theme</div>';
+  html += '<div class="settings-theme-grid">';
+  var builtInThemes = ['default', 'teal', 'blue', 'mocha', 'light', 'cream', 'bm77'];
+  for (var i = 0; i < builtInThemes.length; i++) {
+    var tid = builtInThemes[i];
+    var sw = THEME_SWATCHES[tid];
+    var sel = bmaSettings.theme === tid ? ' selected' : '';
+    html += '<button class="settings-swatch' + sel + '" data-theme="' + tid + '">';
+    html += '<div class="settings-swatch-colors">';
+    for (var s = 0; s < sw.length; s++) {
+      html += '<div style="background:' + sw[s] + '"></div>';
+    }
+    html += '</div>';
+    html += '<div class="settings-swatch-name">' + THEME_NAMES[tid] + '</div>';
+    html += '</button>';
+  }
+  // Custom theme swatches
+  for (var ci = 0; ci < 3; ci++) {
+    var ct = bmaSettings.customThemes[ci];
+    var ctId = 'custom-' + ci;
+    var csel = bmaSettings.theme === ctId ? ' selected' : '';
+    if (ct) {
+      html += '<button class="settings-swatch' + csel + '" data-theme="' + ctId + '">';
+      html += '<div class="settings-swatch-colors">';
+      html += '<div style="background:' + esc(ct.bg) + '"></div>';
+      html += '<div style="background:' + esc(ct.bg2) + '"></div>';
+      html += '<div style="background:' + esc(ct.accent) + '"></div>';
+      html += '<div style="background:' + esc(ct.accentDim) + '"></div>';
+      html += '</div>';
+      html += '<div class="settings-swatch-name">' + esc(ct.name || 'Custom ' + (ci + 1)) + '</div>';
+      html += '</button>';
+    }
+  }
+  html += '</div>';
+
+  // Custom theme inputs
+  html += '<details class="settings-custom-details"><summary>Custom themes</summary>';
+  html += '<div class="settings-custom-themes">';
+  for (var ci = 0; ci < 3; ci++) {
+    var ct = bmaSettings.customThemes[ci];
+    var placeholder = '{"name":"My Theme","bg":"#0a0a0a","bg1":"#111","bg2":"#1a1a1a","bg3":"#222","fg":"#ccc","fgDim":"#666","fgBright":"#eee","accent":"#ff6600","accentDim":"#cc5200","border":"#333"}';
+    html += '<div class="settings-custom-slot">';
+    html += '<label>Slot ' + (ci + 1) + '</label>';
+    html += '<textarea class="settings-custom-input" data-slot="' + ci + '" rows="2" placeholder=\'' + placeholder + '\' spellcheck="false">' + (ct ? esc(JSON.stringify(ct)) : '') + '</textarea>';
+    html += '<div class="settings-custom-actions">';
+    html += '<button class="settings-custom-apply" data-slot="' + ci + '">Apply</button>';
+    if (ct) html += '<button class="settings-custom-del" data-slot="' + ci + '">Delete</button>';
+    html += '</div></div>';
+  }
+  html += '</div></details>';
+  html += '</div>';
+
+  // ── Cache section ──
+  html += '<div class="settings-section"><div class="settings-section-title">Cache</div>';
+  html += '<div id="settingsCacheContent"><div class="settings-cache-loading">Loading...</div></div>';
+  html += '</div>';
+
+  // ── Default Percentile Preset ──
+  html += '<div class="settings-section"><div class="settings-section-title">Default Percentile Preset</div>';
+  html += '<div class="settings-preset-btns">';
+  var presets = ['quartiles', 'deciles', 'ventiles', 'custom'];
+  var presetLabels = ['Quartiles', 'Deciles', 'Ventiles', 'Custom'];
+  for (var pi = 0; pi < presets.length; pi++) {
+    var pa = bmaSettings.defaultPercentilePreset === presets[pi] ? ' active' : '';
+    html += '<button class="settings-preset-btn' + pa + '" data-preset="' + presets[pi] + '">' + presetLabels[pi] + '</button>';
+  }
+  html += '</div>';
+  var cpVis = bmaSettings.defaultPercentilePreset === 'custom' ? '' : ' style="display:none"';
+  var cpVal = bmaSettings.customPercentiles ? bmaSettings.customPercentiles.join(', ') : '';
+  html += '<input type="text" class="settings-custom-pct" id="settingsCustomPct" placeholder="e.g. 5,10,25,50,75,90,95" value="' + cpVal + '"' + cpVis + ' autocomplete="off" spellcheck="false">';
+  html += '</div>';
+
+  // ── Number Formatting ──
+  html += '<div class="settings-section"><div class="settings-section-title">Number Formatting</div>';
+  html += '<div class="settings-sigfigs-row"><label>Significant figures</label><select id="settingsSigFigs">';
+  var sigOpts = [['', 'Auto'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5'], ['6', '6'], ['8', '8']];
+  for (var si = 0; si < sigOpts.length; si++) {
+    var sv = sigOpts[si][0];
+    var sl = sigOpts[si][1];
+    var curSig = bmaSettings.sigFigs === null ? '' : String(bmaSettings.sigFigs);
+    var ssel = sv === curSig ? ' selected' : '';
+    html += '<option value="' + sv + '"' + ssel + '>' + sl + '</option>';
+  }
+  html += '</select></div></div>';
+
+  body.innerHTML = html;
+
+  // Wire events
+  wireSettingsEvents();
+
+  // Load cache info async
+  loadCacheInfo();
+}
+
+function wireSettingsEvents() {
+  var body = document.getElementById('settingsBody');
+  if (!body) return;
+
+  // Theme swatches
+  body.addEventListener('click', function(e) {
+    var swatch = e.target.closest('.settings-swatch');
+    if (swatch) {
+      var tid = swatch.dataset.theme;
+      applyTheme(tid);
+      renderSettingsBody();
+      return;
+    }
+
+    // Custom theme apply
+    var applyBtn = e.target.closest('.settings-custom-apply');
+    if (applyBtn) {
+      var slot = parseInt(applyBtn.dataset.slot, 10);
+      var textarea = body.querySelector('.settings-custom-input[data-slot="' + slot + '"]');
+      if (textarea) {
+        try {
+          var obj = JSON.parse(textarea.value);
+          // Validate keys
+          var valid = true;
+          for (var ki = 0; ki < CUSTOM_THEME_KEYS.length; ki++) {
+            if (!obj[CUSTOM_THEME_KEYS[ki]]) { valid = false; break; }
+          }
+          if (!valid) {
+            textarea.style.borderColor = 'var(--red)';
+            return;
+          }
+          bmaSettings.customThemes[slot] = obj;
+          applyTheme('custom-' + slot);
+          renderSettingsBody();
+        } catch (err) {
+          textarea.style.borderColor = 'var(--red)';
+        }
+      }
+      return;
+    }
+
+    // Custom theme delete
+    var delBtn = e.target.closest('.settings-custom-del');
+    if (delBtn) {
+      var slot = parseInt(delBtn.dataset.slot, 10);
+      bmaSettings.customThemes[slot] = null;
+      if (bmaSettings.theme === 'custom-' + slot) {
+        applyTheme('default');
+      }
+      saveSettings();
+      renderSettingsBody();
+      return;
+    }
+
+    // Preset buttons
+    var presetBtn = e.target.closest('.settings-preset-btn');
+    if (presetBtn) {
+      var preset = presetBtn.dataset.preset;
+      bmaSettings.defaultPercentilePreset = preset;
+      if (preset === 'custom') {
+        var cpInput = document.getElementById('settingsCustomPct');
+        if (cpInput) cpInput.style.display = '';
+      }
+      saveSettings();
+      body.querySelectorAll('.settings-preset-btn').forEach(function(b) { b.classList.remove('active'); });
+      presetBtn.classList.add('active');
+      // Show/hide custom input
+      var cpInput = document.getElementById('settingsCustomPct');
+      if (cpInput) cpInput.style.display = preset === 'custom' ? '' : 'none';
+      return;
+    }
+
+    // Cache delete individual
+    var cacheDel = e.target.closest('.settings-cache-del');
+    if (cacheDel) {
+      var key = cacheDel.dataset.key;
+      cacheDelete(key).then(function() { loadCacheInfo(); });
+      return;
+    }
+
+    // Cache clear all
+    if (e.target.closest('#settingsCacheClearAll')) {
+      cacheDeleteAll().then(function() { loadCacheInfo(); });
+      return;
+    }
+  });
+
+  // Custom percentile input
+  var cpInput = document.getElementById('settingsCustomPct');
+  if (cpInput) {
+    cpInput.addEventListener('change', function() {
+      var vals = cpInput.value.split(',').map(function(s) { return parseFloat(s.trim()); }).filter(function(n) { return !isNaN(n) && n > 0 && n < 100; });
+      if (vals.length > 0) {
+        vals.sort(function(a, b) { return a - b; });
+        bmaSettings.customPercentiles = vals;
+        saveSettings();
+      }
+    });
+  }
+
+  // Sig figs
+  var sigSelect = document.getElementById('settingsSigFigs');
+  if (sigSelect) {
+    sigSelect.addEventListener('change', function() {
+      var v = sigSelect.value;
+      bmaSettings.sigFigs = v === '' ? null : parseInt(v, 10);
+      saveSettings();
+      // Re-render stats if available
+      if (typeof renderStatsTable === 'function' && lastDisplayedStats) {
+        renderStatsTable();
+      }
+    });
+  }
+}
+
+function loadCacheInfo() {
+  var container = document.getElementById('settingsCacheContent');
+  if (!container) return;
+
+  cacheList().then(function(items) {
+    if (items.length === 0) {
+      container.innerHTML = '<div class="settings-cache-empty">No cached results.</div>';
+      return;
+    }
+    var totalSize = 0;
+    for (var i = 0; i < items.length; i++) totalSize += items[i].size;
+    var html = '<div class="settings-cache-summary">' + items.length + ' cached result' + (items.length !== 1 ? 's' : '') + ' (' + formatBytes(totalSize) + ')</div>';
+    html += '<div class="settings-cache-list">';
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var displayKey = item.key.length > 60 ? item.key.substring(0, 57) + '...' : item.key;
+      html += '<div class="settings-cache-item">';
+      html += '<span class="settings-cache-name" title="' + esc(item.key) + '">' + esc(displayKey) + '</span>';
+      html += '<span class="settings-cache-size">' + formatBytes(item.size) + '</span>';
+      html += '<button class="settings-cache-del" data-key="' + esc(item.key) + '" title="Delete">✕</button>';
+      html += '</div>';
+    }
+    html += '</div>';
+    html += '<button class="settings-cache-clear-all" id="settingsCacheClearAll">Clear all cache</button>';
+    container.innerHTML = html;
+  }).catch(function() {
+    container.innerHTML = '<div class="settings-cache-empty">Could not read cache.</div>';
+  });
+}
+
+// ─── Initialization ──────────────────────────────────────────────────
+
+function initSettings() {
+  loadSettings();
+  applyTheme(bmaSettings.theme);
+
+  // Modal close handlers
+  $settingsClose.addEventListener('click', closeSettings);
+  $settingsModal.addEventListener('click', function(e) {
+    if (e.target === $settingsModal) closeSettings();
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && $settingsModal.classList.contains('active')) {
+      closeSettings();
+    }
+  });
+
+  // Gear button
+  $settingsBtn.addEventListener('click', openSettings);
+}
+
+initSettings();
 
 // ─── CDF Plot ─────────────────────────────────────────────────────────
 $cdfClose.addEventListener('click', () => $cdfModal.classList.remove('active'));

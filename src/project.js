@@ -1,3 +1,63 @@
+// ─── Result Cache (IndexedDB) ──────────────────────────────────────────
+
+function openCacheDB() {
+  return new Promise(function(resolve, reject) {
+    var req = indexedDB.open('bma-cache', 1);
+    req.onupgradeneeded = function() {
+      req.result.createObjectStore('results');
+    };
+    req.onsuccess = function() { resolve(req.result); };
+    req.onerror = function() { reject(req.error); };
+  });
+}
+
+function cacheGet(key) {
+  return openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('results', 'readonly');
+      var req = tx.objectStore('results').get(key);
+      req.onsuccess = function() { resolve(req.result || null); };
+      req.onerror = function() { reject(req.error); };
+    });
+  });
+}
+
+function cachePut(key, value) {
+  return openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('results', 'readwrite');
+      tx.objectStore('results').put(value, key);
+      tx.oncomplete = function() { resolve(); };
+      tx.onerror = function() { reject(tx.error); };
+    });
+  });
+}
+
+function cacheDelete(key) {
+  return openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('results', 'readwrite');
+      tx.objectStore('results').delete(key);
+      tx.oncomplete = function() { resolve(); };
+      tx.onerror = function() { reject(tx.error); };
+    });
+  });
+}
+
+function analysisFingerprint() {
+  return JSON.stringify({
+    filter: currentFilter,
+    typeOverrides: currentTypeOverrides || null,
+    skipCols: currentSkipCols || null,
+    colFilters: currentColFilters || null,
+    zipEntry: currentZipEntry || null,
+    calcolCode: currentCalcolCode || '',
+    calcolMeta: currentCalcolMeta || [],
+    groupBy: currentGroupBy,
+    groupStatsCols: currentGroupBy !== null && statsCatSelectedVars.size > 0 ? Array.from(statsCatSelectedVars).sort() : null
+  });
+}
+
 // ─── Project Save/Load ─────────────────────────────────────────────────
 
 function estimateResultBytes(data) {
@@ -205,6 +265,7 @@ function saveProjectFile() {
 function clearProject() {
   if (!currentFile) return;
   try { localStorage.removeItem(projectKey(currentFile)); } catch (e) {}
+  cacheDelete(projectKey(currentFile)).catch(function() {});
 
   currentCalcolCode = '';
   currentCalcolMeta = [];
@@ -254,6 +315,7 @@ $toolbarMenu.addEventListener('click', (e) => {
   if (action === 'save') saveProjectFile();
   else if (action === 'load') $projectFileInput.click();
   else if (action === 'clear') clearProject();
+  else if (action === 'settings') openSettings();
 });
 
 // Toolbar buttons
@@ -489,6 +551,37 @@ function startAnalysis(xyzOverride, filter, typeOverrides, zipEntry, skipCols, c
   if (skipCols !== undefined) currentSkipCols = skipCols;
   if (colFilters !== undefined) currentColFilters = colFilters;
 
+  var cacheKey = projectKey(currentFile);
+  var fingerprint = analysisFingerprint();
+
+  // Check IndexedDB cache before spawning worker
+  cacheGet(cacheKey).then(function(cached) {
+    if (cached && cached.fingerprint === fingerprint && cached.lastModified === currentFile.lastModified) {
+      // Cache hit — restore results without re-analysis
+      var msg = cached.data;
+      currentHeader = msg.header;
+      currentColTypes = msg.colTypes;
+      currentRowVar = msg.rowVarName || 'r';
+      if (msg.origColCount) currentOrigColCount = msg.origColCount;
+      if (!xyzOverride) {
+        currentXYZ = { ...msg.xyzGuess };
+        detectedXYZ = { ...msg.xyzGuess };
+      } else {
+        currentXYZ = { ...xyzOverride };
+        detectedXYZ = { ...xyzOverride };
+      }
+      lastCompleteData = msg;
+      msg._cached = true;
+      displayResults(msg);
+      return;
+    }
+    runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerprint);
+  }).catch(function() {
+    runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerprint);
+  });
+}
+
+function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerprint) {
   if (worker) worker.terminate();
   worker = new Worker(workerUrl);
 
@@ -542,6 +635,12 @@ function startAnalysis(xyzOverride, filter, typeOverrides, zipEntry, skipCols, c
       $overlay.remove();
       lastCompleteData = msg;
       displayResults(msg);
+      // Store in IndexedDB cache (async, fire-and-forget)
+      cachePut(cacheKey, {
+        fingerprint: fingerprint,
+        lastModified: currentFile.lastModified,
+        data: msg
+      }).catch(function() { /* ignore cache write errors */ });
     } else if (msg.type === 'error') {
       $overlay.remove();
       if (msg.message.startsWith('Filter expression')) {
@@ -588,8 +687,18 @@ function displayResults(data) {
     ? `${rowCount.toLocaleString()} / ${totalRowCount.toLocaleString()}`
     : totalRowCount.toLocaleString();
   $resultsRowInfo.textContent = rowsDisplay + ' rows · ' + header.length + ' cols';
-  $resultsTimeInfo.textContent = (elapsed / 1000).toFixed(1) + 's';
+  $resultsTimeInfo.textContent = data._cached ? 'cached' : (elapsed / 1000).toFixed(1) + 's';
   $resultsMemInfo.textContent = '~' + formatBytes(estimateResultBytes(data));
+
+  // Apply default percentile preset from settings (only on first analysis, not project restore)
+  if (isFirstAnalysis && !pendingProjectRestore && typeof bmaSettings !== 'undefined' && bmaSettings) {
+    var preset = bmaSettings.defaultPercentilePreset;
+    if (preset === 'custom' && bmaSettings.customPercentiles) {
+      statsPercentiles = bmaSettings.customPercentiles.slice();
+    } else if (STATS_PRESETS[preset]) {
+      statsPercentiles = STATS_PRESETS[preset].slice();
+    }
+  }
 
   // Default to summary tab only on first analysis
   if (isFirstAnalysis) switchTab('summary');

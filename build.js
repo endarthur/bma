@@ -22,6 +22,7 @@ const APP_MODULES = [
   'calcol.js',
   'events.js',
   'filter.js',
+  'settings.js',
   'cdf.js',
 ];
 const app = APP_MODULES.map(f => read(src(f)).trimEnd()).join('\n\n');

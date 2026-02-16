@@ -375,7 +375,7 @@ function tdQuantile(td, q) {
   return centroids[centroids.length - 1].mean;
 }
 
-const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;';
+const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi),isnum:(v)=>Number.isFinite(v),ifnum:(v,d)=>Number.isFinite(v)?v:(d!==undefined?d:NaN)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;const isnum=fn.isnum;const ifnum=fn.ifnum;';
 
 async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride) {
   const startTime = performance.now();
@@ -596,7 +596,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     const obj = {};
     for (let i = 0; i < nCols; i++) {
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? null : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
     }
     // Evaluate calcol code block — mutates obj, adding new properties
     if (calcolFn) {
@@ -678,7 +678,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       let v = row[cm.name];
       if (typeof v === 'boolean') v = v ? 1 : 0;
       const s = stats[idx];
-      if (v === null || v === undefined || (typeof v !== 'number') || isNaN(v)) { s.nulls++; if (gv !== null && groupStats[idx]) { const ga = getGroupAcc(groupStats[idx], gv); if (ga) ga.nulls++; } continue; }
+      if (v === null || v === undefined || (typeof v !== 'number') || !isFinite(v)) { s.nulls++; if (gv !== null && groupStats[idx]) { const ga = getGroupAcc(groupStats[idx], gv); if (ga) ga.nulls++; } continue; }
       // Per-column value filters
       const cf = colFilters ? colFilters[idx] : null;
       if (cf) {
@@ -715,7 +715,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
       if (NULL_SENTINELS.has(raw)) { stats[i].nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
       const v = Number(raw);
-      if (isNaN(v)) { stats[i].nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
+      if (!isFinite(v)) { stats[i].nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
       const s = stats[i];
       // Per-column value filters
       const cf = colFilters ? colFilters[i] : null;
@@ -750,7 +750,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     for (const axis of ['x', 'y', 'z']) {
       const raw = (fields[xyzGuess[axis]] || '').trim();
       const v = Number(raw);
-      if (!isNaN(v)) {
+      if (isFinite(v)) {
         xyzSets[axis].add(v);
         if (precisionSampleCount < PRECISION_SAMPLE) {
           const dotIdx = raw.indexOf('.');
@@ -771,7 +771,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         if (dxyzGuess[dAxis] >= 0) {
           const raw = (fields[dxyzGuess[dAxis]] || '').trim();
           const v = Number(raw);
-          if (!isNaN(v) && v > 0) dxyzSets[dAxis].push(v);
+          if (isFinite(v) && v > 0) dxyzSets[dAxis].push(v);
         }
       }
     }
@@ -1040,7 +1040,7 @@ async function exportCSV(data) {
     const obj = {};
     for (let i = 0; i < nCols; i++) {
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? null : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
     }
     if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) { /* skip */ } delete obj.META; }
     return obj;
@@ -1163,7 +1163,7 @@ async function swathAnalysis(data) {
     const obj = {};
     for (let i = 0; i < nCols; i++) {
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? null : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
     }
     if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) { /* skip */ } delete obj.META; }
     return obj;
@@ -1314,7 +1314,7 @@ async function sectionAnalysis(data) {
     const obj = {};
     for (let i = 0; i < nCols; i++) {
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? null : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
     }
     if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) { /* skip */ } delete obj.META; }
     return obj;
@@ -1380,7 +1380,7 @@ async function sectionAnalysis(data) {
 
       const h = row[hName];
       const v = row[vName];
-      if (h == null || isNaN(h) || v == null || isNaN(v)) continue;
+      if (h == null || !isFinite(h) || v == null || !isFinite(v)) continue;
 
       const val = row[varName];
       const dh = dhName ? row[dhName] : 0;
@@ -1409,7 +1409,7 @@ async function sectionAnalysis(data) {
         const nv = row[normalName];
         if (nv != null && !isNaN(nv) && nv >= slicePos - halfTol && nv <= slicePos + halfTol) {
           const h = row[hName]; const v = row[vName];
-          if (h != null && !isNaN(h) && v != null && !isNaN(v)) {
+          if (h != null && isFinite(h) && v != null && isFinite(v)) {
             const val = row[varName];
             const dh = dhName ? row[dhName] : 0;
             const dv = dvName ? row[dvName] : 0;

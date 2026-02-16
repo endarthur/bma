@@ -13,6 +13,7 @@
 <style>
 /* __INJECT_CSS__ */
 </style>
+<script>try{var t=JSON.parse(localStorage.getItem('bma:settings')||'{}').theme;if(t&&t!=='default')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 </head>
 <body>
 <div class="app">
@@ -93,11 +94,18 @@
         <button class="toolbar-btn" id="projectLoad" title="Load project (.bma.json)">Load</button>
         <button class="toolbar-btn" id="projectClear" title="Clear saved config, revert to defaults">Clear</button>
         <input type="file" id="projectFileInput" accept=".bma.json,.json" style="display:none">
+        <button class="toolbar-icon-btn" id="settingsBtn" title="Settings">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="8" cy="8" r="2.5"/>
+            <path d="M8 1.5v1.2M8 13.3v1.2M1.5 8h1.2M13.3 8h1.2M3.4 3.4l.85.85M11.75 11.75l.85.85M3.4 12.6l.85-.85M11.75 4.25l.85-.85"/>
+          </svg>
+        </button>
         <button class="toolbar-overflow" id="toolbarOverflow" title="More">⋮</button>
         <div class="toolbar-menu" id="toolbarMenu">
           <button class="toolbar-menu-item" data-action="save">Save project</button>
           <button class="toolbar-menu-item" data-action="load">Load project</button>
           <button class="toolbar-menu-item" data-action="clear">Clear project</button>
+          <button class="toolbar-menu-item" data-action="settings">Settings</button>
         </div>
       </div>
     </div>
@@ -207,7 +215,7 @@
                 <p>Row object: <code>r</code> — mutate it to create columns: <code>r.name = expr;</code></p>
                 <p>Access columns: <code>r.col</code> or <code>r["col name"]</code></p>
                 <p><b>Math:</b> <code>abs</code> <code>sqrt</code> <code>pow</code> <code>log</code> <code>log10</code> <code>exp</code> <code>min</code> <code>max</code> <code>round</code> <code>floor</code> <code>ceil</code> <code>PI</code></p>
-                <p><b>Helpers:</b> <code>cap(v, hi)</code> · <code>clamp(v, lo, hi)</code> · <code>ifnull(v, d)</code> · <code>between(v, lo, hi)</code> · <code>remap(v, map)</code> · <code>fn.round(v, n)</code></p>
+                <p><b>Helpers:</b> <code>cap(v, hi)</code> · <code>clamp(v, lo, hi)</code> · <code>ifnull(v, d)</code> · <code>ifnum(v, d)</code> · <code>isnum(v)</code> · <code>between(v, lo, hi)</code> · <code>remap(v, map)</code> · <code>fn.round(v, n)</code></p>
                 <p><b>Loops &amp; conditionals:</b> <code>for</code>, <code>if/else</code>, ternary — full JS</p>
                 <p><b>String:</b> <code>r.LITO.startsWith("BIF")</code> · <code>r.LITO.includes("x")</code></p>
                 <p><b>Type forcing:</b> <code>r.META.cat.push('name')</code> force categorical · <code>r.META.num.push('name')</code> force numeric</p>
@@ -399,6 +407,15 @@
   </div>
 </div>
 
+<div class="settings-modal" id="settingsModal">
+  <div class="settings-modal-inner">
+    <div class="settings-modal-head">
+      <span>Settings</span>
+      <button class="preflight-back-btn" id="settingsClose" title="Close">✕</button>
+    </div>
+    <div class="settings-modal-body" id="settingsBody"></div>
+  </div>
+</div>
 
 <script>
 // __INJECT_WORKER__
