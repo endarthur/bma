@@ -1,5 +1,67 @@
 // ─── Project Save/Load ─────────────────────────────────────────────────
 
+function estimateResultBytes(data) {
+  var bytes = 0;
+  // Stats: per-column fixed fields + centroids
+  if (data.stats) {
+    var keys = Object.keys(data.stats);
+    for (var i = 0; i < keys.length; i++) {
+      var s = data.stats[keys[i]];
+      bytes += 10 * 8; // ~10 numeric fields (count, min, max, mean, std, skew, kurt, nulls, zeros + quantiles obj)
+      if (s.centroids) bytes += s.centroids.length * 16; // 2 floats × 8 bytes
+    }
+  }
+  // Categories: string keys + counts
+  if (data.categories) {
+    var catKeys = Object.keys(data.categories);
+    for (var i = 0; i < catKeys.length; i++) {
+      var cc = data.categories[catKeys[i]].counts;
+      if (cc) {
+        var valKeys = Object.keys(cc);
+        for (var j = 0; j < valKeys.length; j++) {
+          bytes += valKeys[j].length * 2 + 8; // string (UTF-16) + count number
+        }
+      }
+    }
+  }
+  // Geometry
+  if (data.geometry) {
+    var g = data.geometry;
+    if (g.bounds) bytes += 6 * 8;
+    if (g.spacing) bytes += 3 * 8;
+    if (g.transitions) {
+      if (g.transitions.x) bytes += g.transitions.x.length * 8;
+      if (g.transitions.y) bytes += g.transitions.y.length * 8;
+      if (g.transitions.z) bytes += g.transitions.z.length * 8;
+    }
+    if (g.subBlockSizes) bytes += g.subBlockSizes.length * 24;
+  }
+  // Header + colTypes strings
+  if (data.header) {
+    for (var i = 0; i < data.header.length; i++) bytes += data.header[i].length * 2;
+  }
+  // Group stats (same structure as stats, per group)
+  if (data.groupStats) {
+    var gKeys = Object.keys(data.groupStats);
+    for (var i = 0; i < gKeys.length; i++) {
+      var gs = data.groupStats[gKeys[i]];
+      var gsKeys = Object.keys(gs);
+      for (var j = 0; j < gsKeys.length; j++) {
+        var s = gs[gsKeys[j]];
+        bytes += 10 * 8;
+        if (s.centroids) bytes += s.centroids.length * 16;
+      }
+    }
+  }
+  return bytes;
+}
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+  return (b / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 function projectKey(f) { return 'bma:' + f.name + ':' + f.size; }
 
 function serializeProject() {
@@ -277,6 +339,7 @@ function handleFile(file) {
   $resultsFilename.textContent = file.name;
   $resultsRowInfo.textContent = '';
   $resultsTimeInfo.textContent = '';
+  $resultsMemInfo.textContent = '';
   switchTab('preflight');
 
   // Show action bar with execute button and filter
@@ -526,6 +589,7 @@ function displayResults(data) {
     : totalRowCount.toLocaleString();
   $resultsRowInfo.textContent = rowsDisplay + ' rows · ' + header.length + ' cols';
   $resultsTimeInfo.textContent = (elapsed / 1000).toFixed(1) + 's';
+  $resultsMemInfo.textContent = '~' + formatBytes(estimateResultBytes(data));
 
   // Default to summary tab only on first analysis
   if (isFirstAnalysis) switchTab('summary');

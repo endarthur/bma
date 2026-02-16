@@ -44,6 +44,7 @@ const $resultsToolbar = document.getElementById('resultsToolbar');
 const $resultsFilename = document.getElementById('resultsFilename');
 const $resultsRowInfo = document.getElementById('resultsRowInfo');
 const $resultsTimeInfo = document.getElementById('resultsTimeInfo');
+const $resultsMemInfo = document.getElementById('resultsMemInfo');
 const $backToPreflight = document.getElementById('backToPreflight');
 const $projectSave = document.getElementById('projectSave');
 const $projectLoad = document.getElementById('projectLoad');
