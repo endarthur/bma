@@ -2,7 +2,7 @@
 function rebuildFilterExpression() {
   // Gather checked values grouped by column
   const groups = {};
-  $catContent.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
+  $catValueTable.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
     const col = cb.dataset.col;
     if (!groups[col]) groups[col] = [];
     groups[col].push(cb.dataset.val);
@@ -77,7 +77,7 @@ $filterClear.addEventListener('click', () => {
   currentFilter = null;
   $filterError.classList.remove('active');
   // Uncheck all checkboxes
-  $catContent.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
+  $catValueTable.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
     cb.checked = false;
     cb.closest('tr').classList.remove('active');
   });

@@ -13,3 +13,6 @@ function showCDF(colIdx) {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js');
 }
+
+// Load recent files on page load
+renderRecentFiles();

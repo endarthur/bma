@@ -105,6 +105,7 @@
 }
 [data-theme="bm77"] .stats-sidebar-title,
 [data-theme="bm77"] .statscat-sidebar-title,
+[data-theme="bm77"] .cat-sidebar-title,
 [data-theme="bm77"] .calcol-editor-head span,
 [data-theme="bm77"] .calcol-sb-title,
 [data-theme="bm77"] .settings-section-title,
@@ -170,6 +171,7 @@ body {
 .app.has-results > header,
 .app.has-results > .dropzone,
 .app.has-results > .about-section,
+.app.has-results > .recent-files,
 .app.has-results > .landing-footer { display: none; }
 .app.has-results > .error-msg { display: none; }
 .app.has-results > .error-msg.active { display: block; }
@@ -253,6 +255,78 @@ header .logo-mark {
   text-decoration: none;
 }
 .landing-footer a:hover { color: var(--fg-bright); }
+
+/* Recent Files */
+.recent-files {
+  margin-top: 1.5rem;
+}
+.recent-files:empty { display: none; }
+.recent-files-title {
+  font-size: 0.68rem;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.recent-item {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--fg);
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+.recent-item:hover {
+  background: var(--bg2);
+  border-color: var(--border);
+}
+.recent-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--fg-bright);
+}
+.recent-item-size {
+  color: var(--fg-dim);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+.recent-item-time {
+  color: var(--fg-dim);
+  font-size: 0.68rem;
+  white-space: nowrap;
+  min-width: 5.5em;
+  text-align: right;
+}
+.recent-item-project {
+  font-size: 0.58rem;
+  color: var(--amber-dim);
+  background: var(--amber-glow);
+  padding: 0.1rem 0.35rem;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.recent-item-remove {
+  background: none;
+  border: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0 0.25rem;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.recent-item:hover .recent-item-remove { opacity: 1; }
+.recent-item-remove:hover { color: var(--red); }
 
 /* Drop Zone */
 .dropzone {
@@ -1956,63 +2030,259 @@ table.stats tr:hover td:first-child { background: var(--bg2); }
 }
 .cdf-stats span { white-space: nowrap; }
 .cdf-stats strong { color: var(--fg-bright); }
-.cat-list { display: flex; flex-direction: column; gap: 1rem; }
-.cat-item {
-  font-size: 0.78rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--bg);
-}
-.cat-name {
-  color: var(--fg-bright);
-  font-weight: 500;
-  padding: 0.5rem 0.8rem;
+/* Categories tab — sidebar + main layout */
+#panelCategories.active { display: flex; flex-direction: column; }
+.cat-body {
   display: flex;
-  justify-content: space-between;
-  background: var(--bg2);
-  border-bottom: 1px solid var(--border);
+  flex: 1;
+  min-height: 0;
 }
-.cat-name .unique-count { color: var(--fg-dim); font-weight: 400; }
-.cat-table-wrap {
+.cat-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg1);
+}
+.cat-sidebar-section {
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.cat-sidebar-section--grow {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
-table.cat-table {
+.cat-sidebar-title {
+  font-size: 0.62rem;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.3rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.cat-col-search {
+  width: 100%;
+  background: var(--bg);
+  color: var(--fg-bright);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.3rem 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+}
+.cat-col-search::placeholder { color: var(--fg-dim); opacity: 0.5; }
+.cat-col-search:focus { outline: none; border-color: var(--amber); }
+.cat-col-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  border-bottom: 1px solid var(--bg2);
+  font-size: 0.7rem;
+  cursor: pointer;
+  color: var(--fg);
+  transition: background 0.1s;
+}
+.cat-col-item:hover { background: var(--bg2); }
+.cat-col-item.active {
+  background: var(--amber-glow);
+  border-left: 2px solid var(--amber);
+  color: var(--fg-bright);
+}
+.cat-col-item .col-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cat-col-item .col-count {
+  color: var(--fg-dim);
+  font-size: 0.6rem;
+  flex-shrink: 0;
+}
+.cat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+.cat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg1);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.cat-toolbar-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--fg-bright);
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.cat-sort-group {
+  display: flex;
+  gap: 0;
+}
+.cat-sort-btn {
+  font-size: 0.6rem;
+  font-family: var(--mono);
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+.cat-sort-btn:first-child { border-radius: 3px 0 0 3px; }
+.cat-sort-btn:last-child { border-radius: 0 3px 3px 0; }
+.cat-sort-btn + .cat-sort-btn { border-left: 0; }
+.cat-sort-btn.active {
+  background: var(--amber);
+  color: var(--bg);
+  border-color: var(--amber);
+}
+.cat-sort-btn:hover:not(.active) { color: var(--fg-bright); border-color: var(--fg-dim); }
+.cat-copy-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-size: 0.6rem;
+  font-family: var(--mono);
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.cat-copy-btn:hover { color: var(--amber); border-color: var(--amber); }
+.cat-main-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.8rem;
+}
+.cat-empty {
+  color: var(--fg-dim);
+  font-size: 0.78rem;
+  padding: 2rem;
+  text-align: center;
+  opacity: 0.6;
+}
+/* Bar chart */
+.cat-chart {
+  margin-bottom: 0.8rem;
+}
+.cat-chart svg { width: 100%; display: block; }
+.cat-chart-toggle {
+  text-align: center;
+  font-size: 0.65rem;
+  color: var(--amber);
+  cursor: pointer;
+  padding: 0.2rem;
+  user-select: none;
+}
+.cat-chart-toggle:hover { text-decoration: underline; }
+/* Value table */
+.cat-value-search {
+  width: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.3rem 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  margin-bottom: 0.4rem;
+}
+.cat-value-search::placeholder { color: var(--fg-dim); opacity: 0.5; }
+.cat-value-search:focus { outline: none; border-color: var(--amber); }
+table.cat-values {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
 }
-table.cat-table td {
-  padding: 0.25rem 0.6rem;
+table.cat-values thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg1);
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+  z-index: 2;
+}
+table.cat-values td {
+  padding: 0.22rem 0.5rem;
   border-bottom: 1px solid var(--bg2);
   position: relative;
   z-index: 1;
 }
-table.cat-table tr:hover td { background: var(--bg2); }
-table.cat-table tr.active td { background: var(--amber-glow); }
-table.cat-table td:first-child {
+table.cat-values tr:hover td { background: var(--bg2); }
+table.cat-values tr.active td { background: var(--amber-glow); }
+table.cat-values tr {
+  position: relative;
+}
+table.cat-values tr::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: var(--bar, 0%);
+  background: rgba(255, 255, 255, 0.05);
+  pointer-events: none;
+  z-index: 0;
+}
+table.cat-values td.cat-drag-cell {
+  width: 20px;
+  text-align: center;
+  padding: 0.22rem 0.2rem;
+  cursor: grab;
+  color: var(--fg-dim);
+  font-size: 0.6rem;
+  user-select: none;
+}
+table.cat-values td.cat-drag-cell:active { cursor: grabbing; }
+.cat-drag-hidden { display: none; }
+table.cat-values tr.dragging { opacity: 0.4; }
+table.cat-values tr.drag-over td { border-top: 2px solid var(--amber); }
+/* Swatch */
+.cat-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  cursor: pointer;
+  vertical-align: middle;
+  border: 1px solid rgba(255,255,255,0.15);
+  flex-shrink: 0;
+}
+.cat-swatch:hover { border-color: var(--amber); }
+table.cat-values td.cat-swatch-cell {
+  width: 24px;
+  text-align: center;
+  padding: 0.22rem 0.3rem;
+}
+/* Checkbox */
+table.cat-values td.cat-cb-cell {
   width: 28px;
   text-align: center;
   padding-right: 0;
 }
-table.cat-table td:nth-child(2) {
-  color: var(--fg);
-  word-break: break-all;
-}
-table.cat-table td:nth-child(3) {
-  text-align: right;
-  color: var(--fg-dim);
-  white-space: nowrap;
-}
-table.cat-table td:nth-child(4) {
-  text-align: right;
-  color: var(--fg-dim);
-  white-space: nowrap;
-  width: 55px;
-}
-table.cat-table input[type="checkbox"] {
+table.cat-values input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
   width: 14px;
@@ -2024,15 +2294,13 @@ table.cat-table input[type="checkbox"] {
   vertical-align: middle;
   position: relative;
 }
-table.cat-table input[type="checkbox"]:hover {
-  border-color: var(--amber);
-}
-table.cat-table input[type="checkbox"]:checked {
+table.cat-values input[type="checkbox"]:hover { border-color: var(--amber); }
+table.cat-values input[type="checkbox"]:checked {
   background: var(--amber);
   border-color: var(--amber);
 }
-table.cat-table input[type="checkbox"]:checked::after {
-  content: '✓';
+table.cat-values input[type="checkbox"]:checked::after {
+  content: '\2713';
   position: absolute;
   top: -1px;
   left: 1.5px;
@@ -2040,58 +2308,72 @@ table.cat-table input[type="checkbox"]:checked::after {
   color: var(--bg);
   font-weight: 700;
 }
-table.cat-table tr {
-  position: relative;
-}
-table.cat-table tr::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: var(--bar, 0%);
-  background: rgba(255, 255, 255, 0.07);
-  pointer-events: none;
-  z-index: 0;
-}
-.cat-hidden { display: none; }
-.cat-search {
-  width: 100%;
-  box-sizing: border-box;
-  background: var(--bg);
+table.cat-values td.cat-val-cell {
   color: var(--fg);
-  border: none;
-  border-bottom: 1px solid var(--border);
-  padding: 0.3rem 0.6rem;
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  outline: none;
+  word-break: break-all;
 }
-.cat-search::placeholder { color: var(--fg-dim); }
-.cat-toggle {
-  display: block;
-  text-align: center;
-  padding: 0.25rem;
-  font-size: 0.7rem;
-  color: var(--amber);
-  cursor: pointer;
-  border-top: 1px solid var(--border);
-  user-select: none;
-}
-.cat-toggle:hover { background: var(--bg2); }
-.cat-name .cat-meta { color: var(--fg-dim); font-weight: 400; font-size: 0.75rem; display: flex; gap: 0.5rem; align-items: center; }
-.cat-name .cat-nulls { color: var(--fg-dim); }
-.cat-name .cat-entropy { color: var(--fg-dim); }
-.cat-copy-btn {
-  background: none;
-  border: 1px solid var(--border);
+table.cat-values td.cat-count-cell {
+  text-align: right;
   color: var(--fg-dim);
-  font-size: 0.65rem;
-  font-family: var(--mono);
-  padding: 0.1rem 0.4rem;
+  white-space: nowrap;
+}
+table.cat-values td.cat-pct-cell {
+  text-align: right;
+  color: var(--fg-dim);
+  white-space: nowrap;
+  width: 55px;
+}
+/* Color picker popover */
+.cat-color-picker {
+  display: none;
+  position: absolute;
+  z-index: 100;
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  width: 175px;
+}
+.cat-color-picker.open { display: block; }
+.cat-color-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-bottom: 0.4rem;
+}
+.cat-color-swatch {
+  width: 24px;
+  height: 24px;
   border-radius: 3px;
   cursor: pointer;
-  margin-left: 0.3rem;
+  border: 2px solid transparent;
+  transition: border-color 0.1s;
 }
-.cat-copy-btn:hover { color: var(--amber); border-color: var(--amber); }
+.cat-color-swatch:hover { border-color: var(--fg-bright); }
+.cat-color-swatch.selected { border-color: var(--amber); }
+.cat-hex-input {
+  width: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.2rem 0.4rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+}
+.cat-hex-input:focus { outline: none; border-color: var(--amber); }
+/* Responsive */
+@media (max-width: 700px) {
+  .cat-body { flex-direction: column; }
+  .cat-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: 180px;
+  }
+  .cat-sidebar-section--grow { max-height: 120px; }
+}
 
 /* StatsCat */
 #panelStatsCat.active { display: flex; flex-direction: column; }
@@ -2891,6 +3173,8 @@ table.cat-table tr::before {
     <input type="file" id="fileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP">
   </div>
 
+  <div class="recent-files" id="recentFiles"></div>
+
   <div class="about-section">
     <h2>What is this?</h2>
     <p>BMA is a client-side block model inspector. Drop a CSV (or zipped CSV) exported from Isatis, Vulcan, Surpac, Leapfrog, Datamine, or any other mining package and get instant summary statistics, geometry detection, and categorical breakdowns — all without uploading anything to a server.</p>
@@ -3144,15 +3428,26 @@ table.cat-table tr::before {
       </div>
 
       <div class="results-panel" id="panelCategories" data-tab="categories">
-        <div class="panel-inner">
-          <div class="section section--cat" id="catSection">
-            <div class="section-head">
-              Categorical Columns
-              <span class="badge" id="catBadge"></span>
+        <div class="cat-body" id="catBody">
+          <div class="cat-sidebar" id="catSidebar">
+            <div class="cat-sidebar-section">
+              <div class="cat-sidebar-title">Columns <span class="badge" id="catBadge"></span></div>
+              <input type="text" class="cat-col-search" id="catColSearch" placeholder="Search columns..." autocomplete="off" spellcheck="false">
             </div>
-            <div class="section-body">
-              <div class="cat-list" id="catContent"></div>
+            <div class="cat-sidebar-section--grow">
+              <div class="cat-col-list" id="catColList"></div>
             </div>
+          </div>
+          <div class="cat-main" id="catMain">
+            <div class="cat-toolbar" id="catToolbar"></div>
+            <div class="cat-main-content" id="catMainContent">
+              <div class="cat-chart" id="catChart"></div>
+              <div class="cat-value-table-wrap" id="catValueTableWrap">
+                <input type="text" class="cat-value-search" id="catValueSearch" placeholder="Search values..." autocomplete="off" spellcheck="false">
+                <table class="cat-values" id="catValueTable"><tbody></tbody></table>
+              </div>
+            </div>
+            <div class="cat-color-picker" id="catColorPicker"></div>
           </div>
         </div>
       </div>
@@ -4732,8 +5027,11 @@ let currentRowVar = 'r';
 let worker = null;
 let preflightData = null; // { header, sampleRows, autoTypes, delimiter, zipEntries, selectedZipEntry }
 
+var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
+
 const $dropzone = document.getElementById('dropzone');
 const $fileInput = document.getElementById('fileInput');
+const $recentFiles = document.getElementById('recentFiles');
 const $panelPreflight = document.getElementById('panelPreflight');
 const $preflightZip = document.getElementById('preflightZip');
 const $preflightHead = document.getElementById('preflightHead');
@@ -4750,9 +5048,19 @@ const $statsBody = document.getElementById('statsBody');
 const $statsSidebar = document.getElementById('statsSidebar');
 const $statsMain = document.getElementById('statsMain');
 const $statsCdfPanel = document.getElementById('statsCdfPanel');
-const $catContent = document.getElementById('catContent');
 const $catBadge = document.getElementById('catBadge');
-const $catSection = document.getElementById('catSection');
+const $catBody = document.getElementById('catBody');
+const $catSidebar = document.getElementById('catSidebar');
+const $catColList = document.getElementById('catColList');
+const $catColSearch = document.getElementById('catColSearch');
+const $catMain = document.getElementById('catMain');
+const $catToolbar = document.getElementById('catToolbar');
+const $catMainContent = document.getElementById('catMainContent');
+const $catChart = document.getElementById('catChart');
+const $catValueTableWrap = document.getElementById('catValueTableWrap');
+const $catValueSearch = document.getElementById('catValueSearch');
+const $catValueTable = document.getElementById('catValueTable');
+const $catColorPicker = document.getElementById('catColorPicker');
 const $appFooter = document.getElementById('appFooter');
 const $filterSection = document.getElementById('filterSection');
 const $filterExpr = document.getElementById('filterExpr');
@@ -4811,6 +5119,20 @@ let statsCatCdfMin = null;
 let statsCatCdfMax = null;
 let statsCatCrossMode = 'count'; // 'count', 'row', 'col'
 let statsCatShowSelectedOnly = false;
+
+// Categories tab state
+let catFocusedCol = null;           // column index focused in main area
+let catSortModes = {};              // { colName: 'count-desc'|'count-asc'|'alpha'|'custom' }
+let catCustomOrders = {};           // { colName: [val1, val2, ...] }
+let catColorOverrides = {};         // { colName: { value: '#hex' } }
+let catChartShowAll = false;        // show all bars vs top 20
+let _catEventsWired = false;
+
+function getCategoryColor(colName, value, fallbackIdx) {
+  if (catColorOverrides[colName] && catColorOverrides[colName][value])
+    return catColorOverrides[colName][value];
+  return STATSCAT_PALETTE[(fallbackIdx || 0) % STATSCAT_PALETTE.length];
+}
 
 // Statistics tab state
 let statsSelectedVars = null;     // Set<colIdx> or null (= all)
@@ -5561,13 +5883,204 @@ function delimName(d) {
 
 function openCacheDB() {
   return new Promise(function(resolve, reject) {
-    var req = indexedDB.open('bma-cache', 1);
-    req.onupgradeneeded = function() {
-      req.result.createObjectStore('results');
+    var req = indexedDB.open('bma-cache', 2);
+    req.onupgradeneeded = function(e) {
+      var db = req.result;
+      if (!db.objectStoreNames.contains('results'))
+        db.createObjectStore('results');
+      if (!db.objectStoreNames.contains('recents'))
+        db.createObjectStore('recents');
     };
     req.onsuccess = function() { resolve(req.result); };
     req.onerror = function() { reject(req.error); };
   });
+}
+
+// ─── Recent Files (IndexedDB) ───────────────────────────────────────────
+
+var RECENTS_MAX = 20;
+
+function recentKey(f) { return 'bma:' + f.name + ':' + f.size; }
+
+function recentList() {
+  return openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('recents', 'readonly');
+      var store = tx.objectStore('recents');
+      var req = store.getAll();
+      var keyReq = store.getAllKeys();
+      tx.oncomplete = function() {
+        var items = req.result || [];
+        var keys = keyReq.result || [];
+        var result = items.map(function(item, i) { item._key = keys[i]; return item; });
+        result.sort(function(a, b) { return (b.lastOpened || 0) - (a.lastOpened || 0); });
+        resolve(result);
+      };
+      tx.onerror = function() { reject(tx.error); };
+    });
+  });
+}
+
+function recentPut(key, entry) {
+  return openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('recents', 'readwrite');
+      var store = tx.objectStore('recents');
+      store.put(entry, key);
+      tx.oncomplete = function() { resolve(); };
+      tx.onerror = function() { reject(tx.error); };
+    });
+  }).then(function() {
+    // Prune to max entries
+    return recentList().then(function(items) {
+      if (items.length <= RECENTS_MAX) return;
+      return openCacheDB().then(function(db) {
+        var tx = db.transaction('recents', 'readwrite');
+        var store = tx.objectStore('recents');
+        for (var i = RECENTS_MAX; i < items.length; i++) {
+          store.delete(items[i]._key);
+        }
+        return new Promise(function(resolve) { tx.oncomplete = resolve; });
+      });
+    });
+  });
+}
+
+function recentDelete(key) {
+  return openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('recents', 'readwrite');
+      tx.objectStore('recents').delete(key);
+      tx.oncomplete = function() { resolve(); };
+      tx.onerror = function() { reject(tx.error); };
+    });
+  });
+}
+
+function timeAgo(ts) {
+  var diff = Date.now() - ts;
+  var sec = Math.floor(diff / 1000);
+  if (sec < 60) return 'just now';
+  var min = Math.floor(sec / 60);
+  if (min < 60) return min + (min === 1 ? ' min ago' : ' mins ago');
+  var hrs = Math.floor(min / 60);
+  if (hrs < 24) return hrs + (hrs === 1 ? ' hour ago' : ' hours ago');
+  var days = Math.floor(hrs / 24);
+  if (days < 14) return days + (days === 1 ? ' day ago' : ' days ago');
+  var weeks = Math.floor(days / 7);
+  if (weeks < 8) return weeks + (weeks === 1 ? ' week ago' : ' weeks ago');
+  var months = Math.floor(days / 30);
+  return months + (months === 1 ? ' month ago' : ' months ago');
+}
+
+function renderRecentFiles() {
+  recentList().then(function(items) {
+    if (items.length === 0) {
+      $recentFiles.innerHTML = '';
+      return;
+    }
+    var html = '<div class="recent-files-title">Recent Files</div>';
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var hasProj = false;
+      try { hasProj = localStorage.getItem(it._key) !== null; } catch(e) {}
+      html += '<div class="recent-item" data-key="' + esc(it._key) + '">';
+      html += '<span class="recent-item-name">' + esc(it.name) + '</span>';
+      html += '<span class="recent-item-size">' + formatBytes(it.size) + '</span>';
+      if (hasProj) html += '<span class="recent-item-project">project</span>';
+      html += '<span class="recent-item-time">' + timeAgo(it.lastOpened) + '</span>';
+      html += '<button class="recent-item-remove" data-key="' + esc(it._key) + '" title="Remove">\u2715</button>';
+      html += '</div>';
+    }
+    $recentFiles.innerHTML = html;
+
+    // Wire click handlers
+    $recentFiles.querySelectorAll('.recent-item').forEach(function(el) {
+      el.addEventListener('click', function(e) {
+        if (e.target.closest('.recent-item-remove')) return;
+        var key = el.dataset.key;
+        reopenRecent(key);
+      });
+    });
+    $recentFiles.querySelectorAll('.recent-item-remove').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var key = btn.dataset.key;
+        recentDelete(key).then(renderRecentFiles);
+      });
+    });
+  }).catch(function() {
+    $recentFiles.innerHTML = '';
+  });
+}
+
+function reopenRecent(key) {
+  openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('recents', 'readonly');
+      var req = tx.objectStore('recents').get(key);
+      req.onsuccess = function() { resolve(req.result || null); };
+      req.onerror = function() { reject(req.error); };
+    });
+  }).then(function(entry) {
+    if (!entry) return;
+    if (entry.handle && typeof entry.handle.queryPermission === 'function') {
+      // FSAA path — check permission first, only prompt if needed
+      entry.handle.queryPermission({ mode: 'read' }).then(function(perm) {
+        if (perm === 'granted') {
+          return entry.handle.getFile().then(function(file) {
+            handleFile(file, entry.handle);
+          });
+        }
+        // Permission not yet granted — request it for just this handle
+        return entry.handle.requestPermission({ mode: 'read' }).then(function(perm2) {
+          if (perm2 === 'granted') {
+            return entry.handle.getFile().then(function(file) {
+              handleFile(file, entry.handle);
+            });
+          }
+          promptReselect(entry.name);
+        });
+      }).catch(function() {
+        promptReselect(entry.name);
+      });
+    } else {
+      // No handle — prompt user to re-select
+      promptReselect(entry.name);
+    }
+  });
+}
+
+function promptReselect(name) {
+  if (HAS_FSAA) {
+    // Use file picker
+    window.showOpenFilePicker({
+      types: [
+        { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
+        { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } }
+      ],
+      multiple: false
+    }).then(function(handles) {
+      var handle = handles[0];
+      return handle.getFile().then(function(file) {
+        handleFile(file, handle);
+      });
+    }).catch(function() { /* user cancelled */ });
+  } else {
+    // Trigger classic file input
+    $fileInput.click();
+  }
+}
+
+function saveToRecents(file, handle) {
+  var key = recentKey(file);
+  var entry = {
+    name: file.name,
+    size: file.size,
+    handle: handle || null,
+    lastOpened: Date.now()
+  };
+  recentPut(key, entry).catch(function() { /* silent */ });
 }
 
 function cacheGet(key) {
@@ -5714,6 +6227,12 @@ function serializeProject() {
       cdfSelected: Array.from(statsCdfSelected),
       cdfScale: statsCdfScale
     },
+    categories: {
+      focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null,
+      sortModes: catSortModes,
+      customOrders: catCustomOrders,
+      colorOverrides: catColorOverrides
+    },
     exportCols: exportColumns.map(c => ({
       name: c.name, outputName: c.outputName, selected: c.selected
     }))
@@ -5783,6 +6302,11 @@ async function applyProject(project) {
   setCalcolCode(currentCalcolCode);
   simulateCalcol();
 
+  // Restore categories tab state
+  catSortModes = project.categories?.sortModes || {};
+  catCustomOrders = project.categories?.customOrders || {};
+  catColorOverrides = project.categories?.colorOverrides || {};
+
   // Restore filter
   currentFilter = project.filter || null;
   $filterExpr.value = project.filterText || '';
@@ -5841,6 +6365,11 @@ function clearProject() {
   statsCatCdfMax = null;
   statsCatCrossMode = 'count';
   statsCatShowSelectedOnly = false;
+  catFocusedCol = null;
+  catSortModes = {};
+  catCustomOrders = {};
+  catColorOverrides = {};
+  catChartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
@@ -5900,9 +6429,10 @@ $projectFileInput.addEventListener('change', (e) => {
   e.target.value = '';
 });
 
-function handleFile(file) {
+function handleFile(file, handle) {
   if (!file) return;
   currentFile = file;
+  saveToRecents(file, handle);
   currentFilter = null;
   currentGroupBy = null;
   currentStatsCatVar = null;
@@ -5916,6 +6446,11 @@ function handleFile(file) {
   statsCatCdfMin = null;
   statsCatCdfMax = null;
   statsCatCrossMode = 'count';
+  catFocusedCol = null;
+  catSortModes = {};
+  catCustomOrders = {};
+  catColorOverrides = {};
+  catChartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
@@ -5985,7 +6520,10 @@ function handleFile(file) {
   $statsCatGroupList.innerHTML = '';
   $statsCatVarSearch.value = '';
   $statsCatGroupSearch.value = '';
-  $catContent.innerHTML = placeholder;
+  $catColList.innerHTML = '';
+  $catToolbar.innerHTML = '';
+  $catChart.innerHTML = '';
+  $catValueTable.innerHTML = '';
   $catBadge.textContent = '';
   $exportColList.innerHTML = '';
   $exportBadge.textContent = '0';
@@ -5995,14 +6533,15 @@ function handleFile(file) {
   simulateCalcol();
 
   // Run preflight
-  runPreflight(file).then(data => {
+  runPreflight(file).then(async data => {
     renderPreflight(data);
     // Auto-restore saved project config
     const saved = localStorage.getItem(projectKey(file));
     if (saved) {
       try {
         const project = JSON.parse(saved);
-        applyProject(project);
+        await applyProject(project);
+        executeAnalysis();
       } catch (e) { /* corrupt — ignore */ }
     }
   }).catch(err => {
@@ -6045,6 +6584,7 @@ $backToPreflight.addEventListener('click', () => {
   const loadedSpan = $dropzone.querySelector('.loaded-name');
   if (loadedSpan) loadedSpan.remove();
   $dropzone.querySelector('.label').innerHTML = 'Drop a CSV file here, or <strong>click to browse</strong>';
+  renderRecentFiles();
   currentFile = null;
   preflightData = null;
   hasResults = false;
@@ -6057,6 +6597,11 @@ $backToPreflight.addEventListener('click', () => {
   statsCatGroupSortMode = 'count';
   statsCatSelectedVars = new Set();
   statsCatShowSelectedOnly = false;
+  catFocusedCol = null;
+  catSortModes = {};
+  catCustomOrders = {};
+  catColorOverrides = {};
+  catChartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
@@ -6076,10 +6621,14 @@ $backToPreflight.addEventListener('click', () => {
 
 // Allow dropping new files onto results area
 $results.addEventListener('dragover', (e) => { e.preventDefault(); });
-$results.addEventListener('drop', (e) => {
+$results.addEventListener('drop', async (e) => {
   e.preventDefault();
-  const file = e.dataTransfer.files[0];
-  if (file) handleFile(file);
+  var handle = null;
+  if (HAS_FSAA && e.dataTransfer.items && e.dataTransfer.items[0] && e.dataTransfer.items[0].getAsFileSystemHandle) {
+    try { handle = await e.dataTransfer.items[0].getAsFileSystemHandle(); } catch (ex) {}
+  }
+  var file = handle ? await handle.getFile() : (e.dataTransfer.files[0] || null);
+  if (file) handleFile(file, handle);
 });
 
 // Keyboard shortcuts
@@ -6259,8 +6808,9 @@ function displayResults(data) {
     }
   }
 
-  // Default to summary tab only on first analysis
-  if (isFirstAnalysis) switchTab('summary');
+  // Jump to summary only if still on preflight tab
+  var activeTab = $resultsTabs.querySelector('.results-tab.active');
+  if (isFirstAnalysis || (activeTab && activeTab.dataset.tab === 'preflight')) switchTab('summary');
 
   // Mark analysis as clean
   analysisStale = false;
@@ -6414,152 +6964,7 @@ function displayResults(data) {
 
   // Categories
   const catCols = Object.keys(categories).map(Number).sort((a, b) => a - b);
-  $catBadge.textContent = catCols.length + ' columns';
-  if (catCols.length > 0) {
-    $catSection.style.display = '';
-    let html = '';
-    for (const i of catCols) {
-      const cat = categories[i];
-      const entries = Object.entries(cat.counts).sort((a, b) => b[1] - a[1]);
-      const uniqueCount = entries.length + (cat.overflow ? '+' : '');
-      const total = entries.reduce((s, [, c]) => s + c, 0);
-      const nullCount = rowCount - total;
-      const maxCount = entries.length > 0 ? entries[0][1] : 1;
-      const isCalcolCat = i >= origColCount;
-
-      // Shannon entropy
-      let entropy = 0;
-      if (total > 0) {
-        for (const [, count] of entries) {
-          if (count <= 0) continue;
-          const p = count / total;
-          entropy -= p * Math.log2(p);
-        }
-      }
-      const maxEntropy = entries.length > 1 ? Math.log2(entries.length) : 0;
-      const normPct = maxEntropy > 0 ? Math.round((entropy / maxEntropy) * 100) : 0;
-
-      // Header
-      const nullSpan = nullCount > 0 ? `<span class="cat-nulls">\u00B7 ${nullCount.toLocaleString()} null</span>` : '';
-      const entropySpan = maxEntropy > 0 ? `<span class="cat-entropy">\u00B7 H=${entropy.toFixed(2)} (${normPct}%)</span>` : '';
-      html += `<div class="cat-item" data-col="${i}">
-        <div class="cat-name">${esc(header[i])}${isCalcolCat ? '<span class="calcol-tag">CALC</span>' : ''}` +
-        `<span class="cat-meta"><span class="unique-count">${uniqueCount} unique</span>${nullSpan}${entropySpan}` +
-        `<button class="cat-copy-btn" data-cat-col="${i}">Copy</button></span></div>`;
-
-      // Search input (only if >10 values)
-      const show = entries.slice(0, 100);
-      if (entries.length > 10) {
-        html += `<input type="text" class="cat-search" data-cat-col="${i}" placeholder="Search ${entries.length} values\u2026">`;
-      }
-
-      // Table rows
-      html += `<div class="cat-table-wrap"><table class="cat-table"><tbody>`;
-      for (let ri = 0; ri < show.length; ri++) {
-        const [val, count] = show[ri];
-        const pct = total > 0 ? (count / total * 100).toFixed(1) : '0';
-        const barPct = (count / maxCount * 100).toFixed(1);
-        const hiddenCls = (entries.length > 10 && ri >= 10) ? ' cat-hidden' : '';
-        html += `<tr style="--bar:${barPct}%" class="${hiddenCls}">
-          <td><input type="checkbox" data-col="${i}" data-val="${esc(val)}"></td>
-          <td>${esc(val)}</td>
-          <td>${count.toLocaleString()}</td>
-          <td>${pct}%</td>
-        </tr>`;
-      }
-      if (entries.length > 100) {
-        html += `<tr><td colspan="4" style="color:var(--fg-dim);text-align:center;font-size:0.7rem;">+${entries.length - 100} more values</td></tr>`;
-      }
-      html += `</tbody></table></div>`;
-
-      // Toggle link (only if >10 values)
-      if (entries.length > 10) {
-        const showCount = Math.min(entries.length, 100);
-        html += `<div class="cat-toggle" data-cat-col="${i}">Show all ${showCount} \u25BE</div>`;
-      }
-      html += `</div>`;
-    }
-    $catContent.innerHTML = html;
-
-    // Checkbox changes → rebuild expression
-    $catContent.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-      cb.addEventListener('change', () => {
-        cb.closest('tr').classList.toggle('active', cb.checked);
-        rebuildFilterExpression();
-      });
-    });
-
-    // Search inputs
-    $catContent.querySelectorAll('.cat-search').forEach(input => {
-      input.addEventListener('input', () => {
-        const colIdx = input.dataset.catCol;
-        const query = input.value.toLowerCase();
-        const wrap = input.closest('.cat-item').querySelector('.cat-table-wrap');
-        const rows = wrap.querySelectorAll('tbody tr');
-        const toggle = input.closest('.cat-item').querySelector('.cat-toggle');
-        const isExpanded = toggle && toggle.dataset.expanded === '1';
-        rows.forEach((tr, ri) => {
-          if (tr.querySelector('td[colspan]')) return; // skip "+N more" row
-          const valCell = tr.querySelectorAll('td')[1];
-          if (!valCell) return;
-          const matchesSearch = !query || valCell.textContent.toLowerCase().includes(query);
-          if (query) {
-            // While searching, show/hide based only on search match
-            tr.style.display = matchesSearch ? '' : 'none';
-            tr.classList.remove('cat-hidden');
-          } else {
-            // No query: restore collapsed/expanded state
-            tr.style.display = '';
-            if (!isExpanded && ri >= 10) tr.classList.add('cat-hidden');
-            else tr.classList.remove('cat-hidden');
-          }
-        });
-      });
-    });
-
-    // Toggle expand/collapse
-    $catContent.querySelectorAll('.cat-toggle').forEach(toggle => {
-      toggle.addEventListener('click', () => {
-        const item = toggle.closest('.cat-item');
-        const rows = item.querySelectorAll('.cat-table-wrap tbody tr');
-        const isExpanded = toggle.dataset.expanded === '1';
-        if (isExpanded) {
-          // Collapse: hide rows beyond 10
-          rows.forEach((tr, ri) => {
-            if (ri >= 10 && !tr.querySelector('td[colspan]')) tr.classList.add('cat-hidden');
-          });
-          const showCount = Math.min(rows.length, 100);
-          toggle.textContent = 'Show all ' + showCount + ' \u25BE';
-          toggle.dataset.expanded = '0';
-        } else {
-          // Expand: show all
-          rows.forEach(tr => tr.classList.remove('cat-hidden'));
-          toggle.textContent = 'Collapse \u25B4';
-          toggle.dataset.expanded = '1';
-        }
-      });
-    });
-
-    // Copy buttons
-    $catContent.querySelectorAll('.cat-copy-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const colIdx = Number(btn.dataset.catCol);
-        const cat = categories[colIdx];
-        const ent = Object.entries(cat.counts).sort((a, b) => b[1] - a[1]);
-        const tot = ent.reduce((s, [, c]) => s + c, 0);
-        const lines = ['Value\tCount\t%'];
-        ent.forEach(([val, count]) => {
-          lines.push(val + '\t' + count + '\t' + (tot > 0 ? (count / tot * 100).toFixed(1) : '0') + '%');
-        });
-        navigator.clipboard.writeText(lines.join('\n'));
-        btn.textContent = 'Copied!';
-        setTimeout(() => btn.textContent = 'Copy', 1500);
-      });
-    });
-  } else {
-    $catSection.style.display = 'none';
-  }
+  renderCategoriesTab(categories, header, origColCount, rowCount);
 
   // StatsCat
   renderStatsCat(data);
@@ -6596,6 +7001,17 @@ function displayResults(data) {
     }
 
     if (p.exportCols) applyExportRestore(p.exportCols);
+
+    // Restore categories focused column by name
+    const catP = p.categories || {};
+    if (catP.focusedCol) {
+      const idx = header.indexOf(catP.focusedCol);
+      if (idx >= 0 && categories[idx]) {
+        catFocusedCol = idx;
+        renderCatSidebar();
+        renderCatMain();
+      }
+    }
   }
 
   // Auto-save project
@@ -7157,9 +7573,10 @@ function renderOverlaidCDF(entries, varName) {
 
   let curvesSvg = '';
   let meansSvg = '';
+  const gbColName = currentGroupBy !== null ? currentHeader[currentGroupBy] : '';
   for (let gi = 0; gi < plotEntries.length; gi++) {
     const [gv, s] = plotEntries[gi];
-    const color = STATSCAT_PALETTE[gi % STATSCAT_PALETTE.length];
+    const color = getCategoryColor(gbColName, gv, gi);
     const points = [];
     let cumCount = 0;
     for (const [mean, count] of s.centroids) {
@@ -7187,7 +7604,7 @@ function renderOverlaidCDF(entries, varName) {
   let legendSvg = '';
   for (let gi = 0; gi < plotEntries.length; gi++) {
     const [gv] = plotEntries[gi];
-    const color = STATSCAT_PALETTE[gi % STATSCAT_PALETTE.length];
+    const color = getCategoryColor(gbColName, gv, gi);
     const col = gi % legCols;
     const row = Math.floor(gi / legCols);
     const lx = pad.left + col * colW;
@@ -10182,18 +10599,49 @@ initCalcolEditor();
 // ─── Event Handlers ──────────────────────────────────────────────────
 $dropzone.addEventListener('dragover', (e) => { e.preventDefault(); $dropzone.classList.add('drag-over'); });
 $dropzone.addEventListener('dragleave', () => $dropzone.classList.remove('drag-over'));
-$dropzone.addEventListener('drop', (e) => {
+$dropzone.addEventListener('drop', async (e) => {
   e.preventDefault();
   $dropzone.classList.remove('drag-over');
-  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  if (!e.dataTransfer.items || !e.dataTransfer.items.length) {
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0], null);
+    return;
+  }
+  var handle = null;
+  if (HAS_FSAA && e.dataTransfer.items[0].getAsFileSystemHandle) {
+    try { handle = await e.dataTransfer.items[0].getAsFileSystemHandle(); } catch (ex) {}
+  }
+  var file = handle ? await handle.getFile() : (e.dataTransfer.files[0] || null);
+  if (file) handleFile(file, handle);
 });
-$fileInput.addEventListener('change', (e) => { if (e.target.files.length) handleFile(e.target.files[0]); });
+
+// Click to browse — use FSAA showOpenFilePicker when available
+if (HAS_FSAA) {
+  $dropzone.addEventListener('click', async (e) => {
+    if (e.target === $fileInput) return;
+    e.preventDefault();
+    try {
+      var handles = await window.showOpenFilePicker({
+        types: [
+          { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
+          { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } }
+        ],
+        multiple: false
+      });
+      var handle = handles[0];
+      var file = await handle.getFile();
+      handleFile(file, handle);
+    } catch (ex) { /* user cancelled picker */ }
+  });
+  $fileInput.style.display = 'none';
+}
+
+$fileInput.addEventListener('change', (e) => { if (e.target.files.length) handleFile(e.target.files[0], null); });
 
 // ─── Filter Expression System ────────────────────────────────────────
 function rebuildFilterExpression() {
   // Gather checked values grouped by column
   const groups = {};
-  $catContent.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
+  $catValueTable.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
     const col = cb.dataset.col;
     if (!groups[col]) groups[col] = [];
     groups[col].push(cb.dataset.val);
@@ -10268,7 +10716,7 @@ $filterClear.addEventListener('click', () => {
   currentFilter = null;
   $filterError.classList.remove('active');
   // Uncheck all checkboxes
-  $catContent.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
+  $catValueTable.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
     cb.checked = false;
     cb.closest('tr').classList.remove('active');
   });
@@ -10385,7 +10833,8 @@ var SETTINGS_DEFAULTS = {
   customThemes: [null, null, null],
   defaultPercentilePreset: 'quartiles',
   customPercentiles: null,
-  sigFigs: null
+  sigFigs: null,
+  defaultCatSort: 'count-desc'
 };
 
 var THEME_META_COLORS = {
@@ -10599,6 +11048,11 @@ function renderSettingsBody() {
   html += '</div></details>';
   html += '</div>';
 
+  // ── Saved Projects section ──
+  html += '<div class="settings-section"><div class="settings-section-title">Saved Projects</div>';
+  html += renderSettingsProjectList();
+  html += '</div>';
+
   // ── Cache section ──
   html += '<div class="settings-section"><div class="settings-section-title">Cache</div>';
   html += '<div id="settingsCacheContent"><div class="settings-cache-loading">Loading...</div></div>';
@@ -10632,6 +11086,17 @@ function renderSettingsBody() {
   }
   html += '</select></div></div>';
 
+  // ── Default Category Sort ──
+  html += '<div class="settings-section"><div class="settings-section-title">Default Category Sort</div>';
+  html += '<div class="settings-preset-btns">';
+  var catSorts = ['count-desc', 'count-asc', 'alpha'];
+  var catSortLabels = ['Count \u2193', 'Count \u2191', 'A-Z'];
+  for (var csi = 0; csi < catSorts.length; csi++) {
+    var csa = bmaSettings.defaultCatSort === catSorts[csi] ? ' active' : '';
+    html += '<button class="settings-preset-btn settings-cat-sort-btn' + csa + '" data-catsort="' + catSorts[csi] + '">' + catSortLabels[csi] + '</button>';
+  }
+  html += '</div></div>';
+
   body.innerHTML = html;
 
   // Wire events
@@ -10639,6 +11104,60 @@ function renderSettingsBody() {
 
   // Load cache info async
   loadCacheInfo();
+}
+
+function renderSettingsProjectList() {
+  var projects = [];
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var key = localStorage.key(i);
+      if (key && key.startsWith('bma:') && key !== 'bma:settings') {
+        var parts = key.substring(4); // strip 'bma:'
+        var lastColon = parts.lastIndexOf(':');
+        var fname = lastColon > 0 ? parts.substring(0, lastColon) : parts;
+        var fsize = lastColon > 0 ? parts.substring(lastColon + 1) : '';
+        var raw = localStorage.getItem(key);
+        var bytes = raw ? raw.length * 2 : 0; // rough UTF-16 estimate
+        var ts = null;
+        try {
+          var parsed = JSON.parse(raw);
+          ts = parsed._ts || null;
+        } catch (e) {}
+        projects.push({ key: key, name: fname, size: fsize, bytes: bytes, ts: ts });
+      }
+    }
+  } catch (e) {}
+
+  if (projects.length === 0) {
+    return '<div class="settings-cache-empty">No saved projects.</div>';
+  }
+
+  // Sort by timestamp descending (most recent first)
+  projects.sort(function(a, b) { return (b.ts || 0) - (a.ts || 0); });
+
+  var totalBytes = 0;
+  for (var i = 0; i < projects.length; i++) totalBytes += projects[i].bytes;
+
+  var html = '<div class="settings-cache-summary">' + projects.length + ' project' + (projects.length !== 1 ? 's' : '') + ' (' + formatBytes(totalBytes) + ')</div>';
+  html += '<div class="settings-cache-list">';
+  for (var i = 0; i < projects.length; i++) {
+    var p = projects[i];
+    var displayName = p.name.length > 40 ? p.name.substring(0, 37) + '...' : p.name;
+    var dateStr = '';
+    if (p.ts) {
+      var d = new Date(p.ts);
+      dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    html += '<div class="settings-cache-item">';
+    html += '<span class="settings-cache-name" title="' + esc(p.name) + ' (' + (p.size ? formatBytes(Number(p.size)) : '?') + ')">' + esc(displayName) + '</span>';
+    if (dateStr) html += '<span class="settings-cache-size" style="margin-right:0.4rem">' + dateStr + '</span>';
+    html += '<span class="settings-cache-size">' + formatBytes(p.bytes) + '</span>';
+    html += '<button class="settings-cache-del settings-proj-del" data-projkey="' + esc(p.key) + '" title="Delete saved project">\u2715</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+  html += '<button class="settings-cache-clear-all" id="settingsProjClearAll">Clear all saved projects</button>';
+  return html;
 }
 
 function wireSettingsEvents() {
@@ -10713,9 +11232,46 @@ function wireSettingsEvents() {
       return;
     }
 
+    // Category sort buttons
+    var catSortBtn = e.target.closest('.settings-cat-sort-btn');
+    if (catSortBtn) {
+      bmaSettings.defaultCatSort = catSortBtn.dataset.catsort;
+      saveSettings();
+      body.querySelectorAll('.settings-cat-sort-btn').forEach(function(b) { b.classList.remove('active'); });
+      catSortBtn.classList.add('active');
+      return;
+    }
+
+    // Project delete individual
+    var projDel = e.target.closest('.settings-proj-del');
+    if (projDel) {
+      var projKey = projDel.dataset.projkey;
+      if (projKey) {
+        try { localStorage.removeItem(projKey); } catch (ex) {}
+        // Also delete matching cache entry
+        cacheDelete(projKey).catch(function() {});
+        renderSettingsBody();
+      }
+      return;
+    }
+
+    // Project clear all
+    if (e.target.closest('#settingsProjClearAll')) {
+      try {
+        var keysToRemove = [];
+        for (var ki = 0; ki < localStorage.length; ki++) {
+          var lk = localStorage.key(ki);
+          if (lk && lk.startsWith('bma:') && lk !== 'bma:settings') keysToRemove.push(lk);
+        }
+        for (var ki = 0; ki < keysToRemove.length; ki++) localStorage.removeItem(keysToRemove[ki]);
+      } catch (ex) {}
+      renderSettingsBody();
+      return;
+    }
+
     // Cache delete individual
     var cacheDel = e.target.closest('.settings-cache-del');
-    if (cacheDel) {
+    if (cacheDel && !cacheDel.classList.contains('settings-proj-del')) {
       var key = cacheDel.dataset.key;
       cacheDelete(key).then(function() { loadCacheInfo(); });
       return;
@@ -10809,6 +11365,508 @@ function initSettings() {
 
 initSettings();
 
+// ─── Categories Tab ────────────────────────────────────────────────────
+let _catData = null;       // cached { categories, header, origColCount, rowCount }
+let _catColSearch = '';
+
+function renderCategoriesTab(categories, header, origColCount, rowCount) {
+  _catData = { categories, header, origColCount, rowCount };
+  const catCols = Object.keys(categories).map(Number).sort(function(a,b){return a-b;});
+
+  $catBadge.textContent = catCols.length + ' columns';
+
+  if (catCols.length === 0) {
+    $catColList.innerHTML = '';
+    $catToolbar.innerHTML = '';
+    $catChart.innerHTML = '';
+    $catValueTable.querySelector('tbody').innerHTML = '';
+    $catValueSearch.style.display = 'none';
+    $catMainContent.innerHTML = '<div class="cat-empty">No categorical columns detected.</div>';
+    return;
+  }
+
+  // Restore main content structure if replaced by empty message
+  if (!$catMainContent.querySelector('.cat-chart')) {
+    $catMainContent.innerHTML = '';
+    $catMainContent.appendChild($catChart);
+    $catMainContent.appendChild($catValueTableWrap);
+  }
+  $catValueSearch.style.display = '';
+
+  // Auto-focus first column if none focused
+  if (catFocusedCol === null || !categories[catFocusedCol]) {
+    catFocusedCol = catCols[0];
+  }
+
+  renderCatSidebar();
+  renderCatMain();
+  wireCatEventsOnce();
+}
+
+function renderCatSidebar() {
+  if (!_catData) return;
+  var categories = _catData.categories;
+  var header = _catData.header;
+  var origColCount = _catData.origColCount;
+  var catCols = Object.keys(categories).map(Number).sort(function(a,b){return a-b;});
+  var search = _catColSearch.toLowerCase();
+  var html = '';
+  for (var ci = 0; ci < catCols.length; ci++) {
+    var i = catCols[ci];
+    var name = header[i];
+    if (search && name.toLowerCase().indexOf(search) === -1) continue;
+    var cat = categories[i];
+    var uniqueCount = Object.keys(cat.counts).length + (cat.overflow ? '+' : '');
+    var isCalcol = i >= origColCount;
+    var active = i === catFocusedCol ? ' active' : '';
+    html += '<div class="cat-col-item' + active + '" data-col="' + i + '">';
+    html += '<span class="col-name">' + esc(name) + '</span>';
+    if (isCalcol) html += '<span class="calcol-tag">CALC</span>';
+    html += '<span class="col-count">' + uniqueCount + '</span>';
+    html += '</div>';
+  }
+  $catColList.innerHTML = html;
+}
+
+function renderCatMain() {
+  if (!_catData || catFocusedCol === null) return;
+  renderCatToolbar();
+  renderCatBarChart();
+  renderCatValueTable();
+}
+
+function getCatSortedEntries(colIdx) {
+  if (!_catData) return [];
+  var cat = _catData.categories[colIdx];
+  if (!cat) return [];
+  var entries = Object.entries(cat.counts);
+  var colName = _catData.header[colIdx];
+  var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
+  var mode = catSortModes[colName] || defaultSort;
+
+  if (mode === 'count-desc') {
+    entries.sort(function(a,b){ return b[1] - a[1]; });
+  } else if (mode === 'count-asc') {
+    entries.sort(function(a,b){ return a[1] - b[1]; });
+  } else if (mode === 'alpha') {
+    entries.sort(function(a,b){ return a[0].localeCompare(b[0]); });
+  } else if (mode === 'custom') {
+    var order = catCustomOrders[colName];
+    if (order) {
+      var posMap = {};
+      for (var oi = 0; oi < order.length; oi++) posMap[order[oi]] = oi;
+      entries.sort(function(a,b){
+        var pa = posMap[a[0]] !== undefined ? posMap[a[0]] : 999999;
+        var pb = posMap[b[0]] !== undefined ? posMap[b[0]] : 999999;
+        return pa - pb;
+      });
+    }
+  }
+  return entries;
+}
+
+function renderCatToolbar() {
+  if (!_catData || catFocusedCol === null) return;
+  var header = _catData.header;
+  var origColCount = _catData.origColCount;
+  var colName = header[catFocusedCol];
+  var isCalcol = catFocusedCol >= origColCount;
+  var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
+  var mode = catSortModes[colName] || defaultSort;
+
+  // Meta info
+  var cat = _catData.categories[catFocusedCol];
+  var entries = Object.entries(cat.counts);
+  var uniqueCount = entries.length + (cat.overflow ? '+' : '');
+  var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
+  var nullCount = _catData.rowCount - total;
+  var entropy = 0;
+  if (total > 0) {
+    for (var ei = 0; ei < entries.length; ei++) {
+      var c = entries[ei][1];
+      if (c <= 0) continue;
+      var p = c / total;
+      entropy -= p * Math.log2(p);
+    }
+  }
+  var maxEntropy = entries.length > 1 ? Math.log2(entries.length) : 0;
+  var normPct = maxEntropy > 0 ? Math.round((entropy / maxEntropy) * 100) : 0;
+
+  var html = '<div class="cat-toolbar-title">' + esc(colName);
+  if (isCalcol) html += ' <span class="calcol-tag">CALC</span>';
+  html += '</div>';
+
+  // Meta badges
+  html += '<span style="font-size:0.62rem;color:var(--fg-dim)">' + uniqueCount + ' unique';
+  if (nullCount > 0) html += ' \u00B7 ' + nullCount.toLocaleString() + ' null';
+  if (maxEntropy > 0) html += ' \u00B7 H=' + entropy.toFixed(2) + ' (' + normPct + '%)';
+  html += '</span>';
+
+  // Sort buttons
+  html += '<div class="cat-sort-group">';
+  html += '<button class="cat-sort-btn' + (mode === 'count-desc' ? ' active' : '') + '" data-sort="count-desc" title="Sort by count descending">Count\u2193</button>';
+  html += '<button class="cat-sort-btn' + (mode === 'count-asc' ? ' active' : '') + '" data-sort="count-asc" title="Sort by count ascending">Count\u2191</button>';
+  html += '<button class="cat-sort-btn' + (mode === 'alpha' ? ' active' : '') + '" data-sort="alpha" title="Sort alphabetically">A-Z</button>';
+  html += '<button class="cat-sort-btn' + (mode === 'custom' ? ' active' : '') + '" data-sort="custom" title="Custom drag order">Custom</button>';
+  html += '</div>';
+
+  // Copy button
+  html += '<button class="cat-copy-btn" id="catCopyBtn" title="Copy as table">Copy</button>';
+
+  $catToolbar.innerHTML = html;
+}
+
+function renderCatBarChart() {
+  if (!_catData || catFocusedCol === null) return;
+  var colName = _catData.header[catFocusedCol];
+  var entries = getCatSortedEntries(catFocusedCol);
+  if (entries.length === 0) { $catChart.innerHTML = ''; return; }
+
+  var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
+  var maxCount = 0;
+  for (var i = 0; i < entries.length; i++) { if (entries[i][1] > maxCount) maxCount = entries[i][1]; }
+
+  // Determine how many bars to show
+  var showAll = catChartShowAll || entries.length <= 30;
+  var showEntries = showAll ? entries : entries.slice(0, 20);
+
+  var barH = 18, gap = 2, labelW = 120, rightPad = 60;
+  var chartH = showEntries.length * (barH + gap) + 30; // +30 for Pareto line clearance
+  var chartW = 600;
+  var barAreaW = chartW - labelW - rightPad;
+
+  var svg = '<svg viewBox="0 0 ' + chartW + ' ' + chartH + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)">';
+
+  // Bars + Pareto
+  var cumPct = 0;
+  var paretoPoints = [];
+  for (var bi = 0; bi < showEntries.length; bi++) {
+    var val = showEntries[bi][0];
+    var count = showEntries[bi][1];
+    var barW = maxCount > 0 ? (count / maxCount) * barAreaW : 0;
+    var y = bi * (barH + gap);
+    var color = getCategoryColor(colName, val, bi);
+
+    // Bar
+    svg += '<rect x="' + labelW + '" y="' + y + '" width="' + barW.toFixed(1) + '" height="' + barH + '" fill="' + color + '" opacity="0.75" rx="2"/>';
+
+    // Label (truncated)
+    var dispVal = val.length > 18 ? val.substring(0, 17) + '\u2026' : val;
+    svg += '<text x="' + (labelW - 6) + '" y="' + (y + barH / 2 + 3.5) + '" text-anchor="end" fill="var(--fg)" font-size="9.5">' + esc(dispVal) + '</text>';
+
+    // Count + %
+    var pct = total > 0 ? (count / total * 100).toFixed(1) : '0.0';
+    svg += '<text x="' + (labelW + barW + 4) + '" y="' + (y + barH / 2 + 3.5) + '" fill="var(--fg-dim)" font-size="8.5">' + count.toLocaleString() + ' (' + pct + '%)</text>';
+
+    // Pareto accumulation
+    cumPct += total > 0 ? count / total * 100 : 0;
+    paretoPoints.push({ x: labelW + barW, y: y + barH / 2, pct: cumPct });
+  }
+
+  // Pareto line
+  if (paretoPoints.length > 1 && total > 0) {
+    var pPath = '';
+    for (var pi = 0; pi < paretoPoints.length; pi++) {
+      var px = labelW + (paretoPoints[pi].pct / 100) * barAreaW;
+      var py = paretoPoints[pi].y;
+      pPath += (pi === 0 ? 'M' : 'L') + px.toFixed(1) + ',' + py.toFixed(1);
+    }
+    svg += '<path d="' + pPath + '" fill="none" stroke="var(--amber)" stroke-width="1.5" opacity="0.6" stroke-dasharray="4,3"/>';
+    // Mark 80% line if it fits
+    var line80y1 = 0, line80y2 = paretoPoints[paretoPoints.length - 1].y;
+    var line80x = labelW + 0.8 * barAreaW;
+    svg += '<line x1="' + line80x.toFixed(1) + '" y1="' + line80y1 + '" x2="' + line80x.toFixed(1) + '" y2="' + line80y2.toFixed(1) + '" stroke="var(--amber)" stroke-width="0.5" opacity="0.3" stroke-dasharray="2,4"/>';
+    svg += '<text x="' + line80x.toFixed(1) + '" y="' + (line80y2 + 14) + '" text-anchor="middle" fill="var(--amber)" font-size="8" opacity="0.5">80%</text>';
+  }
+
+  svg += '</svg>';
+
+  var toggleHtml = '';
+  if (!showAll && entries.length > 30) {
+    toggleHtml = '<div class="cat-chart-toggle" id="catChartToggle">Show all ' + entries.length + ' values \u25BE</div>';
+  } else if (catChartShowAll && entries.length > 30) {
+    toggleHtml = '<div class="cat-chart-toggle" id="catChartToggle">Show top 20 \u25B4</div>';
+  }
+
+  $catChart.innerHTML = svg + toggleHtml;
+}
+
+function renderCatValueTable() {
+  if (!_catData || catFocusedCol === null) return;
+  var colName = _catData.header[catFocusedCol];
+  var entries = getCatSortedEntries(catFocusedCol);
+  var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
+  var maxCount = 0;
+  for (var i = 0; i < entries.length; i++) { if (entries[i][1] > maxCount) maxCount = entries[i][1]; }
+  var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
+  var mode = catSortModes[colName] || defaultSort;
+  var isCustom = mode === 'custom';
+  var search = ($catValueSearch.value || '').toLowerCase();
+
+  // Limit to 500 values
+  var show = entries.slice(0, 500);
+
+  var html = '<thead><tr>';
+  if (isCustom) html += '<th></th>'; // drag handle column
+  html += '<th></th><th></th><th>Value</th><th>Count</th><th>%</th></tr></thead><tbody>';
+
+  for (var ri = 0; ri < show.length; ri++) {
+    var val = show[ri][0];
+    var count = show[ri][1];
+    if (search && val.toLowerCase().indexOf(search) === -1) continue;
+    var pct = total > 0 ? (count / total * 100).toFixed(1) : '0.0';
+    var barPct = maxCount > 0 ? (count / maxCount * 100).toFixed(1) : '0';
+    var color = getCategoryColor(colName, val, ri);
+
+    html += '<tr style="--bar:' + barPct + '%" data-val="' + esc(val) + '">';
+    if (isCustom) html += '<td class="cat-drag-cell" draggable="true">\u2261</td>';
+    html += '<td class="cat-swatch-cell"><span class="cat-swatch" style="background:' + color + '" data-col="' + catFocusedCol + '" data-val="' + esc(val) + '"></span></td>';
+    html += '<td class="cat-cb-cell"><input type="checkbox" data-col="' + catFocusedCol + '" data-val="' + esc(val) + '"></td>';
+    html += '<td class="cat-val-cell">' + esc(val) + '</td>';
+    html += '<td class="cat-count-cell">' + count.toLocaleString() + '</td>';
+    html += '<td class="cat-pct-cell">' + pct + '%</td>';
+    html += '</tr>';
+  }
+
+  if (entries.length > 500) {
+    var colSpan = isCustom ? 7 : 6;
+    html += '<tr><td colspan="' + colSpan + '" style="color:var(--fg-dim);text-align:center;font-size:0.65rem;padding:0.4rem;">Showing 500 of ' + entries.length + ' values</td></tr>';
+  }
+
+  html += '</tbody>';
+  $catValueTable.innerHTML = html;
+}
+
+function showCatColorPicker(colName, value, anchorEl) {
+  var currentColor = getCategoryColor(colName, value, 0);
+
+  var html = '<div class="cat-color-grid">';
+  for (var i = 0; i < STATSCAT_PALETTE.length; i++) {
+    var c = STATSCAT_PALETTE[i];
+    var sel = c.toLowerCase() === currentColor.toLowerCase() ? ' selected' : '';
+    html += '<div class="cat-color-swatch' + sel + '" style="background:' + c + '" data-color="' + c + '"></div>';
+  }
+  html += '</div>';
+  html += '<input type="text" class="cat-hex-input" placeholder="#hex" value="' + esc(currentColor) + '">';
+
+  $catColorPicker.innerHTML = html;
+  $catColorPicker.dataset.colName = colName;
+  $catColorPicker.dataset.value = value;
+
+  // Position near the anchor
+  var rect = anchorEl.getBoundingClientRect();
+  var mainRect = $catMain.getBoundingClientRect();
+  $catColorPicker.style.top = (rect.bottom - mainRect.top + 4) + 'px';
+  $catColorPicker.style.left = Math.max(0, rect.left - mainRect.left - 60) + 'px';
+  $catColorPicker.classList.add('open');
+}
+
+function hideCatColorPicker() {
+  $catColorPicker.classList.remove('open');
+}
+
+function applyCatColor(colName, value, color) {
+  if (!catColorOverrides[colName]) catColorOverrides[colName] = {};
+  catColorOverrides[colName][value] = color;
+  renderCatBarChart();
+  renderCatValueTable();
+  autoSaveProject();
+}
+
+function initCustomOrder(colName) {
+  if (!catCustomOrders[colName]) {
+    var entries = getCatSortedEntries(catFocusedCol);
+    catCustomOrders[colName] = entries.map(function(e){ return e[0]; });
+  }
+}
+
+function wireCatEventsOnce() {
+  if (_catEventsWired) return;
+  _catEventsWired = true;
+
+  // Sidebar column click
+  $catColList.addEventListener('click', function(e) {
+    var item = e.target.closest('.cat-col-item');
+    if (!item) return;
+    var colIdx = parseInt(item.dataset.col);
+    if (colIdx === catFocusedCol) return;
+    catFocusedCol = colIdx;
+    catChartShowAll = false;
+    $catValueSearch.value = '';
+    renderCatSidebar();
+    renderCatMain();
+    autoSaveProject();
+  });
+
+  // Sidebar search
+  $catColSearch.addEventListener('input', function() {
+    _catColSearch = $catColSearch.value;
+    renderCatSidebar();
+  });
+
+  // Sort buttons (delegated on toolbar)
+  $catToolbar.addEventListener('click', function(e) {
+    var sortBtn = e.target.closest('.cat-sort-btn');
+    if (sortBtn) {
+      var colName = _catData.header[catFocusedCol];
+      var newMode = sortBtn.dataset.sort;
+      catSortModes[colName] = newMode;
+      if (newMode === 'custom') initCustomOrder(colName);
+      renderCatToolbar();
+      renderCatBarChart();
+      renderCatValueTable();
+      autoSaveProject();
+      return;
+    }
+
+    // Copy button
+    var copyBtn = e.target.closest('#catCopyBtn');
+    if (copyBtn) {
+      var entries = getCatSortedEntries(catFocusedCol);
+      var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
+      var lines = ['Value\tCount\t%'];
+      for (var i = 0; i < entries.length; i++) {
+        var pct = total > 0 ? (entries[i][1] / total * 100).toFixed(1) : '0.0';
+        lines.push(entries[i][0] + '\t' + entries[i][1] + '\t' + pct + '%');
+      }
+      navigator.clipboard.writeText(lines.join('\n'));
+      copyBtn.textContent = 'Copied!';
+      setTimeout(function(){ copyBtn.textContent = 'Copy'; }, 1500);
+    }
+  });
+
+  // Chart toggle (delegated on chart area)
+  $catChart.addEventListener('click', function(e) {
+    if (e.target.closest('.cat-chart-toggle')) {
+      catChartShowAll = !catChartShowAll;
+      renderCatBarChart();
+    }
+  });
+
+  // Value search
+  $catValueSearch.addEventListener('input', function() {
+    renderCatValueTable();
+  });
+
+  // Table event delegation
+  $catValueTable.addEventListener('click', function(e) {
+    // Swatch click → color picker
+    var swatch = e.target.closest('.cat-swatch');
+    if (swatch) {
+      var colName = _catData.header[parseInt(swatch.dataset.col)];
+      showCatColorPicker(colName, swatch.dataset.val, swatch);
+      return;
+    }
+
+    // Checkbox change
+    var cb = e.target.closest('input[type="checkbox"]');
+    if (cb) {
+      var tr = cb.closest('tr');
+      if (tr) tr.classList.toggle('active', cb.checked);
+      rebuildFilterExpression();
+      return;
+    }
+  });
+
+  // Color picker delegation
+  $catColorPicker.addEventListener('click', function(e) {
+    var swatch = e.target.closest('.cat-color-swatch');
+    if (swatch) {
+      var cn = $catColorPicker.dataset.colName;
+      var v = $catColorPicker.dataset.value;
+      applyCatColor(cn, v, swatch.dataset.color);
+      hideCatColorPicker();
+      return;
+    }
+  });
+
+  // Hex input
+  $catColorPicker.addEventListener('change', function(e) {
+    if (e.target.classList.contains('cat-hex-input')) {
+      var hex = e.target.value.trim();
+      if (/^#?[0-9a-fA-F]{3,8}$/.test(hex)) {
+        if (hex[0] !== '#') hex = '#' + hex;
+        var cn = $catColorPicker.dataset.colName;
+        var v = $catColorPicker.dataset.value;
+        applyCatColor(cn, v, hex);
+        hideCatColorPicker();
+      }
+    }
+  });
+
+  // Close color picker on click outside
+  document.addEventListener('click', function(e) {
+    if (!$catColorPicker.classList.contains('open')) return;
+    if ($catColorPicker.contains(e.target)) return;
+    if (e.target.classList.contains('cat-swatch')) return;
+    hideCatColorPicker();
+  });
+
+  // Close color picker on Escape
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && $catColorPicker.classList.contains('open')) {
+      hideCatColorPicker();
+    }
+  });
+
+  // Drag and drop for custom ordering
+  var dragSrcRow = null;
+  $catValueTable.addEventListener('dragstart', function(e) {
+    var tr = e.target.closest('tr');
+    if (!tr || !e.target.classList.contains('cat-drag-cell')) return;
+    dragSrcRow = tr;
+    tr.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', tr.dataset.val);
+  });
+
+  $catValueTable.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    var tr = e.target.closest('tr');
+    if (!tr || tr === dragSrcRow) return;
+    e.dataTransfer.dropEffect = 'move';
+    // Clear previous drag-over
+    $catValueTable.querySelectorAll('.drag-over').forEach(function(el){ el.classList.remove('drag-over'); });
+    tr.classList.add('drag-over');
+  });
+
+  $catValueTable.addEventListener('dragleave', function(e) {
+    var tr = e.target.closest('tr');
+    if (tr) tr.classList.remove('drag-over');
+  });
+
+  $catValueTable.addEventListener('drop', function(e) {
+    e.preventDefault();
+    var tr = e.target.closest('tr');
+    if (!tr || !dragSrcRow || tr === dragSrcRow) return;
+    $catValueTable.querySelectorAll('.drag-over').forEach(function(el){ el.classList.remove('drag-over'); });
+    dragSrcRow.classList.remove('dragging');
+
+    var colName = _catData.header[catFocusedCol];
+    initCustomOrder(colName);
+    var order = catCustomOrders[colName];
+    var fromVal = dragSrcRow.dataset.val;
+    var toVal = tr.dataset.val;
+    var fromIdx = order.indexOf(fromVal);
+    var toIdx = order.indexOf(toVal);
+    if (fromIdx >= 0 && toIdx >= 0) {
+      order.splice(fromIdx, 1);
+      var newToIdx = order.indexOf(toVal);
+      order.splice(newToIdx, 0, fromVal);
+      renderCatBarChart();
+      renderCatValueTable();
+      autoSaveProject();
+    }
+    dragSrcRow = null;
+  });
+
+  $catValueTable.addEventListener('dragend', function() {
+    if (dragSrcRow) dragSrcRow.classList.remove('dragging');
+    $catValueTable.querySelectorAll('.drag-over').forEach(function(el){ el.classList.remove('drag-over'); });
+    dragSrcRow = null;
+  });
+}
+
 // ─── CDF Plot ─────────────────────────────────────────────────────────
 $cdfClose.addEventListener('click', () => $cdfModal.classList.remove('active'));
 $cdfModal.addEventListener('click', (e) => { if (e.target === $cdfModal) $cdfModal.classList.remove('active'); });
@@ -10824,6 +11882,9 @@ function showCDF(colIdx) {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js');
 }
+
+// Load recent files on page load
+renderRecentFiles();
 </script>
 </body>
 </html>

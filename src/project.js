@@ -2,13 +2,204 @@
 
 function openCacheDB() {
   return new Promise(function(resolve, reject) {
-    var req = indexedDB.open('bma-cache', 1);
-    req.onupgradeneeded = function() {
-      req.result.createObjectStore('results');
+    var req = indexedDB.open('bma-cache', 2);
+    req.onupgradeneeded = function(e) {
+      var db = req.result;
+      if (!db.objectStoreNames.contains('results'))
+        db.createObjectStore('results');
+      if (!db.objectStoreNames.contains('recents'))
+        db.createObjectStore('recents');
     };
     req.onsuccess = function() { resolve(req.result); };
     req.onerror = function() { reject(req.error); };
   });
+}
+
+// ─── Recent Files (IndexedDB) ───────────────────────────────────────────
+
+var RECENTS_MAX = 20;
+
+function recentKey(f) { return 'bma:' + f.name + ':' + f.size; }
+
+function recentList() {
+  return openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('recents', 'readonly');
+      var store = tx.objectStore('recents');
+      var req = store.getAll();
+      var keyReq = store.getAllKeys();
+      tx.oncomplete = function() {
+        var items = req.result || [];
+        var keys = keyReq.result || [];
+        var result = items.map(function(item, i) { item._key = keys[i]; return item; });
+        result.sort(function(a, b) { return (b.lastOpened || 0) - (a.lastOpened || 0); });
+        resolve(result);
+      };
+      tx.onerror = function() { reject(tx.error); };
+    });
+  });
+}
+
+function recentPut(key, entry) {
+  return openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('recents', 'readwrite');
+      var store = tx.objectStore('recents');
+      store.put(entry, key);
+      tx.oncomplete = function() { resolve(); };
+      tx.onerror = function() { reject(tx.error); };
+    });
+  }).then(function() {
+    // Prune to max entries
+    return recentList().then(function(items) {
+      if (items.length <= RECENTS_MAX) return;
+      return openCacheDB().then(function(db) {
+        var tx = db.transaction('recents', 'readwrite');
+        var store = tx.objectStore('recents');
+        for (var i = RECENTS_MAX; i < items.length; i++) {
+          store.delete(items[i]._key);
+        }
+        return new Promise(function(resolve) { tx.oncomplete = resolve; });
+      });
+    });
+  });
+}
+
+function recentDelete(key) {
+  return openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('recents', 'readwrite');
+      tx.objectStore('recents').delete(key);
+      tx.oncomplete = function() { resolve(); };
+      tx.onerror = function() { reject(tx.error); };
+    });
+  });
+}
+
+function timeAgo(ts) {
+  var diff = Date.now() - ts;
+  var sec = Math.floor(diff / 1000);
+  if (sec < 60) return 'just now';
+  var min = Math.floor(sec / 60);
+  if (min < 60) return min + (min === 1 ? ' min ago' : ' mins ago');
+  var hrs = Math.floor(min / 60);
+  if (hrs < 24) return hrs + (hrs === 1 ? ' hour ago' : ' hours ago');
+  var days = Math.floor(hrs / 24);
+  if (days < 14) return days + (days === 1 ? ' day ago' : ' days ago');
+  var weeks = Math.floor(days / 7);
+  if (weeks < 8) return weeks + (weeks === 1 ? ' week ago' : ' weeks ago');
+  var months = Math.floor(days / 30);
+  return months + (months === 1 ? ' month ago' : ' months ago');
+}
+
+function renderRecentFiles() {
+  recentList().then(function(items) {
+    if (items.length === 0) {
+      $recentFiles.innerHTML = '';
+      return;
+    }
+    var html = '<div class="recent-files-title">Recent Files</div>';
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var hasProj = false;
+      try { hasProj = localStorage.getItem(it._key) !== null; } catch(e) {}
+      html += '<div class="recent-item" data-key="' + esc(it._key) + '">';
+      html += '<span class="recent-item-name">' + esc(it.name) + '</span>';
+      html += '<span class="recent-item-size">' + formatBytes(it.size) + '</span>';
+      if (hasProj) html += '<span class="recent-item-project">project</span>';
+      html += '<span class="recent-item-time">' + timeAgo(it.lastOpened) + '</span>';
+      html += '<button class="recent-item-remove" data-key="' + esc(it._key) + '" title="Remove">\u2715</button>';
+      html += '</div>';
+    }
+    $recentFiles.innerHTML = html;
+
+    // Wire click handlers
+    $recentFiles.querySelectorAll('.recent-item').forEach(function(el) {
+      el.addEventListener('click', function(e) {
+        if (e.target.closest('.recent-item-remove')) return;
+        var key = el.dataset.key;
+        reopenRecent(key);
+      });
+    });
+    $recentFiles.querySelectorAll('.recent-item-remove').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var key = btn.dataset.key;
+        recentDelete(key).then(renderRecentFiles);
+      });
+    });
+  }).catch(function() {
+    $recentFiles.innerHTML = '';
+  });
+}
+
+function reopenRecent(key) {
+  openCacheDB().then(function(db) {
+    return new Promise(function(resolve, reject) {
+      var tx = db.transaction('recents', 'readonly');
+      var req = tx.objectStore('recents').get(key);
+      req.onsuccess = function() { resolve(req.result || null); };
+      req.onerror = function() { reject(req.error); };
+    });
+  }).then(function(entry) {
+    if (!entry) return;
+    if (entry.handle && typeof entry.handle.queryPermission === 'function') {
+      // FSAA path — check permission first, only prompt if needed
+      entry.handle.queryPermission({ mode: 'read' }).then(function(perm) {
+        if (perm === 'granted') {
+          return entry.handle.getFile().then(function(file) {
+            handleFile(file, entry.handle);
+          });
+        }
+        // Permission not yet granted — request it for just this handle
+        return entry.handle.requestPermission({ mode: 'read' }).then(function(perm2) {
+          if (perm2 === 'granted') {
+            return entry.handle.getFile().then(function(file) {
+              handleFile(file, entry.handle);
+            });
+          }
+          promptReselect(entry.name);
+        });
+      }).catch(function() {
+        promptReselect(entry.name);
+      });
+    } else {
+      // No handle — prompt user to re-select
+      promptReselect(entry.name);
+    }
+  });
+}
+
+function promptReselect(name) {
+  if (HAS_FSAA) {
+    // Use file picker
+    window.showOpenFilePicker({
+      types: [
+        { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
+        { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } }
+      ],
+      multiple: false
+    }).then(function(handles) {
+      var handle = handles[0];
+      return handle.getFile().then(function(file) {
+        handleFile(file, handle);
+      });
+    }).catch(function() { /* user cancelled */ });
+  } else {
+    // Trigger classic file input
+    $fileInput.click();
+  }
+}
+
+function saveToRecents(file, handle) {
+  var key = recentKey(file);
+  var entry = {
+    name: file.name,
+    size: file.size,
+    handle: handle || null,
+    lastOpened: Date.now()
+  };
+  recentPut(key, entry).catch(function() { /* silent */ });
 }
 
 function cacheGet(key) {
@@ -155,6 +346,12 @@ function serializeProject() {
       cdfSelected: Array.from(statsCdfSelected),
       cdfScale: statsCdfScale
     },
+    categories: {
+      focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null,
+      sortModes: catSortModes,
+      customOrders: catCustomOrders,
+      colorOverrides: catColorOverrides
+    },
     exportCols: exportColumns.map(c => ({
       name: c.name, outputName: c.outputName, selected: c.selected
     }))
@@ -224,6 +421,11 @@ async function applyProject(project) {
   setCalcolCode(currentCalcolCode);
   simulateCalcol();
 
+  // Restore categories tab state
+  catSortModes = project.categories?.sortModes || {};
+  catCustomOrders = project.categories?.customOrders || {};
+  catColorOverrides = project.categories?.colorOverrides || {};
+
   // Restore filter
   currentFilter = project.filter || null;
   $filterExpr.value = project.filterText || '';
@@ -282,6 +484,11 @@ function clearProject() {
   statsCatCdfMax = null;
   statsCatCrossMode = 'count';
   statsCatShowSelectedOnly = false;
+  catFocusedCol = null;
+  catSortModes = {};
+  catCustomOrders = {};
+  catColorOverrides = {};
+  catChartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
@@ -341,9 +548,10 @@ $projectFileInput.addEventListener('change', (e) => {
   e.target.value = '';
 });
 
-function handleFile(file) {
+function handleFile(file, handle) {
   if (!file) return;
   currentFile = file;
+  saveToRecents(file, handle);
   currentFilter = null;
   currentGroupBy = null;
   currentStatsCatVar = null;
@@ -357,6 +565,11 @@ function handleFile(file) {
   statsCatCdfMin = null;
   statsCatCdfMax = null;
   statsCatCrossMode = 'count';
+  catFocusedCol = null;
+  catSortModes = {};
+  catCustomOrders = {};
+  catColorOverrides = {};
+  catChartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
@@ -426,7 +639,10 @@ function handleFile(file) {
   $statsCatGroupList.innerHTML = '';
   $statsCatVarSearch.value = '';
   $statsCatGroupSearch.value = '';
-  $catContent.innerHTML = placeholder;
+  $catColList.innerHTML = '';
+  $catToolbar.innerHTML = '';
+  $catChart.innerHTML = '';
+  $catValueTable.innerHTML = '';
   $catBadge.textContent = '';
   $exportColList.innerHTML = '';
   $exportBadge.textContent = '0';
@@ -436,14 +652,15 @@ function handleFile(file) {
   simulateCalcol();
 
   // Run preflight
-  runPreflight(file).then(data => {
+  runPreflight(file).then(async data => {
     renderPreflight(data);
     // Auto-restore saved project config
     const saved = localStorage.getItem(projectKey(file));
     if (saved) {
       try {
         const project = JSON.parse(saved);
-        applyProject(project);
+        await applyProject(project);
+        executeAnalysis();
       } catch (e) { /* corrupt — ignore */ }
     }
   }).catch(err => {
@@ -486,6 +703,7 @@ $backToPreflight.addEventListener('click', () => {
   const loadedSpan = $dropzone.querySelector('.loaded-name');
   if (loadedSpan) loadedSpan.remove();
   $dropzone.querySelector('.label').innerHTML = 'Drop a CSV file here, or <strong>click to browse</strong>';
+  renderRecentFiles();
   currentFile = null;
   preflightData = null;
   hasResults = false;
@@ -498,6 +716,11 @@ $backToPreflight.addEventListener('click', () => {
   statsCatGroupSortMode = 'count';
   statsCatSelectedVars = new Set();
   statsCatShowSelectedOnly = false;
+  catFocusedCol = null;
+  catSortModes = {};
+  catCustomOrders = {};
+  catColorOverrides = {};
+  catChartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
@@ -517,10 +740,14 @@ $backToPreflight.addEventListener('click', () => {
 
 // Allow dropping new files onto results area
 $results.addEventListener('dragover', (e) => { e.preventDefault(); });
-$results.addEventListener('drop', (e) => {
+$results.addEventListener('drop', async (e) => {
   e.preventDefault();
-  const file = e.dataTransfer.files[0];
-  if (file) handleFile(file);
+  var handle = null;
+  if (HAS_FSAA && e.dataTransfer.items && e.dataTransfer.items[0] && e.dataTransfer.items[0].getAsFileSystemHandle) {
+    try { handle = await e.dataTransfer.items[0].getAsFileSystemHandle(); } catch (ex) {}
+  }
+  var file = handle ? await handle.getFile() : (e.dataTransfer.files[0] || null);
+  if (file) handleFile(file, handle);
 });
 
 // Keyboard shortcuts
@@ -700,8 +927,9 @@ function displayResults(data) {
     }
   }
 
-  // Default to summary tab only on first analysis
-  if (isFirstAnalysis) switchTab('summary');
+  // Jump to summary only if still on preflight tab
+  var activeTab = $resultsTabs.querySelector('.results-tab.active');
+  if (isFirstAnalysis || (activeTab && activeTab.dataset.tab === 'preflight')) switchTab('summary');
 
   // Mark analysis as clean
   analysisStale = false;
@@ -855,152 +1083,7 @@ function displayResults(data) {
 
   // Categories
   const catCols = Object.keys(categories).map(Number).sort((a, b) => a - b);
-  $catBadge.textContent = catCols.length + ' columns';
-  if (catCols.length > 0) {
-    $catSection.style.display = '';
-    let html = '';
-    for (const i of catCols) {
-      const cat = categories[i];
-      const entries = Object.entries(cat.counts).sort((a, b) => b[1] - a[1]);
-      const uniqueCount = entries.length + (cat.overflow ? '+' : '');
-      const total = entries.reduce((s, [, c]) => s + c, 0);
-      const nullCount = rowCount - total;
-      const maxCount = entries.length > 0 ? entries[0][1] : 1;
-      const isCalcolCat = i >= origColCount;
-
-      // Shannon entropy
-      let entropy = 0;
-      if (total > 0) {
-        for (const [, count] of entries) {
-          if (count <= 0) continue;
-          const p = count / total;
-          entropy -= p * Math.log2(p);
-        }
-      }
-      const maxEntropy = entries.length > 1 ? Math.log2(entries.length) : 0;
-      const normPct = maxEntropy > 0 ? Math.round((entropy / maxEntropy) * 100) : 0;
-
-      // Header
-      const nullSpan = nullCount > 0 ? `<span class="cat-nulls">\u00B7 ${nullCount.toLocaleString()} null</span>` : '';
-      const entropySpan = maxEntropy > 0 ? `<span class="cat-entropy">\u00B7 H=${entropy.toFixed(2)} (${normPct}%)</span>` : '';
-      html += `<div class="cat-item" data-col="${i}">
-        <div class="cat-name">${esc(header[i])}${isCalcolCat ? '<span class="calcol-tag">CALC</span>' : ''}` +
-        `<span class="cat-meta"><span class="unique-count">${uniqueCount} unique</span>${nullSpan}${entropySpan}` +
-        `<button class="cat-copy-btn" data-cat-col="${i}">Copy</button></span></div>`;
-
-      // Search input (only if >10 values)
-      const show = entries.slice(0, 100);
-      if (entries.length > 10) {
-        html += `<input type="text" class="cat-search" data-cat-col="${i}" placeholder="Search ${entries.length} values\u2026">`;
-      }
-
-      // Table rows
-      html += `<div class="cat-table-wrap"><table class="cat-table"><tbody>`;
-      for (let ri = 0; ri < show.length; ri++) {
-        const [val, count] = show[ri];
-        const pct = total > 0 ? (count / total * 100).toFixed(1) : '0';
-        const barPct = (count / maxCount * 100).toFixed(1);
-        const hiddenCls = (entries.length > 10 && ri >= 10) ? ' cat-hidden' : '';
-        html += `<tr style="--bar:${barPct}%" class="${hiddenCls}">
-          <td><input type="checkbox" data-col="${i}" data-val="${esc(val)}"></td>
-          <td>${esc(val)}</td>
-          <td>${count.toLocaleString()}</td>
-          <td>${pct}%</td>
-        </tr>`;
-      }
-      if (entries.length > 100) {
-        html += `<tr><td colspan="4" style="color:var(--fg-dim);text-align:center;font-size:0.7rem;">+${entries.length - 100} more values</td></tr>`;
-      }
-      html += `</tbody></table></div>`;
-
-      // Toggle link (only if >10 values)
-      if (entries.length > 10) {
-        const showCount = Math.min(entries.length, 100);
-        html += `<div class="cat-toggle" data-cat-col="${i}">Show all ${showCount} \u25BE</div>`;
-      }
-      html += `</div>`;
-    }
-    $catContent.innerHTML = html;
-
-    // Checkbox changes → rebuild expression
-    $catContent.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-      cb.addEventListener('change', () => {
-        cb.closest('tr').classList.toggle('active', cb.checked);
-        rebuildFilterExpression();
-      });
-    });
-
-    // Search inputs
-    $catContent.querySelectorAll('.cat-search').forEach(input => {
-      input.addEventListener('input', () => {
-        const colIdx = input.dataset.catCol;
-        const query = input.value.toLowerCase();
-        const wrap = input.closest('.cat-item').querySelector('.cat-table-wrap');
-        const rows = wrap.querySelectorAll('tbody tr');
-        const toggle = input.closest('.cat-item').querySelector('.cat-toggle');
-        const isExpanded = toggle && toggle.dataset.expanded === '1';
-        rows.forEach((tr, ri) => {
-          if (tr.querySelector('td[colspan]')) return; // skip "+N more" row
-          const valCell = tr.querySelectorAll('td')[1];
-          if (!valCell) return;
-          const matchesSearch = !query || valCell.textContent.toLowerCase().includes(query);
-          if (query) {
-            // While searching, show/hide based only on search match
-            tr.style.display = matchesSearch ? '' : 'none';
-            tr.classList.remove('cat-hidden');
-          } else {
-            // No query: restore collapsed/expanded state
-            tr.style.display = '';
-            if (!isExpanded && ri >= 10) tr.classList.add('cat-hidden');
-            else tr.classList.remove('cat-hidden');
-          }
-        });
-      });
-    });
-
-    // Toggle expand/collapse
-    $catContent.querySelectorAll('.cat-toggle').forEach(toggle => {
-      toggle.addEventListener('click', () => {
-        const item = toggle.closest('.cat-item');
-        const rows = item.querySelectorAll('.cat-table-wrap tbody tr');
-        const isExpanded = toggle.dataset.expanded === '1';
-        if (isExpanded) {
-          // Collapse: hide rows beyond 10
-          rows.forEach((tr, ri) => {
-            if (ri >= 10 && !tr.querySelector('td[colspan]')) tr.classList.add('cat-hidden');
-          });
-          const showCount = Math.min(rows.length, 100);
-          toggle.textContent = 'Show all ' + showCount + ' \u25BE';
-          toggle.dataset.expanded = '0';
-        } else {
-          // Expand: show all
-          rows.forEach(tr => tr.classList.remove('cat-hidden'));
-          toggle.textContent = 'Collapse \u25B4';
-          toggle.dataset.expanded = '1';
-        }
-      });
-    });
-
-    // Copy buttons
-    $catContent.querySelectorAll('.cat-copy-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const colIdx = Number(btn.dataset.catCol);
-        const cat = categories[colIdx];
-        const ent = Object.entries(cat.counts).sort((a, b) => b[1] - a[1]);
-        const tot = ent.reduce((s, [, c]) => s + c, 0);
-        const lines = ['Value\tCount\t%'];
-        ent.forEach(([val, count]) => {
-          lines.push(val + '\t' + count + '\t' + (tot > 0 ? (count / tot * 100).toFixed(1) : '0') + '%');
-        });
-        navigator.clipboard.writeText(lines.join('\n'));
-        btn.textContent = 'Copied!';
-        setTimeout(() => btn.textContent = 'Copy', 1500);
-      });
-    });
-  } else {
-    $catSection.style.display = 'none';
-  }
+  renderCategoriesTab(categories, header, origColCount, rowCount);
 
   // StatsCat
   renderStatsCat(data);
@@ -1037,6 +1120,17 @@ function displayResults(data) {
     }
 
     if (p.exportCols) applyExportRestore(p.exportCols);
+
+    // Restore categories focused column by name
+    const catP = p.categories || {};
+    if (catP.focusedCol) {
+      const idx = header.indexOf(catP.focusedCol);
+      if (idx >= 0 && categories[idx]) {
+        catFocusedCol = idx;
+        renderCatSidebar();
+        renderCatMain();
+      }
+    }
   }
 
   // Auto-save project
@@ -1598,9 +1692,10 @@ function renderOverlaidCDF(entries, varName) {
 
   let curvesSvg = '';
   let meansSvg = '';
+  const gbColName = currentGroupBy !== null ? currentHeader[currentGroupBy] : '';
   for (let gi = 0; gi < plotEntries.length; gi++) {
     const [gv, s] = plotEntries[gi];
-    const color = STATSCAT_PALETTE[gi % STATSCAT_PALETTE.length];
+    const color = getCategoryColor(gbColName, gv, gi);
     const points = [];
     let cumCount = 0;
     for (const [mean, count] of s.centroids) {
@@ -1628,7 +1723,7 @@ function renderOverlaidCDF(entries, varName) {
   let legendSvg = '';
   for (let gi = 0; gi < plotEntries.length; gi++) {
     const [gv] = plotEntries[gi];
-    const color = STATSCAT_PALETTE[gi % STATSCAT_PALETTE.length];
+    const color = getCategoryColor(gbColName, gv, gi);
     const col = gi % legCols;
     const row = Math.floor(gi / legCols);
     const lx = pad.left + col * colW;

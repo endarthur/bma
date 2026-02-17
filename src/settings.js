@@ -7,7 +7,8 @@ var SETTINGS_DEFAULTS = {
   customThemes: [null, null, null],
   defaultPercentilePreset: 'quartiles',
   customPercentiles: null,
-  sigFigs: null
+  sigFigs: null,
+  defaultCatSort: 'count-desc'
 };
 
 var THEME_META_COLORS = {
@@ -221,6 +222,11 @@ function renderSettingsBody() {
   html += '</div></details>';
   html += '</div>';
 
+  // ── Saved Projects section ──
+  html += '<div class="settings-section"><div class="settings-section-title">Saved Projects</div>';
+  html += renderSettingsProjectList();
+  html += '</div>';
+
   // ── Cache section ──
   html += '<div class="settings-section"><div class="settings-section-title">Cache</div>';
   html += '<div id="settingsCacheContent"><div class="settings-cache-loading">Loading...</div></div>';
@@ -254,6 +260,17 @@ function renderSettingsBody() {
   }
   html += '</select></div></div>';
 
+  // ── Default Category Sort ──
+  html += '<div class="settings-section"><div class="settings-section-title">Default Category Sort</div>';
+  html += '<div class="settings-preset-btns">';
+  var catSorts = ['count-desc', 'count-asc', 'alpha'];
+  var catSortLabels = ['Count \u2193', 'Count \u2191', 'A-Z'];
+  for (var csi = 0; csi < catSorts.length; csi++) {
+    var csa = bmaSettings.defaultCatSort === catSorts[csi] ? ' active' : '';
+    html += '<button class="settings-preset-btn settings-cat-sort-btn' + csa + '" data-catsort="' + catSorts[csi] + '">' + catSortLabels[csi] + '</button>';
+  }
+  html += '</div></div>';
+
   body.innerHTML = html;
 
   // Wire events
@@ -261,6 +278,60 @@ function renderSettingsBody() {
 
   // Load cache info async
   loadCacheInfo();
+}
+
+function renderSettingsProjectList() {
+  var projects = [];
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var key = localStorage.key(i);
+      if (key && key.startsWith('bma:') && key !== 'bma:settings') {
+        var parts = key.substring(4); // strip 'bma:'
+        var lastColon = parts.lastIndexOf(':');
+        var fname = lastColon > 0 ? parts.substring(0, lastColon) : parts;
+        var fsize = lastColon > 0 ? parts.substring(lastColon + 1) : '';
+        var raw = localStorage.getItem(key);
+        var bytes = raw ? raw.length * 2 : 0; // rough UTF-16 estimate
+        var ts = null;
+        try {
+          var parsed = JSON.parse(raw);
+          ts = parsed._ts || null;
+        } catch (e) {}
+        projects.push({ key: key, name: fname, size: fsize, bytes: bytes, ts: ts });
+      }
+    }
+  } catch (e) {}
+
+  if (projects.length === 0) {
+    return '<div class="settings-cache-empty">No saved projects.</div>';
+  }
+
+  // Sort by timestamp descending (most recent first)
+  projects.sort(function(a, b) { return (b.ts || 0) - (a.ts || 0); });
+
+  var totalBytes = 0;
+  for (var i = 0; i < projects.length; i++) totalBytes += projects[i].bytes;
+
+  var html = '<div class="settings-cache-summary">' + projects.length + ' project' + (projects.length !== 1 ? 's' : '') + ' (' + formatBytes(totalBytes) + ')</div>';
+  html += '<div class="settings-cache-list">';
+  for (var i = 0; i < projects.length; i++) {
+    var p = projects[i];
+    var displayName = p.name.length > 40 ? p.name.substring(0, 37) + '...' : p.name;
+    var dateStr = '';
+    if (p.ts) {
+      var d = new Date(p.ts);
+      dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    html += '<div class="settings-cache-item">';
+    html += '<span class="settings-cache-name" title="' + esc(p.name) + ' (' + (p.size ? formatBytes(Number(p.size)) : '?') + ')">' + esc(displayName) + '</span>';
+    if (dateStr) html += '<span class="settings-cache-size" style="margin-right:0.4rem">' + dateStr + '</span>';
+    html += '<span class="settings-cache-size">' + formatBytes(p.bytes) + '</span>';
+    html += '<button class="settings-cache-del settings-proj-del" data-projkey="' + esc(p.key) + '" title="Delete saved project">\u2715</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+  html += '<button class="settings-cache-clear-all" id="settingsProjClearAll">Clear all saved projects</button>';
+  return html;
 }
 
 function wireSettingsEvents() {
@@ -335,9 +406,46 @@ function wireSettingsEvents() {
       return;
     }
 
+    // Category sort buttons
+    var catSortBtn = e.target.closest('.settings-cat-sort-btn');
+    if (catSortBtn) {
+      bmaSettings.defaultCatSort = catSortBtn.dataset.catsort;
+      saveSettings();
+      body.querySelectorAll('.settings-cat-sort-btn').forEach(function(b) { b.classList.remove('active'); });
+      catSortBtn.classList.add('active');
+      return;
+    }
+
+    // Project delete individual
+    var projDel = e.target.closest('.settings-proj-del');
+    if (projDel) {
+      var projKey = projDel.dataset.projkey;
+      if (projKey) {
+        try { localStorage.removeItem(projKey); } catch (ex) {}
+        // Also delete matching cache entry
+        cacheDelete(projKey).catch(function() {});
+        renderSettingsBody();
+      }
+      return;
+    }
+
+    // Project clear all
+    if (e.target.closest('#settingsProjClearAll')) {
+      try {
+        var keysToRemove = [];
+        for (var ki = 0; ki < localStorage.length; ki++) {
+          var lk = localStorage.key(ki);
+          if (lk && lk.startsWith('bma:') && lk !== 'bma:settings') keysToRemove.push(lk);
+        }
+        for (var ki = 0; ki < keysToRemove.length; ki++) localStorage.removeItem(keysToRemove[ki]);
+      } catch (ex) {}
+      renderSettingsBody();
+      return;
+    }
+
     // Cache delete individual
     var cacheDel = e.target.closest('.settings-cache-del');
-    if (cacheDel) {
+    if (cacheDel && !cacheDel.classList.contains('settings-proj-del')) {
       var key = cacheDel.dataset.key;
       cacheDelete(key).then(function() { loadCacheInfo(); });
       return;

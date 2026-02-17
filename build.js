@@ -23,6 +23,7 @@ const APP_MODULES = [
   'events.js',
   'filter.js',
   'settings.js',
+  'categories.js',
   'cdf.js',
 ];
 const app = APP_MODULES.map(f => read(src(f)).trimEnd()).join('\n\n');

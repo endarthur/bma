@@ -12,8 +12,11 @@ let currentRowVar = 'r';
 let worker = null;
 let preflightData = null; // { header, sampleRows, autoTypes, delimiter, zipEntries, selectedZipEntry }
 
+var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
+
 const $dropzone = document.getElementById('dropzone');
 const $fileInput = document.getElementById('fileInput');
+const $recentFiles = document.getElementById('recentFiles');
 const $panelPreflight = document.getElementById('panelPreflight');
 const $preflightZip = document.getElementById('preflightZip');
 const $preflightHead = document.getElementById('preflightHead');
@@ -30,9 +33,19 @@ const $statsBody = document.getElementById('statsBody');
 const $statsSidebar = document.getElementById('statsSidebar');
 const $statsMain = document.getElementById('statsMain');
 const $statsCdfPanel = document.getElementById('statsCdfPanel');
-const $catContent = document.getElementById('catContent');
 const $catBadge = document.getElementById('catBadge');
-const $catSection = document.getElementById('catSection');
+const $catBody = document.getElementById('catBody');
+const $catSidebar = document.getElementById('catSidebar');
+const $catColList = document.getElementById('catColList');
+const $catColSearch = document.getElementById('catColSearch');
+const $catMain = document.getElementById('catMain');
+const $catToolbar = document.getElementById('catToolbar');
+const $catMainContent = document.getElementById('catMainContent');
+const $catChart = document.getElementById('catChart');
+const $catValueTableWrap = document.getElementById('catValueTableWrap');
+const $catValueSearch = document.getElementById('catValueSearch');
+const $catValueTable = document.getElementById('catValueTable');
+const $catColorPicker = document.getElementById('catColorPicker');
 const $appFooter = document.getElementById('appFooter');
 const $filterSection = document.getElementById('filterSection');
 const $filterExpr = document.getElementById('filterExpr');
@@ -91,6 +104,20 @@ let statsCatCdfMin = null;
 let statsCatCdfMax = null;
 let statsCatCrossMode = 'count'; // 'count', 'row', 'col'
 let statsCatShowSelectedOnly = false;
+
+// Categories tab state
+let catFocusedCol = null;           // column index focused in main area
+let catSortModes = {};              // { colName: 'count-desc'|'count-asc'|'alpha'|'custom' }
+let catCustomOrders = {};           // { colName: [val1, val2, ...] }
+let catColorOverrides = {};         // { colName: { value: '#hex' } }
+let catChartShowAll = false;        // show all bars vs top 20
+let _catEventsWired = false;
+
+function getCategoryColor(colName, value, fallbackIdx) {
+  if (catColorOverrides[colName] && catColorOverrides[colName][value])
+    return catColorOverrides[colName][value];
+  return STATSCAT_PALETTE[(fallbackIdx || 0) % STATSCAT_PALETTE.length];
+}
 
 // Statistics tab state
 let statsSelectedVars = null;     // Set<colIdx> or null (= all)

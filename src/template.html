@@ -44,6 +44,8 @@
     <input type="file" id="fileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP">
   </div>
 
+  <div class="recent-files" id="recentFiles"></div>
+
   <div class="about-section">
     <h2>What is this?</h2>
     <p>BMA is a client-side block model inspector. Drop a CSV (or zipped CSV) exported from Isatis, Vulcan, Surpac, Leapfrog, Datamine, or any other mining package and get instant summary statistics, geometry detection, and categorical breakdowns — all without uploading anything to a server.</p>
@@ -297,15 +299,26 @@
       </div>
 
       <div class="results-panel" id="panelCategories" data-tab="categories">
-        <div class="panel-inner">
-          <div class="section section--cat" id="catSection">
-            <div class="section-head">
-              Categorical Columns
-              <span class="badge" id="catBadge"></span>
+        <div class="cat-body" id="catBody">
+          <div class="cat-sidebar" id="catSidebar">
+            <div class="cat-sidebar-section">
+              <div class="cat-sidebar-title">Columns <span class="badge" id="catBadge"></span></div>
+              <input type="text" class="cat-col-search" id="catColSearch" placeholder="Search columns..." autocomplete="off" spellcheck="false">
             </div>
-            <div class="section-body">
-              <div class="cat-list" id="catContent"></div>
+            <div class="cat-sidebar-section--grow">
+              <div class="cat-col-list" id="catColList"></div>
             </div>
+          </div>
+          <div class="cat-main" id="catMain">
+            <div class="cat-toolbar" id="catToolbar"></div>
+            <div class="cat-main-content" id="catMainContent">
+              <div class="cat-chart" id="catChart"></div>
+              <div class="cat-value-table-wrap" id="catValueTableWrap">
+                <input type="text" class="cat-value-search" id="catValueSearch" placeholder="Search values..." autocomplete="off" spellcheck="false">
+                <table class="cat-values" id="catValueTable"><tbody></tbody></table>
+              </div>
+            </div>
+            <div class="cat-color-picker" id="catColorPicker"></div>
           </div>
         </div>
       </div>
