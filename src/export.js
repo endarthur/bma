@@ -44,7 +44,7 @@ function renderExportColumns() {
     const checked = col.selected ? ' checked' : '';
     const typeClass = col.isCalcol ? 'calcol' : (col.type === 'numeric' ? 'num' : 'cat');
     const typeLabel = col.isCalcol ? 'calc' : (col.type === 'numeric' ? 'num' : 'cat');
-    const hidden = search && col.name.toLowerCase().indexOf(search) < 0 && col.outputName.toLowerCase().indexOf(search) < 0;
+    const hidden = search && !fuzzyMatch(search, col.name.toLowerCase()) && !fuzzyMatch(search, col.outputName.toLowerCase());
     html += '<div class="export-col-item' + (hidden ? ' export-col-hidden' : '') + '" data-idx="' + i + '" draggable="true">';
     html += '<span class="ecol-grip" title="Drag to reorder"></span>';
     html += '<input type="checkbox"' + checked + '>';
@@ -141,7 +141,7 @@ $exportColSearch.addEventListener('input', () => {
   $exportColList.querySelectorAll('.export-col-item').forEach(el => {
     const idx = parseInt(el.dataset.idx);
     const col = exportColumns[idx];
-    const hidden = search && col.name.toLowerCase().indexOf(search) < 0 && col.outputName.toLowerCase().indexOf(search) < 0;
+    const hidden = search && !fuzzyMatch(search, col.name.toLowerCase()) && !fuzzyMatch(search, col.outputName.toLowerCase());
     el.classList.toggle('export-col-hidden', hidden);
   });
 });

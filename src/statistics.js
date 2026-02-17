@@ -167,7 +167,7 @@ function renderStatsSidebar() {
   var html = '';
   for (var ci of numCols) {
     var name = header[ci];
-    if (search && name.toLowerCase().indexOf(search) === -1) continue;
+    if (search && !fuzzyMatch(search, name.toLowerCase())) continue;
     var isCalcol = ci >= origColCount;
     var selected = statsSelectedVars === null || statsSelectedVars.has(ci);
     var checkedAttr = selected ? ' checked' : '';

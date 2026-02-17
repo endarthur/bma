@@ -350,7 +350,7 @@ function renderVariableBrowser() {
   var html = '';
   for (var i = 0; i < hdr.length; i++) {
     var name = hdr[i];
-    if (search && name.toLowerCase().indexOf(search) === -1) continue;
+    if (search && !fuzzyMatch(search, name.toLowerCase())) continue;
     var type = typeOv[i] || types[i] || 'numeric';
     var isNum = type === 'numeric';
     var typeTag = isNum ? '<span class="cv-type num">NUM</span>' : '<span class="cv-type cat">CAT</span>';
@@ -799,7 +799,7 @@ function createExprInput(element, options) {
     var lc = tok.token.toLowerCase();
     items = buildExprAcItems().filter(function(it) {
       var target = it.kind === 'col' || it.kind === 'calc' ? it.label : it.insert;
-      return target.toLowerCase().startsWith(lc) || it.label.toLowerCase().startsWith(lc);
+      return fuzzyMatch(lc, target.toLowerCase()) || fuzzyMatch(lc, it.label.toLowerCase());
     }).slice(0, 10);
     if (items.length === 0) { hideAc(); return; }
     selected = 0;

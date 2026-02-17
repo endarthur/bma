@@ -5710,6 +5710,17 @@ let preflightData = null; // { header, sampleRows, autoTypes, delimiter, zipEntr
 
 var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
 
+// Fuzzy subsequence match — returns true if all chars in query appear in order within target.
+// Both should be lowercase. Empty query matches everything.
+function fuzzyMatch(query, target) {
+  if (!query) return true;
+  var qi = 0;
+  for (var ti = 0; ti < target.length && qi < query.length; ti++) {
+    if (target[ti] === query[qi]) qi++;
+  }
+  return qi === query.length;
+}
+
 const $dropzone = document.getElementById('dropzone');
 const $fileInput = document.getElementById('fileInput');
 const $recentFiles = document.getElementById('recentFiles');
@@ -8102,7 +8113,7 @@ function renderStatsCatVarList(allVarCols, header, origColCount, colTypes) {
   for (const colIdx of allVarCols) {
     if (statsCatShowSelectedOnly && !statsCatSelectedVars.has(colIdx)) continue;
     const name = header[colIdx];
-    if (search && name.toLowerCase().indexOf(search) === -1) continue;
+    if (search && !fuzzyMatch(search, name.toLowerCase())) continue;
     const isCalcol = colIdx >= origColCount;
     const isCat = colTypes[colIdx] === 'categorical';
     const active = colIdx === currentStatsCatVar ? ' active' : '';
@@ -8161,7 +8172,7 @@ function renderStatsCatGroupList(allGroups) {
   let html = '';
   for (const [gv, s] of sorted) {
     const label = gv || '(empty)';
-    if (search && label.toLowerCase().indexOf(search) === -1) continue;
+    if (search && !fuzzyMatch(search, label.toLowerCase())) continue;
     const checked = currentStatsCatChecked && currentStatsCatChecked.has(gv) ? ' checked' : '';
     html += '<div class="statscat-group-item">';
     html += '<label><input type="checkbox"' + checked + ' data-gv="' + esc(gv) + '"> <span class="gname">' + esc(label) + '</span></label>';
@@ -8977,7 +8988,7 @@ function renderStatsSidebar() {
   var html = '';
   for (var ci of numCols) {
     var name = header[ci];
-    if (search && name.toLowerCase().indexOf(search) === -1) continue;
+    if (search && !fuzzyMatch(search, name.toLowerCase())) continue;
     var isCalcol = ci >= origColCount;
     var selected = statsSelectedVars === null || statsSelectedVars.has(ci);
     var checkedAttr = selected ? ' checked' : '';
@@ -9554,7 +9565,7 @@ function renderExportColumns() {
     const checked = col.selected ? ' checked' : '';
     const typeClass = col.isCalcol ? 'calcol' : (col.type === 'numeric' ? 'num' : 'cat');
     const typeLabel = col.isCalcol ? 'calc' : (col.type === 'numeric' ? 'num' : 'cat');
-    const hidden = search && col.name.toLowerCase().indexOf(search) < 0 && col.outputName.toLowerCase().indexOf(search) < 0;
+    const hidden = search && !fuzzyMatch(search, col.name.toLowerCase()) && !fuzzyMatch(search, col.outputName.toLowerCase());
     html += '<div class="export-col-item' + (hidden ? ' export-col-hidden' : '') + '" data-idx="' + i + '" draggable="true">';
     html += '<span class="ecol-grip" title="Drag to reorder"></span>';
     html += '<input type="checkbox"' + checked + '>';
@@ -9651,7 +9662,7 @@ $exportColSearch.addEventListener('input', () => {
   $exportColList.querySelectorAll('.export-col-item').forEach(el => {
     const idx = parseInt(el.dataset.idx);
     const col = exportColumns[idx];
-    const hidden = search && col.name.toLowerCase().indexOf(search) < 0 && col.outputName.toLowerCase().indexOf(search) < 0;
+    const hidden = search && !fuzzyMatch(search, col.name.toLowerCase()) && !fuzzyMatch(search, col.outputName.toLowerCase());
     el.classList.toggle('export-col-hidden', hidden);
   });
 });
@@ -10738,7 +10749,7 @@ function renderGtConfig(data) {
     var q = this.value.toLowerCase();
     document.querySelectorAll('#gtVarList .gt-var-item').forEach(function(item) {
       var name = item.querySelector('span').textContent.toLowerCase();
-      item.style.display = !q || name.indexOf(q) >= 0 ? '' : 'none';
+      item.style.display = fuzzyMatch(q, name) ? '' : 'none';
     });
   });
 
@@ -10974,10 +10985,10 @@ function runGt() {
       if ($btn) $btn.disabled = false;
       lastGtData = m;
       renderGtOutput();
-      // Update tab badge with first variable total tonnage
+      // Update tab badge with number of selected grade variables
       var gtTab = document.querySelector('.results-tab[data-tab="gt"]');
-      if (gtTab && m.gradeResults && m.gradeResults.length > 0) {
-        gtTab.innerHTML = 'GT <span class="tab-badge">' + formatNum(m.gradeResults[0].totalTonnage) + '</span>';
+      if (gtTab && m.gradeResults) {
+        gtTab.innerHTML = 'GT <span class="tab-badge">' + m.gradeResults.length + '</span>';
       }
       gtWorker.terminate();
       gtWorker = null;
@@ -12416,7 +12427,7 @@ function renderVariableBrowser() {
   var html = '';
   for (var i = 0; i < hdr.length; i++) {
     var name = hdr[i];
-    if (search && name.toLowerCase().indexOf(search) === -1) continue;
+    if (search && !fuzzyMatch(search, name.toLowerCase())) continue;
     var type = typeOv[i] || types[i] || 'numeric';
     var isNum = type === 'numeric';
     var typeTag = isNum ? '<span class="cv-type num">NUM</span>' : '<span class="cv-type cat">CAT</span>';
@@ -12865,7 +12876,7 @@ function createExprInput(element, options) {
     var lc = tok.token.toLowerCase();
     items = buildExprAcItems().filter(function(it) {
       var target = it.kind === 'col' || it.kind === 'calc' ? it.label : it.insert;
-      return target.toLowerCase().startsWith(lc) || it.label.toLowerCase().startsWith(lc);
+      return fuzzyMatch(lc, target.toLowerCase()) || fuzzyMatch(lc, it.label.toLowerCase());
     }).slice(0, 10);
     if (items.length === 0) { hideAc(); return; }
     selected = 0;
@@ -13879,7 +13890,7 @@ function renderCatSidebar() {
   for (var ci = 0; ci < catCols.length; ci++) {
     var i = catCols[ci];
     var name = header[i];
-    if (search && name.toLowerCase().indexOf(search) === -1) continue;
+    if (search && !fuzzyMatch(search, name.toLowerCase())) continue;
     var cat = categories[i];
     var uniqueCount = Object.keys(cat.counts).length + (cat.overflow ? '+' : '');
     var isCalcol = i >= origColCount;
@@ -14078,7 +14089,7 @@ function renderCatValueTable() {
   for (var ri = 0; ri < show.length; ri++) {
     var val = show[ri][0];
     var count = show[ri][1];
-    if (search && val.toLowerCase().indexOf(search) === -1) continue;
+    if (search && !fuzzyMatch(search, val.toLowerCase())) continue;
     var pct = total > 0 ? (count / total * 100).toFixed(1) : '0.0';
     var barPct = maxCount > 0 ? (count / maxCount * 100).toFixed(1) : '0';
     var color = getCategoryColor(colName, val, ri);

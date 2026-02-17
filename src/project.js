@@ -1454,7 +1454,7 @@ function renderStatsCatVarList(allVarCols, header, origColCount, colTypes) {
   for (const colIdx of allVarCols) {
     if (statsCatShowSelectedOnly && !statsCatSelectedVars.has(colIdx)) continue;
     const name = header[colIdx];
-    if (search && name.toLowerCase().indexOf(search) === -1) continue;
+    if (search && !fuzzyMatch(search, name.toLowerCase())) continue;
     const isCalcol = colIdx >= origColCount;
     const isCat = colTypes[colIdx] === 'categorical';
     const active = colIdx === currentStatsCatVar ? ' active' : '';
@@ -1513,7 +1513,7 @@ function renderStatsCatGroupList(allGroups) {
   let html = '';
   for (const [gv, s] of sorted) {
     const label = gv || '(empty)';
-    if (search && label.toLowerCase().indexOf(search) === -1) continue;
+    if (search && !fuzzyMatch(search, label.toLowerCase())) continue;
     const checked = currentStatsCatChecked && currentStatsCatChecked.has(gv) ? ' checked' : '';
     html += '<div class="statscat-group-item">';
     html += '<label><input type="checkbox"' + checked + ' data-gv="' + esc(gv) + '"> <span class="gname">' + esc(label) + '</span></label>';

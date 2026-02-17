@@ -180,7 +180,7 @@ function renderGtConfig(data) {
     var q = this.value.toLowerCase();
     document.querySelectorAll('#gtVarList .gt-var-item').forEach(function(item) {
       var name = item.querySelector('span').textContent.toLowerCase();
-      item.style.display = !q || name.indexOf(q) >= 0 ? '' : 'none';
+      item.style.display = fuzzyMatch(q, name) ? '' : 'none';
     });
   });
 
@@ -416,10 +416,10 @@ function runGt() {
       if ($btn) $btn.disabled = false;
       lastGtData = m;
       renderGtOutput();
-      // Update tab badge with first variable total tonnage
+      // Update tab badge with number of selected grade variables
       var gtTab = document.querySelector('.results-tab[data-tab="gt"]');
-      if (gtTab && m.gradeResults && m.gradeResults.length > 0) {
-        gtTab.innerHTML = 'GT <span class="tab-badge">' + formatNum(m.gradeResults[0].totalTonnage) + '</span>';
+      if (gtTab && m.gradeResults) {
+        gtTab.innerHTML = 'GT <span class="tab-badge">' + m.gradeResults.length + '</span>';
       }
       gtWorker.terminate();
       gtWorker = null;

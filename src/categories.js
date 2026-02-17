@@ -47,7 +47,7 @@ function renderCatSidebar() {
   for (var ci = 0; ci < catCols.length; ci++) {
     var i = catCols[ci];
     var name = header[i];
-    if (search && name.toLowerCase().indexOf(search) === -1) continue;
+    if (search && !fuzzyMatch(search, name.toLowerCase())) continue;
     var cat = categories[i];
     var uniqueCount = Object.keys(cat.counts).length + (cat.overflow ? '+' : '');
     var isCalcol = i >= origColCount;
@@ -246,7 +246,7 @@ function renderCatValueTable() {
   for (var ri = 0; ri < show.length; ri++) {
     var val = show[ri][0];
     var count = show[ri][1];
-    if (search && val.toLowerCase().indexOf(search) === -1) continue;
+    if (search && !fuzzyMatch(search, val.toLowerCase())) continue;
     var pct = total > 0 ? (count / total * 100).toFixed(1) : '0.0';
     var barPct = maxCount > 0 ? (count / maxCount * 100).toFixed(1) : '0';
     var color = getCategoryColor(colName, val, ri);

@@ -14,6 +14,17 @@ let preflightData = null; // { header, sampleRows, autoTypes, delimiter, zipEntr
 
 var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
 
+// Fuzzy subsequence match — returns true if all chars in query appear in order within target.
+// Both should be lowercase. Empty query matches everything.
+function fuzzyMatch(query, target) {
+  if (!query) return true;
+  var qi = 0;
+  for (var ti = 0; ti < target.length && qi < query.length; ti++) {
+    if (target[ti] === query[qi]) qi++;
+  }
+  return qi === query.length;
+}
+
 const $dropzone = document.getElementById('dropzone');
 const $fileInput = document.getElementById('fileInput');
 const $recentFiles = document.getElementById('recentFiles');
