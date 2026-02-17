@@ -18,6 +18,7 @@ const APP_MODULES = [
   'statistics.js',
   'export.js',
   'swath.js',
+  'gt.js',
   'section.js',
   'calcol.js',
   'events.js',

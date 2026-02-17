@@ -106,6 +106,7 @@
 [data-theme="bm77"] .stats-sidebar-title,
 [data-theme="bm77"] .statscat-sidebar-title,
 [data-theme="bm77"] .cat-sidebar-title,
+[data-theme="bm77"] .gt-sidebar-title,
 [data-theme="bm77"] .calcol-editor-head span,
 [data-theme="bm77"] .calcol-sb-title,
 [data-theme="bm77"] .settings-section-title,
@@ -2649,19 +2650,144 @@ table.cat-values td.cat-pct-cell {
 }
 
 /* Export */
-#panelExport.active { display: block; }
-.export-body { padding: 1rem; }
-.export-toolbar {
-  display: flex; gap: 0.4rem; margin-bottom: 0.75rem; flex-wrap: wrap;
+#panelExport.active { display: flex; flex-direction: column; height: calc(100vh - 100px); }
+.export-body {
+  display: flex; flex: 1; min-height: 0;
 }
-.export-toolbar button {
+.export-sidebar {
+  width: 260px; min-width: 260px; display: flex; flex-direction: column;
+  border-right: 1px solid var(--border); background: var(--bg1);
+}
+.export-sidebar-section {
+  padding: 0.6rem 0.75rem 0.4rem; border-bottom: 1px solid var(--border);
+}
+.export-sidebar-section--grow {
+  flex: 1; min-height: 0; overflow-y: auto;
+}
+.export-sidebar-title {
+  font: 600 0.78rem var(--mono); color: var(--fg); margin-bottom: 0.4rem;
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.export-col-search {
+  width: 100%; box-sizing: border-box; background: var(--bg); border: 1px solid var(--border);
+  color: var(--fg); font: 0.75rem var(--mono); padding: 0.3rem 0.5rem; border-radius: 3px;
+  margin-bottom: 0.4rem;
+}
+.export-col-search:focus { border-color: var(--amber); outline: none; }
+.export-sel-btns {
+  display: flex; gap: 0.3rem; flex-wrap: wrap;
+}
+.export-sel-btns button {
   background: var(--bg2); border: 1px solid var(--border); color: var(--fg-dim);
-  font: 0.72rem var(--mono); padding: 0.25rem 0.6rem; cursor: pointer; border-radius: 3px;
+  font: 0.7rem var(--mono); padding: 0.2rem 0.5rem; cursor: pointer; border-radius: 3px;
 }
-.export-toolbar button:hover { color: var(--fg-bright); border-color: var(--amber); }
+.export-sel-btns button:hover { color: var(--fg-bright); border-color: var(--amber); }
+.export-main {
+  flex: 1; min-width: 0; display: flex; flex-direction: column;
+}
+.export-toolbar {
+  display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border); background: var(--bg1); flex-wrap: wrap;
+}
+.export-toolbar .tb-group {
+  display: flex; align-items: center; gap: 0.4rem;
+}
+.export-toolbar label {
+  font: 0.75rem var(--mono); color: var(--fg-dim); cursor: pointer;
+  display: flex; align-items: center; gap: 0.3rem;
+}
+.export-label {
+  font: 500 0.72rem var(--mono); color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.04em;
+}
+.export-delim {
+  background: var(--bg2); border: 1px solid var(--border); color: var(--fg-dim);
+  font: 0.75rem var(--mono); padding: 0.2rem 0.5rem; cursor: pointer; border-radius: 3px;
+  min-width: 2rem; text-align: center;
+}
+.export-delim:hover { color: var(--fg-bright); border-color: var(--amber); }
+.export-delim.active { background: var(--amber); color: var(--bg); border-color: var(--amber); }
+.export-row-preview {
+  font: 0.75rem var(--mono); color: var(--fg-dim);
+}
+.export-main-content {
+  flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0.75rem;
+}
+.export-format {
+  border: 1px solid var(--border); border-radius: 4px; padding: 0.6rem 0.75rem;
+  background: var(--bg1); margin-bottom: 0.75rem;
+}
+.export-format-row {
+  display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.4rem;
+}
+.export-format-row:last-child { margin-bottom: 0; }
+.export-format-row label {
+  font: 0.75rem var(--mono); color: var(--fg-dim); cursor: pointer;
+  display: flex; align-items: center; gap: 0.3rem;
+}
+.export-custom-delim {
+  width: 3.5ch; background: var(--bg); border: 1px solid var(--border); color: var(--fg);
+  font: 0.75rem var(--mono); padding: 0.2rem 0.3rem; border-radius: 3px; text-align: center;
+}
+.export-custom-delim:focus { border-color: var(--amber); outline: none; }
+.export-quote, .export-ending, .export-decsep {
+  background: var(--bg2); border: 1px solid var(--border); color: var(--fg-dim);
+  font: 0.75rem var(--mono); padding: 0.2rem 0.5rem; cursor: pointer; border-radius: 3px;
+  min-width: 2rem; text-align: center;
+}
+.export-quote:hover, .export-ending:hover, .export-decsep:hover {
+  color: var(--fg-bright); border-color: var(--amber);
+}
+.export-quote.active, .export-ending.active, .export-decsep.active {
+  background: var(--amber); color: var(--bg); border-color: var(--amber);
+}
+.export-select {
+  background: var(--bg); border: 1px solid var(--border); color: var(--fg);
+  font: 0.72rem var(--mono); padding: 0.2rem 0.35rem; border-radius: 3px; cursor: pointer;
+}
+.export-select:focus { border-color: var(--amber); outline: none; }
+.export-inline-input {
+  width: 5ch; background: var(--bg); border: 1px solid var(--border); color: var(--fg);
+  font: 0.72rem var(--mono); padding: 0.2rem 0.35rem; border-radius: 3px; text-align: center;
+}
+.export-inline-input:focus { border-color: var(--amber); outline: none; }
+.export-format-warn {
+  font-size: 0.72rem; color: var(--amber); margin-top: 0.35rem; padding: 0.25rem 0;
+}
+.export-preview {
+  border: 1px solid var(--border); border-radius: 4px; margin-bottom: 0.75rem; overflow: hidden;
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+}
+.export-preview-head {
+  display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border); background: var(--bg1);
+}
+.export-preview-info {
+  font: 0.72rem var(--mono); color: var(--fg-dim); margin-left: auto;
+}
+.export-preview-pre {
+  font: 0.72rem var(--mono); color: var(--fg); background: var(--bg);
+  padding: 0.5rem 0.6rem; margin: 0; overflow: auto;
+  white-space: pre; line-height: 1.5; flex: 1; min-height: 0;
+}
+.export-comment-section {
+  margin-bottom: 0.75rem;
+}
+.export-comment-toolbar {
+  display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;
+}
+.export-comment-toolbar button {
+  background: var(--bg2); border: 1px solid var(--border); color: var(--fg-dim);
+  font: 0.72rem var(--mono); padding: 0.2rem 0.5rem; cursor: pointer; border-radius: 3px;
+}
+.export-comment-toolbar button:hover { color: var(--fg-bright); border-color: var(--amber); }
+.export-comment-textarea {
+  width: 100%; box-sizing: border-box; background: var(--bg); border: 1px solid var(--border);
+  color: var(--fg); font: 0.75rem var(--mono); padding: 0.4rem 0.5rem; border-radius: 4px;
+  resize: vertical;
+}
+.export-comment-textarea:focus { border-color: var(--amber); outline: none; }
 .export-col-list {
-  max-height: 420px; overflow-y: auto; border: 1px solid var(--border);
-  border-radius: 4px; background: var(--bg1); margin-bottom: 0.75rem;
+  overflow-y: auto;
 }
 .export-col-item {
   display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.6rem;
@@ -2669,6 +2795,7 @@ table.cat-values td.cat-pct-cell {
 }
 .export-col-item:last-child { border-bottom: none; }
 .export-col-item:hover { background: var(--bg2); }
+.export-col-item.export-col-hidden { display: none; }
 .export-col-item input[type="checkbox"] { flex-shrink: 0; cursor: pointer; }
 .export-col-item .ecol-name {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -2697,25 +2824,16 @@ table.cat-values td.cat-pct-cell {
   background-image: radial-gradient(circle, var(--amber) 1px, transparent 1px);
   opacity: 1;
 }
-.export-col-item.dragging {
-  opacity: 0.25;
-}
-.export-col-item.drag-over-top {
-  box-shadow: 0 -2px 0 0 var(--amber);
-}
-.export-col-item.drag-over-bottom {
-  box-shadow: 0 2px 0 0 var(--amber);
-}
-.export-actions {
-  display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;
-}
+.export-col-item.dragging { opacity: 0.25; }
+.export-col-item.drag-over-top { box-shadow: 0 -2px 0 0 var(--amber); }
+.export-col-item.drag-over-bottom { box-shadow: 0 2px 0 0 var(--amber); }
 .export-btn {
   background: var(--amber); color: var(--bg); border: none; font: 600 0.82rem var(--mono);
   padding: 0.5rem 1.4rem; border-radius: 4px; cursor: pointer;
 }
 .export-btn:hover { filter: brightness(1.15); }
 .export-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.export-info { font-size: 0.72rem; color: var(--fg-dim); }
+.export-info { font-size: 0.72rem; color: var(--fg-dim); margin-top: 0.5rem; }
 .export-progress { display: none; margin-top: 0.5rem; }
 .export-progress.active { display: block; }
 .export-progress-label { font-size: 0.72rem; color: var(--fg-dim); margin-bottom: 0.3rem; }
@@ -2725,9 +2843,14 @@ table.cat-values td.cat-pct-cell {
 .export-progress-fill {
   height: 100%; width: 0; background: var(--amber); transition: width 0.15s;
 }
+@media (max-width: 700px) {
+  .export-body { flex-direction: column; }
+  .export-sidebar { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid var(--border); max-height: 40vh; }
+  .export-main { min-height: 200px; }
+}
 
 /* Swath */
-#panelSwath.active { display: flex; flex-direction: column; height: calc(100vh - 100px); }
+#panelSwath.active { display: flex; flex-direction: column; }
 .swath-body {
   display: flex;
   flex: 1;
@@ -2853,6 +2976,183 @@ table.cat-values td.cat-pct-cell {
 @media (max-width: 700px) {
   .swath-body { flex-direction: column; }
   .swath-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: none;
+    overflow-y: auto;
+  }
+}
+
+#panelGt.active { display: flex; flex-direction: column; }
+#panelStats.active { display: flex; flex-direction: column; }
+
+/* GT (Grade-Tonnage) */
+.gt-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.gt-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--bg1);
+}
+.gt-sidebar-section {
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.gt-sidebar-title {
+  font-size: 0.62rem;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.3rem;
+}
+.gt-select {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  width: 100%;
+}
+.gt-select:focus { border-color: var(--amber); outline: none; }
+.gt-input {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.2rem 0.5rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+.gt-input:focus { border-color: var(--amber); outline: none; }
+.gt-vol-display {
+  font-size: 0.65rem; color: var(--fg-dim); margin-bottom: 0.2rem;
+}
+.gt-radio-label {
+  font-size: 0.68rem; color: var(--fg); margin-right: 0.7rem; cursor: pointer;
+}
+.gt-radio-label input { accent-color: var(--amber); cursor: pointer; margin-right: 0.2rem; }
+.gt-generate {
+  background: var(--amber); color: var(--bg); border: none;
+  padding: 0.4rem 1rem; border-radius: 3px; cursor: pointer;
+  font: 600 0.75rem var(--mono); width: 100%; white-space: nowrap;
+}
+.gt-generate:hover { filter: brightness(1.15); }
+.gt-generate:disabled { opacity: 0.4; cursor: not-allowed; }
+.gt-progress { display: none; margin-top: 0.4rem; }
+.gt-progress.active { display: block; }
+.gt-progress-bar { height: 4px; background: var(--bg2); border-radius: 2px; overflow: hidden; }
+.gt-progress-fill { height: 100%; width: 0; background: var(--amber); transition: width 0.15s; }
+.gt-progress-label { font-size: 0.62rem; color: var(--fg-dim); margin-top: 0.2rem; }
+.gt-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 1rem;
+}
+.gt-hint { color: var(--fg-dim); font-size: 0.78rem; padding: 2rem; text-align: center; opacity: 0.5; }
+.gt-toolbar {
+  display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.8rem;
+}
+.gt-copy-btn {
+  background: none; border: 1px solid var(--border); color: var(--fg-dim);
+  font: 0.65rem var(--mono); padding: 0.2rem 0.6rem; border-radius: 3px; cursor: pointer;
+}
+.gt-copy-btn:hover { border-color: var(--fg-dim); color: var(--fg); }
+.gt-elapsed { font-size: 0.6rem; color: var(--fg-dim); margin-left: auto; }
+.gt-chart-wrap { margin-bottom: 1rem; }
+.gt-chart-wrap svg { width: 100%; height: auto; max-height: 500px; }
+.gt-table-wrap { overflow-x: auto; }
+.gt-table {
+  width: 100%; border-collapse: collapse; font-size: 0.72rem;
+}
+.gt-table th {
+  text-align: left; padding: 0.35rem 0.6rem; border-bottom: 2px solid var(--border);
+  color: var(--fg-dim); font-weight: 600; font-size: 0.65rem; text-transform: uppercase;
+  letter-spacing: 0.04em; white-space: nowrap;
+}
+.gt-table td {
+  padding: 0.25rem 0.6rem; border-bottom: 1px solid var(--bg3);
+  color: var(--fg); font-variant-numeric: tabular-nums;
+}
+.gt-table tbody tr:hover { background: var(--bg2); }
+.gt-sidebar-section--grow {
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.gt-var-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 60px;
+  max-height: 200px;
+}
+.gt-var-item {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.2rem;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+.gt-var-item:hover { background: var(--bg2); }
+.gt-var-item input { cursor: pointer; accent-color: var(--amber); flex-shrink: 0; }
+.gt-var-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.gt-var-unit {
+  margin-left: auto;
+  font: 0.62rem var(--mono);
+  background: var(--bg);
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 0 0.2rem;
+  cursor: pointer;
+  max-width: 50px;
+  flex-shrink: 0;
+}
+.gt-var-search { margin-bottom: 0.3rem; padding: 0.15rem 0.4rem !important; font-size: 0.65rem !important; }
+.gt-group-values { margin-top: 0.4rem; }
+.gt-group-values .gt-var-list { max-height: 150px; }
+.gt-var-btns {
+  display: flex; gap: 0.3rem; margin-bottom: 0.3rem;
+}
+.gt-var-btns button {
+  background: none; border: 1px solid var(--border); color: var(--fg-dim);
+  font: 0.6rem var(--mono); padding: 0.1rem 0.4rem; border-radius: 2px; cursor: pointer;
+}
+.gt-var-btns button:hover { border-color: var(--fg-dim); color: var(--fg); }
+.gt-chart-title {
+  font-size: 0.72rem; color: var(--fg-bright); margin-bottom: 0.4rem; font-weight: 600;
+}
+.gt-table-section { margin-top: 0.5rem; border: 1px solid var(--border); border-radius: 4px; }
+.gt-table-header {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.35rem 0.6rem; cursor: pointer; user-select: none;
+  font-size: 0.68rem; color: var(--fg-bright); font-weight: 600;
+  background: var(--bg1); border-radius: 4px 4px 0 0;
+}
+.gt-table-header:hover { background: var(--bg2); }
+.gt-table-toggle { font-size: 0.55rem; color: var(--fg-dim); width: 0.7rem; text-align: center; }
+.gt-table-header .gt-copy-btn { margin-left: auto; }
+@media (max-width: 700px) {
+  .gt-body { flex-direction: column; }
+  .gt-sidebar {
     width: 100%;
     border-right: none;
     border-bottom: 1px solid var(--border);
@@ -3264,6 +3564,7 @@ table.cat-values td.cat-pct-cell {
       <button class="results-tab" data-tab="categories">Categories</button>
       <button class="results-tab" data-tab="statscat">StatsCat</button>
       <button class="results-tab" data-tab="export">Export</button>
+      <button class="results-tab" data-tab="gt">GT</button>
       <button class="results-tab" data-tab="swath">Swath</button>
       <button class="results-tab" data-tab="section">Section</button>
     </div>
@@ -3486,28 +3787,111 @@ table.cat-values td.cat-pct-cell {
         </div>
       </div>
       <div class="results-panel" id="panelExport" data-tab="export">
-        <div class="panel-inner">
-          <div class="section">
-            <div class="section-head">
-              Export Columns <span class="badge" id="exportBadge">0</span>
-            </div>
-            <div class="section-body export-body">
-              <div class="export-toolbar">
+        <div class="export-body" id="exportBody">
+          <div class="export-sidebar">
+            <div class="export-sidebar-section">
+              <div class="export-sidebar-title">Columns <span class="badge" id="exportBadge">0</span></div>
+              <input type="text" class="export-col-search" id="exportColSearch" placeholder="Search columns…" autocomplete="off" spellcheck="false">
+              <div class="export-sel-btns">
                 <button id="exportSelAll">All</button>
                 <button id="exportSelNone">None</button>
                 <button id="exportSelOrig">Original</button>
                 <button id="exportSelCalc">Calcols</button>
               </div>
+            </div>
+            <div class="export-sidebar-section--grow">
               <div class="export-col-list" id="exportColList"></div>
-              <div class="export-actions">
+            </div>
+          </div>
+          <div class="export-main">
+            <div class="export-toolbar" id="exportToolbar">
+              <div class="tb-group" style="margin-left:auto">
+                <span class="export-row-preview" id="exportRowPreview"></span>
                 <button class="export-btn" id="exportDownload">Download CSV</button>
-                <span class="export-info" id="exportInfo"></span>
+              </div>
+            </div>
+            <div class="export-main-content" id="exportMainContent">
+              <div class="export-format" id="exportFormatSection">
+                <div class="export-format-row">
+                  <span class="export-label">Delimiter</span>
+                  <button class="export-delim active" data-delim=",">,</button>
+                  <button class="export-delim" data-delim="tab">Tab</button>
+                  <button class="export-delim" data-delim=";">;</button>
+                  <button class="export-delim" data-delim="|">|</button>
+                  <button class="export-delim" data-delim=" ">Spc</button>
+                  <span class="export-label" style="margin-left:0.5rem">Other</span>
+                  <input type="text" class="export-custom-delim" id="exportCustomDelim" maxlength="4" placeholder="…">
+                </div>
+                <div class="export-format-row">
+                  <span class="export-label">Quote</span>
+                  <button class="export-quote active" data-quote='"'>&quot;</button>
+                  <button class="export-quote" data-quote="'">&apos;</button>
+                  <button class="export-quote" data-quote="">None</button>
+                  <span class="export-label" style="margin-left:0.75rem">Ending</span>
+                  <button class="export-ending active" data-ending="lf">LF</button>
+                  <button class="export-ending" data-ending="crlf">CRLF</button>
+                  <label style="margin-left:0.75rem"><input type="checkbox" id="exportIncludeHeader" checked> Header row</label>
+                  <label><input type="checkbox" id="exportCommentHeader"> Comment header</label>
+                </div>
+                <div class="export-format-row">
+                  <span class="export-label">Nulls</span>
+                  <select class="export-select" id="exportNullSelect">
+                    <option value="">(empty)</option>
+                    <option value="NA">NA</option>
+                    <option value="NaN">NaN</option>
+                    <option value="NULL">NULL</option>
+                    <option value="-999">-999</option>
+                    <option value="custom">Custom…</option>
+                  </select>
+                  <input type="text" class="export-inline-input" id="exportNullInput" style="display:none" placeholder="value" maxlength="20">
+                  <span class="export-label" style="margin-left:0.75rem">Precision</span>
+                  <select class="export-select" id="exportPrecisionSelect">
+                    <option value="auto">Auto</option>
+                    <option value="0">0 dp</option>
+                    <option value="1">1 dp</option>
+                    <option value="2">2 dp</option>
+                    <option value="3">3 dp</option>
+                    <option value="4">4 dp</option>
+                    <option value="6">6 dp</option>
+                    <option value="8">8 dp</option>
+                    <option value="10">10 dp</option>
+                    <option value="custom">Custom…</option>
+                  </select>
+                  <input type="number" class="export-inline-input" id="exportPrecisionInput" style="display:none" min="0" max="20" placeholder="dp">
+                  <span class="export-label" style="margin-left:0.75rem">Dec sep</span>
+                  <button class="export-decsep active" data-sep=".">.</button>
+                  <button class="export-decsep" data-sep=",">,</button>
+                </div>
+                <div class="export-format-warn" id="exportPrecisionWarn" style="display:none"></div>
+              </div>
+              <div class="export-comment-section" id="exportCommentSection" style="display:none">
+                <div class="export-comment-toolbar">
+                  <span class="export-label">Comment Header</span>
+                  <button id="exportCommentGenerate" title="Generate from detected geometry">Generate from geometry</button>
+                </div>
+                <textarea id="exportCommentText" class="export-comment-textarea" rows="6" spellcheck="false" placeholder="Lines will be prefixed with # in the output"></textarea>
+              </div>
+              <div class="export-preview" id="exportPreview">
+                <div class="export-preview-head">
+                  <span class="export-label">Preview</span>
+                  <span class="export-preview-info" id="exportPreviewInfo"></span>
+                </div>
+                <pre class="export-preview-pre" id="exportPreviewPre"></pre>
               </div>
               <div class="export-progress" id="exportProgress">
                 <div class="export-progress-label" id="exportProgressLabel"></div>
                 <div class="export-progress-bar"><div class="export-progress-fill" id="exportProgressFill"></div></div>
               </div>
+              <div class="export-info" id="exportInfo"></div>
             </div>
+          </div>
+        </div>
+      </div>
+      <div class="results-panel" id="panelGt" data-tab="gt">
+        <div class="gt-body">
+          <div class="gt-sidebar" id="gtSidebar"></div>
+          <div class="gt-content" id="gtContent">
+            <div class="gt-hint">Select a grade variable and click Generate.</div>
           </div>
         </div>
       </div>
@@ -4555,6 +4939,14 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
 
 async function exportCSV(data) {
   const { file, filter, zipEntry, calcolCode, calcolMeta, resolvedTypes, exportCols } = data;
+  const outDelim = data.delimiter || ',';
+  const includeHeader = data.includeHeader !== false;
+  const commentLines = data.commentLines || null;
+  const quoteChar = data.quoteChar !== undefined ? data.quoteChar : '"';
+  const lineEnding = data.lineEnding || '\\n';
+  const nullValue = data.nullValue !== undefined ? data.nullValue : '';
+  const precision = data.precision !== undefined ? data.precision : null;
+  const decimalSep = data.decimalSep || '.';
   const startTime = performance.now();
 
   let csvFile = file;
@@ -4600,6 +4992,12 @@ async function exportCSV(data) {
     }
   }
 
+  // Precompute escaped quoteChar regex
+  var qcEscRe = null;
+  if (quoteChar) {
+    qcEscRe = new RegExp(quoteChar.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&'), 'g');
+  }
+
   function buildRow(fields) {
     const obj = {};
     for (let i = 0; i < nCols; i++) {
@@ -4611,17 +5009,31 @@ async function exportCSV(data) {
   }
 
   function csvEscape(v) {
-    if (v === null || v === undefined) return '';
-    const s = String(v);
-    if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\\n') >= 0 || s.indexOf('\\r') >= 0) {
-      return '"' + s.replace(/"/g, '""') + '"';
+    if (v === null || v === undefined || (typeof v === 'number' && !isFinite(v))) return nullValue;
+    var s;
+    if (typeof v === 'number') {
+      s = precision !== null ? v.toFixed(precision) : String(v);
+      if (decimalSep !== '.') s = s.replace('.', decimalSep);
+    } else {
+      s = String(v);
+    }
+    if (quoteChar && (s.indexOf(outDelim) >= 0 || s.indexOf(quoteChar) >= 0 || s.indexOf('\\n') >= 0 || s.indexOf('\\r') >= 0)) {
+      return quoteChar + s.replace(qcEscRe, quoteChar + quoteChar) + quoteChar;
     }
     return s;
   }
 
+  // Comment header lines
+  if (commentLines && commentLines.length > 0) {
+    const commentBlock = commentLines.map(function(l) { return '# ' + l; }).join(lineEnding) + lineEnding;
+    self.postMessage({ type: 'export-chunk', csv: commentBlock });
+  }
+
   // CSV header row
-  const headerLine = exportCols.map(c => csvEscape(c.outputName)).join(',') + '\\n';
-  self.postMessage({ type: 'export-chunk', csv: headerLine });
+  if (includeHeader) {
+    const headerLine = exportCols.map(function(c) { return csvEscape(c.outputName); }).join(outDelim) + lineEnding;
+    self.postMessage({ type: 'export-chunk', csv: headerLine });
+  }
 
   const stream = csvFile.stream().pipeThrough(new TextDecoderStream());
   const reader = stream.getReader();
@@ -4656,7 +5068,7 @@ async function exportCSV(data) {
       if (filterFn && !filterFn(row)) continue;
 
       rowCount++;
-      const csvLine = exportCols.map(c => csvEscape(row[c.name])).join(',') + '\\n';
+      const csvLine = exportCols.map(c => csvEscape(row[c.name])).join(outDelim) + lineEnding;
       chunkLines.push(csvLine);
 
       if (chunkLines.length >= CHUNK_SIZE) {
@@ -4674,7 +5086,7 @@ async function exportCSV(data) {
       const row = buildRow(fields);
       if (!filterFn || filterFn(row)) {
         rowCount++;
-        chunkLines.push(exportCols.map(c => csvEscape(row[c.name])).join(',') + '\\n');
+        chunkLines.push(exportCols.map(c => csvEscape(row[c.name])).join(outDelim) + lineEnding);
       }
     }
   }
@@ -4999,6 +5411,273 @@ async function sectionAnalysis(data) {
   });
 }
 
+async function gtAnalysis(data) {
+  var startTime = performance.now();
+  var file = data.file, zipEntry = data.zipEntry, globalFilter = data.globalFilter,
+      localFilter = data.localFilter, calcolCode = data.calcolCode, calcolMeta = data.calcolMeta,
+      resolvedTypes = data.resolvedTypes,
+      densityCol = data.densityCol, weightCol = data.weightCol,
+      dxyzCols = data.dxyzCols, blockVolume = data.blockVolume,
+      groupByCol = data.groupByCol != null ? data.groupByCol : null;
+
+  // Multi-grade: gradeCols + gradeRanges arrays
+  var gradeCols = data.gradeCols;
+  var gradeRanges = data.gradeRanges;
+
+  var csvFile = file;
+  if (isZipFile(file)) {
+    try { csvFile = await extractCSVFromZip(file, zipEntry); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  }
+
+  var sampleLines = await readSample(csvFile, 50);
+  if (sampleLines.length < 2) { self.postMessage({ type: 'error', message: 'File appears empty.' }); return; }
+
+  var delimiter = detectDelimiter(sampleLines.slice(0, 20));
+  var header = sampleLines[0].split(delimiter).map(function(h) { return h.trim().replace(/^["']|["']$/g, ''); });
+  var nCols = header.length;
+  var rowVarName = 'r';
+  var colSet = new Set(header);
+  for (var ci = 0; ci < ['r','d','row','_r','_d'].length; ci++) {
+    var cand = ['r','d','row','_r','_d'][ci];
+    if (!colSet.has(cand)) { rowVarName = cand; break; }
+  }
+
+  var colTypes = resolvedTypes;
+
+  var calcolFn = null;
+  if (calcolCode && calcolMeta && calcolMeta.length > 0) {
+    try { calcolFn = new Function(rowVarName, MATH_PREAMBLE + calcolCode); }
+    catch(e) { calcolFn = null; }
+  }
+
+  var globalFn = null, localFn = null;
+  if (globalFilter) {
+    try { globalFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + globalFilter.expression + '); } catch(e) { return false; }'); }
+    catch(e) { self.postMessage({ type: 'error', message: 'Global filter error: ' + e.message }); return; }
+  }
+  if (localFilter) {
+    try { localFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + localFilter + '); } catch(e) { return false; }'); }
+    catch(e) { self.postMessage({ type: 'error', message: 'Local filter error: ' + e.message }); return; }
+  }
+
+  function buildRow(fields) {
+    var obj = {};
+    for (var i = 0; i < nCols; i++) {
+      var raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+    }
+    if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) {} delete obj.META; }
+    return obj;
+  }
+
+  // Resolve column names
+  function resolveColName(idx) {
+    if (idx >= nCols && calcolMeta) return calcolMeta[idx - nCols].name;
+    return header[idx];
+  }
+
+  var densityColName = densityCol != null && densityCol >= 0 ? resolveColName(densityCol) : null;
+  var weightColName = weightCol != null && weightCol >= 0 ? resolveColName(weightCol) : null;
+  var dxyzNames = dxyzCols ? [header[dxyzCols[0]], header[dxyzCols[1]], header[dxyzCols[2]]] : null;
+
+  // Resolve group-by column name
+  var groupByColName = groupByCol !== null ? resolveColName(groupByCol) : null;
+  var GT_MAX_GROUPS = 200;
+
+  // Per-grade-variable bin arrays
+  var N_BINS = 10000;
+  var gradeInfo = [];
+  for (var gi = 0; gi < gradeCols.length; gi++) {
+    var gc = gradeCols[gi];
+    var gr = gradeRanges[gi];
+    var colName = resolveColName(gc);
+    var bw = (gr.max - gr.min) / N_BINS;
+    gradeInfo.push({
+      colIdx: gc,
+      colName: colName,
+      gradeMin: gr.min,
+      gradeMax: gr.max,
+      binWidth: bw,
+      groups: {} // groupVal -> { tonnageBins, metalBins }
+    });
+    // Create default (ungrouped) bins
+    gradeInfo[gi].groups['__all__'] = {
+      tonnageBins: new Float64Array(N_BINS),
+      metalBins: new Float64Array(N_BINS)
+    };
+  }
+
+  function getGroupBins(gInfo, gv) {
+    var bins = gInfo.groups[gv];
+    if (bins) return bins;
+    if (Object.keys(gInfo.groups).length >= GT_MAX_GROUPS + 1) return null; // +1 for __all__
+    bins = { tonnageBins: new Float64Array(N_BINS), metalBins: new Float64Array(N_BINS) };
+    gInfo.groups[gv] = bins;
+    return bins;
+  }
+
+  function processRowGt(row, tonnage) {
+    var gv = groupByColName ? String(row[groupByColName] || '') : null;
+    for (var gi = 0; gi < gradeInfo.length; gi++) {
+      var info = gradeInfo[gi];
+      var grade = row[info.colName];
+      if (grade == null || typeof grade !== 'number' || !isFinite(grade)) continue;
+      var metal = grade * tonnage;
+      var binIdx = Math.floor((grade - info.gradeMin) / info.binWidth);
+      if (binIdx < 0) binIdx = 0;
+      if (binIdx >= N_BINS) binIdx = N_BINS - 1;
+      // Always accumulate into __all__
+      info.groups['__all__'].tonnageBins[binIdx] += tonnage;
+      info.groups['__all__'].metalBins[binIdx] += metal;
+      // Group bins
+      if (gv !== null) {
+        var gb = getGroupBins(info, gv);
+        if (gb) {
+          gb.tonnageBins[binIdx] += tonnage;
+          gb.metalBins[binIdx] += metal;
+        }
+      }
+    }
+  }
+
+  var stream = csvFile.stream().pipeThrough(new TextDecoderStream());
+  var reader = stream.getReader();
+  var buffer = '', isFirstLine = true, totalChars = 0, lastProgress = 0;
+
+  while (true) {
+    var res = await reader.read();
+    if (res.done) break;
+    totalChars += res.value.length;
+    buffer += res.value;
+    var parts = buffer.split('\\n');
+    buffer = parts.pop();
+
+    for (var pi = 0; pi < parts.length; pi++) {
+      var line = parts[pi].replace(/\\r$/, '');
+      if (line.startsWith('#')) continue;
+      if (isFirstLine) { isFirstLine = false; continue; }
+      if (!line) continue;
+
+      var fields = line.split(delimiter);
+      var row = buildRow(fields);
+      if (globalFn && !globalFn(row)) continue;
+      if (localFn && !localFn(row)) continue;
+
+      // Compute tonnage for this block
+      var volume = 1;
+      if (dxyzNames) {
+        var dx = row[dxyzNames[0]], dy = row[dxyzNames[1]], dz = row[dxyzNames[2]];
+        if (typeof dx === 'number' && typeof dy === 'number' && typeof dz === 'number' && isFinite(dx) && isFinite(dy) && isFinite(dz)) {
+          volume = Math.abs(dx) * Math.abs(dy) * Math.abs(dz);
+        }
+      } else if (blockVolume > 0) {
+        volume = blockVolume;
+      }
+      var density = 1;
+      if (densityColName) {
+        var dv = row[densityColName];
+        if (typeof dv === 'number' && isFinite(dv) && dv > 0) density = dv;
+      }
+      var weight = 1;
+      if (weightColName) {
+        var wv = row[weightColName];
+        if (typeof wv === 'number' && isFinite(wv) && wv > 0) weight = wv;
+      }
+      var tonnage = volume * density * weight;
+      processRowGt(row, tonnage);
+
+      if (totalChars - lastProgress >= 500000) {
+        lastProgress = totalChars;
+        self.postMessage({ type: 'gt-progress', percent: (totalChars / csvFile.size) * 100 });
+      }
+    }
+  }
+  // Last buffer line
+  if (buffer) {
+    var lastLine = buffer.replace(/\\r$/, '');
+    if (lastLine && !lastLine.startsWith('#') && !isFirstLine) {
+      var lastFields = lastLine.split(delimiter);
+      var lastRow = buildRow(lastFields);
+      if ((!globalFn || globalFn(lastRow)) && (!localFn || localFn(lastRow))) {
+        var lVol = 1;
+        if (dxyzNames) {
+          var ldx = lastRow[dxyzNames[0]], ldy = lastRow[dxyzNames[1]], ldz = lastRow[dxyzNames[2]];
+          if (typeof ldx === 'number' && typeof ldy === 'number' && typeof ldz === 'number' && isFinite(ldx) && isFinite(ldy) && isFinite(ldz)) {
+            lVol = Math.abs(ldx) * Math.abs(ldy) * Math.abs(ldz);
+          }
+        } else if (blockVolume > 0) {
+          lVol = blockVolume;
+        }
+        var lDen = 1;
+        if (densityColName) { var ldv = lastRow[densityColName]; if (typeof ldv === 'number' && isFinite(ldv) && ldv > 0) lDen = ldv; }
+        var lWt = 1;
+        if (weightColName) { var lwv = lastRow[weightColName]; if (typeof lwv === 'number' && isFinite(lwv) && lwv > 0) lWt = lwv; }
+        var lTon = lVol * lDen * lWt;
+        processRowGt(lastRow, lTon);
+      }
+    }
+  }
+
+  // Post-process: cumulative sums for each grade variable and group
+  function buildResults(tonnageBins, metalBins, gradeMin, binWidth) {
+    var cumTonnage = new Float64Array(N_BINS);
+    var cumMetal = new Float64Array(N_BINS);
+    cumTonnage[N_BINS - 1] = tonnageBins[N_BINS - 1];
+    cumMetal[N_BINS - 1] = metalBins[N_BINS - 1];
+    for (var i = N_BINS - 2; i >= 0; i--) {
+      cumTonnage[i] = cumTonnage[i + 1] + tonnageBins[i];
+      cumMetal[i] = cumMetal[i + 1] + metalBins[i];
+    }
+    var totalTonnage = cumTonnage[0];
+    var results = [];
+    for (var j = 0; j < N_BINS; j++) {
+      results.push({
+        cutoff: gradeMin + j * binWidth,
+        tonnage: cumTonnage[j],
+        grade: cumTonnage[j] > 0 ? cumMetal[j] / cumTonnage[j] : 0,
+        metal: cumMetal[j]
+      });
+    }
+    return { results: results, totalTonnage: totalTonnage };
+  }
+
+  var gradeResults = [];
+  for (var gi = 0; gi < gradeInfo.length; gi++) {
+    var info = gradeInfo[gi];
+    var allBins = info.groups['__all__'];
+    var allResult = buildResults(allBins.tonnageBins, allBins.metalBins, info.gradeMin, info.binWidth);
+    var groupResults = null;
+    if (groupByColName) {
+      groupResults = {};
+      for (var gv in info.groups) {
+        if (gv === '__all__') continue;
+        var gb = info.groups[gv];
+        groupResults[gv] = buildResults(gb.tonnageBins, gb.metalBins, info.gradeMin, info.binWidth);
+      }
+    }
+    gradeResults.push({
+      colIdx: info.colIdx,
+      colName: info.colName,
+      results: allResult.results,
+      totalTonnage: allResult.totalTonnage,
+      gradeMin: info.gradeMin,
+      gradeMax: info.gradeMax,
+      binWidth: info.binWidth,
+      groupResults: groupResults
+    });
+  }
+
+  var elapsed = performance.now() - startTime;
+  self.postMessage({
+    type: 'gt-complete',
+    gradeResults: gradeResults,
+    grouped: groupByColName !== null,
+    groupByColName: groupByColName,
+    elapsed: elapsed
+  });
+}
+
 self.onmessage = (e) => {
   if (e.data.mode === 'export') {
     exportCSV(e.data);
@@ -5006,6 +5685,8 @@ self.onmessage = (e) => {
     swathAnalysis(e.data);
   } else if (e.data.mode === 'section') {
     sectionAnalysis(e.data);
+  } else if (e.data.mode === 'gt') {
+    gtAnalysis(e.data);
   } else {
     const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride } = e.data;
     analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride);
@@ -5111,7 +5792,7 @@ let currentGroupBy = null; // column index for StatsCat grouping
 let currentStatsCatVar = null; // selected numeric column index
 let currentStatsCatChecked = null; // Set<string> of checked group values (null = all)
 let lastStatsCatData = null; // cached full data for re-render
-let statsCatGroupSortMode = 'count'; // 'count' or 'name'
+let statsCatGroupSortMode = null; // null = inherit from Categories tab, or 'count-desc'|'count-asc'|'alpha'|'custom'
 let statsCatSelectedVars = new Set(); // col indices selected for group stats analysis
 let statsCatCdfScale = 'linear'; // 'linear' or 'log'
 let statsCatCdfManual = false;
@@ -5144,6 +5825,16 @@ let statsCdfScale = 'linear';     // 'linear' | 'log'
 // Export
 let exportWorker = null;
 let exportColumns = []; // [{name, outputName, type, selected, isCalcol}]
+let exportDelimiter = ',';
+let exportIncludeHeader = true;
+let exportCommentHeader = false;
+let exportCommentText = '';
+let exportQuoteChar = '"';       // '"', "'", '' (none)
+let exportLineEnding = '\n';     // '\n' or '\r\n'
+let exportNullValue = '';        // string to write for NaN/null
+let exportPrecision = null;      // null = auto (passthrough), or integer (decimal places)
+let exportDecimalSep = '.';      // '.' or ','
+let exportSourcePrecision = {};  // {colName: maxDp} detected from preflight
 const $exportColList = document.getElementById('exportColList');
 const $exportBadge = document.getElementById('exportBadge');
 const $exportDownload = document.getElementById('exportDownload');
@@ -5151,6 +5842,25 @@ const $exportInfo = document.getElementById('exportInfo');
 const $exportProgress = document.getElementById('exportProgress');
 const $exportProgressLabel = document.getElementById('exportProgressLabel');
 const $exportProgressFill = document.getElementById('exportProgressFill');
+const $exportColSearch = document.getElementById('exportColSearch');
+const $exportBody = document.getElementById('exportBody');
+const $exportToolbar = document.getElementById('exportToolbar');
+const $exportRowPreview = document.getElementById('exportRowPreview');
+const $exportIncludeHeader = document.getElementById('exportIncludeHeader');
+const $exportCommentHeader = document.getElementById('exportCommentHeader');
+const $exportCommentSection = document.getElementById('exportCommentSection');
+const $exportCommentText = document.getElementById('exportCommentText');
+const $exportCommentGenerate = document.getElementById('exportCommentGenerate');
+const $exportCustomDelim = document.getElementById('exportCustomDelim');
+const $exportFormatSection = document.getElementById('exportFormatSection');
+const $exportPreview = document.getElementById('exportPreview');
+const $exportPreviewPre = document.getElementById('exportPreviewPre');
+const $exportPreviewInfo = document.getElementById('exportPreviewInfo');
+const $exportPrecisionSelect = document.getElementById('exportPrecisionSelect');
+const $exportPrecisionInput = document.getElementById('exportPrecisionInput');
+const $exportNullSelect = document.getElementById('exportNullSelect');
+const $exportNullInput = document.getElementById('exportNullInput');
+const $exportPrecisionWarn = document.getElementById('exportPrecisionWarn');
 
 // DXYZ state
 let currentDXYZ = { dx: -1, dy: -1, dz: -1 };
@@ -5159,6 +5869,11 @@ let currentDXYZ = { dx: -1, dy: -1, dz: -1 };
 let swathWorker = null;
 let lastSwathData = null;
 let swathExprController = null;
+
+// GT state
+let gtWorker = null;
+let lastGtData = null;
+let gtExprController = null;
 
 // Section state
 let sectionBlocks = null;
@@ -5200,7 +5915,10 @@ function switchTab(tabId) {
 }
 $resultsTabs.addEventListener('click', (e) => {
   const tab = e.target.closest('.results-tab');
-  if (tab) switchTab(tab.dataset.tab);
+  if (tab) {
+    switchTab(tab.dataset.tab);
+    if (typeof autoSaveProject === 'function') autoSaveProject();
+  }
 });
 
 // ─── Preflight: main-thread helpers ────────────────────────────────────
@@ -5288,9 +6006,9 @@ async function readPreviewFromZipEntry(file, entry, maxLines) {
   return readLinesFromStream(stream, maxLines);
 }
 
-async function readLinesFromStream(stream, maxLines) {
+async function readLinesFromStream(stream, maxLines, captureComments) {
   const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
-  let buf = '', lines = [];
+  let buf = '', lines = [], commentLines = [], headerReached = false;
   while (lines.length < maxLines + 1) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -5299,16 +6017,25 @@ async function readLinesFromStream(stream, maxLines) {
     buf = parts.pop();
     for (const p of parts) {
       const trimmed = p.replace(/\r$/, '');
-      if (trimmed.startsWith('#')) continue;
+      if (trimmed.startsWith('#')) {
+        if (captureComments && !headerReached) commentLines.push(trimmed.replace(/^#\s?/, ''));
+        continue;
+      }
+      headerReached = true;
       lines.push(trimmed);
       if (lines.length >= maxLines + 1) break;
     }
   }
   if (buf && lines.length < maxLines + 1) {
     const trimmed = buf.replace(/\r$/, '');
-    if (!trimmed.startsWith('#')) lines.push(trimmed);
+    if (trimmed.startsWith('#')) {
+      if (captureComments && !headerReached) commentLines.push(trimmed.replace(/^#\s?/, ''));
+    } else {
+      lines.push(trimmed);
+    }
   }
   reader.cancel();
+  if (captureComments) return { lines, commentLines };
   return lines;
 }
 
@@ -5384,6 +6111,7 @@ async function runPreflight(file) {
   let zipEntries = null;
   let lines;
 
+  let commentLines = [];
   if (isZip) {
     zipEntries = await listZipEntries(file);
     const csvEntries = zipEntries.filter(e => CSV_EXTENSIONS_MAIN.test(e.name));
@@ -5391,8 +6119,10 @@ async function runPreflight(file) {
     // Preview the first CSV entry
     lines = await readPreviewFromZipEntry(file, csvEntries[0], 100);
   } else {
-    // Read first ~64KB for preview
-    lines = await readLinesFromStream(file.slice(0, 256 * 1024).stream(), 100);
+    // Read first ~64KB for preview, capture leading comment lines
+    const result = await readLinesFromStream(file.slice(0, 256 * 1024).stream(), 100, true);
+    lines = result.lines;
+    commentLines = result.commentLines;
   }
 
   if (lines.length < 2) throw new Error('File appears empty or has no data rows.');
@@ -5420,7 +6150,8 @@ async function runPreflight(file) {
     xyz: { ...xyzGuess },
     dxyz: { ...dxyzGuess },
     skipCols: new Set(),
-    colFilters: defaultFilters
+    colFilters: defaultFilters,
+    commentLines
   };
 }
 
@@ -5852,15 +6583,51 @@ function renderPreflightTable(data) {
   $preflightPreview.innerHTML = `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
 }
 
+function addThousandsSep(s) {
+  var sep = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.thousandsSep) || 'space';
+  if (sep === 'none') return s;
+  var sepChar = sep === 'comma' ? ',' : '\u2009'; // thin space
+  var parts = s.split('.');
+  var intPart = parts[0];
+  var neg = '';
+  if (intPart.startsWith('-')) { neg = '-'; intPart = intPart.substring(1); }
+  if (intPart.length <= 3) return s;
+  var result = '';
+  for (var i = intPart.length - 1, count = 0; i >= 0; i--, count++) {
+    if (count > 0 && count % 3 === 0) result = sepChar + result;
+    result = intPart[i] + result;
+  }
+  return neg + result + (parts.length > 1 ? '.' + parts[1] : '');
+}
+
 function formatNum(v, decimals) {
-  if (v === null || v === undefined) return '—';
+  if (v === null || v === undefined) return '\u2014';
   var d = decimals;
   if (d === undefined && typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.sigFigs !== null) {
     d = bmaSettings.sigFigs;
   }
-  if (Math.abs(v) >= 1e6 || (Math.abs(v) < 0.001 && v !== 0)) return v.toExponential(d != null ? d : 3);
-  if (Number.isInteger(v)) return v.toLocaleString();
-  return v.toLocaleString(undefined, { minimumFractionDigits: d != null ? d : 2, maximumFractionDigits: d != null ? d : 4 });
+  // Sci notation check
+  var sciMode = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.sciNotation) || 'auto';
+  var useSci = false;
+  if (sciMode === 'auto') {
+    useSci = Math.abs(v) >= 1e6 || (Math.abs(v) < 0.001 && v !== 0);
+  } else if (sciMode !== 'never') {
+    var threshold = parseFloat(sciMode);
+    useSci = isFinite(threshold) && (Math.abs(v) >= threshold || (Math.abs(v) < 0.001 && v !== 0));
+  }
+  if (useSci) return v.toExponential(d != null ? d : 3);
+  // Fixed-point formatting
+  var fracDigits = d != null ? d : (Math.abs(v) >= 100 ? 2 : Math.abs(v) >= 1 ? 3 : 4);
+  if (Number.isInteger(v)) return addThousandsSep(String(v));
+  var s = v.toFixed(fracDigits);
+  // Trim trailing zeros to min 2
+  var fparts = s.split('.');
+  if (fparts.length === 2) {
+    var minFrac = d != null ? d : 2;
+    while (fparts[1].length > minFrac && fparts[1].endsWith('0')) fparts[1] = fparts[1].slice(0, -1);
+    s = fparts[0] + '.' + fparts[1];
+  }
+  return addThousandsSep(s);
 }
 
 function formatSize(bytes) {
@@ -6200,6 +6967,7 @@ function serializeProject() {
   return {
     _bma: 1,
     _ts: Date.now(),
+    activeTab: document.querySelector('.results-tab.active')?.dataset.tab || null,
     file: { name: currentFile.name, size: currentFile.size },
     preflight: {
       typeOverrides: preflightData?.typeOverrides || {},
@@ -6218,7 +6986,13 @@ function serializeProject() {
       selectedVars: Array.from(statsCatSelectedVars),
       sortMode: statsCatGroupSortMode,
       cdfScale: statsCatCdfScale,
-      crossMode: statsCatCrossMode
+      cdfManual: statsCatCdfManual,
+      cdfMin: statsCatCdfMin,
+      cdfMax: statsCatCdfMax,
+      crossMode: statsCatCrossMode,
+      displayVar: currentStatsCatVar,
+      checkedGroups: currentStatsCatChecked ? Array.from(currentStatsCatChecked) : null,
+      showSelectedOnly: statsCatShowSelectedOnly
     },
     statsTab: {
       selectedVars: statsSelectedVars ? Array.from(statsSelectedVars) : null,
@@ -6235,7 +7009,65 @@ function serializeProject() {
     },
     exportCols: exportColumns.map(c => ({
       name: c.name, outputName: c.outputName, selected: c.selected
-    }))
+    })),
+    exportSettings: {
+      delimiter: exportDelimiter,
+      includeHeader: exportIncludeHeader,
+      commentHeader: exportCommentHeader,
+      commentText: exportCommentText,
+      quoteChar: exportQuoteChar,
+      lineEnding: exportLineEnding,
+      nullValue: exportNullValue,
+      precision: exportPrecision,
+      decimalSep: exportDecimalSep
+    },
+    gt: (function() {
+      var varList = document.getElementById('gtVarList');
+      if (!varList) return null;
+      var checked = varList.querySelectorAll('input[type="checkbox"]:checked');
+      var gradeCols = [];
+      for (var ci = 0; ci < checked.length; ci++) gradeCols.push(checked[ci].parentElement.querySelector('span').textContent);
+      var mode = 'range';
+      var modeRadio = document.querySelector('input[name="gtCutoffMode"]:checked');
+      if (modeRadio) mode = modeRadio.value;
+      var gb = document.getElementById('gtGroupBy');
+      return {
+        gradeCols: gradeCols,
+        groupByCol: gb && gb.value !== '-1' && gb.options[gb.selectedIndex] ? gb.options[gb.selectedIndex].textContent : null,
+        densityCol: (function() { var d = document.getElementById('gtDensityCol'); return d && d.value !== '-1' && d.options[d.selectedIndex] ? d.options[d.selectedIndex].textContent : null; })(),
+        weightCol: (function() { var w = document.getElementById('gtWeightCol'); return w && w.value !== '-1' && w.options[w.selectedIndex] ? w.options[w.selectedIndex].textContent : null; })(),
+        localFilter: (document.getElementById('gtLocalFilter') || {}).value || '',
+        cutoffMode: mode,
+        cutoffMin: parseFloat((document.getElementById('gtCutoffMin') || {}).value) || 0,
+        cutoffMax: parseFloat((document.getElementById('gtCutoffMax') || {}).value) || 1,
+        cutoffStep: parseFloat((document.getElementById('gtCutoffStep') || {}).value) || 0.05,
+        cutoffCustom: (document.getElementById('gtCutoffCustomText') || {}).value || '',
+        volumeOverride: parseFloat((document.getElementById('gtVolOverride') || {}).value) || null,
+        tonnageUnit: parseInt((document.getElementById('gtTonnageUnit') || {}).value) || 0,
+        customTonnageSym: (document.getElementById('gtCustomTonnageSym') || {}).value || '',
+        customTonnageDiv: parseFloat((document.getElementById('gtCustomTonnageDiv') || {}).value) || null,
+        gradeUnits: (function() {
+          var gu = {};
+          document.querySelectorAll('.gt-var-unit').forEach(function(sel) {
+            var colIdx = parseInt(sel.dataset.col);
+            var colName = currentHeader[colIdx];
+            if (colName && parseInt(sel.value) !== 0) gu[colName] = parseInt(sel.value);
+          });
+          return Object.keys(gu).length > 0 ? gu : null;
+        })(),
+        selectedGroups: (function() {
+          var list = document.getElementById('gtGrpList');
+          if (!list) return null;
+          var checked = [];
+          var hasTotal = false;
+          list.querySelectorAll('input:checked').forEach(function(cb) {
+            if (cb.value === '__total__') hasTotal = true;
+            else checked.push(cb.value);
+          });
+          return { values: checked, showTotal: hasTotal };
+        })()
+      };
+    })()
   };
 }
 
@@ -6311,7 +7143,13 @@ async function applyProject(project) {
   currentFilter = project.filter || null;
   $filterExpr.value = project.filterText || '';
 
-  // Stash post-analysis config for when analysis runs
+  // Restore StatsCat groupBy + selectedVars NOW (before executeAnalysis)
+  // so the worker includes grouped stats in its analysis
+  const sc = project.statsCat || {};
+  if (sc.groupBy != null) currentGroupBy = sc.groupBy;
+  if (sc.selectedVars) statsCatSelectedVars = new Set(sc.selectedVars);
+
+  // Stash remaining post-analysis config for when displayResults runs
   pendingProjectRestore = project;
 }
 
@@ -6357,7 +7195,7 @@ function clearProject() {
   currentGroupBy = null;
   currentStatsCatVar = null;
   currentStatsCatChecked = null;
-  statsCatGroupSortMode = 'count';
+  statsCatGroupSortMode = null;
   statsCatSelectedVars = new Set();
   statsCatCdfScale = 'linear';
   statsCatCdfManual = false;
@@ -6377,6 +7215,7 @@ function clearProject() {
   statsCdfScale = 'linear';
   exportColumns = [];
   pendingProjectRestore = null;
+  resetExportSettings();
 
   runPreflight(currentFile).then(data => {
     renderPreflight(data);
@@ -6438,7 +7277,7 @@ function handleFile(file, handle) {
   currentStatsCatVar = null;
   currentStatsCatChecked = null;
   lastStatsCatData = null;
-  statsCatGroupSortMode = 'count';
+  statsCatGroupSortMode = null;
   statsCatSelectedVars = new Set();
   statsCatShowSelectedOnly = false;
   statsCatCdfScale = 'linear';
@@ -6458,6 +7297,7 @@ function handleFile(file, handle) {
   statsCdfScale = 'linear';
   exportColumns = [];
   pendingProjectRestore = null;
+  resetExportSettings();
   currentTypeOverrides = null;
   currentZipEntry = null;
   currentSkipCols = null;
@@ -6594,7 +7434,7 @@ $backToPreflight.addEventListener('click', () => {
   currentStatsCatVar = null;
   currentStatsCatChecked = null;
   lastStatsCatData = null;
-  statsCatGroupSortMode = 'count';
+  statsCatGroupSortMode = null;
   statsCatSelectedVars = new Set();
   statsCatShowSelectedOnly = false;
   catFocusedCol = null;
@@ -6966,29 +7806,26 @@ function displayResults(data) {
   const catCols = Object.keys(categories).map(Number).sort((a, b) => a - b);
   renderCategoriesTab(categories, header, origColCount, rowCount);
 
-  // StatsCat
-  renderStatsCat(data);
-
-  // Export
-  initExportColumns();
-
-  // Swath & Section
-  renderSwathConfig(data);
-  renderSectionConfig(data);
-
   // Restore pending project state (phase 2 — post-analysis)
-  if (pendingProjectRestore) {
-    const p = pendingProjectRestore;
+  const restoredProject = pendingProjectRestore;
+  if (restoredProject) {
     pendingProjectRestore = null;
 
-    const sc = p.statsCat || {};
-    if (sc.groupBy != null) currentGroupBy = sc.groupBy;
-    if (sc.selectedVars) statsCatSelectedVars = new Set(sc.selectedVars);
-    if (sc.sortMode) statsCatGroupSortMode = sc.sortMode;
+    // StatsCat display state — restore before renderStatsCat() so UI renders correctly
+    const sc = restoredProject.statsCat || {};
+    // groupBy and selectedVars already restored in applyProject() (phase 1)
+    if (sc.sortMode !== undefined) statsCatGroupSortMode = sc.sortMode;
     if (sc.cdfScale) statsCatCdfScale = sc.cdfScale;
+    if (sc.cdfManual !== undefined) statsCatCdfManual = sc.cdfManual;
+    if (sc.cdfMin !== undefined) statsCatCdfMin = sc.cdfMin;
+    if (sc.cdfMax !== undefined) statsCatCdfMax = sc.cdfMax;
     if (sc.crossMode) statsCatCrossMode = sc.crossMode;
+    if (sc.displayVar != null) currentStatsCatVar = sc.displayVar;
+    if (sc.checkedGroups) currentStatsCatChecked = new Set(sc.checkedGroups);
+    if (sc.showSelectedOnly !== undefined) statsCatShowSelectedOnly = sc.showSelectedOnly;
 
-    const st = p.statsTab || {};
+    // Stats tab
+    const st = restoredProject.statsTab || {};
     if (st.selectedVars) statsSelectedVars = new Set(st.selectedVars);
     if (st.visibleMetrics) statsVisibleMetrics = new Set(st.visibleMetrics);
     if (st.percentiles) statsPercentiles = st.percentiles;
@@ -7000,10 +7837,8 @@ function displayResults(data) {
       renderStatsTab(lastDisplayedStats, lastDisplayedHeader, currentOrigColCount || lastDisplayedHeader.length, currentFilter !== null, data.rowCount);
     }
 
-    if (p.exportCols) applyExportRestore(p.exportCols);
-
     // Restore categories focused column by name
-    const catP = p.categories || {};
+    const catP = restoredProject.categories || {};
     if (catP.focusedCol) {
       const idx = header.indexOf(catP.focusedCol);
       if (idx >= 0 && categories[idx]) {
@@ -7012,6 +7847,125 @@ function displayResults(data) {
         renderCatMain();
       }
     }
+  }
+
+  // StatsCat — render after display state is restored (or with defaults)
+  renderStatsCat(data);
+
+  // Export
+  initExportColumns();
+  if (restoredProject) {
+    if (restoredProject.exportCols) applyExportRestore(restoredProject.exportCols);
+    if (restoredProject.exportSettings) restoreExportSettings(restoredProject.exportSettings);
+  }
+
+  // GT, Swath & Section
+  // Snapshot current GT config before renderGtConfig rebuilds the sidebar
+  var gtSnapshot = null;
+  if (!restoredProject && document.getElementById('gtVarList')) {
+    gtSnapshot = serializeProject().gt;
+  }
+  renderGtConfig(data);
+  renderSwathConfig(data);
+  renderSectionConfig(data);
+
+  // Restore GT sidebar from project or snapshot
+  var gtp = (restoredProject && restoredProject.gt) ? restoredProject.gt : gtSnapshot;
+  if (gtp) {
+    // Multi-grade checkbox restore (backward compat: old gradeCol string)
+    var $gVarList = document.getElementById('gtVarList');
+    if ($gVarList) {
+      var names = gtp.gradeCols || (gtp.gradeCol ? [gtp.gradeCol] : []);
+      var nameSet = {};
+      for (var ni = 0; ni < names.length; ni++) nameSet[names[ni]] = true;
+      var cbs = $gVarList.querySelectorAll('input[type="checkbox"]');
+      for (var ci = 0; ci < cbs.length; ci++) {
+        var lbl = cbs[ci].parentElement.querySelector('span').textContent;
+        cbs[ci].checked = !!nameSet[lbl];
+      }
+    }
+    // Group-by restore
+    var $gGroupBy = document.getElementById('gtGroupBy');
+    if ($gGroupBy && gtp.groupByCol) {
+      for (var gbi = 0; gbi < $gGroupBy.options.length; gbi++) {
+        if ($gGroupBy.options[gbi].textContent === gtp.groupByCol) { $gGroupBy.value = $gGroupBy.options[gbi].value; break; }
+      }
+    }
+    var $gDensity = document.getElementById('gtDensityCol');
+    var $gWeight = document.getElementById('gtWeightCol');
+    if ($gDensity && gtp.densityCol) {
+      for (var di = 0; di < $gDensity.options.length; di++) {
+        if ($gDensity.options[di].textContent === gtp.densityCol) { $gDensity.value = $gDensity.options[di].value; break; }
+      }
+    }
+    if ($gWeight && gtp.weightCol) {
+      for (var wi = 0; wi < $gWeight.options.length; wi++) {
+        if ($gWeight.options[wi].textContent === gtp.weightCol) { $gWeight.value = $gWeight.options[wi].value; break; }
+      }
+    }
+    var $gLocalFilter = document.getElementById('gtLocalFilter');
+    if ($gLocalFilter && gtp.localFilter) $gLocalFilter.value = gtp.localFilter;
+    var $gCutoffMin = document.getElementById('gtCutoffMin');
+    var $gCutoffMax = document.getElementById('gtCutoffMax');
+    var $gCutoffStep = document.getElementById('gtCutoffStep');
+    if ($gCutoffMin && gtp.cutoffMin != null) $gCutoffMin.value = gtp.cutoffMin;
+    if ($gCutoffMax && gtp.cutoffMax != null) $gCutoffMax.value = gtp.cutoffMax;
+    if ($gCutoffStep && gtp.cutoffStep != null) $gCutoffStep.value = gtp.cutoffStep;
+    if (gtp.cutoffMode === 'custom') {
+      var $gRadio = document.querySelector('input[name="gtCutoffMode"][value="custom"]');
+      if ($gRadio) { $gRadio.checked = true; $gRadio.dispatchEvent(new Event('change')); }
+      var $gCustomText = document.getElementById('gtCutoffCustomText');
+      if ($gCustomText && gtp.cutoffCustom) $gCustomText.value = gtp.cutoffCustom;
+    }
+    var $gVolOverride = document.getElementById('gtVolOverride');
+    if ($gVolOverride && gtp.volumeOverride) $gVolOverride.value = gtp.volumeOverride;
+    var $gTonnageUnit = document.getElementById('gtTonnageUnit');
+    if ($gTonnageUnit && gtp.tonnageUnit != null) {
+      $gTonnageUnit.value = gtp.tonnageUnit;
+      $gTonnageUnit.dispatchEvent(new Event('change'));
+    }
+    var $gCTSym = document.getElementById('gtCustomTonnageSym');
+    var $gCTDiv = document.getElementById('gtCustomTonnageDiv');
+    if ($gCTSym && gtp.customTonnageSym) $gCTSym.value = gtp.customTonnageSym;
+    if ($gCTDiv && gtp.customTonnageDiv) $gCTDiv.value = gtp.customTonnageDiv;
+
+    // Per-variable grade units
+    var gradeUnits = gtp.gradeUnits || null;
+    // Backward compat: old single gradeUnit → apply to all
+    if (!gradeUnits && gtp.gradeUnit != null && gtp.gradeUnit > 0) {
+      gradeUnits = {};
+      document.querySelectorAll('.gt-var-unit').forEach(function(sel) {
+        var colIdx = parseInt(sel.dataset.col);
+        var colName = currentHeader[colIdx];
+        if (colName) gradeUnits[colName] = gtp.gradeUnit;
+      });
+    }
+    if (gradeUnits) {
+      document.querySelectorAll('.gt-var-unit').forEach(function(sel) {
+        var colIdx = parseInt(sel.dataset.col);
+        var colName = currentHeader[colIdx];
+        if (colName && gradeUnits[colName] != null) sel.value = gradeUnits[colName];
+      });
+    }
+
+    // Restore group-by values and trigger checkbox population
+    if (gtp.groupByCol && $gGroupBy && $gGroupBy.value !== '-1') {
+      updateGroupByValues();
+      // Restore selected groups
+      if (gtp.selectedGroups) {
+        var sg = gtp.selectedGroups;
+        var valSet = new Set(sg.values || []);
+        document.querySelectorAll('#gtGrpList input[type="checkbox"]').forEach(function(cb) {
+          if (cb.value === '__total__') cb.checked = !!sg.showTotal;
+          else cb.checked = valSet.has(cb.value);
+        });
+      }
+    }
+  }
+
+  // Restore active tab
+  if (restoredProject && restoredProject.activeTab) {
+    switchTab(restoredProject.activeTab);
   }
 
   // Auto-save project
@@ -7167,10 +8121,37 @@ function renderStatsCatVarList(allVarCols, header, origColCount, colTypes) {
   $statsCatVarFilter.classList.toggle('active', statsCatShowSelectedOnly);
 }
 
+function getEffectiveStatsCatSort() {
+  if (statsCatGroupSortMode !== null) return statsCatGroupSortMode;
+  // Inherit from Categories tab
+  const gbColName = currentGroupBy !== null && currentHeader[currentGroupBy] ? currentHeader[currentGroupBy] : null;
+  if (gbColName && catSortModes[gbColName]) return catSortModes[gbColName];
+  return 'count-desc';
+}
+
 function sortStatsCatGroups(groups) {
-  if (statsCatGroupSortMode === 'name') {
+  const mode = getEffectiveStatsCatSort();
+  if (mode === 'alpha') {
     return groups.slice().sort((a, b) => (a[0] || '').localeCompare(b[0] || ''));
   }
+  if (mode === 'count-asc') {
+    return groups.slice().sort((a, b) => a[1].count - b[1].count);
+  }
+  if (mode === 'custom') {
+    const gbColName = currentGroupBy !== null && currentHeader[currentGroupBy] ? currentHeader[currentGroupBy] : null;
+    const order = gbColName && catCustomOrders[gbColName] ? catCustomOrders[gbColName] : null;
+    if (order) {
+      const pos = {};
+      for (let i = 0; i < order.length; i++) pos[order[i]] = i;
+      return groups.slice().sort((a, b) => {
+        const pa = pos[a[0]] !== undefined ? pos[a[0]] : Infinity;
+        const pb = pos[b[0]] !== undefined ? pos[b[0]] : Infinity;
+        if (pa !== pb) return pa - pb;
+        return b[1].count - a[1].count; // fallback: count-desc for unordered
+      });
+    }
+  }
+  // count-desc (default)
   return groups.slice().sort((a, b) => b[1].count - a[1].count);
 }
 
@@ -7213,6 +8194,7 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
       renderStatsCatGroupList(getStatsCatGroupEntries());
       wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
       renderStatsCatContent();
+      autoSaveProject();
     });
   });
 
@@ -7223,23 +8205,34 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
       const colIdx = parseInt(cb.dataset.col);
       if (cb.checked) {
         statsCatSelectedVars.add(colIdx);
+        // Only mark stale if this column lacks data from last analysis
+        if (lastStatsCatData && !(lastStatsCatData.groupStats[colIdx] || (lastStatsCatData.groupCategories && lastStatsCatData.groupCategories[colIdx]))) {
+          markAnalysisStale();
+        }
       } else {
         statsCatSelectedVars.delete(colIdx);
+        // Unchecking never needs re-analysis — data already computed
       }
       renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
       wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
-      markAnalysisStale();
+      autoSaveProject();
     });
   });
 
   // Variable All/None — affect only search-filtered results
   $statsCatVarAll.onclick = () => {
+    let needsStale = false;
     $statsCatVarList.querySelectorAll('.statscat-var-item').forEach(el => {
-      statsCatSelectedVars.add(parseInt(el.dataset.col));
+      const ci = parseInt(el.dataset.col);
+      statsCatSelectedVars.add(ci);
+      if (lastStatsCatData && !(lastStatsCatData.groupStats[ci] || (lastStatsCatData.groupCategories && lastStatsCatData.groupCategories[ci]))) {
+        needsStale = true;
+      }
     });
     renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
-    markAnalysisStale();
+    if (needsStale) markAnalysisStale();
+    autoSaveProject();
   };
   $statsCatVarNone.onclick = () => {
     $statsCatVarList.querySelectorAll('.statscat-var-item').forEach(el => {
@@ -7247,7 +8240,8 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
     });
     renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
-    markAnalysisStale();
+    // Unchecking never needs re-analysis
+    autoSaveProject();
   };
 
   // Variable filter toggle (All / Selected)
@@ -7255,6 +8249,7 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
     statsCatShowSelectedOnly = !statsCatShowSelectedOnly;
     renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+    autoSaveProject();
   };
 
   // Group checkboxes
@@ -7263,6 +8258,7 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
       const gv = cb.dataset.gv;
       if (cb.checked) { currentStatsCatChecked.add(gv); } else { currentStatsCatChecked.delete(gv); }
       renderStatsCatContent();
+      autoSaveProject();
     });
   });
 
@@ -7273,21 +8269,32 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
     renderStatsCatGroupList(entries);
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
     renderStatsCatContent();
+    autoSaveProject();
   };
   $statsCatGroupNone.onclick = () => {
     currentStatsCatChecked = new Set();
     renderStatsCatGroupList(getStatsCatGroupEntries());
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
     renderStatsCatContent();
+    autoSaveProject();
   };
 
-  // Sort toggle
+  // Sort toggle — cycle: count-desc → count-asc → alpha → custom (if exists) → count-desc
+  var sortLabels = { 'count-desc': 'Count\u2193', 'count-asc': 'Count\u2191', 'alpha': 'A-Z', 'custom': 'Custom' };
+  $statsCatGroupSort.textContent = sortLabels[getEffectiveStatsCatSort()] || 'Count\u2193';
   $statsCatGroupSort.onclick = () => {
-    statsCatGroupSortMode = statsCatGroupSortMode === 'count' ? 'name' : 'count';
-    $statsCatGroupSort.textContent = 'Sort: ' + statsCatGroupSortMode;
+    var eff = getEffectiveStatsCatSort();
+    var gbColName = currentGroupBy !== null && currentHeader[currentGroupBy] ? currentHeader[currentGroupBy] : null;
+    var hasCustom = gbColName && catCustomOrders[gbColName] && catCustomOrders[gbColName].length > 0;
+    var cycle = ['count-desc', 'count-asc', 'alpha'];
+    if (hasCustom) cycle.push('custom');
+    var idx = cycle.indexOf(eff);
+    statsCatGroupSortMode = cycle[(idx + 1) % cycle.length];
+    $statsCatGroupSort.textContent = sortLabels[getEffectiveStatsCatSort()];
     renderStatsCatGroupList(getStatsCatGroupEntries());
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
     renderStatsCatContent();
+    autoSaveProject();
   };
 
   // Variable search
@@ -7369,7 +8376,7 @@ function renderStatsCatNumeric(data, varName, isCalcol) {
     html += '<td>' + formatNum(s.max) + '</td>';
     html += '<td>' + formatNum(s.mean) + '</td>';
     html += '<td>' + formatNum(s.std) + '</td>';
-    html += '<td>' + (cv !== null ? cv.toFixed(1) : '\u2014') + '</td>';
+    html += '<td>' + (cv !== null ? (cv > 9999 ? '>9999' : cv.toFixed(1)) : '\u2014') + '</td>';
     html += '<td>' + (s.skewness !== null ? s.skewness.toFixed(2) : '\u2014') + '</td>';
     html += '<td>' + (s.kurtosis !== null ? s.kurtosis.toFixed(2) : '\u2014') + '</td>';
     html += '</tr>';
@@ -7498,6 +8505,7 @@ function wireStatsCatCrossMode() {
     btn.addEventListener('click', () => {
       statsCatCrossMode = btn.dataset.mode;
       renderStatsCatContent();
+      autoSaveProject();
     });
   });
 }
@@ -7631,6 +8639,7 @@ function wireStatsCatCdfToolbar() {
     btn.addEventListener('click', () => {
       statsCatCdfScale = btn.dataset.scale;
       renderStatsCatContent();
+      autoSaveProject();
     });
   });
   // Manual checkbox
@@ -7640,6 +8649,7 @@ function wireStatsCatCdfToolbar() {
       statsCatCdfManual = manualCb.checked;
       if (!statsCatCdfManual) { statsCatCdfMin = null; statsCatCdfMax = null; }
       renderStatsCatContent();
+      autoSaveProject();
     });
   }
   // Manual min/max inputs
@@ -7649,12 +8659,14 @@ function wireStatsCatCdfToolbar() {
     minInput.addEventListener('change', () => {
       statsCatCdfMin = minInput.value !== '' ? parseFloat(minInput.value) : null;
       renderStatsCatContent();
+      autoSaveProject();
     });
   }
   if (maxInput) {
     maxInput.addEventListener('change', () => {
       statsCatCdfMax = maxInput.value !== '' ? parseFloat(maxInput.value) : null;
       renderStatsCatContent();
+      autoSaveProject();
     });
   }
   // Copy SVG
@@ -7769,6 +8781,7 @@ $statsCatGroupBy.addEventListener('change', () => {
   currentGroupBy = val ? parseInt(val) : null;
   currentStatsCatVar = null;
   currentStatsCatChecked = null;
+  statsCatGroupSortMode = null; // re-inherit from Categories
   statsCatShowSelectedOnly = false;
   $statsCatVarSearch.value = '';
   $statsCatGroupSearch.value = '';
@@ -7780,6 +8793,7 @@ $statsCatGroupBy.addEventListener('change', () => {
     $statsCatContent.innerHTML = '<div class="statscat-empty">Select a categorical column to see statistics broken down by group.</div>';
   }
   markAnalysisStale();
+  autoSaveProject();
 });
 
 // Mobile collapsible StatsCat sections (one-time delegation)
@@ -8508,17 +9522,40 @@ function initExportColumns() {
       isCalcol
     });
   }
+  detectSourcePrecision();
   renderExportColumns();
+  updateExportRowPreview();
+  updateExportPreview();
+}
+
+function detectSourcePrecision() {
+  exportSourcePrecision = {};
+  if (!preflightData || !preflightData.sampleRows || !preflightData.header) return;
+  const hdr = preflightData.header;
+  for (let ci = 0; ci < hdr.length; ci++) {
+    let maxDp = 0;
+    for (let ri = 0; ri < preflightData.sampleRows.length; ri++) {
+      const raw = (preflightData.sampleRows[ri][ci] || '').trim();
+      const dot = raw.indexOf('.');
+      if (dot >= 0) {
+        const dp = raw.length - dot - 1;
+        if (dp > maxDp) maxDp = dp;
+      }
+    }
+    if (maxDp > 0) exportSourcePrecision[hdr[ci]] = maxDp;
+  }
 }
 
 function renderExportColumns() {
+  const search = $exportColSearch.value.toLowerCase();
   let html = '';
   for (let i = 0; i < exportColumns.length; i++) {
     const col = exportColumns[i];
     const checked = col.selected ? ' checked' : '';
     const typeClass = col.isCalcol ? 'calcol' : (col.type === 'numeric' ? 'num' : 'cat');
     const typeLabel = col.isCalcol ? 'calc' : (col.type === 'numeric' ? 'num' : 'cat');
-    html += '<div class="export-col-item" data-idx="' + i + '" draggable="true">';
+    const hidden = search && col.name.toLowerCase().indexOf(search) < 0 && col.outputName.toLowerCase().indexOf(search) < 0;
+    html += '<div class="export-col-item' + (hidden ? ' export-col-hidden' : '') + '" data-idx="' + i + '" draggable="true">';
     html += '<span class="ecol-grip" title="Drag to reorder"></span>';
     html += '<input type="checkbox"' + checked + '>';
     html += '<span class="ecol-name" title="' + esc(col.name) + '">' + esc(col.name) + '</span>';
@@ -8536,6 +9573,17 @@ function updateExportBadge() {
   $exportBadge.textContent = sel + ' / ' + exportColumns.length;
 }
 
+function updateExportRowPreview() {
+  if (!lastCompleteData) { $exportRowPreview.textContent = ''; return; }
+  const rc = lastCompleteData.rowCount;
+  const trc = lastCompleteData.totalRowCount;
+  if (currentFilter) {
+    $exportRowPreview.textContent = rc.toLocaleString() + ' / ' + trc.toLocaleString() + ' rows';
+  } else {
+    $exportRowPreview.textContent = trc.toLocaleString() + ' rows';
+  }
+}
+
 let exportDragIdx = null;
 
 function wireExportColumnEvents() {
@@ -8545,10 +9593,14 @@ function wireExportColumnEvents() {
     cb.addEventListener('change', () => {
       exportColumns[idx].selected = cb.checked;
       updateExportBadge();
+      updateExportPreview();
+      autoSaveProject();
     });
     const renameInput = el.querySelector('.ecol-rename');
     renameInput.addEventListener('input', () => {
       exportColumns[idx].outputName = renameInput.value || exportColumns[idx].name;
+      updateExportPreview();
+      autoSaveProject();
     });
 
     el.addEventListener('dragstart', (e) => {
@@ -8587,27 +9639,339 @@ function wireExportColumnEvents() {
       exportColumns.splice(insertAt, 0, item);
       exportDragIdx = null;
       renderExportColumns();
+      updateExportPreview();
+      autoSaveProject();
     });
   });
 }
+
+// Column search
+$exportColSearch.addEventListener('input', () => {
+  const search = $exportColSearch.value.toLowerCase();
+  $exportColList.querySelectorAll('.export-col-item').forEach(el => {
+    const idx = parseInt(el.dataset.idx);
+    const col = exportColumns[idx];
+    const hidden = search && col.name.toLowerCase().indexOf(search) < 0 && col.outputName.toLowerCase().indexOf(search) < 0;
+    el.classList.toggle('export-col-hidden', hidden);
+  });
+});
 
 // Selection buttons
 document.getElementById('exportSelAll').addEventListener('click', () => {
   exportColumns.forEach(c => c.selected = true);
   renderExportColumns();
+  updateExportPreview();
+  autoSaveProject();
 });
 document.getElementById('exportSelNone').addEventListener('click', () => {
   exportColumns.forEach(c => c.selected = false);
   renderExportColumns();
+  updateExportPreview();
+  autoSaveProject();
 });
 document.getElementById('exportSelOrig').addEventListener('click', () => {
   exportColumns.forEach(c => c.selected = !c.isCalcol);
   renderExportColumns();
+  updateExportPreview();
+  autoSaveProject();
 });
 document.getElementById('exportSelCalc').addEventListener('click', () => {
   exportColumns.forEach(c => c.selected = c.isCalcol);
   renderExportColumns();
+  updateExportPreview();
+  autoSaveProject();
 });
+
+// ─── Format controls ──────────────────────────────────────────────────
+
+// Delimiter presets
+$exportFormatSection.addEventListener('click', (e) => {
+  const delimBtn = e.target.closest('.export-delim');
+  if (delimBtn) {
+    $exportFormatSection.querySelectorAll('.export-delim').forEach(b => b.classList.remove('active'));
+    delimBtn.classList.add('active');
+    exportDelimiter = delimBtn.dataset.delim === 'tab' ? '\t' : delimBtn.dataset.delim;
+    $exportCustomDelim.value = '';
+    updateExportWarnings();
+    updateExportPreview();
+    autoSaveProject();
+    return;
+  }
+  const quoteBtn = e.target.closest('.export-quote');
+  if (quoteBtn) {
+    $exportFormatSection.querySelectorAll('.export-quote').forEach(b => b.classList.remove('active'));
+    quoteBtn.classList.add('active');
+    exportQuoteChar = quoteBtn.dataset.quote;
+    updateExportPreview();
+    autoSaveProject();
+    return;
+  }
+  const endingBtn = e.target.closest('.export-ending');
+  if (endingBtn) {
+    $exportFormatSection.querySelectorAll('.export-ending').forEach(b => b.classList.remove('active'));
+    endingBtn.classList.add('active');
+    exportLineEnding = endingBtn.dataset.ending === 'crlf' ? '\r\n' : '\n';
+    autoSaveProject();
+    return;
+  }
+  const decsepBtn = e.target.closest('.export-decsep');
+  if (decsepBtn) {
+    $exportFormatSection.querySelectorAll('.export-decsep').forEach(b => b.classList.remove('active'));
+    decsepBtn.classList.add('active');
+    exportDecimalSep = decsepBtn.dataset.sep;
+    updateExportWarnings();
+    updateExportPreview();
+    autoSaveProject();
+    return;
+  }
+});
+
+// Custom delimiter input
+$exportCustomDelim.addEventListener('input', () => {
+  const v = $exportCustomDelim.value;
+  if (v) {
+    $exportFormatSection.querySelectorAll('.export-delim').forEach(b => b.classList.remove('active'));
+    exportDelimiter = v;
+    updateExportWarnings();
+    updateExportPreview();
+    autoSaveProject();
+  }
+});
+
+// Header row toggle
+$exportIncludeHeader.addEventListener('change', () => {
+  exportIncludeHeader = $exportIncludeHeader.checked;
+  updateExportPreview();
+  autoSaveProject();
+});
+
+// Comment header toggle
+$exportCommentHeader.addEventListener('change', () => {
+  exportCommentHeader = $exportCommentHeader.checked;
+  $exportCommentSection.style.display = exportCommentHeader ? '' : 'none';
+  if (exportCommentHeader && !exportCommentText && preflightData && preflightData.commentLines && preflightData.commentLines.length > 0) {
+    exportCommentText = preflightData.commentLines.join('\n');
+    $exportCommentText.value = exportCommentText;
+  }
+  updateExportPreview();
+  autoSaveProject();
+});
+
+// Comment text changes
+$exportCommentText.addEventListener('input', () => {
+  exportCommentText = $exportCommentText.value;
+  updateExportPreview();
+  autoSaveProject();
+});
+
+// Generate from geometry
+$exportCommentGenerate.addEventListener('click', () => {
+  if (!lastGeoData) {
+    $exportCommentText.value = '(No geometry detected)';
+    exportCommentText = $exportCommentText.value;
+    return;
+  }
+  const gx = lastGeoData.x, gy = lastGeoData.y, gz = lastGeoData.z;
+  if (!gx || !gy || !gz) {
+    $exportCommentText.value = '(Incomplete geometry)';
+    exportCommentText = $exportCommentText.value;
+    return;
+  }
+  const total = gx.gridCount * gy.gridCount * gz.gridCount;
+  const lines = [
+    currentFile.name,
+    '  exported from BMA',
+    '  encoding: UTF-8',
+    '  block size: ' + gx.blockSize + ' ' + gy.blockSize + ' ' + gz.blockSize,
+    '  size in blocks: ' + gx.gridCount + ' ' + gy.gridCount + ' ' + gz.gridCount + ' = ' + total,
+    '  minimum centroid: ' + gx.origin + ' ' + gy.origin + ' ' + gz.origin,
+    '  maximum centroid: ' + gx.max + ' ' + gy.max + ' ' + gz.max
+  ];
+  exportCommentText = lines.join('\n');
+  $exportCommentText.value = exportCommentText;
+  updateExportPreview();
+  autoSaveProject();
+});
+
+// Null select
+$exportNullSelect.addEventListener('change', () => {
+  if ($exportNullSelect.value === 'custom') {
+    $exportNullInput.style.display = '';
+    $exportNullInput.focus();
+  } else {
+    $exportNullInput.style.display = 'none';
+    exportNullValue = $exportNullSelect.value;
+    updateExportPreview();
+    autoSaveProject();
+  }
+});
+$exportNullInput.addEventListener('input', () => {
+  exportNullValue = $exportNullInput.value;
+  updateExportPreview();
+  autoSaveProject();
+});
+
+// Precision select
+$exportPrecisionSelect.addEventListener('change', () => {
+  if ($exportPrecisionSelect.value === 'custom') {
+    $exportPrecisionInput.style.display = '';
+    $exportPrecisionInput.focus();
+  } else if ($exportPrecisionSelect.value === 'auto') {
+    $exportPrecisionInput.style.display = 'none';
+    exportPrecision = null;
+    updateExportWarnings();
+    updateExportPreview();
+    autoSaveProject();
+  } else {
+    $exportPrecisionInput.style.display = 'none';
+    exportPrecision = parseInt($exportPrecisionSelect.value);
+    updateExportWarnings();
+    updateExportPreview();
+    autoSaveProject();
+  }
+});
+$exportPrecisionInput.addEventListener('input', () => {
+  const v = parseInt($exportPrecisionInput.value);
+  exportPrecision = (isNaN(v) || v < 0) ? null : Math.min(v, 20);
+  updateExportWarnings();
+  updateExportPreview();
+  autoSaveProject();
+});
+
+// ─── Warnings ─────────────────────────────────────────────────────────
+
+function updateExportWarnings() {
+  const warnings = [];
+
+  // Delimiter-decsep conflict
+  if (exportDelimiter === exportDecimalSep) {
+    warnings.push('Delimiter matches decimal separator \u2014 numeric values will be quoted');
+  }
+
+  // Precision warning
+  if (exportPrecision !== null) {
+    const affected = [];
+    for (const col of exportColumns) {
+      if (!col.selected || col.type !== 'numeric') continue;
+      const srcDp = exportSourcePrecision[col.name];
+      if (srcDp !== undefined && srcDp > exportPrecision) {
+        affected.push(col.outputName || col.name);
+      }
+    }
+    if (affected.length > 0) {
+      const names = affected.length > 5 ? affected.slice(0, 5).join(', ') + ' +' + (affected.length - 5) + ' more' : affected.join(', ');
+      warnings.push('Columns ' + names + ' have up to ' + Math.max(...affected.map(n => {
+        const col = exportColumns.find(c => (c.outputName || c.name) === n);
+        return col ? (exportSourcePrecision[col.name] || 0) : 0;
+      })) + ' dp \u2014 output will use ' + exportPrecision + ' dp');
+    }
+  }
+
+  if (warnings.length > 0) {
+    $exportPrecisionWarn.style.display = '';
+    $exportPrecisionWarn.textContent = warnings.join(' | ');
+  } else {
+    $exportPrecisionWarn.style.display = 'none';
+    $exportPrecisionWarn.textContent = '';
+  }
+}
+
+// ─── Live Preview ─────────────────────────────────────────────────────
+
+function updateExportPreview() {
+  if (!preflightData || !preflightData.sampleRows || !preflightData.header) {
+    $exportPreviewPre.textContent = '';
+    $exportPreviewInfo.textContent = '';
+    return;
+  }
+
+  const selected = exportColumns.filter(c => c.selected);
+  if (selected.length === 0) {
+    $exportPreviewPre.textContent = '(No columns selected)';
+    $exportPreviewInfo.textContent = '';
+    return;
+  }
+
+  const hdr = preflightData.header;
+  const rows = preflightData.sampleRows;
+  const maxRows = Math.min(rows.length, 100);
+  const delim = exportDelimiter;
+  const qc = exportQuoteChar;
+  const le = exportLineEnding;
+
+  // Build column index map: selected col name -> index in preflight header
+  const colMap = [];
+  for (const col of selected) {
+    const idx = hdr.indexOf(col.name);
+    colMap.push({ idx, col });
+  }
+
+  function previewEscape(v, isNum) {
+    if (v === null || v === undefined || v === '' || v === 'NaN' || v === 'NA' || v === 'na' || v === 'nan' || v === 'null' || v === 'NULL') {
+      return exportNullValue;
+    }
+    let s = String(v);
+    // Apply precision to numbers
+    if (isNum && exportPrecision !== null) {
+      const n = Number(v);
+      if (isFinite(n)) {
+        s = n.toFixed(exportPrecision);
+      }
+    }
+    // Apply decimal separator
+    if (isNum && exportDecimalSep !== '.') {
+      s = s.replace('.', exportDecimalSep);
+    }
+    // Quoting
+    if (qc && (s.indexOf(delim) >= 0 || s.indexOf(qc) >= 0 || s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0)) {
+      return qc + s.replace(new RegExp(qc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), qc + qc) + qc;
+    }
+    return s;
+  }
+
+  const lines = [];
+
+  // Comment lines
+  if (exportCommentHeader && exportCommentText.trim()) {
+    const commentLines = exportCommentText.split('\n');
+    for (const cl of commentLines) {
+      lines.push('# ' + cl);
+    }
+  }
+
+  // Header row
+  if (exportIncludeHeader) {
+    lines.push(selected.map(c => previewEscape(c.outputName, false)).join(delim));
+  }
+
+  // Data rows
+  for (let ri = 0; ri < maxRows; ri++) {
+    const row = rows[ri];
+    const cells = [];
+    for (const cm of colMap) {
+      if (cm.idx < 0) {
+        cells.push(exportNullValue); // calcol column — not in preflight
+      } else {
+        const raw = row[cm.idx] || '';
+        const isNum = cm.col.type === 'numeric';
+        cells.push(previewEscape(raw, isNum));
+      }
+    }
+    lines.push(cells.join(delim));
+  }
+
+  $exportPreviewPre.textContent = lines.join(le);
+
+  // Info text
+  const totalRows = lastCompleteData ? (currentFilter ? lastCompleteData.rowCount : lastCompleteData.totalRowCount) : rows.length;
+  if (totalRows > maxRows) {
+    $exportPreviewInfo.textContent = 'Showing ' + maxRows + ' of ' + totalRows.toLocaleString() + ' rows';
+  } else {
+    $exportPreviewInfo.textContent = maxRows + ' rows';
+  }
+}
+
+// ─── Export ───────────────────────────────────────────────────────────
 
 function startExport() {
   const selected = exportColumns.filter(c => c.selected);
@@ -8618,13 +9982,18 @@ function startExport() {
 
   const exportCols = selected.map(c => ({ name: c.name, outputName: c.outputName }));
   const baseName = currentFile.name.replace(/\.[^.]+$/, '');
-  const suggestedName = baseName + '_export.csv';
+  const ext = exportDelimiter === '\t' ? '.tsv' : '.csv';
+  const suggestedName = baseName + '_export' + ext;
 
-  // Resolve types: only original column types (no calcol types needed for resolvedTypes)
   const resolvedTypes = currentColTypes.slice(0, currentOrigColCount);
 
   const filterPayload = currentFilter ? { expression: currentFilter.expression } : null;
   const zipEntry = preflightData ? (preflightData.selectedZipEntry || null) : null;
+
+  let commentLines = null;
+  if (exportCommentHeader && exportCommentText.trim()) {
+    commentLines = exportCommentText.split('\n');
+  }
 
   const msg = {
     mode: 'export',
@@ -8634,7 +10003,15 @@ function startExport() {
     calcolCode: currentCalcolCode || null,
     calcolMeta: currentCalcolMeta.length > 0 ? currentCalcolMeta : null,
     resolvedTypes,
-    exportCols
+    exportCols,
+    delimiter: exportDelimiter,
+    includeHeader: exportIncludeHeader,
+    commentLines,
+    quoteChar: exportQuoteChar,
+    lineEnding: exportLineEnding,
+    nullValue: exportNullValue,
+    precision: exportPrecision,
+    decimalSep: exportDecimalSep
   };
 
   $exportDownload.disabled = true;
@@ -8646,10 +10023,9 @@ function startExport() {
   if (exportWorker) exportWorker.terminate();
 
   if (window.showSaveFilePicker) {
-    // FSAA path
     window.showSaveFilePicker({
       suggestedName,
-      types: [{ description: 'CSV', accept: { 'text/csv': ['.csv'] } }]
+      types: [{ description: 'CSV', accept: { 'text/csv': ['.csv', '.tsv'] } }]
     }).then(async (handle) => {
       const writable = await handle.createWritable();
       exportWorker = new Worker(workerUrl);
@@ -8664,7 +10040,7 @@ function startExport() {
         } else if (m.type === 'export-complete') {
           await writable.close();
           $exportProgressFill.style.width = '100%';
-          $exportProgressLabel.textContent = 'Done — ' + m.rowCount.toLocaleString() + ' rows in ' + (m.elapsed / 1000).toFixed(1) + 's';
+          $exportProgressLabel.textContent = 'Done \u2014 ' + m.rowCount.toLocaleString() + ' rows in ' + (m.elapsed / 1000).toFixed(1) + 's';
           $exportDownload.disabled = false;
           exportWorker.terminate();
           exportWorker = null;
@@ -8679,12 +10055,10 @@ function startExport() {
       };
       exportWorker.postMessage(msg);
     }).catch((err) => {
-      // User cancelled picker
       $exportProgress.classList.remove('active');
       $exportDownload.disabled = false;
     });
   } else {
-    // Blob fallback
     const chunks = [];
     exportWorker = new Worker(workerUrl);
     exportWorker.onmessage = (e) => {
@@ -8706,7 +10080,7 @@ function startExport() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         $exportProgressFill.style.width = '100%';
-        $exportProgressLabel.textContent = 'Done — ' + m.rowCount.toLocaleString() + ' rows in ' + (m.elapsed / 1000).toFixed(1) + 's';
+        $exportProgressLabel.textContent = 'Done \u2014 ' + m.rowCount.toLocaleString() + ' rows in ' + (m.elapsed / 1000).toFixed(1) + 's';
         $exportDownload.disabled = false;
         exportWorker.terminate();
         exportWorker = null;
@@ -8723,6 +10097,129 @@ function startExport() {
 }
 
 $exportDownload.addEventListener('click', startExport);
+
+function resetExportSettings() {
+  exportDelimiter = ',';
+  exportIncludeHeader = true;
+  exportCommentHeader = false;
+  exportCommentText = '';
+  exportQuoteChar = '"';
+  exportLineEnding = '\n';
+  exportNullValue = '';
+  exportPrecision = null;
+  exportDecimalSep = '.';
+  $exportIncludeHeader.checked = true;
+  $exportCommentHeader.checked = false;
+  $exportCommentText.value = '';
+  $exportCommentSection.style.display = 'none';
+  $exportColSearch.value = '';
+  $exportRowPreview.textContent = '';
+  $exportCustomDelim.value = '';
+  $exportFormatSection.querySelectorAll('.export-delim').forEach(b => {
+    b.classList.toggle('active', b.dataset.delim === ',');
+  });
+  $exportFormatSection.querySelectorAll('.export-quote').forEach(b => {
+    b.classList.toggle('active', b.dataset.quote === '"');
+  });
+  $exportFormatSection.querySelectorAll('.export-ending').forEach(b => {
+    b.classList.toggle('active', b.dataset.ending === 'lf');
+  });
+  $exportFormatSection.querySelectorAll('.export-decsep').forEach(b => {
+    b.classList.toggle('active', b.dataset.sep === '.');
+  });
+  $exportNullSelect.value = '';
+  $exportNullInput.style.display = 'none';
+  $exportNullInput.value = '';
+  $exportPrecisionSelect.value = 'auto';
+  $exportPrecisionInput.style.display = 'none';
+  $exportPrecisionInput.value = '';
+  $exportPrecisionWarn.style.display = 'none';
+  $exportPrecisionWarn.textContent = '';
+  updateExportPreview();
+}
+
+function restoreExportSettings(es) {
+  if (!es) return;
+  if (es.delimiter !== undefined) {
+    exportDelimiter = es.delimiter;
+    const delimVal = exportDelimiter === '\t' ? 'tab' : exportDelimiter;
+    // Check if it matches a preset
+    let matchedPreset = false;
+    $exportFormatSection.querySelectorAll('.export-delim').forEach(b => {
+      const isMatch = b.dataset.delim === delimVal;
+      b.classList.toggle('active', isMatch);
+      if (isMatch) matchedPreset = true;
+    });
+    if (!matchedPreset) {
+      $exportCustomDelim.value = exportDelimiter;
+    }
+  }
+  if (es.includeHeader !== undefined) {
+    exportIncludeHeader = es.includeHeader;
+    $exportIncludeHeader.checked = exportIncludeHeader;
+  }
+  if (es.commentHeader !== undefined) {
+    exportCommentHeader = es.commentHeader;
+    $exportCommentHeader.checked = exportCommentHeader;
+    $exportCommentSection.style.display = exportCommentHeader ? '' : 'none';
+  }
+  if (es.commentText !== undefined) {
+    exportCommentText = es.commentText;
+    $exportCommentText.value = exportCommentText;
+  }
+  if (es.quoteChar !== undefined) {
+    exportQuoteChar = es.quoteChar;
+    $exportFormatSection.querySelectorAll('.export-quote').forEach(b => {
+      b.classList.toggle('active', b.dataset.quote === exportQuoteChar);
+    });
+  }
+  if (es.lineEnding !== undefined) {
+    exportLineEnding = es.lineEnding;
+    const endVal = exportLineEnding === '\r\n' ? 'crlf' : 'lf';
+    $exportFormatSection.querySelectorAll('.export-ending').forEach(b => {
+      b.classList.toggle('active', b.dataset.ending === endVal);
+    });
+  }
+  if (es.nullValue !== undefined) {
+    exportNullValue = es.nullValue;
+    // Check if matches a preset
+    const presetVals = ['', 'NA', 'NaN', 'NULL', '-999'];
+    if (presetVals.indexOf(exportNullValue) >= 0) {
+      $exportNullSelect.value = exportNullValue;
+      $exportNullInput.style.display = 'none';
+    } else {
+      $exportNullSelect.value = 'custom';
+      $exportNullInput.style.display = '';
+      $exportNullInput.value = exportNullValue;
+    }
+  }
+  if (es.precision !== undefined) {
+    exportPrecision = es.precision;
+    if (exportPrecision === null) {
+      $exportPrecisionSelect.value = 'auto';
+      $exportPrecisionInput.style.display = 'none';
+    } else {
+      // Check if matches a preset
+      const opt = $exportPrecisionSelect.querySelector('option[value="' + exportPrecision + '"]');
+      if (opt && exportPrecision !== 'custom') {
+        $exportPrecisionSelect.value = String(exportPrecision);
+        $exportPrecisionInput.style.display = 'none';
+      } else {
+        $exportPrecisionSelect.value = 'custom';
+        $exportPrecisionInput.style.display = '';
+        $exportPrecisionInput.value = exportPrecision;
+      }
+    }
+  }
+  if (es.decimalSep !== undefined) {
+    exportDecimalSep = es.decimalSep;
+    $exportFormatSection.querySelectorAll('.export-decsep').forEach(b => {
+      b.classList.toggle('active', b.dataset.sep === exportDecimalSep);
+    });
+  }
+  updateExportWarnings();
+  updateExportPreview();
+}
 
 // ─── Swath Tab ────────────────────────────────────────────────────────
 
@@ -9057,6 +10554,929 @@ function renderSingleSwathSvg(bins, swathData, varColIdx, stat) {
     '<text x="' + (W / 2) + '" y="' + (H - 6) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + axisLabel + ' Coordinate &mdash; ' + esc(varName) + ' (' + (statLabels[stat] || stat) + ')</text>' +
     '<text x="12" y="' + (H / 2) + '" text-anchor="middle" fill="#6a737d" font-size="10" transform="rotate(-90, 12, ' + (H / 2) + ')">' + esc(varName) + '</text>' +
     '</svg>';
+}
+
+// ─── Grade-Tonnage (GT) Tab ──────────────────────────────────────────
+
+const GT_TONNAGE_UNITS = [
+  { label: 't',  symbol: 't',  divisor: 1 },
+  { label: 'kt', symbol: 'kt', divisor: 1e3 },
+  { label: 'Mt', symbol: 'Mt', divisor: 1e6 },
+  { label: 'Custom\u2026', symbol: null, divisor: null }
+];
+const GT_GRADE_UNITS = [
+  { label: '(raw)',  symbol: '',     factor: 1 },
+  { label: '%',      symbol: '%',    factor: 0.01 },
+  { label: 'ppm',    symbol: 'ppm',  factor: 1e-6 },
+  { label: 'ppb',    symbol: 'ppb',  factor: 1e-9 },
+  { label: 'g/t',    symbol: 'g/t',  factor: 1e-6 },
+  { label: 'oz/t',   symbol: 'oz/t', factor: 3.11035e-5 },
+  { label: 'Custom\u2026', symbol: null, factor: null }
+];
+
+let gtNumCols = [];
+let gtCatCols = [];
+
+function renderGtConfig(data) {
+  var $sidebar = document.getElementById('gtSidebar');
+  var $content = document.getElementById('gtContent');
+  if (!$sidebar) return;
+  var header = data.header, colTypes = data.colTypes, geometry = data.geometry;
+
+  // Reset cached results
+  lastGtData = null;
+
+  // Gather numeric columns (excluding XYZ/DXYZ)
+  var excludeSet = new Set();
+  if (currentXYZ.x >= 0) excludeSet.add(currentXYZ.x);
+  if (currentXYZ.y >= 0) excludeSet.add(currentXYZ.y);
+  if (currentXYZ.z >= 0) excludeSet.add(currentXYZ.z);
+  if (currentDXYZ.dx >= 0) excludeSet.add(currentDXYZ.dx);
+  if (currentDXYZ.dy >= 0) excludeSet.add(currentDXYZ.dy);
+  if (currentDXYZ.dz >= 0) excludeSet.add(currentDXYZ.dz);
+
+  gtNumCols = header.map(function(h, i) { return { name: h, idx: i, type: colTypes[i] }; })
+    .filter(function(c) { return c.type === 'numeric' && !excludeSet.has(c.idx); });
+
+  gtCatCols = header.map(function(h, i) { return { name: h, idx: i, type: colTypes[i] }; })
+    .filter(function(c) { return c.type === 'categorical'; });
+
+  if (gtNumCols.length === 0) {
+    $sidebar.innerHTML = '';
+    $content.innerHTML = '<div class="gt-hint">No numeric variable columns available for grade-tonnage analysis.</div>';
+    return;
+  }
+
+  // Auto-detect block volume
+  var volDisplay = 'Count-based (1 per row)';
+  var volValue = '';
+  var hasDXYZ = currentDXYZ.dx >= 0 && currentDXYZ.dy >= 0 && currentDXYZ.dz >= 0;
+  if (hasDXYZ) {
+    volDisplay = 'Per-row DXYZ columns';
+  } else if (geometry && geometry.x && geometry.y && geometry.z &&
+             geometry.x.blockSize && geometry.y.blockSize && geometry.z.blockSize) {
+    var bv = geometry.x.blockSize * geometry.y.blockSize * geometry.z.blockSize;
+    volDisplay = 'Geometry: ' + geometry.x.blockSize + ' \u00d7 ' + geometry.y.blockSize + ' \u00d7 ' + geometry.z.blockSize + ' = ' + formatNum(bv) + ' m\u00b3';
+    volValue = bv;
+  }
+
+  // Grade variable checkbox list with per-variable unit selects
+  var gradeUnitOpts = GT_GRADE_UNITS.slice(0, -1).map(function(u, i) {
+    return '<option value="' + i + '">' + esc(u.label) + '</option>';
+  }).join('');
+  var varItems = gtNumCols.map(function(c, i) {
+    return '<label class="gt-var-item"><input type="checkbox" value="' + c.idx + '"' + (i === 0 ? ' checked' : '') + '><span>' + esc(c.name) + '</span>' +
+      '<select class="gt-var-unit" data-col="' + c.idx + '">' + gradeUnitOpts + '</select></label>';
+  }).join('');
+
+  var densityOpts = '<option value="-1">\u2014 none</option>' + gtNumCols.map(function(c) {
+    return '<option value="' + c.idx + '">' + esc(c.name) + '</option>';
+  }).join('');
+  var weightOpts = densityOpts;
+
+  var tonnageUnitOpts = GT_TONNAGE_UNITS.map(function(u, i) {
+    return '<option value="' + i + '">' + esc(u.label) + '</option>';
+  }).join('');
+
+  // Group-by dropdown
+  var groupByOpts = '<option value="-1">\u2014 none</option>' + gtCatCols.map(function(c) {
+    return '<option value="' + c.idx + '">' + esc(c.name) + '</option>';
+  }).join('');
+
+  // Default cutoff range from first grade column stats
+  var defMin = 0, defMax = 1, defStep = 0.05;
+  var firstGrade = gtNumCols[0];
+  if (lastCompleteData && lastCompleteData.stats && lastCompleteData.stats[firstGrade.idx]) {
+    var gs = lastCompleteData.stats[firstGrade.idx];
+    defMin = gs.min != null ? Math.floor(gs.min * 100) / 100 : 0;
+    defMax = gs.max != null ? Math.ceil(gs.max * 100) / 100 : 1;
+    defStep = +((defMax - defMin) / 20).toPrecision(2) || 0.05;
+  }
+
+  $sidebar.innerHTML =
+    '<div class="gt-sidebar-section--grow">' +
+      '<div class="gt-sidebar-title">Grade Variables</div>' +
+      '<input type="text" class="gt-input gt-var-search" id="gtVarSearch" placeholder="search\u2026" spellcheck="false">' +
+      '<div class="gt-var-btns"><button id="gtVarAll">All</button><button id="gtVarNone">None</button></div>' +
+      '<div class="gt-var-list" id="gtVarList">' + varItems + '</div>' +
+    '</div>' +
+    '<div class="gt-sidebar-section">' +
+      '<div class="gt-sidebar-title">Density (optional)</div>' +
+      '<select class="gt-select" id="gtDensityCol">' + densityOpts + '</select>' +
+    '</div>' +
+    '<div class="gt-sidebar-section">' +
+      '<div class="gt-sidebar-title">Weight (optional)</div>' +
+      '<select class="gt-select" id="gtWeightCol">' + weightOpts + '</select>' +
+    '</div>' +
+    '<div class="gt-sidebar-section">' +
+      '<div class="gt-sidebar-title">Group by (optional)</div>' +
+      '<select class="gt-select" id="gtGroupBy">' + groupByOpts + '</select>' +
+      '<div class="gt-group-values" id="gtGroupValues" style="display:none">' +
+        '<div class="gt-var-btns"><button id="gtGrpAll">All</button><button id="gtGrpNone">None</button></div>' +
+        '<div class="gt-var-list" id="gtGrpList"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="gt-sidebar-section">' +
+      '<div class="gt-sidebar-title">Block Volume</div>' +
+      '<div class="gt-vol-display" id="gtVolDisplay">' + volDisplay + '</div>' +
+      '<div style="display:flex;gap:0.3rem;align-items:center;margin-top:0.2rem">' +
+        '<span style="font-size:0.55rem;color:var(--fg-dim);white-space:nowrap">Override (m\u00b3)</span>' +
+        '<input type="number" class="gt-input" id="gtVolOverride" value="' + volValue + '" min="0" step="any" placeholder="auto">' +
+      '</div>' +
+    '</div>' +
+    '<div class="gt-sidebar-section">' +
+      '<div class="gt-sidebar-title">Tonnage Unit</div>' +
+      '<select class="gt-select" id="gtTonnageUnit">' + tonnageUnitOpts + '</select>' +
+      '<div id="gtCustomTonnageWrap" style="display:none;margin-top:0.3rem">' +
+        '<div style="display:flex;gap:0.3rem">' +
+          '<input type="text" class="gt-input" id="gtCustomTonnageSym" placeholder="symbol" style="width:50px">' +
+          '<input type="number" class="gt-input" id="gtCustomTonnageDiv" placeholder="divisor" step="any">' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="gt-sidebar-section">' +
+      '<div class="gt-sidebar-title">Cutoffs</div>' +
+      '<div style="margin-bottom:0.3rem">' +
+        '<label class="gt-radio-label"><input type="radio" name="gtCutoffMode" value="range" checked> Range</label>' +
+        '<label class="gt-radio-label"><input type="radio" name="gtCutoffMode" value="custom"> Custom</label>' +
+      '</div>' +
+      '<div id="gtCutoffRange">' +
+        '<div style="display:flex;gap:0.3rem">' +
+          '<label style="flex:1;display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.55rem;color:var(--fg-dim)">Min</span><input type="number" class="gt-input" id="gtCutoffMin" value="' + defMin + '" step="any"></label>' +
+          '<label style="flex:1;display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.55rem;color:var(--fg-dim)">Max</span><input type="number" class="gt-input" id="gtCutoffMax" value="' + defMax + '" step="any"></label>' +
+          '<label style="flex:1;display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.55rem;color:var(--fg-dim)">Step</span><input type="number" class="gt-input" id="gtCutoffStep" value="' + defStep + '" step="any" min="0"></label>' +
+        '</div>' +
+      '</div>' +
+      '<div id="gtCutoffCustom" style="display:none">' +
+        '<input type="text" class="gt-input" id="gtCutoffCustomText" placeholder="0.2, 0.5, 1.0, 2.0, 5.0" spellcheck="false">' +
+      '</div>' +
+    '</div>' +
+    '<div class="gt-sidebar-section">' +
+      '<div class="gt-sidebar-title">Local Filter</div>' +
+      '<input type="text" class="gt-input" id="gtLocalFilter" placeholder="e.g. r.zone == 1" autocomplete="off" spellcheck="false">' +
+    '</div>' +
+    '<div class="gt-sidebar-section">' +
+      '<button class="gt-generate" id="gtGenerate">Generate</button>' +
+      '<div class="gt-progress" id="gtProgress">' +
+        '<div class="gt-progress-bar"><div class="gt-progress-fill" id="gtProgressFill"></div></div>' +
+        '<div class="gt-progress-label" id="gtProgressLabel"></div>' +
+      '</div>' +
+    '</div>';
+
+  $content.innerHTML = '<div class="gt-hint">Select grade variables and click Generate.</div>';
+
+  // Wire events — autosave on any sidebar change
+  $sidebar.addEventListener('change', function() { autoSaveProject(); });
+  $sidebar.addEventListener('input', function(e) {
+    if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox' && e.target.type !== 'radio') autoSaveProject();
+  });
+
+  var $tonnageUnit = document.getElementById('gtTonnageUnit');
+
+  // Variable search filter
+  document.getElementById('gtVarSearch').addEventListener('input', function() {
+    var q = this.value.toLowerCase();
+    document.querySelectorAll('#gtVarList .gt-var-item').forEach(function(item) {
+      var name = item.querySelector('span').textContent.toLowerCase();
+      item.style.display = !q || name.indexOf(q) >= 0 ? '' : 'none';
+    });
+  });
+
+  // All/None buttons for grade variables (only affect visible items)
+  document.getElementById('gtVarAll').addEventListener('click', function() {
+    document.querySelectorAll('#gtVarList .gt-var-item').forEach(function(item) {
+      if (item.style.display !== 'none') item.querySelector('input[type="checkbox"]').checked = true;
+    });
+  });
+  document.getElementById('gtVarNone').addEventListener('click', function() {
+    document.querySelectorAll('#gtVarList .gt-var-item').forEach(function(item) {
+      if (item.style.display !== 'none') item.querySelector('input[type="checkbox"]').checked = false;
+    });
+  });
+
+  // Cutoff mode radio
+  document.querySelectorAll('input[name="gtCutoffMode"]').forEach(function(r) {
+    r.addEventListener('change', function() {
+      document.getElementById('gtCutoffRange').style.display = r.value === 'range' ? '' : 'none';
+      document.getElementById('gtCutoffCustom').style.display = r.value === 'custom' ? '' : 'none';
+    });
+  });
+
+  // Unit custom toggles
+  $tonnageUnit.addEventListener('change', function() {
+    var idx = parseInt($tonnageUnit.value);
+    document.getElementById('gtCustomTonnageWrap').style.display = GT_TONNAGE_UNITS[idx].divisor === null ? '' : 'none';
+    if (lastGtData) renderGtOutput();
+  });
+  // Per-variable grade unit change — re-render if results exist
+  document.getElementById('gtVarList').addEventListener('change', function(e) {
+    if (e.target.classList.contains('gt-var-unit') && lastGtData) renderGtOutput();
+  });
+
+  // Group-by dropdown change — populate group value checkboxes
+  document.getElementById('gtGroupBy').addEventListener('change', function() {
+    updateGroupByValues();
+  });
+
+  // Group value All/None buttons
+  document.getElementById('gtGrpAll').addEventListener('click', function() {
+    document.querySelectorAll('#gtGrpList input[type="checkbox"]').forEach(function(cb) { cb.checked = true; });
+    if (lastGtData) renderGtOutput();
+  });
+  document.getElementById('gtGrpNone').addEventListener('click', function() {
+    document.querySelectorAll('#gtGrpList input[type="checkbox"]').forEach(function(cb) { cb.checked = false; });
+    if (lastGtData) renderGtOutput();
+  });
+
+  // Group value checkbox change — re-render
+  document.getElementById('gtGrpList').addEventListener('change', function() {
+    if (lastGtData) renderGtOutput();
+  });
+
+  // Generate button
+  document.getElementById('gtGenerate').addEventListener('click', runGt);
+
+  // Local filter autocomplete
+  if (gtExprController) gtExprController.destroy();
+  gtExprController = createExprInput(document.getElementById('gtLocalFilter'), { mode: 'filter' });
+}
+
+function updateGroupByValues() {
+  var $wrap = document.getElementById('gtGroupValues');
+  var $list = document.getElementById('gtGrpList');
+  var colIdx = parseInt(document.getElementById('gtGroupBy').value);
+  if (colIdx < 0 || !lastCompleteData || !lastCompleteData.categories) {
+    $wrap.style.display = 'none';
+    $list.innerHTML = '';
+    return;
+  }
+  var catEntry = lastCompleteData.categories[colIdx];
+  if (!catEntry || !catEntry.counts) { $wrap.style.display = 'none'; return; }
+  var cats = catEntry.counts;
+  var colName = currentHeader[colIdx] || '';
+  var values = Object.keys(cats);
+  // Use custom order if available
+  if (catCustomOrders[colName]) {
+    var orderedSet = new Set(catCustomOrders[colName]);
+    var ordered = catCustomOrders[colName].filter(function(v) { return cats[v] != null; });
+    var rest = values.filter(function(v) { return !orderedSet.has(v); }).sort();
+    values = ordered.concat(rest);
+  } else {
+    values.sort();
+  }
+  var html = '<label class="gt-var-item"><input type="checkbox" value="__total__" checked><span>Total (all)</span></label>';
+  for (var i = 0; i < values.length; i++) {
+    html += '<label class="gt-var-item"><input type="checkbox" value="' + esc(values[i]) + '" checked><span>' + esc(values[i]) + '</span></label>';
+  }
+  $list.innerHTML = html;
+  $wrap.style.display = '';
+}
+
+function getGtTonnageUnit() {
+  var tIdx = parseInt(document.getElementById('gtTonnageUnit').value);
+  var tu = GT_TONNAGE_UNITS[tIdx] || GT_TONNAGE_UNITS[0];
+  var tonnageDivisor = tu.divisor;
+  var tonnageSymbol = tu.symbol;
+  if (tonnageDivisor === null) {
+    tonnageSymbol = document.getElementById('gtCustomTonnageSym').value || 'units';
+    tonnageDivisor = parseFloat(document.getElementById('gtCustomTonnageDiv').value) || 1;
+  }
+  return { tonnageDivisor: tonnageDivisor, tonnageSymbol: tonnageSymbol, metalSymbol: tonnageSymbol };
+}
+
+function getGtGradeUnit(colIdx) {
+  var sel = document.querySelector('.gt-var-unit[data-col="' + colIdx + '"]');
+  var idx = sel ? parseInt(sel.value) : 0;
+  var gu = GT_GRADE_UNITS[idx] || GT_GRADE_UNITS[0];
+  return { gradeFactor: gu.factor, gradeSymbol: gu.symbol };
+}
+
+function getGtCutoffs() {
+  var mode = document.querySelector('input[name="gtCutoffMode"]:checked').value;
+  var cutoffs = [];
+  if (mode === 'range') {
+    var mn = parseFloat(document.getElementById('gtCutoffMin').value);
+    var mx = parseFloat(document.getElementById('gtCutoffMax').value);
+    var step = parseFloat(document.getElementById('gtCutoffStep').value);
+    if (!isFinite(mn) || !isFinite(mx) || !isFinite(step) || step <= 0) return [];
+    for (var v = mn; v <= mx + step * 0.001; v += step) {
+      cutoffs.push(+v.toPrecision(10));
+    }
+  } else {
+    var txt = document.getElementById('gtCutoffCustomText').value;
+    txt.split(/[,;\s]+/).forEach(function(s) {
+      var v = parseFloat(s.trim());
+      if (isFinite(v)) cutoffs.push(v);
+    });
+    cutoffs.sort(function(a, b) { return a - b; });
+  }
+  return cutoffs;
+}
+
+function getGtCheckedGradeCols() {
+  var checked = [];
+  document.querySelectorAll('#gtVarList input[type="checkbox"]:checked').forEach(function(cb) {
+    checked.push(parseInt(cb.value));
+  });
+  return checked;
+}
+
+function runGt() {
+  if (gtExprController) { var r = gtExprController.validate(); if (!r.valid) return; }
+  var gradeCols = getGtCheckedGradeCols();
+  if (gradeCols.length === 0) return;
+
+  var densityCol = parseInt(document.getElementById('gtDensityCol').value);
+  var weightCol = parseInt(document.getElementById('gtWeightCol').value);
+  var groupByCol = parseInt(document.getElementById('gtGroupBy').value);
+  var localFilter = document.getElementById('gtLocalFilter').value.trim();
+  var volOverride = parseFloat(document.getElementById('gtVolOverride').value);
+
+  // Compute per-variable grade ranges from stats
+  var gradeRanges = [];
+  for (var i = 0; i < gradeCols.length; i++) {
+    var gc = gradeCols[i];
+    var gradeMin = 0, gradeMax = 1;
+    if (lastCompleteData && lastCompleteData.stats && lastCompleteData.stats[gc]) {
+      var gs = lastCompleteData.stats[gc];
+      gradeMin = gs.min != null ? gs.min : 0;
+      gradeMax = gs.max != null ? gs.max : 1;
+    }
+    var range = gradeMax - gradeMin;
+    if (range <= 0) range = 1;
+    gradeMin -= range * 0.001;
+    gradeMax += range * 0.001;
+    gradeRanges.push({ min: gradeMin, max: gradeMax });
+  }
+
+  // Determine block volume
+  var blockVolume = 0;
+  var dxyzCols = null;
+  var hasDXYZ = currentDXYZ.dx >= 0 && currentDXYZ.dy >= 0 && currentDXYZ.dz >= 0;
+  if (isFinite(volOverride) && volOverride > 0) {
+    blockVolume = volOverride;
+  } else if (hasDXYZ) {
+    dxyzCols = [currentDXYZ.dx, currentDXYZ.dy, currentDXYZ.dz];
+  } else if (lastCompleteData && lastCompleteData.geometry) {
+    var geo = lastCompleteData.geometry;
+    if (geo.x && geo.y && geo.z && geo.x.blockSize && geo.y.blockSize && geo.z.blockSize) {
+      blockVolume = geo.x.blockSize * geo.y.blockSize * geo.z.blockSize;
+    }
+  }
+
+  if (gtWorker) gtWorker.terminate();
+  gtWorker = new Worker(workerUrl);
+
+  var $progress = document.getElementById('gtProgress');
+  var $fill = document.getElementById('gtProgressFill');
+  var $label = document.getElementById('gtProgressLabel');
+  var $content = document.getElementById('gtContent');
+  $progress.classList.add('active');
+  $fill.style.width = '0%';
+  $label.textContent = '0%';
+  $content.innerHTML = '';
+
+  var $btn = document.getElementById('gtGenerate');
+  if ($btn) $btn.disabled = true;
+
+  var resolvedTypes = currentColTypes.slice(0, currentOrigColCount);
+  var filterPayload = currentFilter ? { expression: currentFilter.expression } : null;
+  var zipEntry = preflightData ? (preflightData.selectedZipEntry || null) : null;
+
+  gtWorker.postMessage({
+    mode: 'gt',
+    file: currentFile,
+    zipEntry: zipEntry,
+    globalFilter: filterPayload,
+    localFilter: localFilter || null,
+    calcolCode: currentCalcolCode || null,
+    calcolMeta: currentCalcolMeta.length > 0 ? currentCalcolMeta : null,
+    resolvedTypes: resolvedTypes,
+    gradeCols: gradeCols,
+    gradeRanges: gradeRanges,
+    densityCol: densityCol >= 0 ? densityCol : null,
+    weightCol: weightCol >= 0 ? weightCol : null,
+    dxyzCols: dxyzCols,
+    blockVolume: blockVolume,
+    groupByCol: groupByCol >= 0 ? groupByCol : null
+  });
+
+  gtWorker.onmessage = function(e) {
+    var m = e.data;
+    if (m.type === 'gt-progress') {
+      var pct = Math.min(99, m.percent);
+      $fill.style.width = pct.toFixed(1) + '%';
+      $label.textContent = pct.toFixed(0) + '%';
+    } else if (m.type === 'gt-complete') {
+      $fill.style.width = '100%';
+      $label.textContent = 'Done';
+      setTimeout(function() { $progress.classList.remove('active'); }, 800);
+      if ($btn) $btn.disabled = false;
+      lastGtData = m;
+      renderGtOutput();
+      // Update tab badge with first variable total tonnage
+      var gtTab = document.querySelector('.results-tab[data-tab="gt"]');
+      if (gtTab && m.gradeResults && m.gradeResults.length > 0) {
+        gtTab.innerHTML = 'GT <span class="tab-badge">' + formatNum(m.gradeResults[0].totalTonnage) + '</span>';
+      }
+      gtWorker.terminate();
+      gtWorker = null;
+    } else if (m.type === 'error') {
+      $label.textContent = 'Error: ' + m.message;
+      setTimeout(function() { $progress.classList.remove('active'); }, 2000);
+      if ($btn) $btn.disabled = false;
+      gtWorker.terminate();
+      gtWorker = null;
+    }
+  };
+}
+
+function renderGtOutput() {
+  if (!lastGtData || !lastGtData.gradeResults) return;
+  var $content = document.getElementById('gtContent');
+  if (!$content) return;
+  var cutoffs = getGtCutoffs();
+  var tonnageUnit = getGtTonnageUnit();
+  if (cutoffs.length === 0) {
+    $content.innerHTML = '<div class="gt-hint">No valid cutoffs defined.</div>';
+    return;
+  }
+
+  // Determine which groups are selected (if grouped)
+  var selectedGroups = new Set();
+  var showTotal = false;
+  var isGrouped = lastGtData.grouped;
+  if (isGrouped) {
+    document.querySelectorAll('#gtGrpList input:checked').forEach(function(cb) {
+      if (cb.value === '__total__') showTotal = true;
+      else selectedGroups.add(cb.value);
+    });
+  }
+
+  var gradeResults = lastGtData.gradeResults;
+  var html = '<div class="gt-toolbar"><span class="gt-elapsed">' + (lastGtData.elapsed / 1000).toFixed(1) + 's</span></div>';
+
+  for (var gi = 0; gi < gradeResults.length; gi++) {
+    var gr = gradeResults[gi];
+    var gradeUnit = getGtGradeUnit(gr.colIdx);
+    var units = {
+      tonnageDivisor: tonnageUnit.tonnageDivisor,
+      tonnageSymbol: tonnageUnit.tonnageSymbol,
+      metalSymbol: tonnageUnit.metalSymbol,
+      gradeFactor: gradeUnit.gradeFactor,
+      gradeSymbol: gradeUnit.gradeSymbol
+    };
+    if (gradeResults.length > 1) {
+      html += '<div class="gt-chart-title">' + esc(gr.colName) + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') + '</div>';
+    }
+    html += '<div class="gt-chart-wrap">' + renderGtChart(gr, cutoffs, units, isGrouped, gi, selectedGroups, showTotal) + '</div>';
+    // Collapsible table with per-table copy button
+    var tableTitle = gradeResults.length > 1 ? esc(gr.colName) + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') : 'Table';
+    html += '<div class="gt-table-section">' +
+      '<div class="gt-table-header" data-gt-collapse="' + gi + '">' +
+        '<span class="gt-table-toggle">\u25BC</span> ' + tableTitle +
+        '<button class="gt-copy-btn" data-gt-copy="' + gi + '">Copy</button>' +
+      '</div>' +
+      '<div class="gt-table-body" id="gtTableBody' + gi + '">' +
+        '<div class="gt-table-wrap">' + renderGtTable(gr, cutoffs, units, isGrouped, gi, selectedGroups, showTotal) + '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  $content.innerHTML = html;
+
+  // Wire per-table copy buttons
+  $content.querySelectorAll('[data-gt-copy]').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var idx = btn.dataset.gtCopy;
+      var table = document.querySelector('#gtTableBody' + idx + ' .gt-table');
+      if (!table) return;
+      var tsv = [];
+      table.querySelectorAll('tr').forEach(function(row) {
+        var cells = [];
+        row.querySelectorAll('th, td').forEach(function(c) { cells.push(c.textContent); });
+        tsv.push(cells.join('\t'));
+      });
+      navigator.clipboard.writeText(tsv.join('\n')).then(function() {
+        btn.textContent = 'Copied!';
+        setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
+      });
+    });
+  });
+
+  // Wire collapsible table headers
+  $content.querySelectorAll('[data-gt-collapse]').forEach(function(hdr) {
+    hdr.addEventListener('click', function() {
+      var idx = hdr.dataset.gtCollapse;
+      var body = document.getElementById('gtTableBody' + idx);
+      var toggle = hdr.querySelector('.gt-table-toggle');
+      if (body.style.display === 'none') {
+        body.style.display = '';
+        toggle.textContent = '\u25BC';
+      } else {
+        body.style.display = 'none';
+        toggle.textContent = '\u25B6';
+      }
+    });
+  });
+
+  // Wire crosshairs for each chart
+  for (var ci = 0; ci < gradeResults.length; ci++) {
+    var chGradeUnit = getGtGradeUnit(gradeResults[ci].colIdx);
+    var chUnits = {
+      tonnageDivisor: tonnageUnit.tonnageDivisor,
+      tonnageSymbol: tonnageUnit.tonnageSymbol,
+      metalSymbol: tonnageUnit.metalSymbol,
+      gradeFactor: chGradeUnit.gradeFactor,
+      gradeSymbol: chGradeUnit.gradeSymbol
+    };
+    wireGtCrosshair(gradeResults[ci], cutoffs, chUnits, ci);
+  }
+}
+
+function interpolateGt(results, cutoff, binWidth, gradeMin) {
+  var zero = { tonnage: 0, grade: 0, metal: 0 };
+  if (!results || results.length === 0) return zero;
+  if (!binWidth || !isFinite(binWidth)) return results[0] || zero;
+  var idx = (cutoff - gradeMin) / binWidth;
+  if (!isFinite(idx)) return results[0] || zero;
+  var lo = Math.floor(idx);
+  if (lo < 0) lo = 0;
+  if (lo >= results.length) lo = results.length - 1;
+  var hi = lo + 1;
+  if (hi >= results.length) hi = results.length - 1;
+  if (lo === hi) return results[lo] || zero;
+  var a = results[lo], b = results[hi];
+  if (!a || !b) return a || b || zero;
+  var frac = idx - lo;
+  return {
+    tonnage: a.tonnage + (b.tonnage - a.tonnage) * frac,
+    grade: a.grade + (b.grade - a.grade) * frac,
+    metal: a.metal + (b.metal - a.metal) * frac
+  };
+}
+
+function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGroups, showTotal) {
+  var results = grData.results;
+  if (!results || results.length === 0) return '<div class="gt-hint">No GT data available.</div>';
+  var binWidth = grData.binWidth;
+  var gradeMin = grData.gradeMin;
+  var totalTonnage = grData.totalTonnage;
+  var td = units.tonnageDivisor || 1;
+  var gf = units.gradeFactor || 1;
+  var clipId = 'gt-clip-' + chartIdx;
+
+  // Determine if we render grouped overlay
+  var groupResults = isGrouped && grData.groupResults ? grData.groupResults : null;
+  var allGroupNames = groupResults ? Object.keys(groupResults).sort() : [];
+  // Filter to selected groups
+  var groupNames = allGroupNames;
+  if (groupResults && selectedGroups && selectedGroups.size > 0) {
+    groupNames = allGroupNames.filter(function(n) { return selectedGroups.has(n); });
+  } else if (groupResults && selectedGroups && selectedGroups.size === 0 && !showTotal) {
+    groupNames = [];
+  }
+
+  // Sample curve at cutoffs (overall)
+  var points = cutoffs.map(function(c) {
+    var p = interpolateGt(results, c, binWidth, gradeMin);
+    return { cutoff: c, tonnage: p.tonnage / td, grade: p.grade, metal: p.metal * gf / td };
+  });
+
+  var W = 720, H = 380;
+  var pad = { top: 30, right: 75, bottom: 50, left: 75 };
+  var plotW = W - pad.left - pad.right;
+  var plotH = H - pad.top - pad.bottom;
+
+  // Tonnage range (left Y)
+  var tMin = 0, tMax = Math.max.apply(null, points.map(function(p) { return p.tonnage; })) || 1;
+  tMax += tMax * 0.05;
+
+  // Grade range (right Y) — only from points with tonnage > 0
+  var validGrades = points.filter(function(p) { return p.tonnage > 0; }).map(function(p) { return p.grade; });
+  if (validGrades.length === 0) validGrades = [0, 1];
+  var gMin = Math.min.apply(null, validGrades);
+  var gMax = Math.max.apply(null, validGrades);
+  if (gMin === gMax) { gMin -= 0.5; gMax += 0.5; }
+  var gPadding = (gMax - gMin) * 0.05;
+  gMin -= gPadding; gMax += gPadding;
+  if (gMin < 0) gMin = 0;
+
+  // X range
+  var xMin = cutoffs[0], xMax = cutoffs[cutoffs.length - 1];
+  var xRange = xMax - xMin || 1;
+
+  var sx = function(v) { return pad.left + ((v - xMin) / xRange) * plotW; };
+  var syT = function(v) { return pad.top + ((tMax - v) / (tMax - tMin)) * plotH; };
+  var syG = function(v) { return pad.top + ((gMax - v) / (gMax - gMin)) * plotH; };
+
+  // Grid
+  var svg = '';
+  var nxTicks = Math.min(10, cutoffs.length);
+  for (var i = 0; i <= nxTicks; i++) {
+    var v = xMin + (xRange * i / nxTicks);
+    var x = sx(v);
+    svg += '<line x1="' + x.toFixed(1) + '" y1="' + pad.top + '" x2="' + x.toFixed(1) + '" y2="' + (H - pad.bottom) + '" stroke="#1e2228" stroke-width="1"/>';
+    svg += '<text x="' + x.toFixed(1) + '" y="' + (H - pad.bottom + 14) + '" text-anchor="middle" fill="#6a737d" font-size="9">' + formatNum(v) + '</text>';
+  }
+  var nyTicks = 6;
+  for (var j = 0; j <= nyTicks; j++) {
+    var tv = tMin + ((tMax - tMin) * j / nyTicks);
+    var y = syT(tv);
+    svg += '<line x1="' + pad.left + '" y1="' + y.toFixed(1) + '" x2="' + (W - pad.right) + '" y2="' + y.toFixed(1) + '" stroke="#1e2228" stroke-width="1"/>';
+    svg += '<text x="' + (pad.left - 6) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end" fill="var(--amber)" font-size="9">' + formatNum(tv) + '</text>';
+    var gv = gMin + ((gMax - gMin) * j / nyTicks);
+    svg += '<text x="' + (W - pad.right + 6) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="start" fill="var(--blue)" font-size="9">' + formatNum(gv) + '</text>';
+  }
+
+  // Clip path
+  svg += '<defs><clipPath id="' + clipId + '"><rect x="' + pad.left + '" y="' + pad.top + '" width="' + plotW + '" height="' + plotH + '"/></clipPath></defs>';
+  svg += '<g clip-path="url(#' + clipId + ')">';
+
+  if (groupNames.length > 0 || (isGrouped && showTotal)) {
+    // "Total" line from overall results
+    if (showTotal) {
+      var tTotalP = '';
+      var gTotalP = '';
+      for (var ti = 0; ti < points.length; ti++) {
+        tTotalP += (ti === 0 ? 'M' : 'L') + sx(points[ti].cutoff).toFixed(1) + ',' + syT(points[ti].tonnage).toFixed(1);
+        if (points[ti].tonnage > 0) {
+          gTotalP += (gTotalP ? 'L' : 'M') + sx(points[ti].cutoff).toFixed(1) + ',' + syG(points[ti].grade).toFixed(1);
+        }
+      }
+      svg += '<path d="' + tTotalP + '" fill="none" stroke="var(--amber)" stroke-width="2.5" opacity="0.7"/>';
+      if (gTotalP) svg += '<path d="' + gTotalP + '" fill="none" stroke="var(--blue)" stroke-width="2" stroke-dasharray="4,3" opacity="0.7"/>';
+    }
+    // Grouped overlay: draw tonnage + grade per group with colors
+    for (var gi = 0; gi < groupNames.length; gi++) {
+      var gn = groupNames[gi];
+      var grd = groupResults[gn];
+      var colorIdx = allGroupNames.indexOf(gn);
+      var color = getCategoryColor(lastGtData.groupByColName || '', gn, colorIdx >= 0 ? colorIdx : gi);
+      var grpPts = cutoffs.map(function(c) {
+        var p = interpolateGt(grd.results, c, binWidth, gradeMin);
+        return { cutoff: c, tonnage: p.tonnage / td, grade: p.grade };
+      });
+      // Tonnage line (solid)
+      var tP = '';
+      for (var k = 0; k < grpPts.length; k++) {
+        tP += (k === 0 ? 'M' : 'L') + sx(grpPts[k].cutoff).toFixed(1) + ',' + syT(grpPts[k].tonnage).toFixed(1);
+      }
+      svg += '<path d="' + tP + '" fill="none" stroke="' + color + '" stroke-width="1.5"/>';
+      // Grade line (dashed) — clip where tonnage is 0
+      var gP = '';
+      for (var l = 0; l < grpPts.length; l++) {
+        if (grpPts[l].tonnage > 0) {
+          gP += (gP ? 'L' : 'M') + sx(grpPts[l].cutoff).toFixed(1) + ',' + syG(grpPts[l].grade).toFixed(1);
+        }
+      }
+      if (gP) svg += '<path d="' + gP + '" fill="none" stroke="' + color + '" stroke-width="1" stroke-dasharray="4,3"/>';
+    }
+  } else {
+    // Ungrouped: standard tonnage + grade + metal lines
+    var tPath = '';
+    for (var k = 0; k < points.length; k++) {
+      tPath += (k === 0 ? 'M' : 'L') + sx(points[k].cutoff).toFixed(1) + ',' + syT(points[k].tonnage).toFixed(1);
+    }
+    svg += '<path d="' + tPath + '" fill="none" stroke="var(--amber)" stroke-width="2"/>';
+
+    var gPath = '';
+    for (var l = 0; l < points.length; l++) {
+      if (points[l].tonnage > 0) {
+        gPath += (gPath ? 'L' : 'M') + sx(points[l].cutoff).toFixed(1) + ',' + syG(points[l].grade).toFixed(1);
+      }
+    }
+    if (gPath) svg += '<path d="' + gPath + '" fill="none" stroke="var(--blue)" stroke-width="2"/>';
+
+    var mMax = Math.max.apply(null, points.map(function(p) { return p.metal; })) || 1;
+    var syM = function(v) { return pad.top + ((mMax - v) / mMax) * plotH; };
+    var mPath = '';
+    for (var n = 0; n < points.length; n++) {
+      mPath += (n === 0 ? 'M' : 'L') + sx(points[n].cutoff).toFixed(1) + ',' + syM(points[n].metal).toFixed(1);
+    }
+    svg += '<path d="' + mPath + '" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-dasharray="4,3"/>';
+  }
+
+  svg += '</g>'; // close clip group
+
+  // Axis labels
+  svg += '<text x="' + (W / 2) + '" y="' + (H - 6) + '" text-anchor="middle" fill="#6a737d" font-size="10">Cutoff' + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') + '</text>';
+  svg += '<text x="12" y="' + (H / 2) + '" text-anchor="middle" fill="var(--amber)" font-size="10" transform="rotate(-90, 12, ' + (H / 2) + ')">Tonnage (' + esc(units.tonnageSymbol) + ')</text>';
+  svg += '<text x="' + (W - 8) + '" y="' + (H / 2) + '" text-anchor="middle" fill="var(--blue)" font-size="10" transform="rotate(90, ' + (W - 8) + ', ' + (H / 2) + ')">Grade' + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') + '</text>';
+
+  // Legend
+  if (groupNames.length > 0 || (isGrouped && showTotal)) {
+    var legY = pad.top + 6;
+    if (showTotal) {
+      svg += '<rect x="' + (pad.left + 10) + '" y="' + legY + '" width="10" height="3" fill="var(--amber)" rx="1" opacity="0.7"/>';
+      svg += '<text x="' + (pad.left + 24) + '" y="' + (legY + 4) + '" fill="var(--amber)" font-size="7">Total</text>';
+      legY += 11;
+    }
+    for (var gi = 0; gi < Math.min(groupNames.length, 15); gi++) {
+      var gn = groupNames[gi];
+      var colorIdx = allGroupNames.indexOf(gn);
+      var color = getCategoryColor(lastGtData.groupByColName || '', gn, colorIdx >= 0 ? colorIdx : gi);
+      svg += '<rect x="' + (pad.left + 10) + '" y="' + legY + '" width="10" height="3" fill="' + color + '" rx="1"/>';
+      svg += '<text x="' + (pad.left + 24) + '" y="' + (legY + 4) + '" fill="' + color + '" font-size="7">' + esc(gn) + '</text>';
+      legY += 11;
+    }
+    if (groupNames.length > 15) {
+      svg += '<text x="' + (pad.left + 24) + '" y="' + (legY + 4) + '" fill="var(--fg-dim)" font-size="7">+' + (groupNames.length - 15) + ' more</text>';
+    }
+  } else {
+    svg += '<rect x="' + (pad.left + 10) + '" y="' + (pad.top + 6) + '" width="10" height="3" fill="var(--amber)" rx="1"/>';
+    svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 10) + '" fill="var(--amber)" font-size="8">Tonnage</text>';
+    svg += '<rect x="' + (pad.left + 10) + '" y="' + (pad.top + 18) + '" width="10" height="3" fill="var(--blue)" rx="1"/>';
+    svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 22) + '" fill="var(--blue)" font-size="8">Grade</text>';
+    svg += '<line x1="' + (pad.left + 10) + '" y1="' + (pad.top + 31.5) + '" x2="' + (pad.left + 20) + '" y2="' + (pad.top + 31.5) + '" stroke="var(--green)" stroke-width="1.5" stroke-dasharray="3,2"/>';
+    svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 34) + '" fill="var(--green)" font-size="8">Metal</text>';
+  }
+
+  // Crosshair overlay area
+  svg += '<rect class="gt-crosshair-area" x="' + pad.left + '" y="' + pad.top + '" width="' + plotW + '" height="' + plotH + '" fill="transparent"/>';
+  svg += '<line class="gt-crosshair-line" x1="0" y1="' + pad.top + '" x2="0" y2="' + (H - pad.bottom) + '" stroke="var(--fg-dim)" stroke-width="1" opacity="0" stroke-dasharray="3,3"/>';
+  svg += '<g class="gt-crosshair-tooltip" opacity="0"><rect class="gt-tt-bg" rx="3" ry="3"/><text class="gt-tt-text" font-size="9"></text></g>';
+
+  return '<svg class="gt-svg" data-chart-idx="' + chartIdx + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono);width:100%;height:auto" ' +
+    'data-pad-left="' + pad.left + '" data-pad-right="' + pad.right + '" data-pad-top="' + pad.top + '" data-pad-bottom="' + pad.bottom + '" ' +
+    'data-w="' + W + '" data-h="' + H + '" data-xmin="' + xMin + '" data-xmax="' + xMax + '">' +
+    '<rect width="' + W + '" height="' + H + '" fill="var(--bg)" rx="4"/>' +
+    svg +
+    '</svg>';
+}
+
+function wireGtCrosshair(grData, cutoffs, units, chartIdx) {
+  var svgEl = document.querySelector('.gt-svg[data-chart-idx="' + chartIdx + '"]');
+  if (!svgEl) return;
+  var area = svgEl.querySelector('.gt-crosshair-area');
+  var line = svgEl.querySelector('.gt-crosshair-line');
+  var ttGroup = svgEl.querySelector('.gt-crosshair-tooltip');
+  var ttBg = svgEl.querySelector('.gt-tt-bg');
+  var ttText = svgEl.querySelector('.gt-tt-text');
+  if (!area || !line || !ttGroup) return;
+
+  var padLeft = parseFloat(svgEl.dataset.padLeft);
+  var W = parseFloat(svgEl.dataset.w);
+  var xMin = parseFloat(svgEl.dataset.xmin);
+  var xMax = parseFloat(svgEl.dataset.xmax);
+  var padRight = parseFloat(svgEl.dataset.padRight);
+  var plotW = W - padLeft - padRight;
+
+  function onMove(e) {
+    var pt = svgEl.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    var svgX = pt.matrixTransform(svgEl.getScreenCTM().inverse()).x;
+    var cutoff = xMin + ((svgX - padLeft) / plotW) * (xMax - xMin);
+    if (cutoff < xMin) cutoff = xMin;
+    if (cutoff > xMax) cutoff = xMax;
+
+    var p = interpolateGt(grData.results, cutoff, grData.binWidth, grData.gradeMin);
+    var td = units.tonnageDivisor;
+    var gf = units.gradeFactor;
+    var tonnage = p.tonnage / td;
+    var grade = p.grade;
+    var metal = p.metal * gf / td;
+    var pctTotal = grData.totalTonnage > 0 ? (p.tonnage / grData.totalTonnage * 100) : 0;
+
+    line.setAttribute('x1', svgX.toFixed(1));
+    line.setAttribute('x2', svgX.toFixed(1));
+    line.setAttribute('opacity', '1');
+
+    var lines = [
+      'Cutoff: ' + formatNum(cutoff),
+      'Tonnage: ' + formatNum(tonnage) + ' ' + units.tonnageSymbol,
+      'Grade: ' + formatNum(grade) + (units.gradeSymbol ? ' ' + units.gradeSymbol : ''),
+      'Metal: ' + formatNum(metal) + ' ' + units.metalSymbol,
+      '% Total: ' + pctTotal.toFixed(1) + '%'
+    ];
+
+    var lineH = 13;
+    var ttW = 140;
+    var ttH = lines.length * lineH + 8;
+    var tx = svgX + 10;
+    var ty = 40;
+    if (tx + ttW > W - 10) tx = svgX - ttW - 10;
+
+    ttBg.setAttribute('x', tx);
+    ttBg.setAttribute('y', ty);
+    ttBg.setAttribute('width', ttW);
+    ttBg.setAttribute('height', ttH);
+    ttBg.setAttribute('fill', 'var(--bg1)');
+    ttBg.setAttribute('stroke', 'var(--border)');
+
+    var textHtml = '';
+    for (var i = 0; i < lines.length; i++) {
+      textHtml += '<tspan x="' + (tx + 6) + '" dy="' + (i === 0 ? (ty + lineH) : lineH) + '" fill="var(--fg)">' + esc(lines[i]) + '</tspan>';
+    }
+    ttText.innerHTML = textHtml;
+    ttGroup.setAttribute('opacity', '1');
+  }
+
+  function onLeave() {
+    line.setAttribute('opacity', '0');
+    ttGroup.setAttribute('opacity', '0');
+  }
+
+  area.addEventListener('mousemove', onMove);
+  area.addEventListener('mouseleave', onLeave);
+}
+
+function renderGtTable(grData, cutoffs, units, isGrouped, tableIdx, selectedGroups, showTotal) {
+  var results = grData.results;
+  var binWidth = grData.binWidth;
+  var gradeMin = grData.gradeMin;
+  var totalTonnage = grData.totalTonnage;
+  var td = units.tonnageDivisor;
+  var gf = units.gradeFactor;
+  var groupResults = isGrouped && grData.groupResults ? grData.groupResults : null;
+  var allGroupNames = groupResults ? Object.keys(groupResults).sort() : [];
+  var groupNames = allGroupNames;
+  if (groupResults && selectedGroups && selectedGroups.size > 0) {
+    groupNames = allGroupNames.filter(function(n) { return selectedGroups.has(n); });
+  } else if (groupResults && selectedGroups && selectedGroups.size === 0 && !showTotal) {
+    groupNames = [];
+  }
+
+  var hasGroupCol = groupNames.length > 0 || (isGrouped && showTotal);
+  var gradeLabel = 'Grade' + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '');
+  var html = '<table class="gt-table" id="gtResultTable' + tableIdx + '">';
+  html += '<thead><tr>';
+  if (hasGroupCol) html += '<th>Group</th>';
+  html += '<th>Cutoff' + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') + '</th>';
+  html += '<th>Tonnage (' + esc(units.tonnageSymbol) + ')</th>';
+  html += '<th>' + gradeLabel + '</th>';
+  html += '<th>Metal (' + esc(units.metalSymbol) + ')</th>';
+  html += '<th>% Total</th>';
+  html += '</tr></thead><tbody>';
+
+  if (hasGroupCol) {
+    // "Total" block first if requested
+    if (showTotal) {
+      for (var ti = 0; ti < cutoffs.length; ti++) {
+        var c = cutoffs[ti];
+        var p = interpolateGt(results, c, binWidth, gradeMin);
+        var tonnage = p.tonnage / td;
+        var grade = p.grade;
+        var metal = p.metal * gf / td;
+        var pctTotal = totalTonnage > 0 ? (p.tonnage / totalTonnage * 100) : 0;
+        html += '<tr>';
+        if (ti === 0) html += '<td rowspan="' + cutoffs.length + '" style="color:var(--amber);font-weight:600">Total</td>';
+        html += '<td>' + formatNum(c) + '</td>';
+        html += '<td>' + formatNum(tonnage) + '</td>';
+        html += '<td>' + formatNum(grade) + '</td>';
+        html += '<td>' + formatNum(metal) + '</td>';
+        html += '<td>' + pctTotal.toFixed(1) + '%</td>';
+        html += '</tr>';
+      }
+    }
+    // Grouped table: rows grouped by group value then cutoff
+    for (var gi = 0; gi < groupNames.length; gi++) {
+      var gn = groupNames[gi];
+      var grd = groupResults[gn];
+      for (var ci = 0; ci < cutoffs.length; ci++) {
+        var c = cutoffs[ci];
+        var p = interpolateGt(grd.results, c, binWidth, gradeMin);
+        var tonnage = p.tonnage / td;
+        var grade = p.grade;
+        var metal = p.metal * gf / td;
+        var pctTotal = grd.totalTonnage > 0 ? (p.tonnage / grd.totalTonnage * 100) : 0;
+        html += '<tr>';
+        if (ci === 0) html += '<td rowspan="' + cutoffs.length + '">' + esc(gn) + '</td>';
+        html += '<td>' + formatNum(c) + '</td>';
+        html += '<td>' + formatNum(tonnage) + '</td>';
+        html += '<td>' + formatNum(grade) + '</td>';
+        html += '<td>' + formatNum(metal) + '</td>';
+        html += '<td>' + pctTotal.toFixed(1) + '%</td>';
+        html += '</tr>';
+      }
+    }
+  } else {
+    // Ungrouped table
+    for (var i = 0; i < cutoffs.length; i++) {
+      var c = cutoffs[i];
+      var p = interpolateGt(results, c, binWidth, gradeMin);
+      var tonnage = p.tonnage / td;
+      var grade = p.grade;
+      var metal = p.metal * gf / td;
+      var pctTotal = totalTonnage > 0 ? (p.tonnage / totalTonnage * 100) : 0;
+      html += '<tr>';
+      html += '<td>' + formatNum(c) + '</td>';
+      html += '<td>' + formatNum(tonnage) + '</td>';
+      html += '<td>' + formatNum(grade) + '</td>';
+      html += '<td>' + formatNum(metal) + '</td>';
+      html += '<td>' + pctTotal.toFixed(1) + '%</td>';
+      html += '</tr>';
+    }
+  }
+  html += '</tbody></table>';
+  return html;
+}
+
+function resetGtState() {
+  lastGtData = null;
+  if (gtWorker) { gtWorker.terminate(); gtWorker = null; }
+  if (gtExprController) { gtExprController.destroy(); gtExprController = null; }
 }
 
 // ─── Section Tab ──────────────────────────────────────────────────────
@@ -10834,6 +13254,8 @@ var SETTINGS_DEFAULTS = {
   defaultPercentilePreset: 'quartiles',
   customPercentiles: null,
   sigFigs: null,
+  thousandsSep: 'space',
+  sciNotation: 'auto',
   defaultCatSort: 'count-desc'
 };
 
@@ -11084,7 +13506,26 @@ function renderSettingsBody() {
     var ssel = sv === curSig ? ' selected' : '';
     html += '<option value="' + sv + '"' + ssel + '>' + sl + '</option>';
   }
-  html += '</select></div></div>';
+  html += '</select></div>';
+  // Thousands separator
+  var tSepOpts = [['space', 'Space (1\u2009234)'], ['comma', 'Comma (1,234)'], ['none', 'None (1234)']];
+  var curTSep = bmaSettings.thousandsSep || 'space';
+  html += '<div class="settings-sigfigs-row" style="margin-top:0.4rem"><label>Thousands separator</label><select id="settingsThousandsSep">';
+  for (var ti = 0; ti < tSepOpts.length; ti++) {
+    var tsel = tSepOpts[ti][0] === curTSep ? ' selected' : '';
+    html += '<option value="' + tSepOpts[ti][0] + '"' + tsel + '>' + tSepOpts[ti][1] + '</option>';
+  }
+  html += '</select></div>';
+  // Scientific notation
+  var sciOpts = [['auto', 'Auto'], ['never', 'Never'], ['1e6', '\u2265 1M'], ['1e9', '\u2265 1B']];
+  var curSci = bmaSettings.sciNotation || 'auto';
+  html += '<div class="settings-sigfigs-row" style="margin-top:0.4rem"><label>Scientific notation</label><select id="settingsSciNotation">';
+  for (var sci = 0; sci < sciOpts.length; sci++) {
+    var scsel = sciOpts[sci][0] === curSci ? ' selected' : '';
+    html += '<option value="' + sciOpts[sci][0] + '"' + scsel + '>' + sciOpts[sci][1] + '</option>';
+  }
+  html += '</select></div>';
+  html += '</div>';
 
   // ── Default Category Sort ──
   html += '<div class="settings-section"><div class="settings-section-title">Default Category Sort</div>';
@@ -11304,10 +13745,27 @@ function wireSettingsEvents() {
       var v = sigSelect.value;
       bmaSettings.sigFigs = v === '' ? null : parseInt(v, 10);
       saveSettings();
-      // Re-render stats if available
-      if (typeof renderStatsTable === 'function' && lastDisplayedStats) {
-        renderStatsTable();
-      }
+      refreshFormattedViews();
+    });
+  }
+
+  // Thousands separator
+  var tSepSelect = document.getElementById('settingsThousandsSep');
+  if (tSepSelect) {
+    tSepSelect.addEventListener('change', function() {
+      bmaSettings.thousandsSep = tSepSelect.value;
+      saveSettings();
+      refreshFormattedViews();
+    });
+  }
+
+  // Scientific notation
+  var sciSelect = document.getElementById('settingsSciNotation');
+  if (sciSelect) {
+    sciSelect.addEventListener('change', function() {
+      bmaSettings.sciNotation = sciSelect.value;
+      saveSettings();
+      refreshFormattedViews();
     });
   }
 }
@@ -11340,6 +13798,13 @@ function loadCacheInfo() {
   }).catch(function() {
     container.innerHTML = '<div class="settings-cache-empty">Could not read cache.</div>';
   });
+}
+
+function refreshFormattedViews() {
+  if (typeof renderStatsTable === 'function' && lastDisplayedStats) {
+    renderStatsTable();
+  }
+  if (lastGtData) renderGtOutput();
 }
 
 // ─── Initialization ──────────────────────────────────────────────────

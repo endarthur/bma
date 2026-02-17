@@ -135,6 +135,7 @@
       <button class="results-tab" data-tab="categories">Categories</button>
       <button class="results-tab" data-tab="statscat">StatsCat</button>
       <button class="results-tab" data-tab="export">Export</button>
+      <button class="results-tab" data-tab="gt">GT</button>
       <button class="results-tab" data-tab="swath">Swath</button>
       <button class="results-tab" data-tab="section">Section</button>
     </div>
@@ -357,28 +358,111 @@
         </div>
       </div>
       <div class="results-panel" id="panelExport" data-tab="export">
-        <div class="panel-inner">
-          <div class="section">
-            <div class="section-head">
-              Export Columns <span class="badge" id="exportBadge">0</span>
-            </div>
-            <div class="section-body export-body">
-              <div class="export-toolbar">
+        <div class="export-body" id="exportBody">
+          <div class="export-sidebar">
+            <div class="export-sidebar-section">
+              <div class="export-sidebar-title">Columns <span class="badge" id="exportBadge">0</span></div>
+              <input type="text" class="export-col-search" id="exportColSearch" placeholder="Search columns…" autocomplete="off" spellcheck="false">
+              <div class="export-sel-btns">
                 <button id="exportSelAll">All</button>
                 <button id="exportSelNone">None</button>
                 <button id="exportSelOrig">Original</button>
                 <button id="exportSelCalc">Calcols</button>
               </div>
+            </div>
+            <div class="export-sidebar-section--grow">
               <div class="export-col-list" id="exportColList"></div>
-              <div class="export-actions">
+            </div>
+          </div>
+          <div class="export-main">
+            <div class="export-toolbar" id="exportToolbar">
+              <div class="tb-group" style="margin-left:auto">
+                <span class="export-row-preview" id="exportRowPreview"></span>
                 <button class="export-btn" id="exportDownload">Download CSV</button>
-                <span class="export-info" id="exportInfo"></span>
+              </div>
+            </div>
+            <div class="export-main-content" id="exportMainContent">
+              <div class="export-format" id="exportFormatSection">
+                <div class="export-format-row">
+                  <span class="export-label">Delimiter</span>
+                  <button class="export-delim active" data-delim=",">,</button>
+                  <button class="export-delim" data-delim="tab">Tab</button>
+                  <button class="export-delim" data-delim=";">;</button>
+                  <button class="export-delim" data-delim="|">|</button>
+                  <button class="export-delim" data-delim=" ">Spc</button>
+                  <span class="export-label" style="margin-left:0.5rem">Other</span>
+                  <input type="text" class="export-custom-delim" id="exportCustomDelim" maxlength="4" placeholder="…">
+                </div>
+                <div class="export-format-row">
+                  <span class="export-label">Quote</span>
+                  <button class="export-quote active" data-quote='"'>&quot;</button>
+                  <button class="export-quote" data-quote="'">&apos;</button>
+                  <button class="export-quote" data-quote="">None</button>
+                  <span class="export-label" style="margin-left:0.75rem">Ending</span>
+                  <button class="export-ending active" data-ending="lf">LF</button>
+                  <button class="export-ending" data-ending="crlf">CRLF</button>
+                  <label style="margin-left:0.75rem"><input type="checkbox" id="exportIncludeHeader" checked> Header row</label>
+                  <label><input type="checkbox" id="exportCommentHeader"> Comment header</label>
+                </div>
+                <div class="export-format-row">
+                  <span class="export-label">Nulls</span>
+                  <select class="export-select" id="exportNullSelect">
+                    <option value="">(empty)</option>
+                    <option value="NA">NA</option>
+                    <option value="NaN">NaN</option>
+                    <option value="NULL">NULL</option>
+                    <option value="-999">-999</option>
+                    <option value="custom">Custom…</option>
+                  </select>
+                  <input type="text" class="export-inline-input" id="exportNullInput" style="display:none" placeholder="value" maxlength="20">
+                  <span class="export-label" style="margin-left:0.75rem">Precision</span>
+                  <select class="export-select" id="exportPrecisionSelect">
+                    <option value="auto">Auto</option>
+                    <option value="0">0 dp</option>
+                    <option value="1">1 dp</option>
+                    <option value="2">2 dp</option>
+                    <option value="3">3 dp</option>
+                    <option value="4">4 dp</option>
+                    <option value="6">6 dp</option>
+                    <option value="8">8 dp</option>
+                    <option value="10">10 dp</option>
+                    <option value="custom">Custom…</option>
+                  </select>
+                  <input type="number" class="export-inline-input" id="exportPrecisionInput" style="display:none" min="0" max="20" placeholder="dp">
+                  <span class="export-label" style="margin-left:0.75rem">Dec sep</span>
+                  <button class="export-decsep active" data-sep=".">.</button>
+                  <button class="export-decsep" data-sep=",">,</button>
+                </div>
+                <div class="export-format-warn" id="exportPrecisionWarn" style="display:none"></div>
+              </div>
+              <div class="export-comment-section" id="exportCommentSection" style="display:none">
+                <div class="export-comment-toolbar">
+                  <span class="export-label">Comment Header</span>
+                  <button id="exportCommentGenerate" title="Generate from detected geometry">Generate from geometry</button>
+                </div>
+                <textarea id="exportCommentText" class="export-comment-textarea" rows="6" spellcheck="false" placeholder="Lines will be prefixed with # in the output"></textarea>
+              </div>
+              <div class="export-preview" id="exportPreview">
+                <div class="export-preview-head">
+                  <span class="export-label">Preview</span>
+                  <span class="export-preview-info" id="exportPreviewInfo"></span>
+                </div>
+                <pre class="export-preview-pre" id="exportPreviewPre"></pre>
               </div>
               <div class="export-progress" id="exportProgress">
                 <div class="export-progress-label" id="exportProgressLabel"></div>
                 <div class="export-progress-bar"><div class="export-progress-fill" id="exportProgressFill"></div></div>
               </div>
+              <div class="export-info" id="exportInfo"></div>
             </div>
+          </div>
+        </div>
+      </div>
+      <div class="results-panel" id="panelGt" data-tab="gt">
+        <div class="gt-body">
+          <div class="gt-sidebar" id="gtSidebar"></div>
+          <div class="gt-content" id="gtContent">
+            <div class="gt-hint">Select a grade variable and click Generate.</div>
           </div>
         </div>
       </div>

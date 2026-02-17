@@ -96,7 +96,7 @@ let currentGroupBy = null; // column index for StatsCat grouping
 let currentStatsCatVar = null; // selected numeric column index
 let currentStatsCatChecked = null; // Set<string> of checked group values (null = all)
 let lastStatsCatData = null; // cached full data for re-render
-let statsCatGroupSortMode = 'count'; // 'count' or 'name'
+let statsCatGroupSortMode = null; // null = inherit from Categories tab, or 'count-desc'|'count-asc'|'alpha'|'custom'
 let statsCatSelectedVars = new Set(); // col indices selected for group stats analysis
 let statsCatCdfScale = 'linear'; // 'linear' or 'log'
 let statsCatCdfManual = false;
@@ -129,6 +129,16 @@ let statsCdfScale = 'linear';     // 'linear' | 'log'
 // Export
 let exportWorker = null;
 let exportColumns = []; // [{name, outputName, type, selected, isCalcol}]
+let exportDelimiter = ',';
+let exportIncludeHeader = true;
+let exportCommentHeader = false;
+let exportCommentText = '';
+let exportQuoteChar = '"';       // '"', "'", '' (none)
+let exportLineEnding = '\n';     // '\n' or '\r\n'
+let exportNullValue = '';        // string to write for NaN/null
+let exportPrecision = null;      // null = auto (passthrough), or integer (decimal places)
+let exportDecimalSep = '.';      // '.' or ','
+let exportSourcePrecision = {};  // {colName: maxDp} detected from preflight
 const $exportColList = document.getElementById('exportColList');
 const $exportBadge = document.getElementById('exportBadge');
 const $exportDownload = document.getElementById('exportDownload');
@@ -136,6 +146,25 @@ const $exportInfo = document.getElementById('exportInfo');
 const $exportProgress = document.getElementById('exportProgress');
 const $exportProgressLabel = document.getElementById('exportProgressLabel');
 const $exportProgressFill = document.getElementById('exportProgressFill');
+const $exportColSearch = document.getElementById('exportColSearch');
+const $exportBody = document.getElementById('exportBody');
+const $exportToolbar = document.getElementById('exportToolbar');
+const $exportRowPreview = document.getElementById('exportRowPreview');
+const $exportIncludeHeader = document.getElementById('exportIncludeHeader');
+const $exportCommentHeader = document.getElementById('exportCommentHeader');
+const $exportCommentSection = document.getElementById('exportCommentSection');
+const $exportCommentText = document.getElementById('exportCommentText');
+const $exportCommentGenerate = document.getElementById('exportCommentGenerate');
+const $exportCustomDelim = document.getElementById('exportCustomDelim');
+const $exportFormatSection = document.getElementById('exportFormatSection');
+const $exportPreview = document.getElementById('exportPreview');
+const $exportPreviewPre = document.getElementById('exportPreviewPre');
+const $exportPreviewInfo = document.getElementById('exportPreviewInfo');
+const $exportPrecisionSelect = document.getElementById('exportPrecisionSelect');
+const $exportPrecisionInput = document.getElementById('exportPrecisionInput');
+const $exportNullSelect = document.getElementById('exportNullSelect');
+const $exportNullInput = document.getElementById('exportNullInput');
+const $exportPrecisionWarn = document.getElementById('exportPrecisionWarn');
 
 // DXYZ state
 let currentDXYZ = { dx: -1, dy: -1, dz: -1 };
@@ -144,6 +173,11 @@ let currentDXYZ = { dx: -1, dy: -1, dz: -1 };
 let swathWorker = null;
 let lastSwathData = null;
 let swathExprController = null;
+
+// GT state
+let gtWorker = null;
+let lastGtData = null;
+let gtExprController = null;
 
 // Section state
 let sectionBlocks = null;
@@ -185,6 +219,9 @@ function switchTab(tabId) {
 }
 $resultsTabs.addEventListener('click', (e) => {
   const tab = e.target.closest('.results-tab');
-  if (tab) switchTab(tab.dataset.tab);
+  if (tab) {
+    switchTab(tab.dataset.tab);
+    if (typeof autoSaveProject === 'function') autoSaveProject();
+  }
 });
 

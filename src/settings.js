@@ -8,6 +8,8 @@ var SETTINGS_DEFAULTS = {
   defaultPercentilePreset: 'quartiles',
   customPercentiles: null,
   sigFigs: null,
+  thousandsSep: 'space',
+  sciNotation: 'auto',
   defaultCatSort: 'count-desc'
 };
 
@@ -258,7 +260,26 @@ function renderSettingsBody() {
     var ssel = sv === curSig ? ' selected' : '';
     html += '<option value="' + sv + '"' + ssel + '>' + sl + '</option>';
   }
-  html += '</select></div></div>';
+  html += '</select></div>';
+  // Thousands separator
+  var tSepOpts = [['space', 'Space (1\u2009234)'], ['comma', 'Comma (1,234)'], ['none', 'None (1234)']];
+  var curTSep = bmaSettings.thousandsSep || 'space';
+  html += '<div class="settings-sigfigs-row" style="margin-top:0.4rem"><label>Thousands separator</label><select id="settingsThousandsSep">';
+  for (var ti = 0; ti < tSepOpts.length; ti++) {
+    var tsel = tSepOpts[ti][0] === curTSep ? ' selected' : '';
+    html += '<option value="' + tSepOpts[ti][0] + '"' + tsel + '>' + tSepOpts[ti][1] + '</option>';
+  }
+  html += '</select></div>';
+  // Scientific notation
+  var sciOpts = [['auto', 'Auto'], ['never', 'Never'], ['1e6', '\u2265 1M'], ['1e9', '\u2265 1B']];
+  var curSci = bmaSettings.sciNotation || 'auto';
+  html += '<div class="settings-sigfigs-row" style="margin-top:0.4rem"><label>Scientific notation</label><select id="settingsSciNotation">';
+  for (var sci = 0; sci < sciOpts.length; sci++) {
+    var scsel = sciOpts[sci][0] === curSci ? ' selected' : '';
+    html += '<option value="' + sciOpts[sci][0] + '"' + scsel + '>' + sciOpts[sci][1] + '</option>';
+  }
+  html += '</select></div>';
+  html += '</div>';
 
   // ── Default Category Sort ──
   html += '<div class="settings-section"><div class="settings-section-title">Default Category Sort</div>';
@@ -478,10 +499,27 @@ function wireSettingsEvents() {
       var v = sigSelect.value;
       bmaSettings.sigFigs = v === '' ? null : parseInt(v, 10);
       saveSettings();
-      // Re-render stats if available
-      if (typeof renderStatsTable === 'function' && lastDisplayedStats) {
-        renderStatsTable();
-      }
+      refreshFormattedViews();
+    });
+  }
+
+  // Thousands separator
+  var tSepSelect = document.getElementById('settingsThousandsSep');
+  if (tSepSelect) {
+    tSepSelect.addEventListener('change', function() {
+      bmaSettings.thousandsSep = tSepSelect.value;
+      saveSettings();
+      refreshFormattedViews();
+    });
+  }
+
+  // Scientific notation
+  var sciSelect = document.getElementById('settingsSciNotation');
+  if (sciSelect) {
+    sciSelect.addEventListener('change', function() {
+      bmaSettings.sciNotation = sciSelect.value;
+      saveSettings();
+      refreshFormattedViews();
     });
   }
 }
@@ -514,6 +552,13 @@ function loadCacheInfo() {
   }).catch(function() {
     container.innerHTML = '<div class="settings-cache-empty">Could not read cache.</div>';
   });
+}
+
+function refreshFormattedViews() {
+  if (typeof renderStatsTable === 'function' && lastDisplayedStats) {
+    renderStatsTable();
+  }
+  if (lastGtData) renderGtOutput();
 }
 
 // ─── Initialization ──────────────────────────────────────────────────

@@ -83,9 +83,9 @@ async function readPreviewFromZipEntry(file, entry, maxLines) {
   return readLinesFromStream(stream, maxLines);
 }
 
-async function readLinesFromStream(stream, maxLines) {
+async function readLinesFromStream(stream, maxLines, captureComments) {
   const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
-  let buf = '', lines = [];
+  let buf = '', lines = [], commentLines = [], headerReached = false;
   while (lines.length < maxLines + 1) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -94,16 +94,25 @@ async function readLinesFromStream(stream, maxLines) {
     buf = parts.pop();
     for (const p of parts) {
       const trimmed = p.replace(/\r$/, '');
-      if (trimmed.startsWith('#')) continue;
+      if (trimmed.startsWith('#')) {
+        if (captureComments && !headerReached) commentLines.push(trimmed.replace(/^#\s?/, ''));
+        continue;
+      }
+      headerReached = true;
       lines.push(trimmed);
       if (lines.length >= maxLines + 1) break;
     }
   }
   if (buf && lines.length < maxLines + 1) {
     const trimmed = buf.replace(/\r$/, '');
-    if (!trimmed.startsWith('#')) lines.push(trimmed);
+    if (trimmed.startsWith('#')) {
+      if (captureComments && !headerReached) commentLines.push(trimmed.replace(/^#\s?/, ''));
+    } else {
+      lines.push(trimmed);
+    }
   }
   reader.cancel();
+  if (captureComments) return { lines, commentLines };
   return lines;
 }
 
@@ -179,6 +188,7 @@ async function runPreflight(file) {
   let zipEntries = null;
   let lines;
 
+  let commentLines = [];
   if (isZip) {
     zipEntries = await listZipEntries(file);
     const csvEntries = zipEntries.filter(e => CSV_EXTENSIONS_MAIN.test(e.name));
@@ -186,8 +196,10 @@ async function runPreflight(file) {
     // Preview the first CSV entry
     lines = await readPreviewFromZipEntry(file, csvEntries[0], 100);
   } else {
-    // Read first ~64KB for preview
-    lines = await readLinesFromStream(file.slice(0, 256 * 1024).stream(), 100);
+    // Read first ~64KB for preview, capture leading comment lines
+    const result = await readLinesFromStream(file.slice(0, 256 * 1024).stream(), 100, true);
+    lines = result.lines;
+    commentLines = result.commentLines;
   }
 
   if (lines.length < 2) throw new Error('File appears empty or has no data rows.');
@@ -215,7 +227,8 @@ async function runPreflight(file) {
     xyz: { ...xyzGuess },
     dxyz: { ...dxyzGuess },
     skipCols: new Set(),
-    colFilters: defaultFilters
+    colFilters: defaultFilters,
+    commentLines
   };
 }
 
@@ -647,15 +660,51 @@ function renderPreflightTable(data) {
   $preflightPreview.innerHTML = `<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
 }
 
+function addThousandsSep(s) {
+  var sep = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.thousandsSep) || 'space';
+  if (sep === 'none') return s;
+  var sepChar = sep === 'comma' ? ',' : '\u2009'; // thin space
+  var parts = s.split('.');
+  var intPart = parts[0];
+  var neg = '';
+  if (intPart.startsWith('-')) { neg = '-'; intPart = intPart.substring(1); }
+  if (intPart.length <= 3) return s;
+  var result = '';
+  for (var i = intPart.length - 1, count = 0; i >= 0; i--, count++) {
+    if (count > 0 && count % 3 === 0) result = sepChar + result;
+    result = intPart[i] + result;
+  }
+  return neg + result + (parts.length > 1 ? '.' + parts[1] : '');
+}
+
 function formatNum(v, decimals) {
-  if (v === null || v === undefined) return '—';
+  if (v === null || v === undefined) return '\u2014';
   var d = decimals;
   if (d === undefined && typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.sigFigs !== null) {
     d = bmaSettings.sigFigs;
   }
-  if (Math.abs(v) >= 1e6 || (Math.abs(v) < 0.001 && v !== 0)) return v.toExponential(d != null ? d : 3);
-  if (Number.isInteger(v)) return v.toLocaleString();
-  return v.toLocaleString(undefined, { minimumFractionDigits: d != null ? d : 2, maximumFractionDigits: d != null ? d : 4 });
+  // Sci notation check
+  var sciMode = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.sciNotation) || 'auto';
+  var useSci = false;
+  if (sciMode === 'auto') {
+    useSci = Math.abs(v) >= 1e6 || (Math.abs(v) < 0.001 && v !== 0);
+  } else if (sciMode !== 'never') {
+    var threshold = parseFloat(sciMode);
+    useSci = isFinite(threshold) && (Math.abs(v) >= threshold || (Math.abs(v) < 0.001 && v !== 0));
+  }
+  if (useSci) return v.toExponential(d != null ? d : 3);
+  // Fixed-point formatting
+  var fracDigits = d != null ? d : (Math.abs(v) >= 100 ? 2 : Math.abs(v) >= 1 ? 3 : 4);
+  if (Number.isInteger(v)) return addThousandsSep(String(v));
+  var s = v.toFixed(fracDigits);
+  // Trim trailing zeros to min 2
+  var fparts = s.split('.');
+  if (fparts.length === 2) {
+    var minFrac = d != null ? d : 2;
+    while (fparts[1].length > minFrac && fparts[1].endsWith('0')) fparts[1] = fparts[1].slice(0, -1);
+    s = fparts[0] + '.' + fparts[1];
+  }
+  return addThousandsSep(s);
 }
 
 function formatSize(bytes) {

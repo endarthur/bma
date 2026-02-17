@@ -1,6 +1,6 @@
 # V1 Roadmap — Feature Architecture
 
-Tab bar: `Preflight · Summary · Calc · Statistics · Categories · StatsCat · Export`
+Tab bar: `Preflight · Summary · Calc · Statistics · Categories · StatsCat · Export · GT · Swath · Section`
 
 ## 1. Calc tab — done
 
@@ -12,47 +12,107 @@ Statistics grouped by categorical variable. Dropdown to select grouping column, 
 
 ## 3. Export tab — done
 
-Stream-export with column selection, renaming, drag-and-drop reordering. Separate export worker (doesn't interfere with analysis worker). FSAA streaming path on supported browsers, Blob fallback otherwise. Applies active filters and evaluates calcol expressions during export.
+Stream-export with column selection, renaming, drag-and-drop reordering. Format settings: arbitrary delimiter (presets + custom), quote character, line endings, null representation, number precision with truncation warning, decimal separator with conflict detection. Live preview of first 100 rows. Separate export worker. FSAA streaming path on supported browsers, Blob fallback otherwise.
 
-## 4. Swath tab
+## 4. Swath tab — needs polish
 
-Spatial binning along a direction vector with per-bin statistics.
+Functional but needs fixing and polishing. Spatial binning along a coordinate axis with per-bin statistics.
 
-**Architecture:**
-- Project coordinates onto user-defined vector (azimuth/dip), bin by distance
-- One streaming pass, `Map<binIndex, StatsAccumulator>` per variable
-- UI: azimuth/dip inputs, slice width, variable selection, optional local filter
-- Output: line charts (mean +/- std or P25/P50/P75 ribbons) via canvas or SVG
+## 5. Section tab — needs overhaul
 
-## 5. Project Save/Load
+Exists but needs a full overhaul.
 
-Persist session state so users can resume work without re-configuring from scratch after a page reload.
+## 6. Project Save/Load — done
 
-**What to save:**
-- File reference (name, size, last-modified — for re-identification on re-drop)
-- Preflight config: type overrides, skipped columns, XYZ assignments, per-column value filters, selected ZIP entry
-- Calculated columns (`currentCalcols` array — name, expression, type, order)
-- Global filter expression
-- StatsCat config: selected grouping column, selected variables
-- Export config: column selection, renames, order
+Auto-save to localStorage, manual save/load `.bma.json`, recent files with FSAA handle persistence.
 
-**What NOT to save:**
-- The CSV file itself (too large; user re-drops it)
-- Computed results (re-derived from analysis)
+## 7. Grade-Tonnage tab
 
-**Storage:** `localStorage` keyed by filename + size hash. JSON blob with a schema version for forward compatibility.
+Grade-tonnage curves and tables. The #1 missing feature for resource geologists — GT curves drive cutoff optimization and resource reporting.
 
-**UX flow:**
-1. On analysis complete, auto-save project state (debounced, silent)
-2. On file drop, check if a saved project matches the file signature
-3. If match found, prompt: "Restore previous session?" — restores config and re-runs analysis
-4. Manual save/load via a small toolbar control (download/upload `.bma.json` for sharing between machines)
+### Concept
 
-**Architecture:**
-- `saveProject()` — serializes config state to JSON, writes to `localStorage`
-- `loadProject(file)` — parses JSON, validates schema version, applies config, triggers analysis
-- `.bma.json` portable format — same JSON, downloaded/uploaded as file for cross-machine sharing
-- No file content stored — project files are small (< 10 KB typically)
+Sweep cutoff grades from low to high. At each cutoff, compute tonnage, mean grade, and contained metal for all blocks above the cutoff. Display as interactive chart + exportable table.
+
+### Optional selections (require Generate)
+
+Three optional inputs that change the computation, making a Generate button necessary:
+
+1. **Density column** — numeric column for bulk density (t/m³). Tonnage = volume × density. If not selected, tonnage = volume (density assumed 1) or count-based if no geometry.
+2. **Weight/proportion column** — numeric column for block weighting. Multiplicative factor: tonnage = volume × density × weight. Use cases: partial blocks in sub-block models, compositing weights, ore fraction.
+3. **Local filter** — filter expression specific to the GT analysis, independent of the global filter. Common use: GT within a pit shell (`r.pit_shell <= 5`), within a geological domain (`r.LITO === 'oxide'`), or above a depth.
+
+### Worker approach
+
+Always a dedicated worker pass (not derived from cached centroids) — GT curves appear in financial reporting, so approximation errors are unacceptable.
+
+**Streaming histogram approach (constant memory):**
+1. First determine grade min/max (from cached `lastCompleteData.stats[gradeCol]`)
+2. Allocate fine-grained histogram: N bins (e.g., 10,000) spanning `[min, max]`
+3. Each bin stores: `totalTonnage`, `totalMetal` (grade × tonnage)
+4. Stream file, apply global filter + local GT filter, for each passing row:
+   - `grade = row[gradeCol]`
+   - `volume = dx × dy × dz` (from geometry or DXYZ columns, or user-supplied constant)
+   - `tonnage = volume × density × weight` (density/weight default to 1 if not selected)
+   - `metal = grade × tonnage`
+   - Bin index = `floor((grade - min) / binWidth)`
+   - Accumulate `bins[i].tonnage += tonnage`, `bins[i].metal += metal`
+5. Post-process: cumulative sum from right to left → `tonnageAbove[i]`, `metalAbove[i]`, `gradeAbove[i] = metalAbove[i] / tonnageAbove[i]`
+
+**Memory:** ~240 KB for 10,000 bins regardless of file size. Streams the full file but only needs grade + density + weight + XYZ columns per row.
+
+### Block volume resolution
+
+Priority order:
+1. Per-row DXYZ columns (sub-block models): `volume = row[dx] × row[dy] × row[dz]`
+2. Detected geometry block size: `volume = geo.x.blockSize × geo.y.blockSize × geo.z.blockSize`
+3. User-supplied constant (manual input in sidebar)
+4. Fallback: count-based (tonnage = 1 per row, no volume)
+
+### Layout
+
+Sidebar + main, matching other tabs:
+
+**Sidebar:**
+- Grade variable selector (numeric columns dropdown)
+- Density column (optional, dropdown with "—" default)
+- Weight column (optional, dropdown with "—" default)
+- Block volume display (auto-detected, with manual override input)
+- Local filter textarea
+- Cutoff range: min, max, step (auto-populated from grade stats, editable)
+- **Generate** button
+
+**Main:**
+- GT chart (SVG): cutoff on X-axis, tonnage on left Y-axis, grade on right Y-axis, optional metal curve. Interactive crosshair showing values at cursor position.
+- GT table below chart: cutoff, tonnage (Mt), grade (mean above cutoff), metal (tonnage × grade), % of total tonnage. Sortable, copyable, exportable.
+- Progress bar during generation.
+
+### Project save/load
+
+Persist: grade column (by name), density column, weight column, local filter, cutoff range/step, volume override.
+
+## 8. Histograms in Statistics tab
+
+Approximate frequency histograms from cached t-digest centroids. No file re-read needed.
+
+### Concept
+
+Reconstruct an approximate frequency distribution from the t-digest centroids already stored in `lastCompleteData`. Each centroid represents a cluster of nearby values with a known count — redistribute centroid mass into histogram bins using linear interpolation between centroid means.
+
+### Architecture
+
+- **Bin count selector**: dropdown or input (20, 50, 100 bins, or auto based on Freedman-Diaconis / Sturges rule using cached stats)
+- **Data source**: `lastCompleteData.stats[colIdx].centroids` — array of `[mean, count]` pairs, already sorted
+- **Rendering**: SVG bar chart in the CDF panel area. Toggle between CDF and Histogram view (or show both stacked).
+- **Multi-variable overlay**: same variable selection as CDF — click column names to toggle. Semi-transparent bars or side-by-side grouped bars.
+- **Axis**: X = value range, Y = frequency (count) or density (normalized). Toggle between count and density.
+
+### Integration with Statistics tab
+
+- Add CDF/Histogram toggle buttons to the CDF toolbar (alongside Linear/Log scale)
+- Histogram shares the same variable selection (click column headers to add/remove)
+- SVG/PNG download works for histogram too
+- Log scale applies to X-axis (useful for lognormal grade distributions)
 
 ## 6. Block Index — analysis infrastructure
 
@@ -165,14 +225,14 @@ Read Datamine binary block model files directly, without requiring a prior CSV e
 
 ### Derived features from cached results (no re-scan)
 
-Many high-value features can be computed from the existing `lastCompleteData` (t-digest centroids, stats, categories) without re-reading the file:
+Features computable from existing `lastCompleteData` without re-reading the file:
 
-- **Grade-tonnage curves** — sweep cutoff grades against t-digest centroids. The #1 missing feature for resource geologists.
-- **Histograms** — approximate frequency distribution from t-digest centroids. Complement to existing CDF plots.
 - **Additional percentiles** (P5, P95, P99) — t-digest already supports arbitrary quantile queries.
 - **Geometric mean / log statistics** — requires adding a `sum(ln(x))` accumulator to Welford during analysis, then computed in `finalizeAcc()`.
 - **Sum/Total** — trivial: `mean * count`. Fundamental for resource quantification.
 - **Correlation matrix** — requires adding streaming Pearson covariance accumulators (O(k^2) memory for k numeric columns). Feasible for typical block models (5-20 grade variables).
+
+Note: Grade-tonnage curves (section 7) and histograms (section 8) have been promoted to full feature sections above.
 
 ---
 

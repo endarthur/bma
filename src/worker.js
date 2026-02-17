@@ -991,6 +991,14 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
 
 async function exportCSV(data) {
   const { file, filter, zipEntry, calcolCode, calcolMeta, resolvedTypes, exportCols } = data;
+  const outDelim = data.delimiter || ',';
+  const includeHeader = data.includeHeader !== false;
+  const commentLines = data.commentLines || null;
+  const quoteChar = data.quoteChar !== undefined ? data.quoteChar : '"';
+  const lineEnding = data.lineEnding || '\n';
+  const nullValue = data.nullValue !== undefined ? data.nullValue : '';
+  const precision = data.precision !== undefined ? data.precision : null;
+  const decimalSep = data.decimalSep || '.';
   const startTime = performance.now();
 
   let csvFile = file;
@@ -1036,6 +1044,12 @@ async function exportCSV(data) {
     }
   }
 
+  // Precompute escaped quoteChar regex
+  var qcEscRe = null;
+  if (quoteChar) {
+    qcEscRe = new RegExp(quoteChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+  }
+
   function buildRow(fields) {
     const obj = {};
     for (let i = 0; i < nCols; i++) {
@@ -1047,17 +1061,31 @@ async function exportCSV(data) {
   }
 
   function csvEscape(v) {
-    if (v === null || v === undefined) return '';
-    const s = String(v);
-    if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0) {
-      return '"' + s.replace(/"/g, '""') + '"';
+    if (v === null || v === undefined || (typeof v === 'number' && !isFinite(v))) return nullValue;
+    var s;
+    if (typeof v === 'number') {
+      s = precision !== null ? v.toFixed(precision) : String(v);
+      if (decimalSep !== '.') s = s.replace('.', decimalSep);
+    } else {
+      s = String(v);
+    }
+    if (quoteChar && (s.indexOf(outDelim) >= 0 || s.indexOf(quoteChar) >= 0 || s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0)) {
+      return quoteChar + s.replace(qcEscRe, quoteChar + quoteChar) + quoteChar;
     }
     return s;
   }
 
+  // Comment header lines
+  if (commentLines && commentLines.length > 0) {
+    const commentBlock = commentLines.map(function(l) { return '# ' + l; }).join(lineEnding) + lineEnding;
+    self.postMessage({ type: 'export-chunk', csv: commentBlock });
+  }
+
   // CSV header row
-  const headerLine = exportCols.map(c => csvEscape(c.outputName)).join(',') + '\n';
-  self.postMessage({ type: 'export-chunk', csv: headerLine });
+  if (includeHeader) {
+    const headerLine = exportCols.map(function(c) { return csvEscape(c.outputName); }).join(outDelim) + lineEnding;
+    self.postMessage({ type: 'export-chunk', csv: headerLine });
+  }
 
   const stream = csvFile.stream().pipeThrough(new TextDecoderStream());
   const reader = stream.getReader();
@@ -1092,7 +1120,7 @@ async function exportCSV(data) {
       if (filterFn && !filterFn(row)) continue;
 
       rowCount++;
-      const csvLine = exportCols.map(c => csvEscape(row[c.name])).join(',') + '\n';
+      const csvLine = exportCols.map(c => csvEscape(row[c.name])).join(outDelim) + lineEnding;
       chunkLines.push(csvLine);
 
       if (chunkLines.length >= CHUNK_SIZE) {
@@ -1110,7 +1138,7 @@ async function exportCSV(data) {
       const row = buildRow(fields);
       if (!filterFn || filterFn(row)) {
         rowCount++;
-        chunkLines.push(exportCols.map(c => csvEscape(row[c.name])).join(',') + '\n');
+        chunkLines.push(exportCols.map(c => csvEscape(row[c.name])).join(outDelim) + lineEnding);
       }
     }
   }
@@ -1435,6 +1463,273 @@ async function sectionAnalysis(data) {
   });
 }
 
+async function gtAnalysis(data) {
+  var startTime = performance.now();
+  var file = data.file, zipEntry = data.zipEntry, globalFilter = data.globalFilter,
+      localFilter = data.localFilter, calcolCode = data.calcolCode, calcolMeta = data.calcolMeta,
+      resolvedTypes = data.resolvedTypes,
+      densityCol = data.densityCol, weightCol = data.weightCol,
+      dxyzCols = data.dxyzCols, blockVolume = data.blockVolume,
+      groupByCol = data.groupByCol != null ? data.groupByCol : null;
+
+  // Multi-grade: gradeCols + gradeRanges arrays
+  var gradeCols = data.gradeCols;
+  var gradeRanges = data.gradeRanges;
+
+  var csvFile = file;
+  if (isZipFile(file)) {
+    try { csvFile = await extractCSVFromZip(file, zipEntry); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  }
+
+  var sampleLines = await readSample(csvFile, 50);
+  if (sampleLines.length < 2) { self.postMessage({ type: 'error', message: 'File appears empty.' }); return; }
+
+  var delimiter = detectDelimiter(sampleLines.slice(0, 20));
+  var header = sampleLines[0].split(delimiter).map(function(h) { return h.trim().replace(/^["']|["']$/g, ''); });
+  var nCols = header.length;
+  var rowVarName = 'r';
+  var colSet = new Set(header);
+  for (var ci = 0; ci < ['r','d','row','_r','_d'].length; ci++) {
+    var cand = ['r','d','row','_r','_d'][ci];
+    if (!colSet.has(cand)) { rowVarName = cand; break; }
+  }
+
+  var colTypes = resolvedTypes;
+
+  var calcolFn = null;
+  if (calcolCode && calcolMeta && calcolMeta.length > 0) {
+    try { calcolFn = new Function(rowVarName, MATH_PREAMBLE + calcolCode); }
+    catch(e) { calcolFn = null; }
+  }
+
+  var globalFn = null, localFn = null;
+  if (globalFilter) {
+    try { globalFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + globalFilter.expression + '); } catch(e) { return false; }'); }
+    catch(e) { self.postMessage({ type: 'error', message: 'Global filter error: ' + e.message }); return; }
+  }
+  if (localFilter) {
+    try { localFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + localFilter + '); } catch(e) { return false; }'); }
+    catch(e) { self.postMessage({ type: 'error', message: 'Local filter error: ' + e.message }); return; }
+  }
+
+  function buildRow(fields) {
+    var obj = {};
+    for (var i = 0; i < nCols; i++) {
+      var raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+    }
+    if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) {} delete obj.META; }
+    return obj;
+  }
+
+  // Resolve column names
+  function resolveColName(idx) {
+    if (idx >= nCols && calcolMeta) return calcolMeta[idx - nCols].name;
+    return header[idx];
+  }
+
+  var densityColName = densityCol != null && densityCol >= 0 ? resolveColName(densityCol) : null;
+  var weightColName = weightCol != null && weightCol >= 0 ? resolveColName(weightCol) : null;
+  var dxyzNames = dxyzCols ? [header[dxyzCols[0]], header[dxyzCols[1]], header[dxyzCols[2]]] : null;
+
+  // Resolve group-by column name
+  var groupByColName = groupByCol !== null ? resolveColName(groupByCol) : null;
+  var GT_MAX_GROUPS = 200;
+
+  // Per-grade-variable bin arrays
+  var N_BINS = 10000;
+  var gradeInfo = [];
+  for (var gi = 0; gi < gradeCols.length; gi++) {
+    var gc = gradeCols[gi];
+    var gr = gradeRanges[gi];
+    var colName = resolveColName(gc);
+    var bw = (gr.max - gr.min) / N_BINS;
+    gradeInfo.push({
+      colIdx: gc,
+      colName: colName,
+      gradeMin: gr.min,
+      gradeMax: gr.max,
+      binWidth: bw,
+      groups: {} // groupVal -> { tonnageBins, metalBins }
+    });
+    // Create default (ungrouped) bins
+    gradeInfo[gi].groups['__all__'] = {
+      tonnageBins: new Float64Array(N_BINS),
+      metalBins: new Float64Array(N_BINS)
+    };
+  }
+
+  function getGroupBins(gInfo, gv) {
+    var bins = gInfo.groups[gv];
+    if (bins) return bins;
+    if (Object.keys(gInfo.groups).length >= GT_MAX_GROUPS + 1) return null; // +1 for __all__
+    bins = { tonnageBins: new Float64Array(N_BINS), metalBins: new Float64Array(N_BINS) };
+    gInfo.groups[gv] = bins;
+    return bins;
+  }
+
+  function processRowGt(row, tonnage) {
+    var gv = groupByColName ? String(row[groupByColName] || '') : null;
+    for (var gi = 0; gi < gradeInfo.length; gi++) {
+      var info = gradeInfo[gi];
+      var grade = row[info.colName];
+      if (grade == null || typeof grade !== 'number' || !isFinite(grade)) continue;
+      var metal = grade * tonnage;
+      var binIdx = Math.floor((grade - info.gradeMin) / info.binWidth);
+      if (binIdx < 0) binIdx = 0;
+      if (binIdx >= N_BINS) binIdx = N_BINS - 1;
+      // Always accumulate into __all__
+      info.groups['__all__'].tonnageBins[binIdx] += tonnage;
+      info.groups['__all__'].metalBins[binIdx] += metal;
+      // Group bins
+      if (gv !== null) {
+        var gb = getGroupBins(info, gv);
+        if (gb) {
+          gb.tonnageBins[binIdx] += tonnage;
+          gb.metalBins[binIdx] += metal;
+        }
+      }
+    }
+  }
+
+  var stream = csvFile.stream().pipeThrough(new TextDecoderStream());
+  var reader = stream.getReader();
+  var buffer = '', isFirstLine = true, totalChars = 0, lastProgress = 0;
+
+  while (true) {
+    var res = await reader.read();
+    if (res.done) break;
+    totalChars += res.value.length;
+    buffer += res.value;
+    var parts = buffer.split('\n');
+    buffer = parts.pop();
+
+    for (var pi = 0; pi < parts.length; pi++) {
+      var line = parts[pi].replace(/\r$/, '');
+      if (line.startsWith('#')) continue;
+      if (isFirstLine) { isFirstLine = false; continue; }
+      if (!line) continue;
+
+      var fields = line.split(delimiter);
+      var row = buildRow(fields);
+      if (globalFn && !globalFn(row)) continue;
+      if (localFn && !localFn(row)) continue;
+
+      // Compute tonnage for this block
+      var volume = 1;
+      if (dxyzNames) {
+        var dx = row[dxyzNames[0]], dy = row[dxyzNames[1]], dz = row[dxyzNames[2]];
+        if (typeof dx === 'number' && typeof dy === 'number' && typeof dz === 'number' && isFinite(dx) && isFinite(dy) && isFinite(dz)) {
+          volume = Math.abs(dx) * Math.abs(dy) * Math.abs(dz);
+        }
+      } else if (blockVolume > 0) {
+        volume = blockVolume;
+      }
+      var density = 1;
+      if (densityColName) {
+        var dv = row[densityColName];
+        if (typeof dv === 'number' && isFinite(dv) && dv > 0) density = dv;
+      }
+      var weight = 1;
+      if (weightColName) {
+        var wv = row[weightColName];
+        if (typeof wv === 'number' && isFinite(wv) && wv > 0) weight = wv;
+      }
+      var tonnage = volume * density * weight;
+      processRowGt(row, tonnage);
+
+      if (totalChars - lastProgress >= 500000) {
+        lastProgress = totalChars;
+        self.postMessage({ type: 'gt-progress', percent: (totalChars / csvFile.size) * 100 });
+      }
+    }
+  }
+  // Last buffer line
+  if (buffer) {
+    var lastLine = buffer.replace(/\r$/, '');
+    if (lastLine && !lastLine.startsWith('#') && !isFirstLine) {
+      var lastFields = lastLine.split(delimiter);
+      var lastRow = buildRow(lastFields);
+      if ((!globalFn || globalFn(lastRow)) && (!localFn || localFn(lastRow))) {
+        var lVol = 1;
+        if (dxyzNames) {
+          var ldx = lastRow[dxyzNames[0]], ldy = lastRow[dxyzNames[1]], ldz = lastRow[dxyzNames[2]];
+          if (typeof ldx === 'number' && typeof ldy === 'number' && typeof ldz === 'number' && isFinite(ldx) && isFinite(ldy) && isFinite(ldz)) {
+            lVol = Math.abs(ldx) * Math.abs(ldy) * Math.abs(ldz);
+          }
+        } else if (blockVolume > 0) {
+          lVol = blockVolume;
+        }
+        var lDen = 1;
+        if (densityColName) { var ldv = lastRow[densityColName]; if (typeof ldv === 'number' && isFinite(ldv) && ldv > 0) lDen = ldv; }
+        var lWt = 1;
+        if (weightColName) { var lwv = lastRow[weightColName]; if (typeof lwv === 'number' && isFinite(lwv) && lwv > 0) lWt = lwv; }
+        var lTon = lVol * lDen * lWt;
+        processRowGt(lastRow, lTon);
+      }
+    }
+  }
+
+  // Post-process: cumulative sums for each grade variable and group
+  function buildResults(tonnageBins, metalBins, gradeMin, binWidth) {
+    var cumTonnage = new Float64Array(N_BINS);
+    var cumMetal = new Float64Array(N_BINS);
+    cumTonnage[N_BINS - 1] = tonnageBins[N_BINS - 1];
+    cumMetal[N_BINS - 1] = metalBins[N_BINS - 1];
+    for (var i = N_BINS - 2; i >= 0; i--) {
+      cumTonnage[i] = cumTonnage[i + 1] + tonnageBins[i];
+      cumMetal[i] = cumMetal[i + 1] + metalBins[i];
+    }
+    var totalTonnage = cumTonnage[0];
+    var results = [];
+    for (var j = 0; j < N_BINS; j++) {
+      results.push({
+        cutoff: gradeMin + j * binWidth,
+        tonnage: cumTonnage[j],
+        grade: cumTonnage[j] > 0 ? cumMetal[j] / cumTonnage[j] : 0,
+        metal: cumMetal[j]
+      });
+    }
+    return { results: results, totalTonnage: totalTonnage };
+  }
+
+  var gradeResults = [];
+  for (var gi = 0; gi < gradeInfo.length; gi++) {
+    var info = gradeInfo[gi];
+    var allBins = info.groups['__all__'];
+    var allResult = buildResults(allBins.tonnageBins, allBins.metalBins, info.gradeMin, info.binWidth);
+    var groupResults = null;
+    if (groupByColName) {
+      groupResults = {};
+      for (var gv in info.groups) {
+        if (gv === '__all__') continue;
+        var gb = info.groups[gv];
+        groupResults[gv] = buildResults(gb.tonnageBins, gb.metalBins, info.gradeMin, info.binWidth);
+      }
+    }
+    gradeResults.push({
+      colIdx: info.colIdx,
+      colName: info.colName,
+      results: allResult.results,
+      totalTonnage: allResult.totalTonnage,
+      gradeMin: info.gradeMin,
+      gradeMax: info.gradeMax,
+      binWidth: info.binWidth,
+      groupResults: groupResults
+    });
+  }
+
+  var elapsed = performance.now() - startTime;
+  self.postMessage({
+    type: 'gt-complete',
+    gradeResults: gradeResults,
+    grouped: groupByColName !== null,
+    groupByColName: groupByColName,
+    elapsed: elapsed
+  });
+}
+
 self.onmessage = (e) => {
   if (e.data.mode === 'export') {
     exportCSV(e.data);
@@ -1442,6 +1737,8 @@ self.onmessage = (e) => {
     swathAnalysis(e.data);
   } else if (e.data.mode === 'section') {
     sectionAnalysis(e.data);
+  } else if (e.data.mode === 'gt') {
+    gtAnalysis(e.data);
   } else {
     const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride } = e.data;
     analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride);

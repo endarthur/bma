@@ -319,6 +319,7 @@ function serializeProject() {
   return {
     _bma: 1,
     _ts: Date.now(),
+    activeTab: document.querySelector('.results-tab.active')?.dataset.tab || null,
     file: { name: currentFile.name, size: currentFile.size },
     preflight: {
       typeOverrides: preflightData?.typeOverrides || {},
@@ -337,7 +338,13 @@ function serializeProject() {
       selectedVars: Array.from(statsCatSelectedVars),
       sortMode: statsCatGroupSortMode,
       cdfScale: statsCatCdfScale,
-      crossMode: statsCatCrossMode
+      cdfManual: statsCatCdfManual,
+      cdfMin: statsCatCdfMin,
+      cdfMax: statsCatCdfMax,
+      crossMode: statsCatCrossMode,
+      displayVar: currentStatsCatVar,
+      checkedGroups: currentStatsCatChecked ? Array.from(currentStatsCatChecked) : null,
+      showSelectedOnly: statsCatShowSelectedOnly
     },
     statsTab: {
       selectedVars: statsSelectedVars ? Array.from(statsSelectedVars) : null,
@@ -354,7 +361,65 @@ function serializeProject() {
     },
     exportCols: exportColumns.map(c => ({
       name: c.name, outputName: c.outputName, selected: c.selected
-    }))
+    })),
+    exportSettings: {
+      delimiter: exportDelimiter,
+      includeHeader: exportIncludeHeader,
+      commentHeader: exportCommentHeader,
+      commentText: exportCommentText,
+      quoteChar: exportQuoteChar,
+      lineEnding: exportLineEnding,
+      nullValue: exportNullValue,
+      precision: exportPrecision,
+      decimalSep: exportDecimalSep
+    },
+    gt: (function() {
+      var varList = document.getElementById('gtVarList');
+      if (!varList) return null;
+      var checked = varList.querySelectorAll('input[type="checkbox"]:checked');
+      var gradeCols = [];
+      for (var ci = 0; ci < checked.length; ci++) gradeCols.push(checked[ci].parentElement.querySelector('span').textContent);
+      var mode = 'range';
+      var modeRadio = document.querySelector('input[name="gtCutoffMode"]:checked');
+      if (modeRadio) mode = modeRadio.value;
+      var gb = document.getElementById('gtGroupBy');
+      return {
+        gradeCols: gradeCols,
+        groupByCol: gb && gb.value !== '-1' && gb.options[gb.selectedIndex] ? gb.options[gb.selectedIndex].textContent : null,
+        densityCol: (function() { var d = document.getElementById('gtDensityCol'); return d && d.value !== '-1' && d.options[d.selectedIndex] ? d.options[d.selectedIndex].textContent : null; })(),
+        weightCol: (function() { var w = document.getElementById('gtWeightCol'); return w && w.value !== '-1' && w.options[w.selectedIndex] ? w.options[w.selectedIndex].textContent : null; })(),
+        localFilter: (document.getElementById('gtLocalFilter') || {}).value || '',
+        cutoffMode: mode,
+        cutoffMin: parseFloat((document.getElementById('gtCutoffMin') || {}).value) || 0,
+        cutoffMax: parseFloat((document.getElementById('gtCutoffMax') || {}).value) || 1,
+        cutoffStep: parseFloat((document.getElementById('gtCutoffStep') || {}).value) || 0.05,
+        cutoffCustom: (document.getElementById('gtCutoffCustomText') || {}).value || '',
+        volumeOverride: parseFloat((document.getElementById('gtVolOverride') || {}).value) || null,
+        tonnageUnit: parseInt((document.getElementById('gtTonnageUnit') || {}).value) || 0,
+        customTonnageSym: (document.getElementById('gtCustomTonnageSym') || {}).value || '',
+        customTonnageDiv: parseFloat((document.getElementById('gtCustomTonnageDiv') || {}).value) || null,
+        gradeUnits: (function() {
+          var gu = {};
+          document.querySelectorAll('.gt-var-unit').forEach(function(sel) {
+            var colIdx = parseInt(sel.dataset.col);
+            var colName = currentHeader[colIdx];
+            if (colName && parseInt(sel.value) !== 0) gu[colName] = parseInt(sel.value);
+          });
+          return Object.keys(gu).length > 0 ? gu : null;
+        })(),
+        selectedGroups: (function() {
+          var list = document.getElementById('gtGrpList');
+          if (!list) return null;
+          var checked = [];
+          var hasTotal = false;
+          list.querySelectorAll('input:checked').forEach(function(cb) {
+            if (cb.value === '__total__') hasTotal = true;
+            else checked.push(cb.value);
+          });
+          return { values: checked, showTotal: hasTotal };
+        })()
+      };
+    })()
   };
 }
 
@@ -430,7 +495,13 @@ async function applyProject(project) {
   currentFilter = project.filter || null;
   $filterExpr.value = project.filterText || '';
 
-  // Stash post-analysis config for when analysis runs
+  // Restore StatsCat groupBy + selectedVars NOW (before executeAnalysis)
+  // so the worker includes grouped stats in its analysis
+  const sc = project.statsCat || {};
+  if (sc.groupBy != null) currentGroupBy = sc.groupBy;
+  if (sc.selectedVars) statsCatSelectedVars = new Set(sc.selectedVars);
+
+  // Stash remaining post-analysis config for when displayResults runs
   pendingProjectRestore = project;
 }
 
@@ -476,7 +547,7 @@ function clearProject() {
   currentGroupBy = null;
   currentStatsCatVar = null;
   currentStatsCatChecked = null;
-  statsCatGroupSortMode = 'count';
+  statsCatGroupSortMode = null;
   statsCatSelectedVars = new Set();
   statsCatCdfScale = 'linear';
   statsCatCdfManual = false;
@@ -496,6 +567,7 @@ function clearProject() {
   statsCdfScale = 'linear';
   exportColumns = [];
   pendingProjectRestore = null;
+  resetExportSettings();
 
   runPreflight(currentFile).then(data => {
     renderPreflight(data);
@@ -557,7 +629,7 @@ function handleFile(file, handle) {
   currentStatsCatVar = null;
   currentStatsCatChecked = null;
   lastStatsCatData = null;
-  statsCatGroupSortMode = 'count';
+  statsCatGroupSortMode = null;
   statsCatSelectedVars = new Set();
   statsCatShowSelectedOnly = false;
   statsCatCdfScale = 'linear';
@@ -577,6 +649,7 @@ function handleFile(file, handle) {
   statsCdfScale = 'linear';
   exportColumns = [];
   pendingProjectRestore = null;
+  resetExportSettings();
   currentTypeOverrides = null;
   currentZipEntry = null;
   currentSkipCols = null;
@@ -713,7 +786,7 @@ $backToPreflight.addEventListener('click', () => {
   currentStatsCatVar = null;
   currentStatsCatChecked = null;
   lastStatsCatData = null;
-  statsCatGroupSortMode = 'count';
+  statsCatGroupSortMode = null;
   statsCatSelectedVars = new Set();
   statsCatShowSelectedOnly = false;
   catFocusedCol = null;
@@ -1085,29 +1158,26 @@ function displayResults(data) {
   const catCols = Object.keys(categories).map(Number).sort((a, b) => a - b);
   renderCategoriesTab(categories, header, origColCount, rowCount);
 
-  // StatsCat
-  renderStatsCat(data);
-
-  // Export
-  initExportColumns();
-
-  // Swath & Section
-  renderSwathConfig(data);
-  renderSectionConfig(data);
-
   // Restore pending project state (phase 2 — post-analysis)
-  if (pendingProjectRestore) {
-    const p = pendingProjectRestore;
+  const restoredProject = pendingProjectRestore;
+  if (restoredProject) {
     pendingProjectRestore = null;
 
-    const sc = p.statsCat || {};
-    if (sc.groupBy != null) currentGroupBy = sc.groupBy;
-    if (sc.selectedVars) statsCatSelectedVars = new Set(sc.selectedVars);
-    if (sc.sortMode) statsCatGroupSortMode = sc.sortMode;
+    // StatsCat display state — restore before renderStatsCat() so UI renders correctly
+    const sc = restoredProject.statsCat || {};
+    // groupBy and selectedVars already restored in applyProject() (phase 1)
+    if (sc.sortMode !== undefined) statsCatGroupSortMode = sc.sortMode;
     if (sc.cdfScale) statsCatCdfScale = sc.cdfScale;
+    if (sc.cdfManual !== undefined) statsCatCdfManual = sc.cdfManual;
+    if (sc.cdfMin !== undefined) statsCatCdfMin = sc.cdfMin;
+    if (sc.cdfMax !== undefined) statsCatCdfMax = sc.cdfMax;
     if (sc.crossMode) statsCatCrossMode = sc.crossMode;
+    if (sc.displayVar != null) currentStatsCatVar = sc.displayVar;
+    if (sc.checkedGroups) currentStatsCatChecked = new Set(sc.checkedGroups);
+    if (sc.showSelectedOnly !== undefined) statsCatShowSelectedOnly = sc.showSelectedOnly;
 
-    const st = p.statsTab || {};
+    // Stats tab
+    const st = restoredProject.statsTab || {};
     if (st.selectedVars) statsSelectedVars = new Set(st.selectedVars);
     if (st.visibleMetrics) statsVisibleMetrics = new Set(st.visibleMetrics);
     if (st.percentiles) statsPercentiles = st.percentiles;
@@ -1119,10 +1189,8 @@ function displayResults(data) {
       renderStatsTab(lastDisplayedStats, lastDisplayedHeader, currentOrigColCount || lastDisplayedHeader.length, currentFilter !== null, data.rowCount);
     }
 
-    if (p.exportCols) applyExportRestore(p.exportCols);
-
     // Restore categories focused column by name
-    const catP = p.categories || {};
+    const catP = restoredProject.categories || {};
     if (catP.focusedCol) {
       const idx = header.indexOf(catP.focusedCol);
       if (idx >= 0 && categories[idx]) {
@@ -1131,6 +1199,125 @@ function displayResults(data) {
         renderCatMain();
       }
     }
+  }
+
+  // StatsCat — render after display state is restored (or with defaults)
+  renderStatsCat(data);
+
+  // Export
+  initExportColumns();
+  if (restoredProject) {
+    if (restoredProject.exportCols) applyExportRestore(restoredProject.exportCols);
+    if (restoredProject.exportSettings) restoreExportSettings(restoredProject.exportSettings);
+  }
+
+  // GT, Swath & Section
+  // Snapshot current GT config before renderGtConfig rebuilds the sidebar
+  var gtSnapshot = null;
+  if (!restoredProject && document.getElementById('gtVarList')) {
+    gtSnapshot = serializeProject().gt;
+  }
+  renderGtConfig(data);
+  renderSwathConfig(data);
+  renderSectionConfig(data);
+
+  // Restore GT sidebar from project or snapshot
+  var gtp = (restoredProject && restoredProject.gt) ? restoredProject.gt : gtSnapshot;
+  if (gtp) {
+    // Multi-grade checkbox restore (backward compat: old gradeCol string)
+    var $gVarList = document.getElementById('gtVarList');
+    if ($gVarList) {
+      var names = gtp.gradeCols || (gtp.gradeCol ? [gtp.gradeCol] : []);
+      var nameSet = {};
+      for (var ni = 0; ni < names.length; ni++) nameSet[names[ni]] = true;
+      var cbs = $gVarList.querySelectorAll('input[type="checkbox"]');
+      for (var ci = 0; ci < cbs.length; ci++) {
+        var lbl = cbs[ci].parentElement.querySelector('span').textContent;
+        cbs[ci].checked = !!nameSet[lbl];
+      }
+    }
+    // Group-by restore
+    var $gGroupBy = document.getElementById('gtGroupBy');
+    if ($gGroupBy && gtp.groupByCol) {
+      for (var gbi = 0; gbi < $gGroupBy.options.length; gbi++) {
+        if ($gGroupBy.options[gbi].textContent === gtp.groupByCol) { $gGroupBy.value = $gGroupBy.options[gbi].value; break; }
+      }
+    }
+    var $gDensity = document.getElementById('gtDensityCol');
+    var $gWeight = document.getElementById('gtWeightCol');
+    if ($gDensity && gtp.densityCol) {
+      for (var di = 0; di < $gDensity.options.length; di++) {
+        if ($gDensity.options[di].textContent === gtp.densityCol) { $gDensity.value = $gDensity.options[di].value; break; }
+      }
+    }
+    if ($gWeight && gtp.weightCol) {
+      for (var wi = 0; wi < $gWeight.options.length; wi++) {
+        if ($gWeight.options[wi].textContent === gtp.weightCol) { $gWeight.value = $gWeight.options[wi].value; break; }
+      }
+    }
+    var $gLocalFilter = document.getElementById('gtLocalFilter');
+    if ($gLocalFilter && gtp.localFilter) $gLocalFilter.value = gtp.localFilter;
+    var $gCutoffMin = document.getElementById('gtCutoffMin');
+    var $gCutoffMax = document.getElementById('gtCutoffMax');
+    var $gCutoffStep = document.getElementById('gtCutoffStep');
+    if ($gCutoffMin && gtp.cutoffMin != null) $gCutoffMin.value = gtp.cutoffMin;
+    if ($gCutoffMax && gtp.cutoffMax != null) $gCutoffMax.value = gtp.cutoffMax;
+    if ($gCutoffStep && gtp.cutoffStep != null) $gCutoffStep.value = gtp.cutoffStep;
+    if (gtp.cutoffMode === 'custom') {
+      var $gRadio = document.querySelector('input[name="gtCutoffMode"][value="custom"]');
+      if ($gRadio) { $gRadio.checked = true; $gRadio.dispatchEvent(new Event('change')); }
+      var $gCustomText = document.getElementById('gtCutoffCustomText');
+      if ($gCustomText && gtp.cutoffCustom) $gCustomText.value = gtp.cutoffCustom;
+    }
+    var $gVolOverride = document.getElementById('gtVolOverride');
+    if ($gVolOverride && gtp.volumeOverride) $gVolOverride.value = gtp.volumeOverride;
+    var $gTonnageUnit = document.getElementById('gtTonnageUnit');
+    if ($gTonnageUnit && gtp.tonnageUnit != null) {
+      $gTonnageUnit.value = gtp.tonnageUnit;
+      $gTonnageUnit.dispatchEvent(new Event('change'));
+    }
+    var $gCTSym = document.getElementById('gtCustomTonnageSym');
+    var $gCTDiv = document.getElementById('gtCustomTonnageDiv');
+    if ($gCTSym && gtp.customTonnageSym) $gCTSym.value = gtp.customTonnageSym;
+    if ($gCTDiv && gtp.customTonnageDiv) $gCTDiv.value = gtp.customTonnageDiv;
+
+    // Per-variable grade units
+    var gradeUnits = gtp.gradeUnits || null;
+    // Backward compat: old single gradeUnit → apply to all
+    if (!gradeUnits && gtp.gradeUnit != null && gtp.gradeUnit > 0) {
+      gradeUnits = {};
+      document.querySelectorAll('.gt-var-unit').forEach(function(sel) {
+        var colIdx = parseInt(sel.dataset.col);
+        var colName = currentHeader[colIdx];
+        if (colName) gradeUnits[colName] = gtp.gradeUnit;
+      });
+    }
+    if (gradeUnits) {
+      document.querySelectorAll('.gt-var-unit').forEach(function(sel) {
+        var colIdx = parseInt(sel.dataset.col);
+        var colName = currentHeader[colIdx];
+        if (colName && gradeUnits[colName] != null) sel.value = gradeUnits[colName];
+      });
+    }
+
+    // Restore group-by values and trigger checkbox population
+    if (gtp.groupByCol && $gGroupBy && $gGroupBy.value !== '-1') {
+      updateGroupByValues();
+      // Restore selected groups
+      if (gtp.selectedGroups) {
+        var sg = gtp.selectedGroups;
+        var valSet = new Set(sg.values || []);
+        document.querySelectorAll('#gtGrpList input[type="checkbox"]').forEach(function(cb) {
+          if (cb.value === '__total__') cb.checked = !!sg.showTotal;
+          else cb.checked = valSet.has(cb.value);
+        });
+      }
+    }
+  }
+
+  // Restore active tab
+  if (restoredProject && restoredProject.activeTab) {
+    switchTab(restoredProject.activeTab);
   }
 
   // Auto-save project
@@ -1286,10 +1473,37 @@ function renderStatsCatVarList(allVarCols, header, origColCount, colTypes) {
   $statsCatVarFilter.classList.toggle('active', statsCatShowSelectedOnly);
 }
 
+function getEffectiveStatsCatSort() {
+  if (statsCatGroupSortMode !== null) return statsCatGroupSortMode;
+  // Inherit from Categories tab
+  const gbColName = currentGroupBy !== null && currentHeader[currentGroupBy] ? currentHeader[currentGroupBy] : null;
+  if (gbColName && catSortModes[gbColName]) return catSortModes[gbColName];
+  return 'count-desc';
+}
+
 function sortStatsCatGroups(groups) {
-  if (statsCatGroupSortMode === 'name') {
+  const mode = getEffectiveStatsCatSort();
+  if (mode === 'alpha') {
     return groups.slice().sort((a, b) => (a[0] || '').localeCompare(b[0] || ''));
   }
+  if (mode === 'count-asc') {
+    return groups.slice().sort((a, b) => a[1].count - b[1].count);
+  }
+  if (mode === 'custom') {
+    const gbColName = currentGroupBy !== null && currentHeader[currentGroupBy] ? currentHeader[currentGroupBy] : null;
+    const order = gbColName && catCustomOrders[gbColName] ? catCustomOrders[gbColName] : null;
+    if (order) {
+      const pos = {};
+      for (let i = 0; i < order.length; i++) pos[order[i]] = i;
+      return groups.slice().sort((a, b) => {
+        const pa = pos[a[0]] !== undefined ? pos[a[0]] : Infinity;
+        const pb = pos[b[0]] !== undefined ? pos[b[0]] : Infinity;
+        if (pa !== pb) return pa - pb;
+        return b[1].count - a[1].count; // fallback: count-desc for unordered
+      });
+    }
+  }
+  // count-desc (default)
   return groups.slice().sort((a, b) => b[1].count - a[1].count);
 }
 
@@ -1332,6 +1546,7 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
       renderStatsCatGroupList(getStatsCatGroupEntries());
       wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
       renderStatsCatContent();
+      autoSaveProject();
     });
   });
 
@@ -1342,23 +1557,34 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
       const colIdx = parseInt(cb.dataset.col);
       if (cb.checked) {
         statsCatSelectedVars.add(colIdx);
+        // Only mark stale if this column lacks data from last analysis
+        if (lastStatsCatData && !(lastStatsCatData.groupStats[colIdx] || (lastStatsCatData.groupCategories && lastStatsCatData.groupCategories[colIdx]))) {
+          markAnalysisStale();
+        }
       } else {
         statsCatSelectedVars.delete(colIdx);
+        // Unchecking never needs re-analysis — data already computed
       }
       renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
       wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
-      markAnalysisStale();
+      autoSaveProject();
     });
   });
 
   // Variable All/None — affect only search-filtered results
   $statsCatVarAll.onclick = () => {
+    let needsStale = false;
     $statsCatVarList.querySelectorAll('.statscat-var-item').forEach(el => {
-      statsCatSelectedVars.add(parseInt(el.dataset.col));
+      const ci = parseInt(el.dataset.col);
+      statsCatSelectedVars.add(ci);
+      if (lastStatsCatData && !(lastStatsCatData.groupStats[ci] || (lastStatsCatData.groupCategories && lastStatsCatData.groupCategories[ci]))) {
+        needsStale = true;
+      }
     });
     renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
-    markAnalysisStale();
+    if (needsStale) markAnalysisStale();
+    autoSaveProject();
   };
   $statsCatVarNone.onclick = () => {
     $statsCatVarList.querySelectorAll('.statscat-var-item').forEach(el => {
@@ -1366,7 +1592,8 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
     });
     renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
-    markAnalysisStale();
+    // Unchecking never needs re-analysis
+    autoSaveProject();
   };
 
   // Variable filter toggle (All / Selected)
@@ -1374,6 +1601,7 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
     statsCatShowSelectedOnly = !statsCatShowSelectedOnly;
     renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+    autoSaveProject();
   };
 
   // Group checkboxes
@@ -1382,6 +1610,7 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
       const gv = cb.dataset.gv;
       if (cb.checked) { currentStatsCatChecked.add(gv); } else { currentStatsCatChecked.delete(gv); }
       renderStatsCatContent();
+      autoSaveProject();
     });
   });
 
@@ -1392,21 +1621,32 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
     renderStatsCatGroupList(entries);
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
     renderStatsCatContent();
+    autoSaveProject();
   };
   $statsCatGroupNone.onclick = () => {
     currentStatsCatChecked = new Set();
     renderStatsCatGroupList(getStatsCatGroupEntries());
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
     renderStatsCatContent();
+    autoSaveProject();
   };
 
-  // Sort toggle
+  // Sort toggle — cycle: count-desc → count-asc → alpha → custom (if exists) → count-desc
+  var sortLabels = { 'count-desc': 'Count\u2193', 'count-asc': 'Count\u2191', 'alpha': 'A-Z', 'custom': 'Custom' };
+  $statsCatGroupSort.textContent = sortLabels[getEffectiveStatsCatSort()] || 'Count\u2193';
   $statsCatGroupSort.onclick = () => {
-    statsCatGroupSortMode = statsCatGroupSortMode === 'count' ? 'name' : 'count';
-    $statsCatGroupSort.textContent = 'Sort: ' + statsCatGroupSortMode;
+    var eff = getEffectiveStatsCatSort();
+    var gbColName = currentGroupBy !== null && currentHeader[currentGroupBy] ? currentHeader[currentGroupBy] : null;
+    var hasCustom = gbColName && catCustomOrders[gbColName] && catCustomOrders[gbColName].length > 0;
+    var cycle = ['count-desc', 'count-asc', 'alpha'];
+    if (hasCustom) cycle.push('custom');
+    var idx = cycle.indexOf(eff);
+    statsCatGroupSortMode = cycle[(idx + 1) % cycle.length];
+    $statsCatGroupSort.textContent = sortLabels[getEffectiveStatsCatSort()];
     renderStatsCatGroupList(getStatsCatGroupEntries());
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
     renderStatsCatContent();
+    autoSaveProject();
   };
 
   // Variable search
@@ -1488,7 +1728,7 @@ function renderStatsCatNumeric(data, varName, isCalcol) {
     html += '<td>' + formatNum(s.max) + '</td>';
     html += '<td>' + formatNum(s.mean) + '</td>';
     html += '<td>' + formatNum(s.std) + '</td>';
-    html += '<td>' + (cv !== null ? cv.toFixed(1) : '\u2014') + '</td>';
+    html += '<td>' + (cv !== null ? (cv > 9999 ? '>9999' : cv.toFixed(1)) : '\u2014') + '</td>';
     html += '<td>' + (s.skewness !== null ? s.skewness.toFixed(2) : '\u2014') + '</td>';
     html += '<td>' + (s.kurtosis !== null ? s.kurtosis.toFixed(2) : '\u2014') + '</td>';
     html += '</tr>';
@@ -1617,6 +1857,7 @@ function wireStatsCatCrossMode() {
     btn.addEventListener('click', () => {
       statsCatCrossMode = btn.dataset.mode;
       renderStatsCatContent();
+      autoSaveProject();
     });
   });
 }
@@ -1750,6 +1991,7 @@ function wireStatsCatCdfToolbar() {
     btn.addEventListener('click', () => {
       statsCatCdfScale = btn.dataset.scale;
       renderStatsCatContent();
+      autoSaveProject();
     });
   });
   // Manual checkbox
@@ -1759,6 +2001,7 @@ function wireStatsCatCdfToolbar() {
       statsCatCdfManual = manualCb.checked;
       if (!statsCatCdfManual) { statsCatCdfMin = null; statsCatCdfMax = null; }
       renderStatsCatContent();
+      autoSaveProject();
     });
   }
   // Manual min/max inputs
@@ -1768,12 +2011,14 @@ function wireStatsCatCdfToolbar() {
     minInput.addEventListener('change', () => {
       statsCatCdfMin = minInput.value !== '' ? parseFloat(minInput.value) : null;
       renderStatsCatContent();
+      autoSaveProject();
     });
   }
   if (maxInput) {
     maxInput.addEventListener('change', () => {
       statsCatCdfMax = maxInput.value !== '' ? parseFloat(maxInput.value) : null;
       renderStatsCatContent();
+      autoSaveProject();
     });
   }
   // Copy SVG
@@ -1888,6 +2133,7 @@ $statsCatGroupBy.addEventListener('change', () => {
   currentGroupBy = val ? parseInt(val) : null;
   currentStatsCatVar = null;
   currentStatsCatChecked = null;
+  statsCatGroupSortMode = null; // re-inherit from Categories
   statsCatShowSelectedOnly = false;
   $statsCatVarSearch.value = '';
   $statsCatGroupSearch.value = '';
@@ -1899,6 +2145,7 @@ $statsCatGroupBy.addEventListener('change', () => {
     $statsCatContent.innerHTML = '<div class="statscat-empty">Select a categorical column to see statistics broken down by group.</div>';
   }
   markAnalysisStale();
+  autoSaveProject();
 });
 
 // Mobile collapsible StatsCat sections (one-time delegation)
