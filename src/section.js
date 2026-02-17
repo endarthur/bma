@@ -148,6 +148,14 @@ function runSection() {
     varCol
   });
 
+  sectionWorker.onerror = (e) => {
+    $label.textContent = 'Worker error: ' + (e.message || 'unknown error');
+    $label.style.color = 'var(--red)';
+    setTimeout(() => { $progress.classList.remove('active'); $label.style.color = ''; }, 3000);
+    sectionWorker.terminate();
+    sectionWorker = null;
+  };
+
   sectionWorker.onmessage = (e) => {
     const m = e.data;
     if (m.type === 'section-progress') {

@@ -26,7 +26,7 @@ Exists but needs a full overhaul.
 
 Auto-save to localStorage, manual save/load `.bma.json`, recent files with FSAA handle persistence.
 
-## 7. Grade-Tonnage tab
+## 7. Grade-Tonnage tab — done
 
 Grade-tonnage curves and tables. The #1 missing feature for resource geologists — GT curves drive cutoff optimization and resource reporting.
 
@@ -238,16 +238,17 @@ Note: Grade-tonnage curves (section 7) and histograms (section 8) have been prom
 
 ## Known issues from code review
 
-**Bugs:**
-- No `worker.onerror` handler — uncaught worker exceptions leave the analysis overlay stuck
-- Stale `currentTypeOverrides`/`currentZipEntry`/`currentSkipCols`/`currentColFilters` not reset on new file load — File B can inherit config from File A
-- `lastCompleteData` not cleared on new file — canceling analysis on a new file restores previous file's results
-- `$errorMsg` hidden by CSS during re-analysis — non-filter worker errors vanish silently
+**Bugs:** — all fixed
+
+- ~~No `worker.onerror` handler~~ — fixed: all workers (analysis, GT, swath, section, export) now have `onerror` handlers
+- ~~Stale config not reset on new file~~ — fixed: `handleFile()` clears `currentTypeOverrides`/`currentZipEntry`/`currentSkipCols`/`currentColFilters`
+- ~~`lastCompleteData` not cleared on new file~~ — fixed: `handleFile()` clears it and terminates running worker + removes stale overlay
+- ~~`$errorMsg` hidden during re-analysis~~ — fixed: errors now display inside the analysis overlay (visible in-place) with a Dismiss button that restores previous results
 
 **Code health:**
 - Significant duplication between worker and main thread (delimiter detection, type detection, XYZ patterns, NULL sentinels, ZIP reading). XYZ patterns have already drifted. Consolidate via shared code injection into the worker template literal.
-- Dead code: `sigfig()` in worker, `triggerPreflightAnalysis()` on main thread
-- `_overflow` flag on category count objects collides with literal `"_overflow"` column values
+- ~~Dead code: `sigfig()` in worker, `triggerPreflightAnalysis()` on main thread~~ — already removed
+- ~~`_overflow` flag collision~~ — fixed: replaced with separate `catOverflow` Set in worker
 
 **Performance:**
 - XYZ coordinate Sets grow unbounded in worker memory (sub-blocked models with float noise). Needs sampling or cap.
@@ -257,7 +258,7 @@ Note: Grade-tonnage curves (section 7) and histograms (section 8) have been prom
 
 **UX:**
 - Category checkbox → filter workflow is undiscoverable (no hint in UI)
-- No autocomplete on filter input (calcol editor has it)
+- ~~No autocomplete on filter input~~ — fixed: `createExprInput()` used everywhere including global filter
 - No confirmation on calcol deletion
 - No stale-results indicator on tabs after config changes
 - Mobile: HTML5 drag-and-drop doesn't work for Export column reorder (needs touch fallback)

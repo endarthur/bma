@@ -31,6 +31,11 @@ All styles including responsive breakpoints and theme variables.
     #panelCalcols       Calculated columns editor
     #panelStatistics    Statistics: sidebar + table + CDF panel
     #panelCategories    Categorical value counts
+    #panelStatsCat      Statistics by category (group-by)
+    #panelExport        Column selection, CSV export
+    #panelGt            Grade-tonnage curves and tables
+    #panelSwath         Swath plots (spatial binning)
+    #panelSection       Section view
 .filter-footer    Global filter expression bar (bottom)
 #cdfModal         CDF plot modal
 ```
@@ -78,7 +83,8 @@ currentXYZ           // {x, y, z} — column indices
 detectedXYZ          // original auto-detected XYZ
 currentFilter        // {expression: string} | null
 currentRowVar        // 'r' (or alternative if 'r' collides with column name)
-currentCalcols       // [{id, name, expr, type}] — persist across re-analysis
+currentCalcolCode    // string — calcol code block
+currentCalcolMeta    // [{name, type}] — calcol metadata
 currentOrigColCount  // number of original (non-calcol) columns
 preflightData        // {header, sampleRows, autoTypes, delimiter, zipEntries,
                      //  selectedZipEntry, typeOverrides, skipCols, xyz, colFilters}

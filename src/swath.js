@@ -162,6 +162,15 @@ function runSwath() {
     binWidth
   });
 
+  swathWorker.onerror = (e) => {
+    $label.textContent = 'Worker error: ' + (e.message || 'unknown error');
+    $label.style.color = 'var(--red)';
+    setTimeout(() => { $progress.classList.remove('active'); $label.style.color = ''; }, 3000);
+    if ($btn) $btn.disabled = false;
+    swathWorker.terminate();
+    swathWorker = null;
+  };
+
   swathWorker.onmessage = (e) => {
     const m = e.data;
     if (m.type === 'swath-progress') {

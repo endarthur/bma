@@ -403,6 +403,15 @@ function runGt() {
     groupByCol: groupByCol >= 0 ? groupByCol : null
   });
 
+  gtWorker.onerror = function(e) {
+    $label.textContent = 'Worker error: ' + (e.message || 'unknown error');
+    $label.style.color = 'var(--red)';
+    setTimeout(function() { $progress.classList.remove('active'); $label.style.color = ''; }, 3000);
+    if ($btn) $btn.disabled = false;
+    gtWorker.terminate();
+    gtWorker = null;
+  };
+
   gtWorker.onmessage = function(e) {
     var m = e.data;
     if (m.type === 'gt-progress') {

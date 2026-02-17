@@ -496,6 +496,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   // ── Stats accumulators (initialized after type detection) ──
   let stats = null;
   let catCounts = null;
+  let catOverflow = null;
   let numericCols = null;
   let catCols = null;
   let filterFn = null;
@@ -518,6 +519,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       stats[i] = { count: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, td: newTDigest() };
     }
     catCounts = {};
+    catOverflow = new Set();
     for (const i of catCols) catCounts[i] = {};
 
     // Compile calcol code block
@@ -697,9 +699,9 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       if (v === null || v === undefined || v === '') continue;
       const sv = String(v);
       const counts = catCounts[idx];
-      if (counts._overflow) continue;
+      if (catOverflow.has(idx)) continue;
       counts[sv] = (counts[sv] || 0) + 1;
-      if (Object.keys(counts).length > MAX_UNIQUE_CAT) counts._overflow = true;
+      if (Object.keys(counts).length > MAX_UNIQUE_CAT) catOverflow.add(idx);
       // Cross-tab counting
       if (gv !== null && groupCategories[idx]) {
         let gm = groupCategories[idx].get(gv);
@@ -733,9 +735,9 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       const v = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
       if (!v) continue;
       const cc = catCounts[i];
-      if (cc._overflow) continue;
+      if (catOverflow.has(i)) continue;
       cc[v] = (cc[v] || 0) + 1;
-      if (Object.keys(cc).length > MAX_UNIQUE_CAT) cc._overflow = true;
+      if (Object.keys(cc).length > MAX_UNIQUE_CAT) catOverflow.add(i);
       // Cross-tab counting
       if (gv !== null && groupCategories[i]) {
         let gm = groupCategories[i].get(gv);
@@ -946,10 +948,8 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   const finalCats = {};
   const allCatCols = [...catCols, ...calcolCatCols];
   for (const i of allCatCols) {
-    const cc = { ...catCounts[i] };
-    const overflow = cc._overflow;
-    delete cc._overflow;
-    finalCats[i] = { counts: cc, overflow: !!overflow };
+    const cc = catCounts[i];
+    finalCats[i] = { counts: cc, overflow: catOverflow.has(i) };
   }
 
   // Build extended header/types for complete message

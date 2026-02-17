@@ -34,9 +34,10 @@ src/
 ├── project.js      # Save/load projects, autosave, restore
 ├── statistics.js   # Statistics tab — sidebar, percentiles, CDF panel
 ├── export.js       # Export tab — column selection, CSV download
+├── gt.js           # Grade-tonnage tab — curves, tables, per-variable units
 ├── swath.js        # Swath plot tab
 ├── section.js      # Section view tab
-├── calcol.js       # Calculated columns editor UI
+├── calcol.js       # Calculated columns editor UI, createExprInput() autocomplete
 ├── events.js       # File drop/input event handlers
 ├── filter.js       # Filter expression system, category checkboxes
 └── cdf.js          # CDF modal, service worker registration
@@ -81,7 +82,7 @@ Messages **from** worker:
 
 - `currentFile`, `currentHeader`, `currentColTypes`, `currentXYZ` — active file and schema
 - `currentFilter` — global filter expression (`{expression: string}` or null)
-- `currentCalcols` — calculated column definitions `[{id, name, expr, type}]`
+- `currentCalcolCode`, `currentCalcolMeta` — calculated columns code block and metadata
 - `preflightData` — preflight sampling results
 - `lastCompleteData` — snapshot of last successful analysis (used for cancel restore)
 - `currentRowVar` — variable name for row expressions (default `'r'`, changes if column named `r` exists)

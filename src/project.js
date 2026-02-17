@@ -655,9 +655,12 @@ function handleFile(file, handle) {
   currentSkipCols = null;
   currentColFilters = null;
   lastCompleteData = null;
+  if (worker) { worker.terminate(); worker = null; }
   if (exportWorker) { exportWorker.terminate(); exportWorker = null; }
   if (swathWorker) { swathWorker.terminate(); swathWorker = null; }
   if (sectionWorker) { sectionWorker.terminate(); sectionWorker = null; }
+  var staleOverlay = document.querySelector('.reanalysis-overlay');
+  if (staleOverlay) staleOverlay.remove();
   lastSwathData = null;
   sectionBlocks = null;
   sectionTransform = null;
@@ -907,9 +910,17 @@ function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerpr
   });
 
   worker.onerror = (e) => {
-    $overlay.remove();
-    $errorMsg.textContent = 'Worker error: ' + (e.message || 'unknown error');
-    $errorMsg.classList.add('active');
+    $reLabel.textContent = 'Worker error: ' + (e.message || 'unknown error');
+    $reLabel.style.color = 'var(--red)';
+    $reBar.parentElement.style.display = 'none';
+    var btn = $overlay.querySelector('.re-cancel');
+    btn.textContent = 'Dismiss';
+    var newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.addEventListener('click', () => {
+      $overlay.remove();
+      if (lastCompleteData) displayResults(lastCompleteData);
+    });
   };
 
   worker.onmessage = (e) => {
@@ -942,13 +953,23 @@ function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerpr
         data: msg
       }).catch(function() { /* ignore cache write errors */ });
     } else if (msg.type === 'error') {
-      $overlay.remove();
       if (msg.message.startsWith('Filter expression')) {
+        $overlay.remove();
         $filterError.textContent = msg.message;
         $filterError.classList.add('active');
+        if (lastCompleteData) displayResults(lastCompleteData);
       } else {
-        $errorMsg.textContent = msg.message;
-        $errorMsg.classList.add('active');
+        $reLabel.textContent = msg.message;
+        $reLabel.style.color = 'var(--red)';
+        $reBar.parentElement.style.display = 'none';
+        var btn = $overlay.querySelector('.re-cancel');
+        btn.textContent = 'Dismiss';
+        var newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+        newBtn.addEventListener('click', () => {
+          $overlay.remove();
+          if (lastCompleteData) displayResults(lastCompleteData);
+        });
       }
     }
   };

@@ -4444,6 +4444,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   // ── Stats accumulators (initialized after type detection) ──
   let stats = null;
   let catCounts = null;
+  let catOverflow = null;
   let numericCols = null;
   let catCols = null;
   let filterFn = null;
@@ -4466,6 +4467,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       stats[i] = { count: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, td: newTDigest() };
     }
     catCounts = {};
+    catOverflow = new Set();
     for (const i of catCols) catCounts[i] = {};
 
     // Compile calcol code block
@@ -4645,9 +4647,9 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       if (v === null || v === undefined || v === '') continue;
       const sv = String(v);
       const counts = catCounts[idx];
-      if (counts._overflow) continue;
+      if (catOverflow.has(idx)) continue;
       counts[sv] = (counts[sv] || 0) + 1;
-      if (Object.keys(counts).length > MAX_UNIQUE_CAT) counts._overflow = true;
+      if (Object.keys(counts).length > MAX_UNIQUE_CAT) catOverflow.add(idx);
       // Cross-tab counting
       if (gv !== null && groupCategories[idx]) {
         let gm = groupCategories[idx].get(gv);
@@ -4681,9 +4683,9 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       const v = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
       if (!v) continue;
       const cc = catCounts[i];
-      if (cc._overflow) continue;
+      if (catOverflow.has(i)) continue;
       cc[v] = (cc[v] || 0) + 1;
-      if (Object.keys(cc).length > MAX_UNIQUE_CAT) cc._overflow = true;
+      if (Object.keys(cc).length > MAX_UNIQUE_CAT) catOverflow.add(i);
       // Cross-tab counting
       if (gv !== null && groupCategories[i]) {
         let gm = groupCategories[i].get(gv);
@@ -4894,10 +4896,8 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   const finalCats = {};
   const allCatCols = [...catCols, ...calcolCatCols];
   for (const i of allCatCols) {
-    const cc = { ...catCounts[i] };
-    const overflow = cc._overflow;
-    delete cc._overflow;
-    finalCats[i] = { counts: cc, overflow: !!overflow };
+    const cc = catCounts[i];
+    finalCats[i] = { counts: cc, overflow: catOverflow.has(i) };
   }
 
   // Build extended header/types for complete message
@@ -7314,9 +7314,12 @@ function handleFile(file, handle) {
   currentSkipCols = null;
   currentColFilters = null;
   lastCompleteData = null;
+  if (worker) { worker.terminate(); worker = null; }
   if (exportWorker) { exportWorker.terminate(); exportWorker = null; }
   if (swathWorker) { swathWorker.terminate(); swathWorker = null; }
   if (sectionWorker) { sectionWorker.terminate(); sectionWorker = null; }
+  var staleOverlay = document.querySelector('.reanalysis-overlay');
+  if (staleOverlay) staleOverlay.remove();
   lastSwathData = null;
   sectionBlocks = null;
   sectionTransform = null;
@@ -7566,9 +7569,17 @@ function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerpr
   });
 
   worker.onerror = (e) => {
-    $overlay.remove();
-    $errorMsg.textContent = 'Worker error: ' + (e.message || 'unknown error');
-    $errorMsg.classList.add('active');
+    $reLabel.textContent = 'Worker error: ' + (e.message || 'unknown error');
+    $reLabel.style.color = 'var(--red)';
+    $reBar.parentElement.style.display = 'none';
+    var btn = $overlay.querySelector('.re-cancel');
+    btn.textContent = 'Dismiss';
+    var newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.addEventListener('click', () => {
+      $overlay.remove();
+      if (lastCompleteData) displayResults(lastCompleteData);
+    });
   };
 
   worker.onmessage = (e) => {
@@ -7601,13 +7612,23 @@ function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerpr
         data: msg
       }).catch(function() { /* ignore cache write errors */ });
     } else if (msg.type === 'error') {
-      $overlay.remove();
       if (msg.message.startsWith('Filter expression')) {
+        $overlay.remove();
         $filterError.textContent = msg.message;
         $filterError.classList.add('active');
+        if (lastCompleteData) displayResults(lastCompleteData);
       } else {
-        $errorMsg.textContent = msg.message;
-        $errorMsg.classList.add('active');
+        $reLabel.textContent = msg.message;
+        $reLabel.style.color = 'var(--red)';
+        $reBar.parentElement.style.display = 'none';
+        var btn = $overlay.querySelector('.re-cancel');
+        btn.textContent = 'Dismiss';
+        var newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+        newBtn.addEventListener('click', () => {
+          $overlay.remove();
+          if (lastCompleteData) displayResults(lastCompleteData);
+        });
       }
     }
   };
@@ -10040,6 +10061,14 @@ function startExport() {
     }).then(async (handle) => {
       const writable = await handle.createWritable();
       exportWorker = new Worker(workerUrl);
+      exportWorker.onerror = async (e) => {
+        await writable.abort();
+        $exportInfo.textContent = 'Worker error: ' + (e.message || 'unknown error');
+        $exportProgress.classList.remove('active');
+        $exportDownload.disabled = false;
+        exportWorker.terminate();
+        exportWorker = null;
+      };
       exportWorker.onmessage = async (e) => {
         const m = e.data;
         if (m.type === 'export-chunk') {
@@ -10072,6 +10101,13 @@ function startExport() {
   } else {
     const chunks = [];
     exportWorker = new Worker(workerUrl);
+    exportWorker.onerror = (e) => {
+      $exportInfo.textContent = 'Worker error: ' + (e.message || 'unknown error');
+      $exportProgress.classList.remove('active');
+      $exportDownload.disabled = false;
+      exportWorker.terminate();
+      exportWorker = null;
+    };
     exportWorker.onmessage = (e) => {
       const m = e.data;
       if (m.type === 'export-chunk') {
@@ -10395,6 +10431,15 @@ function runSwath() {
     varCols,
     binWidth
   });
+
+  swathWorker.onerror = (e) => {
+    $label.textContent = 'Worker error: ' + (e.message || 'unknown error');
+    $label.style.color = 'var(--red)';
+    setTimeout(() => { $progress.classList.remove('active'); $label.style.color = ''; }, 3000);
+    if ($btn) $btn.disabled = false;
+    swathWorker.terminate();
+    swathWorker = null;
+  };
 
   swathWorker.onmessage = (e) => {
     const m = e.data;
@@ -10971,6 +11016,15 @@ function runGt() {
     blockVolume: blockVolume,
     groupByCol: groupByCol >= 0 ? groupByCol : null
   });
+
+  gtWorker.onerror = function(e) {
+    $label.textContent = 'Worker error: ' + (e.message || 'unknown error');
+    $label.style.color = 'var(--red)';
+    setTimeout(function() { $progress.classList.remove('active'); $label.style.color = ''; }, 3000);
+    if ($btn) $btn.disabled = false;
+    gtWorker.terminate();
+    gtWorker = null;
+  };
 
   gtWorker.onmessage = function(e) {
     var m = e.data;
@@ -11639,6 +11693,14 @@ function runSection() {
     tolerance,
     varCol
   });
+
+  sectionWorker.onerror = (e) => {
+    $label.textContent = 'Worker error: ' + (e.message || 'unknown error');
+    $label.style.color = 'var(--red)';
+    setTimeout(() => { $progress.classList.remove('active'); $label.style.color = ''; }, 3000);
+    sectionWorker.terminate();
+    sectionWorker = null;
+  };
 
   sectionWorker.onmessage = (e) => {
     const m = e.data;

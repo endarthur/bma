@@ -519,6 +519,14 @@ function startExport() {
     }).then(async (handle) => {
       const writable = await handle.createWritable();
       exportWorker = new Worker(workerUrl);
+      exportWorker.onerror = async (e) => {
+        await writable.abort();
+        $exportInfo.textContent = 'Worker error: ' + (e.message || 'unknown error');
+        $exportProgress.classList.remove('active');
+        $exportDownload.disabled = false;
+        exportWorker.terminate();
+        exportWorker = null;
+      };
       exportWorker.onmessage = async (e) => {
         const m = e.data;
         if (m.type === 'export-chunk') {
@@ -551,6 +559,13 @@ function startExport() {
   } else {
     const chunks = [];
     exportWorker = new Worker(workerUrl);
+    exportWorker.onerror = (e) => {
+      $exportInfo.textContent = 'Worker error: ' + (e.message || 'unknown error');
+      $exportProgress.classList.remove('active');
+      $exportDownload.disabled = false;
+      exportWorker.terminate();
+      exportWorker = null;
+    };
     exportWorker.onmessage = (e) => {
       const m = e.data;
       if (m.type === 'export-chunk') {
