@@ -6,15 +6,7 @@ const GT_TONNAGE_UNITS = [
   { label: 'Mt', symbol: 'Mt', divisor: 1e6 },
   { label: 'Custom\u2026', symbol: null, divisor: null }
 ];
-const GT_GRADE_UNITS = [
-  { label: '(raw)',  symbol: '',     factor: 1 },
-  { label: '%',      symbol: '%',    factor: 0.01 },
-  { label: 'ppm',    symbol: 'ppm',  factor: 1e-6 },
-  { label: 'ppb',    symbol: 'ppb',  factor: 1e-9 },
-  { label: 'g/t',    symbol: 'g/t',  factor: 1e-6 },
-  { label: 'oz/t',   symbol: 'oz/t', factor: 3.11035e-5 },
-  { label: 'Custom\u2026', symbol: null, factor: null }
-];
+const GT_GRADE_UNITS = GRADE_UNITS.concat([{ label: 'Custom\u2026', symbol: null, factor: null }]);
 
 let gtNumCols = [];
 let gtCatCols = [];
@@ -63,12 +55,13 @@ function renderGtConfig(data) {
   }
 
   // Grade variable checkbox list with per-variable unit selects
-  var gradeUnitOpts = GT_GRADE_UNITS.slice(0, -1).map(function(u, i) {
-    return '<option value="' + i + '">' + esc(u.label) + '</option>';
-  }).join('');
   var varItems = gtNumCols.map(function(c, i) {
+    var defUnit = globalUnits[c.name] || 0;
+    var opts = GT_GRADE_UNITS.slice(0, -1).map(function(u, ui) {
+      return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
+    }).join('');
     return '<label class="gt-var-item"><input type="checkbox" value="' + c.idx + '"' + (i === 0 ? ' checked' : '') + '><span>' + esc(c.name) + '</span>' +
-      '<select class="gt-var-unit" data-col="' + c.idx + '">' + gradeUnitOpts + '</select></label>';
+      '<select class="gt-var-unit" data-col="' + c.idx + '">' + opts + '</select></label>';
   }).join('');
 
   var densityOpts = '<option value="-1">\u2014 none</option>' + gtNumCols.map(function(c) {
@@ -99,7 +92,7 @@ function renderGtConfig(data) {
     '<div class="gt-sidebar-section--grow">' +
       '<div class="gt-sidebar-title">Grade Variables</div>' +
       '<input type="text" class="gt-input gt-var-search" id="gtVarSearch" placeholder="search\u2026" spellcheck="false">' +
-      '<div class="gt-var-btns"><button id="gtVarAll">All</button><button id="gtVarNone">None</button></div>' +
+      '<div class="gt-var-btns"><button id="gtVarAll">All</button><button id="gtVarNone">None</button><button id="gtUnitSync" class="gt-unit-sync" title="Sync units from Column Overview">Sync units</button></div>' +
       '<div class="gt-var-list" id="gtVarList">' + varItems + '</div>' +
     '</div>' +
     '<div class="gt-sidebar-section">' +
@@ -176,13 +169,15 @@ function renderGtConfig(data) {
   var $tonnageUnit = document.getElementById('gtTonnageUnit');
 
   // Variable search filter
-  document.getElementById('gtVarSearch').addEventListener('input', function() {
+  var $gtVarSearch = document.getElementById('gtVarSearch');
+  $gtVarSearch.addEventListener('input', function() {
     var q = this.value.toLowerCase();
     document.querySelectorAll('#gtVarList .gt-var-item').forEach(function(item) {
       var name = item.querySelector('span').textContent.toLowerCase();
       item.style.display = fuzzyMatch(q, name) ? '' : 'none';
     });
   });
+  wireSearchShortcuts($gtVarSearch, document.getElementById('gtVarAll'), document.getElementById('gtVarNone'));
 
   // All/None buttons for grade variables (only affect visible items)
   document.getElementById('gtVarAll').addEventListener('click', function() {
@@ -194,6 +189,17 @@ function renderGtConfig(data) {
     document.querySelectorAll('#gtVarList .gt-var-item').forEach(function(item) {
       if (item.style.display !== 'none') item.querySelector('input[type="checkbox"]').checked = false;
     });
+  });
+
+  // Sync units from global
+  document.getElementById('gtUnitSync').addEventListener('click', function() {
+    document.querySelectorAll('.gt-var-unit').forEach(function(sel) {
+      var colIdx = parseInt(sel.dataset.col);
+      var colName = currentHeader[colIdx];
+      sel.value = (colName && globalUnits[colName]) ? globalUnits[colName] : 0;
+    });
+    if (lastGtData) renderGtOutput();
+    autoSaveProject();
   });
 
   // Cutoff mode radio
@@ -289,6 +295,9 @@ function getGtTonnageUnit() {
 function getGtGradeUnit(colIdx) {
   var sel = document.querySelector('.gt-var-unit[data-col="' + colIdx + '"]');
   var idx = sel ? parseInt(sel.value) : 0;
+  // Fall back to global unit if GT select is raw (0)
+  if (idx === 0 && currentHeader[colIdx] && globalUnits[currentHeader[colIdx]])
+    idx = globalUnits[currentHeader[colIdx]];
   var gu = GT_GRADE_UNITS[idx] || GT_GRADE_UNITS[0];
   return { gradeFactor: gu.factor, gradeSymbol: gu.symbol };
 }

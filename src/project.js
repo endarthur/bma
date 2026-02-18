@@ -331,6 +331,7 @@ function serializeProject() {
     },
     calcolCode: currentCalcolCode,
     calcolMeta: currentCalcolMeta,
+    globalUnits: Object.keys(globalUnits).length > 0 ? Object.assign({}, globalUnits) : null,
     filter: currentFilter,
     filterText: $filterExpr.value,
     statsCat: {
@@ -373,6 +374,33 @@ function serializeProject() {
       precision: exportPrecision,
       decimalSep: exportDecimalSep
     },
+    swath: (function() {
+      var $axis = document.getElementById('swathAxis');
+      var $binWidth = document.getElementById('swathBinWidth');
+      var $stat = document.getElementById('swathStat');
+      var $filter = document.getElementById('swathLocalFilter');
+      if (!$axis) return null;
+      var checkedVars = [];
+      document.querySelectorAll('#swathVarList input[type="checkbox"]:checked').forEach(function(cb) {
+        var colIdx = parseInt(cb.value);
+        var name = currentHeader[colIdx];
+        if (name) checkedVars.push(name);
+      });
+      var swathUnits = {};
+      document.querySelectorAll('.swath-var-unit').forEach(function(sel) {
+        var colIdx = parseInt(sel.dataset.col);
+        var colName = currentHeader[colIdx];
+        if (colName && parseInt(sel.value) !== 0) swathUnits[colName] = parseInt(sel.value);
+      });
+      return {
+        axis: $axis.value,
+        binWidth: parseFloat($binWidth.value) || 0,
+        stat: $stat ? $stat.value : 'mean_std',
+        checkedVars: checkedVars,
+        localFilter: $filter ? $filter.value : '',
+        units: Object.keys(swathUnits).length > 0 ? swathUnits : null
+      };
+    })(),
     gt: (function() {
       var varList = document.getElementById('gtVarList');
       if (!varList) return null;
@@ -595,6 +623,7 @@ $toolbarMenu.addEventListener('click', (e) => {
   else if (action === 'load') $projectFileInput.click();
   else if (action === 'clear') clearProject();
   else if (action === 'settings') openSettings();
+  else if (action === 'help') toggleHelp();
 });
 
 // Toolbar buttons
@@ -1120,6 +1149,11 @@ function displayResults(data) {
   // OBJ export button visibility
   document.getElementById('exportObjBtn').style.display = lastGeoData ? '' : 'none';
 
+  // Restore globalUnits from pending project
+  if (pendingProjectRestore && pendingProjectRestore.globalUnits) {
+    globalUnits = pendingProjectRestore.globalUnits;
+  }
+
   // Column Overview
   const $colOverview = document.getElementById('colOverviewSection');
   const $colOverviewContent = document.getElementById('colOverviewContent');
@@ -1127,7 +1161,7 @@ function displayResults(data) {
   if (header.length > 0) {
     $colOverview.style.display = '';
     let numCount = 0, catCount = 0;
-    let ovHtml = '<div class="col-overview-wrap"><table class="col-overview"><thead><tr><th>Column</th><th>Type</th><th>Count</th><th>Nulls</th><th>Zeros</th><th>Completeness</th><th>Range / Unique</th></tr></thead><tbody>';
+    let ovHtml = '<div class="col-overview-wrap"><table class="col-overview"><thead><tr><th>Column</th><th>Type</th><th>Unit</th><th>Count</th><th>Nulls</th><th>Zeros</th><th>Completeness</th><th>Range / Unique</th></tr></thead><tbody>';
     for (let ci = 0; ci < header.length; ci++) {
       const cName = header[ci];
       const cType = colTypes[ci];
@@ -1153,9 +1187,18 @@ function displayResults(data) {
       const nullWarn = nulls > 0 && rowCount > 0 && (nulls / rowCount) > 0.1;
       const typeClass = isNum ? 'col-type-num' : 'col-type-cat';
       const typeLabel = isNum ? 'NUM' : 'CAT';
+      let unitCell = '\u2014';
+      if (isNum) {
+        let curUnit = globalUnits[cName] || 0;
+        let unitOpts = GRADE_UNITS.map(function(u, ui) {
+          return '<option value="' + ui + '"' + (ui === curUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
+        }).join('');
+        unitCell = '<select class="col-unit-select" data-col-name="' + esc(cName) + '">' + unitOpts + '</select>';
+      }
       ovHtml += '<tr>'
         + '<td class="col-name" title="' + esc(cName) + '">' + esc(cName) + '</td>'
         + '<td><span class="col-type ' + typeClass + '">' + typeLabel + '</span></td>'
+        + '<td>' + unitCell + '</td>'
         + '<td>' + count.toLocaleString() + '</td>'
         + '<td' + (nullWarn ? ' class="null-warn"' : '') + '>' + (nulls > 0 ? nulls.toLocaleString() : '\u2014') + '</td>'
         + '<td>' + (zeros !== null ? (zeros > 0 ? zeros.toLocaleString() : '\u2014') : '\u2014') + '</td>'
@@ -1233,10 +1276,15 @@ function displayResults(data) {
   }
 
   // GT, Swath & Section
-  // Snapshot current GT config before renderGtConfig rebuilds the sidebar
+  // Snapshot current GT/Swath config before renders rebuild sidebars
   var gtSnapshot = null;
-  if (!restoredProject && document.getElementById('gtVarList')) {
-    gtSnapshot = serializeProject().gt;
+  var swathSnapshot = null;
+  if (!restoredProject) {
+    var snapSer = (document.getElementById('gtVarList') || document.getElementById('swathAxis')) ? serializeProject() : null;
+    if (snapSer) {
+      gtSnapshot = snapSer.gt;
+      swathSnapshot = snapSer.swath;
+    }
   }
   renderGtConfig(data);
   renderSwathConfig(data);
@@ -1333,6 +1381,36 @@ function displayResults(data) {
           else cb.checked = valSet.has(cb.value);
         });
       }
+    }
+  }
+
+  // Restore Swath sidebar from project or snapshot
+  var swp = (restoredProject && restoredProject.swath) ? restoredProject.swath : swathSnapshot;
+  if (swp) {
+    var $sAxis = document.getElementById('swathAxis');
+    var $sBinWidth = document.getElementById('swathBinWidth');
+    var $sStat = document.getElementById('swathStat');
+    var $sFilter = document.getElementById('swathLocalFilter');
+    if ($sAxis && swp.axis) $sAxis.value = swp.axis;
+    if ($sBinWidth && swp.binWidth) $sBinWidth.value = swp.binWidth;
+    if ($sStat && swp.stat) $sStat.value = swp.stat;
+    if ($sFilter && swp.localFilter) $sFilter.value = swp.localFilter;
+    // Restore checked variables by name
+    if (swp.checkedVars && swp.checkedVars.length > 0) {
+      var nameSet = {};
+      for (var si = 0; si < swp.checkedVars.length; si++) nameSet[swp.checkedVars[si]] = true;
+      document.querySelectorAll('#swathVarList .swath-var-item').forEach(function(item) {
+        var name = item.querySelector('span').textContent;
+        item.querySelector('input[type="checkbox"]').checked = !!nameSet[name];
+      });
+    }
+    // Restore swath per-variable units
+    if (swp.units) {
+      document.querySelectorAll('.swath-var-unit').forEach(function(sel) {
+        var colIdx = parseInt(sel.dataset.col);
+        var colName = currentHeader[colIdx];
+        if (colName && swp.units[colName] != null) sel.value = swp.units[colName];
+      });
     }
   }
 
@@ -1675,12 +1753,14 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
     renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
   };
+  wireSearchShortcuts($statsCatVarSearch, $statsCatVarAll, $statsCatVarNone);
 
   // Group search
   $statsCatGroupSearch.oninput = () => {
     renderStatsCatGroupList(getStatsCatGroupEntries());
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
   };
+  wireSearchShortcuts($statsCatGroupSearch, $statsCatGroupAll, $statsCatGroupNone);
 
 }
 

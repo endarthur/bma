@@ -336,6 +336,7 @@ function wireCatEventsOnce() {
     _catColSearch = $catColSearch.value;
     renderCatSidebar();
   });
+  wireSearchShortcuts($catColSearch, null, null);
 
   // Sort buttons (delegated on toolbar)
   $catToolbar.addEventListener('click', function(e) {
@@ -380,6 +381,7 @@ function wireCatEventsOnce() {
   $catValueSearch.addEventListener('input', function() {
     renderCatValueTable();
   });
+  wireSearchShortcuts($catValueSearch, null, null);
 
   // Table event delegation
   $catValueTable.addEventListener('click', function(e) {

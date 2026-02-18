@@ -149,6 +149,55 @@ document.getElementById('copyColOverviewBtn').addEventListener('click', (e) => {
   });
 });
 
+// Sniff units from column names
+function sniffUnits() {
+  if (!currentHeader || currentHeader.length === 0) return;
+  var patterns = [
+    { re: /[_\s]ppm\b|\(ppm\)$/i, idx: 2 },
+    { re: /[_\s]ppb\b|\(ppb\)$/i, idx: 3 },
+    { re: /[_\s](?:pct|perc|prcnt)\b|\(%\)$/i, idx: 1 },
+    { re: /[_\s]gt\b|\(g\/t\)$/i, idx: 4 },
+    { re: /[_\s](?:opt|ozt)\b|\(oz\/t\)$/i, idx: 5 }
+  ];
+  var changed = false;
+  for (var i = 0; i < currentHeader.length; i++) {
+    if (currentColTypes[i] !== 'numeric') continue;
+    var name = currentHeader[i];
+    for (var pi = 0; pi < patterns.length; pi++) {
+      if (patterns[pi].re.test(name)) {
+        globalUnits[name] = patterns[pi].idx;
+        changed = true;
+        break;
+      }
+    }
+  }
+  if (changed) {
+    refreshColumnUnitSelects();
+    autoSaveProject();
+  }
+}
+
+function refreshColumnUnitSelects() {
+  document.querySelectorAll('.col-unit-select').forEach(function(sel) {
+    var colName = sel.dataset.colName;
+    if (colName && globalUnits[colName] != null) sel.value = globalUnits[colName];
+    else sel.value = 0;
+  });
+}
+
+document.getElementById('sniffUnitsBtn').addEventListener('click', sniffUnits);
+
+// Column unit select change
+document.getElementById('colOverviewContent').addEventListener('change', function(e) {
+  if (e.target.classList.contains('col-unit-select')) {
+    var colName = e.target.dataset.colName;
+    var val = parseInt(e.target.value);
+    if (val > 0) globalUnits[colName] = val;
+    else delete globalUnits[colName];
+    autoSaveProject();
+  }
+});
+
 // Export bounding box as OBJ
 document.getElementById('exportObjBtn').addEventListener('click', () => {
   if (!lastGeoData) return;

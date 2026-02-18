@@ -1653,6 +1653,28 @@ header .logo-mark {
 .col-overview .completeness-track { display: inline-block; width: 3rem; height: 4px; border-radius: 2px; background: var(--bg); vertical-align: middle; }
 .col-overview .completeness-bar { display: inline-block; height: 4px; border-radius: 2px; background: var(--amber); vertical-align: middle; }
 .col-overview .null-warn { color: var(--red); }
+.col-unit-select {
+  font: 0.62rem var(--mono);
+  background: var(--bg);
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 0 0.2rem;
+  cursor: pointer;
+}
+.col-unit-select:focus { border-color: var(--amber); outline: none; }
+.sniff-units-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  font: 0.65rem var(--mono);
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-left: 0.5rem;
+}
+.sniff-units-btn:hover { border-color: var(--amber); color: var(--amber); }
 
 /* Stats table */
 .stats-table-wrap { overflow-x: auto; }
@@ -2006,6 +2028,99 @@ table.stats tr:hover td:first-child { background: var(--bg2); }
   color: var(--fg-dim);
 }
 .settings-cache-clear-all:hover { color: var(--red); border-color: var(--red); }
+
+/* ─── Help Overlay ───────────────────────────────────────────────── */
+.help-overlay {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 340px;
+  z-index: 50;
+  pointer-events: none;
+  overflow: hidden;
+}
+.help-overlay.active {
+  pointer-events: auto;
+}
+.help-panel {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 340px;
+  background: var(--bg1);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.25s ease-out;
+  box-shadow: -4px 0 20px rgba(0,0,0,0.4);
+}
+.help-overlay.active .help-panel {
+  transform: translateX(0);
+}
+.help-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--amber);
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.help-body {
+  padding: 0.5rem 0.8rem;
+  overflow-y: auto;
+  flex: 1;
+}
+.help-section {
+  margin-bottom: 0.8rem;
+}
+.help-section-title {
+  font-size: 0.58rem;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.3rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.15rem;
+}
+.help-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+  font-size: 0.68rem;
+  color: var(--fg);
+  line-height: 1.35;
+}
+.help-row kbd {
+  display: inline-block;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.05rem 0.3rem;
+  font: 0.58rem var(--mono);
+  color: var(--amber);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 2rem;
+  text-align: center;
+}
+.help-row code {
+  background: var(--bg3);
+  padding: 0.05rem 0.25rem;
+  border-radius: 2px;
+  font-size: 0.62rem;
+  color: var(--fg-bright);
+}
+.help-row strong {
+  color: var(--fg-bright);
+  font-weight: 600;
+}
+
 .cdf-stats {
   display: flex;
   gap: 1.5rem;
@@ -2928,7 +3043,18 @@ table.cat-values td.cat-pct-cell {
 }
 .swath-var-item:hover { background: var(--bg2); }
 .swath-var-item input { cursor: pointer; accent-color: var(--amber); flex-shrink: 0; }
-.swath-var-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.swath-var-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.swath-var-unit {
+  margin-left: auto;
+  font: 0.62rem var(--mono);
+  background: var(--bg);
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 0 0.2rem;
+  cursor: pointer;
+}
+.swath-var-unit:focus { border-color: var(--amber); outline: none; }
 .swath-var-btns {
   display: flex; gap: 0.3rem; margin-bottom: 0.3rem;
 }
@@ -2937,6 +3063,7 @@ table.cat-values td.cat-pct-cell {
   font: 0.6rem var(--mono); padding: 0.1rem 0.4rem; border-radius: 2px; cursor: pointer;
 }
 .swath-var-btns button:hover { border-color: var(--fg-dim); color: var(--fg); }
+.swath-unit-sync { margin-left: auto; }
 .swath-generate {
   background: var(--amber); color: var(--bg); border: none;
   padding: 0.4rem 1rem; border-radius: 3px; cursor: pointer;
@@ -2960,6 +3087,35 @@ table.cat-values td.cat-pct-cell {
 }
 .swath-chart-card svg { width: 100%; height: auto; max-height: 500px; }
 .swath-hint { color: var(--fg-dim); font-size: 0.78rem; padding: 2rem; text-align: center; opacity: 0.5; }
+.swath-table-section { margin-top: 0.5rem; border: 1px solid var(--border); border-radius: 4px; }
+.swath-table-header {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.35rem 0.6rem; cursor: pointer; user-select: none;
+  font-size: 0.68rem; color: var(--fg-bright); font-weight: 600;
+  background: var(--bg1); border-radius: 4px 4px 0 0;
+}
+.swath-table-header:hover { background: var(--bg2); }
+.swath-table-toggle { font-size: 0.55rem; color: var(--fg-dim); width: 0.7rem; text-align: center; }
+.swath-table-header .swath-copy-btn { margin-left: auto; }
+.swath-copy-btn {
+  background: none; border: 1px solid var(--border); color: var(--fg-dim);
+  font: 0.65rem var(--mono); padding: 0.2rem 0.6rem; border-radius: 3px; cursor: pointer;
+}
+.swath-copy-btn:hover { border-color: var(--fg-dim); color: var(--fg); }
+.swath-table-wrap { overflow-x: auto; }
+.swath-table {
+  width: 100%; border-collapse: collapse; font-size: 0.72rem;
+}
+.swath-table th {
+  text-align: left; padding: 0.35rem 0.6rem; border-bottom: 2px solid var(--border);
+  color: var(--fg-dim); font-weight: 600; font-size: 0.65rem; text-transform: uppercase;
+  letter-spacing: 0.04em; white-space: nowrap;
+}
+.swath-table td {
+  padding: 0.25rem 0.6rem; border-bottom: 1px solid var(--bg3);
+  color: var(--fg); font-variant-numeric: tabular-nums;
+}
+.swath-table tbody tr:hover { background: var(--bg2); }
 @media (max-width: 700px) {
   .swath-body { flex-direction: column; }
   .swath-sidebar {
@@ -3124,6 +3280,7 @@ table.cat-values td.cat-pct-cell {
   font: 0.6rem var(--mono); padding: 0.1rem 0.4rem; border-radius: 2px; cursor: pointer;
 }
 .gt-var-btns button:hover { border-color: var(--fg-dim); color: var(--fg); }
+.gt-unit-sync { margin-left: auto; }
 .gt-chart-title {
   font-size: 0.72rem; color: var(--fg-bright); margin-bottom: 0.4rem; font-weight: 600;
 }

@@ -581,9 +581,11 @@ function wireStatsEventsOnce() {
   });
 
   // --- Variable search (static template element) ---
-  document.getElementById('statsVarSearch').addEventListener('input', function() {
+  var $statsVarSearch = document.getElementById('statsVarSearch');
+  $statsVarSearch.addEventListener('input', function() {
     renderStatsSidebar();
   });
+  wireSearchShortcuts($statsVarSearch, document.getElementById('statsVarAll'), document.getElementById('statsVarNone'));
 
   // --- CDF links in table (delegation on container — innerHTML changes) ---
   $statsContent.addEventListener('click', function(e) {

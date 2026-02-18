@@ -96,6 +96,13 @@
         <button class="toolbar-btn" id="projectLoad" title="Load project (.bma.json)">Load</button>
         <button class="toolbar-btn" id="projectClear" title="Clear saved config, revert to defaults">Clear</button>
         <input type="file" id="projectFileInput" accept=".bma.json,.json" style="display:none">
+        <button class="toolbar-icon-btn" id="helpBtn" title="Help (F1)">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="8" cy="8" r="6.5"/>
+            <path d="M6 6.2a2 2 0 0 1 3.9.6c0 1.2-1.9 1.4-1.9 2.7"/>
+            <circle cx="8" cy="12" r="0.5" fill="currentColor" stroke="none"/>
+          </svg>
+        </button>
         <button class="toolbar-icon-btn" id="settingsBtn" title="Settings">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="8" cy="8" r="2.5"/>
@@ -108,6 +115,7 @@
           <button class="toolbar-menu-item" data-action="load">Load project</button>
           <button class="toolbar-menu-item" data-action="clear">Clear project</button>
           <button class="toolbar-menu-item" data-action="settings">Settings</button>
+          <button class="toolbar-menu-item" data-action="help">Help (F1)</button>
         </div>
       </div>
     </div>
@@ -140,6 +148,15 @@
       <button class="results-tab" data-tab="section">Section</button>
     </div>
     <div class="results-panels">
+      <div class="help-overlay" id="helpOverlay">
+        <div class="help-panel">
+          <div class="help-head">
+            <span id="helpTitle">Help</span>
+            <button class="preflight-back-btn" id="helpClose" title="Close (Esc)">&#10005;</button>
+          </div>
+          <div class="help-body" id="helpBody"></div>
+        </div>
+      </div>
       <div class="results-panel active" id="panelPreflight" data-tab="preflight">
         <div class="preflight-head" id="preflightHead">
           <span class="preflight-zip" id="preflightZip"></span>
@@ -175,7 +192,7 @@
           <div class="section section--cols" id="colOverviewSection" style="display:none">
             <div class="section-head">
               Column Overview
-              <span><span class="badge" id="colOverviewBadge"></span><button class="copy-table-btn" id="copyColOverviewBtn" title="Copy as table">Copy table</button></span>
+              <span><span class="badge" id="colOverviewBadge"></span><button class="sniff-units-btn" id="sniffUnitsBtn" title="Auto-detect units from column names">Sniff units</button><button class="copy-table-btn" id="copyColOverviewBtn" title="Copy as table">Copy table</button></span>
             </div>
             <div class="section-body" id="colOverviewContent"></div>
           </div>

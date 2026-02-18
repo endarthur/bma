@@ -145,6 +145,7 @@ $exportColSearch.addEventListener('input', () => {
     el.classList.toggle('export-col-hidden', hidden);
   });
 });
+wireSearchShortcuts($exportColSearch, document.getElementById('exportSelAll'), document.getElementById('exportSelNone'));
 
 // Selection buttons
 document.getElementById('exportSelAll').addEventListener('click', () => {

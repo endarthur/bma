@@ -441,6 +441,7 @@ function insertAtCursor(text) {
 // Variable search
 if ($calcolVarSearch) {
   $calcolVarSearch.addEventListener('input', renderVariableBrowser);
+  wireSearchShortcuts($calcolVarSearch, null, null);
 }
 
 // ── Simulate / Preview ────────────────────────────────────────────────
