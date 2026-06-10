@@ -326,6 +326,7 @@ if ($auxDropzone) {
   $auxDropzone.addEventListener('dragleave', function() { $auxDropzone.classList.remove('drag-over'); });
   $auxDropzone.addEventListener('drop', async function(e) {
     e.preventDefault();
+    e.stopPropagation(); // keep the $results drop handler from loading this as the main dataset
     $auxDropzone.classList.remove('drag-over');
     var handle = null;
     if (HAS_FSAA && e.dataTransfer.items && e.dataTransfer.items[0] && e.dataTransfer.items[0].getAsFileSystemHandle) {

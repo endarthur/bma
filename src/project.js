@@ -1125,7 +1125,10 @@ $results.addEventListener('drop', async (e) => {
     try { handle = await e.dataTransfer.items[0].getAsFileSystemHandle(); } catch (ex) {}
   }
   var file = handle ? await handle.getFile() : (e.dataTransfer.files[0] || null);
-  if (file) handleFile(file, handle);
+  if (!file) return;
+  // Drops anywhere on the Aux panel load the aux dataset, not the main model
+  if (e.target && e.target.closest && e.target.closest('#panelAux')) loadAuxFile(file, handle);
+  else handleFile(file, handle);
 });
 
 // Keyboard shortcuts

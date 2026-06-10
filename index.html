@@ -173,6 +173,7 @@ body {
 .app.has-results > .dropzone,
 .app.has-results > .about-section,
 .app.has-results > .recent-files,
+.app.has-results > .example-download,
 .app.has-results > .landing-footer { display: none; }
 .app.has-results > .error-msg { display: none; }
 .app.has-results > .error-msg.active { display: block; }
@@ -4402,7 +4403,7 @@ table.stats tr.stats-aux-row td:first-child { padding-left: 1.1rem; }
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build c18b3dc — click to check for updates">c18b3dc</div>
+<div class="build-badge" id="buildBadge" title="build 4540ef3 — click to check for updates">4540ef3</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8694,6 +8695,7 @@ if ($auxDropzone) {
   $auxDropzone.addEventListener('dragleave', function() { $auxDropzone.classList.remove('drag-over'); });
   $auxDropzone.addEventListener('drop', async function(e) {
     e.preventDefault();
+    e.stopPropagation(); // keep the $results drop handler from loading this as the main dataset
     $auxDropzone.classList.remove('drag-over');
     var handle = null;
     if (HAS_FSAA && e.dataTransfer.items && e.dataTransfer.items[0] && e.dataTransfer.items[0].getAsFileSystemHandle) {
@@ -9876,7 +9878,10 @@ $results.addEventListener('drop', async (e) => {
     try { handle = await e.dataTransfer.items[0].getAsFileSystemHandle(); } catch (ex) {}
   }
   var file = handle ? await handle.getFile() : (e.dataTransfer.files[0] || null);
-  if (file) handleFile(file, handle);
+  if (!file) return;
+  // Drops anywhere on the Aux panel load the aux dataset, not the main model
+  if (e.target && e.target.closest && e.target.closest('#panelAux')) loadAuxFile(file, handle);
+  else handleFile(file, handle);
 });
 
 // Keyboard shortcuts

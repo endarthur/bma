@@ -160,6 +160,7 @@ body {
 .app.has-results > .dropzone,
 .app.has-results > .about-section,
 .app.has-results > .recent-files,
+.app.has-results > .example-download,
 .app.has-results > .landing-footer { display: none; }
 .app.has-results > .error-msg { display: none; }
 .app.has-results > .error-msg.active { display: block; }
