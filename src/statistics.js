@@ -52,6 +52,53 @@ function tdQuantileFromCentroids(centroids, totalCount, q) {
   return centroids[centroids.length - 1][0];
 }
 
+// Aux numeric columns available for comparison, each with its same-named
+// primary column (case-insensitive) when one exists. Selection defaults to
+// "matched only" until the user materializes a choice.
+function getStatsAuxCols() {
+  if (!auxCompleteData || !auxCompleteData.stats) return [];
+  var primaryByLower = {};
+  for (var i = 0; i < _statsNumCols.length; i++) {
+    var ci = _statsNumCols[i];
+    primaryByLower[(_statsHeader[ci] || '').toLowerCase()] = ci;
+  }
+  var out = [];
+  Object.keys(auxCompleteData.stats).map(Number).sort(function(a, b) { return a - b; }).forEach(function(ai) {
+    var name = auxCompleteData.header[ai];
+    var m = primaryByLower[(name || '').toLowerCase()];
+    out.push({ idx: ai, name: name, matchCi: m !== undefined ? m : null });
+  });
+  return out;
+}
+
+function isStatsAuxSelected(auxCol) {
+  if (statsAuxSelected === null) return auxCol.matchCi !== null;
+  return statsAuxSelected.has(auxCol.idx);
+}
+
+function materializeStatsAuxSelected() {
+  if (statsAuxSelected !== null) return;
+  statsAuxSelected = new Set();
+  getStatsAuxCols().forEach(function(c) { if (c.matchCi !== null) statsAuxSelected.add(c.idx); });
+}
+
+// Convert a project restore (variable names) to aux column indices — callable
+// only once the aux analysis has produced a header
+function applyStatsAuxRestore() {
+  if (!pendingStatsAuxRestore || !auxCompleteData) return;
+  var byName = {};
+  for (var i = 0; i < auxCompleteData.header.length; i++) byName[auxCompleteData.header[i]] = i;
+  if (pendingStatsAuxRestore.selected) {
+    statsAuxSelected = new Set();
+    pendingStatsAuxRestore.selected.forEach(function(n) { if (byName[n] !== undefined) statsAuxSelected.add(byName[n]); });
+  }
+  if (pendingStatsAuxRestore.cdf) {
+    statsCdfAuxSelected = new Set();
+    pendingStatsAuxRestore.cdf.forEach(function(n) { if (byName[n] !== undefined) statsCdfAuxSelected.add(byName[n]); });
+  }
+  pendingStatsAuxRestore = null;
+}
+
 function getStatsMetricColumns() {
   var cols = [];
   for (var m of STATS_ALL_METRICS) {
@@ -178,6 +225,23 @@ function renderStatsSidebar() {
     if (isCalcol) html += '<span class="calcol-tag">CALC</span>';
     html += '</div>';
   }
+
+  // Aux variables (when the aux dataset has been analyzed)
+  var auxCols = getStatsAuxCols();
+  if (auxCols.length > 0) {
+    var auxLabel = auxPrefix || 'aux';
+    html += '<div class="stats-aux-divider">' + esc(auxLabel) + ': ' + esc(auxFile ? auxFile.name : '') + '</div>';
+    for (var k = 0; k < auxCols.length; k++) {
+      var ac = auxCols[k];
+      var dispName = auxLabel + ':' + ac.name;
+      if (search && !fuzzyMatch(search, dispName.toLowerCase())) continue;
+      var auxSel = isStatsAuxSelected(ac);
+      html += '<div class="stats-var-item stats-var-item--aux' + (auxSel ? '' : ' unchecked') + '" data-aux-col="' + ac.idx + '">';
+      html += '<input type="checkbox"' + (auxSel ? ' checked' : '') + ' data-aux-col="' + ac.idx + '">';
+      html += '<span class="var-name">' + esc(dispName) + '</span>';
+      html += '</div>';
+    }
+  }
   document.getElementById('statsVarList').innerHTML = html;
 }
 
@@ -194,7 +258,26 @@ function renderStatsTable() {
     return statsSelectedVars === null || statsSelectedVars.has(ci);
   });
 
-  if (visCols.length === 0) {
+  // Selected aux columns, paired to their same-named primary where possible
+  var auxSelectedCols = getStatsAuxCols().filter(isStatsAuxSelected);
+  var auxByMatch = {};
+  var auxUnmatched = [];
+  auxSelectedCols.forEach(function(ac) {
+    if (ac.matchCi !== null) (auxByMatch[ac.matchCi] = auxByMatch[ac.matchCi] || []).push(ac);
+    else auxUnmatched.push(ac);
+  });
+  var auxLabel = auxPrefix || 'aux';
+
+  function auxRowHtml(ac) {
+    var as = auxCompleteData.stats[ac.idx];
+    var aCdfActive = statsCdfAuxSelected.has(ac.idx);
+    var aNameClass = aCdfActive ? 'cdf-link cdf-active' : 'cdf-link';
+    var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-aux-col="' + ac.idx + '" href="#">' + esc(auxLabel + ':' + ac.name) + '</a></td>';
+    for (var m of metrics) rowHtml += '<td>' + formatStatValue(getStatValue(as, m), m) + '</td>';
+    return rowHtml + '</tr>';
+  }
+
+  if (visCols.length === 0 && auxSelectedCols.length === 0) {
     $statsContent.innerHTML = '<div style="color:var(--fg-dim);padding:1rem;">No variables selected.</div>';
     return;
   }
@@ -217,7 +300,21 @@ function renderStatsTable() {
       html += '<td>' + formatStatValue(val, m) + '</td>';
     }
     html += '</tr>';
+    // Same-named aux rows directly beneath their primary
+    if (auxByMatch[ci]) {
+      for (var am = 0; am < auxByMatch[ci].length; am++) html += auxRowHtml(auxByMatch[ci][am]);
+    }
   }
+  // Matched aux rows whose primary is deselected still render, at the end
+  var visSet = new Set(visCols);
+  Object.keys(auxByMatch).forEach(function(ciKey) {
+    if (!visSet.has(parseInt(ciKey))) {
+      auxByMatch[ciKey].forEach(function(ac) { html += auxRowHtml(ac); });
+    }
+  });
+  // Aux variables with no primary counterpart
+  for (var au = 0; au < auxUnmatched.length; au++) html += auxRowHtml(auxUnmatched[au]);
+
   html += '</tbody></table>';
   $statsContent.innerHTML = html;
 }
@@ -226,7 +323,7 @@ function renderStatsCdfPanel() {
   var chart = document.getElementById('statsCdfChart');
   if (!chart) return;
 
-  if (statsCdfSelected.size === 0) {
+  if (statsCdfSelected.size === 0 && statsCdfAuxSelected.size === 0) {
     chart.innerHTML = '<div class="stats-cdf-hint">Click column names to add CDF curves</div>';
     return;
   }
@@ -241,6 +338,15 @@ function renderStatsCdfPanel() {
       entries.push([header[ci], stats[ci]]);
     }
   });
+  if (auxCompleteData && auxCompleteData.stats) {
+    var auxLabel = auxPrefix || 'aux';
+    statsCdfAuxSelected.forEach(function(ai) {
+      var as = auxCompleteData.stats[ai];
+      if (as && as.centroids && as.centroids.length > 0) {
+        entries.push([auxLabel + ':' + auxCompleteData.header[ai], as, true]); // [2]=isAux → dashed
+      }
+    });
+  }
 
   if (entries.length === 0) {
     chart.innerHTML = '<div class="stats-cdf-hint">No centroid data for selected columns</div>';
@@ -333,7 +439,8 @@ function renderStatsCdfSvg(entries) {
     }
     if (points.length > 0) {
       var pathParts = points.map(function(p, i) { return (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1); });
-      curvesSvg += '<path d="' + pathParts.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="1.5" opacity="0.85"/>';
+      var dash = entries[gi][2] ? ' stroke-dasharray="6,4"' : '';
+      curvesSvg += '<path d="' + pathParts.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="1.5" opacity="0.85"' + dash + '/>';
     }
     if (eStats.mean !== null && (!isLog || eStats.mean > 0)) {
       var mx = sx(eStats.mean);
@@ -353,7 +460,7 @@ function renderStatsCdfSvg(entries) {
     var row = Math.floor(li / legCols);
     var lx = pad.left + col * colW;
     var ly = legTop + row * legRowH;
-    legendSvg += '<line x1="' + lx + '" y1="' + (ly + 5) + '" x2="' + (lx + 18) + '" y2="' + (ly + 5) + '" stroke="' + lColor + '" stroke-width="2.5"/>';
+    legendSvg += '<line x1="' + lx + '" y1="' + (ly + 5) + '" x2="' + (lx + 18) + '" y2="' + (ly + 5) + '" stroke="' + lColor + '" stroke-width="2.5"' + (entries[li][2] ? ' stroke-dasharray="4,3"' : '') + '/>';
     legendSvg += '<text x="' + (lx + 24) + '" y="' + (ly + 9) + '" fill="#6a737d" font-size="9.5">' + esc(lName) + '</text>';
   }
 
@@ -546,6 +653,18 @@ function wireStatsEventsOnce() {
 
   // --- Variable checkboxes (delegation on container — innerHTML changes) ---
   document.getElementById('statsVarList').addEventListener('change', function(e) {
+    var acb = e.target.closest('input[data-aux-col]');
+    if (acb) {
+      materializeStatsAuxSelected();
+      var aIdx = parseInt(acb.dataset.auxCol);
+      if (acb.checked) statsAuxSelected.add(aIdx);
+      else statsAuxSelected.delete(aIdx);
+      var aItem = acb.closest('.stats-var-item');
+      if (aItem) aItem.classList.toggle('unchecked', !acb.checked);
+      renderStatsTable();
+      autoSaveProject();
+      return;
+    }
     var cb = e.target.closest('input[data-col]');
     if (!cb) return;
     var colIdx = parseInt(cb.dataset.col);
@@ -563,8 +682,12 @@ function wireStatsEventsOnce() {
   // --- All/None buttons (static template elements) ---
   document.getElementById('statsVarAll').addEventListener('click', function() {
     if (statsSelectedVars === null) statsSelectedVars = new Set(_statsNumCols);
-    document.getElementById('statsVarList').querySelectorAll('.stats-var-item').forEach(function(el) {
+    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-col]').forEach(function(el) {
       statsSelectedVars.add(parseInt(el.dataset.col));
+    });
+    materializeStatsAuxSelected();
+    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-aux-col]').forEach(function(el) {
+      statsAuxSelected.add(parseInt(el.dataset.auxCol));
     });
     renderStatsSidebar();
     renderStatsTable();
@@ -572,8 +695,12 @@ function wireStatsEventsOnce() {
   });
   document.getElementById('statsVarNone').addEventListener('click', function() {
     if (statsSelectedVars === null) statsSelectedVars = new Set(_statsNumCols);
-    document.getElementById('statsVarList').querySelectorAll('.stats-var-item').forEach(function(el) {
+    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-col]').forEach(function(el) {
       statsSelectedVars.delete(parseInt(el.dataset.col));
+    });
+    materializeStatsAuxSelected();
+    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-aux-col]').forEach(function(el) {
+      statsAuxSelected.delete(parseInt(el.dataset.auxCol));
     });
     renderStatsSidebar();
     renderStatsTable();
@@ -592,9 +719,15 @@ function wireStatsEventsOnce() {
     var link = e.target.closest('.cdf-link');
     if (!link) return;
     e.preventDefault();
-    var col = parseInt(link.dataset.col);
-    if (statsCdfSelected.has(col)) statsCdfSelected.delete(col);
-    else statsCdfSelected.add(col);
+    if (link.dataset.auxCol !== undefined) {
+      var aCol = parseInt(link.dataset.auxCol);
+      if (statsCdfAuxSelected.has(aCol)) statsCdfAuxSelected.delete(aCol);
+      else statsCdfAuxSelected.add(aCol);
+    } else {
+      var col = parseInt(link.dataset.col);
+      if (statsCdfSelected.has(col)) statsCdfSelected.delete(col);
+      else statsCdfSelected.add(col);
+    }
     renderStatsTable();
     renderStatsCdfPanel();
     autoSaveProject();

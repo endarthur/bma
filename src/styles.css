@@ -3675,3 +3675,17 @@ table.cat-values td.cat-pct-cell {
   padding: 0.3rem 0.5rem; margin-bottom: 0.5rem;
   border: 1px solid var(--red); border-radius: 3px; opacity: 0.85;
 }
+
+/* Aux rows in the Statistics tab */
+.stats-aux-divider {
+  font: 0.6rem var(--mono); color: var(--fg-dim); letter-spacing: 0.06em;
+  padding: 0.4rem 0.2rem 0.15rem; margin-top: 0.3rem;
+  border-top: 1px dashed var(--border);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stats-var-item--aux .var-name { opacity: 0.85; font-style: italic; }
+table.stats tr.stats-aux-row td {
+  background: rgba(184,115,51,0.05);
+  font-style: italic;
+}
+table.stats tr.stats-aux-row td:first-child { padding-left: 1.1rem; }

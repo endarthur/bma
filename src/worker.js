@@ -377,7 +377,7 @@ function tdQuantile(td, q) {
 
 const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi),isnum:(v)=>Number.isFinite(v),ifnum:(v,d)=>Number.isFinite(v)?v:(d!==undefined?d:NaN)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;const isnum=fn.isnum;const ifnum=fn.ifnum;';
 
-async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat) {
+async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride) {
   const startTime = performance.now();
 
   // ZIP / DM extraction
@@ -412,10 +412,15 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   const nCols = header.length;
 
   // Pick a row variable name that doesn't collide with a column name
+  // (or use the caller-fixed handle, e.g. 'aux' for the aux dataset pass)
   let rowVarName = 'r';
-  const colSet = new Set(header);
-  for (const candidate of ['r', 'd', 'row', '_r', '_d']) {
-    if (!colSet.has(candidate)) { rowVarName = candidate; break; }
+  if (rowVarOverride) {
+    rowVarName = rowVarOverride;
+  } else {
+    const colSet = new Set(header);
+    for (const candidate of ['r', 'd', 'row', '_r', '_d']) {
+      if (!colSet.has(candidate)) { rowVarName = candidate; break; }
+    }
   }
 
   // ── Per-column type detection state ──
@@ -786,6 +791,16 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     }
     if (orderSampleCount < ORDER_SAMPLE) orderSampleCount++;
     if (precisionSampleCount < PRECISION_SAMPLE) precisionSampleCount++;
+  }
+
+  // When every column's type is forced (e.g. the aux stats pass sends its
+  // preflight types), skip the detection phase entirely. Detection rows are
+  // excluded from stats — negligible on block models, a real loss on small
+  // sample files.
+  if (forced.size >= nCols) {
+    typesResolved = true;
+    colTypes = resolveTypes();
+    initStatsPhase();
   }
 
   // ── Single-pass stream ──
@@ -1998,7 +2013,7 @@ self.onmessage = (e) => {
   } else if (e.data.mode === 'gt') {
     gtAnalysis(e.data);
   } else {
-    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat } = e.data;
-    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat);
+    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride } = e.data;
+    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride);
   }
 };

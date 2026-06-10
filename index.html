@@ -3688,6 +3688,20 @@ table.cat-values td.cat-pct-cell {
   padding: 0.3rem 0.5rem; margin-bottom: 0.5rem;
   border: 1px solid var(--red); border-radius: 3px; opacity: 0.85;
 }
+
+/* Aux rows in the Statistics tab */
+.stats-aux-divider {
+  font: 0.6rem var(--mono); color: var(--fg-dim); letter-spacing: 0.06em;
+  padding: 0.4rem 0.2rem 0.15rem; margin-top: 0.3rem;
+  border-top: 1px dashed var(--border);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stats-var-item--aux .var-name { opacity: 0.85; font-style: italic; }
+table.stats tr.stats-aux-row td {
+  background: rgba(184,115,51,0.05);
+  font-style: italic;
+}
+table.stats tr.stats-aux-row td:first-child { padding-left: 1.1rem; }
 </style>
 <script>try{var t=JSON.parse(localStorage.getItem('bma:settings')||'{}').theme;if(t&&t!=='default')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 </head>
@@ -4613,7 +4627,7 @@ function tdQuantile(td, q) {
 
 const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi),isnum:(v)=>Number.isFinite(v),ifnum:(v,d)=>Number.isFinite(v)?v:(d!==undefined?d:NaN)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;const isnum=fn.isnum;const ifnum=fn.ifnum;';
 
-async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat) {
+async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride) {
   const startTime = performance.now();
 
   // ZIP / DM extraction
@@ -4648,10 +4662,15 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   const nCols = header.length;
 
   // Pick a row variable name that doesn't collide with a column name
+  // (or use the caller-fixed handle, e.g. 'aux' for the aux dataset pass)
   let rowVarName = 'r';
-  const colSet = new Set(header);
-  for (const candidate of ['r', 'd', 'row', '_r', '_d']) {
-    if (!colSet.has(candidate)) { rowVarName = candidate; break; }
+  if (rowVarOverride) {
+    rowVarName = rowVarOverride;
+  } else {
+    const colSet = new Set(header);
+    for (const candidate of ['r', 'd', 'row', '_r', '_d']) {
+      if (!colSet.has(candidate)) { rowVarName = candidate; break; }
+    }
   }
 
   // ── Per-column type detection state ──
@@ -5022,6 +5041,16 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     }
     if (orderSampleCount < ORDER_SAMPLE) orderSampleCount++;
     if (precisionSampleCount < PRECISION_SAMPLE) precisionSampleCount++;
+  }
+
+  // When every column's type is forced (e.g. the aux stats pass sends its
+  // preflight types), skip the detection phase entirely. Detection rows are
+  // excluded from stats — negligible on block models, a real loss on small
+  // sample files.
+  if (forced.size >= nCols) {
+    typesResolved = true;
+    colTypes = resolveTypes();
+    initStatsPhase();
   }
 
   // ── Single-pass stream ──
@@ -6234,8 +6263,8 @@ self.onmessage = (e) => {
   } else if (e.data.mode === 'gt') {
     gtAnalysis(e.data);
   } else {
-    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat } = e.data;
-    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat);
+    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride } = e.data;
+    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride);
   }
 };
 `;
@@ -6265,6 +6294,10 @@ let auxFilter = null;          // { expression } — references aux columns via 
 let auxWorker = null;          // worker handle for the aux analysis pass
 let pendingAuxRestore = null;  // aux config from a loaded project, applied once the aux file is (re)loaded
 const AUX_ROW_VAR = 'aux';     // fixed code handle for aux filter/calc expressions (NOT the display prefix)
+let auxStale = false;              // aux config changed since last aux analysis
+let statsAuxSelected = null;       // Set of aux col indices shown in the stats table (null = defaults)
+let statsCdfAuxSelected = new Set(); // aux col indices with CDF curves
+let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes
 
 var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
 
@@ -6550,7 +6583,8 @@ var _helpTabs = {
       '<div class="help-section"><div class="help-section-title">Configuration</div>' +
       '<div class="help-row"><span><strong>Display prefix</strong> — cosmetic label for aux variables (e.g. <code>aux:Fe</code>). Does not affect expressions.</span></div>' +
       '<div class="help-row"><span><strong>Coordinates</strong> — assign X/Y/Z. Aux and the block model must share the same coordinate space for swath overlays to align.</span></div>' +
-      '<div class="help-row"><span><strong>Aux filter</strong> — pre-filter aux rows. Reference aux columns as <code>aux.</code>… regardless of the display prefix.</span></div></div>' +
+      '<div class="help-row"><span><strong>Aux filter</strong> — pre-filter aux rows. Reference aux columns as <code>aux.</code>… regardless of the display prefix.</span></div>' +
+      '<div class="help-row"><span><strong>Analyze</strong> — run the full aux statistics pass. Required for the Statistics-tab comparison and CDF overlay; the Swath overlay runs its own pass and does not need it.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Scope</div>' +
       '<div class="help-row"><span>Comparison is statistical/spatial — aux is a separate set of rows, not extra columns. No geometry, export, or per-row joins.</span></div></div>'
   },
@@ -6608,7 +6642,10 @@ var _helpTabs = {
       '<div class="help-row"><span><strong>Percentiles</strong> \u2014 customize which percentiles are shown (preset or custom comma-separated)</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">CDF</div>' +
       '<div class="help-row"><span>Click the <strong>CDF</strong> link on any variable row to open a cumulative distribution overlay.</span></div>' +
-      '<div class="help-row"><span>Toggle multiple variables to compare CDFs. Linear or log scale.</span></div></div>'
+      '<div class="help-row"><span>Toggle multiple variables to compare CDFs. Linear or log scale.</span></div></div>' +
+      '<div class="help-section"><div class="help-section-title">Aux comparison</div>' +
+      '<div class="help-row"><span>After running <strong>Analyze</strong> on the Aux tab, aux variables appear at the bottom of the sidebar. A same-named aux variable shows as an indented row right under its model counterpart — mean against mean, CV against CV.</span></div>' +
+      '<div class="help-row"><span>Click an aux row’s name to overlay its CDF as a dashed curve. A steeper model CDF over a flatter sample CDF is the classic kriging smoothing signature.</span></div></div>'
   },
   categories: {
     title: 'Categories',
@@ -7888,9 +7925,85 @@ function renderAuxConfig() {
       '<div class="pf-sidebar-section-title">Aux filter</div>' +
       '<textarea class="aux-input aux-filter" id="auxFilterInput" rows="2" spellcheck="false" placeholder="aux.Au > 0">' + esc(auxFilter ? auxFilter.expression : '') + '</textarea>' +
       '<div class="aux-hint">Reference aux columns as <code>aux.</code>… — independent of the display prefix.</div>' +
+    '</div>' +
+    '<div class="pf-sidebar-section">' +
+      '<div class="pf-sidebar-section-title">Analysis</div>' +
+      '<button class="swath-generate" id="auxAnalyzeBtn">Analyze</button>' +
+      '<div class="aux-hint aux-analyze-status" id="auxAnalyzeStatus">' +
+        (auxCompleteData
+          ? (auxStale ? 'Config changed — re-run Analyze' : auxCompleteData.rowCount.toLocaleString() + ' rows analyzed')
+          : 'Run to compare aux statistics on the Statistics tab') +
+      '</div>' +
     '</div>';
 
   renderAuxPreview();
+}
+
+function runAuxAnalysis() {
+  if (!auxFile || !auxPreflightData) return;
+  if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
+  auxWorker = new Worker(workerUrl);
+
+  var $btn = document.getElementById('auxAnalyzeBtn');
+  var $status = document.getElementById('auxAnalyzeStatus');
+  if ($btn) $btn.disabled = true;
+  if ($status) { $status.textContent = '0%'; $status.style.color = ''; }
+
+  function fail(msg) {
+    if ($btn) $btn.disabled = false;
+    if ($status) { $status.textContent = 'Error: ' + msg; $status.style.color = 'var(--red)'; }
+    if (auxWorker) { auxWorker.terminate(); auxWorker = null; }
+  }
+
+  var xyz = auxPreflightData.xyz || { x: -1, y: -1, z: -1 };
+  // Force every column's type from the preflight sample: the worker then
+  // skips its detection warmup, whose rows are excluded from stats —
+  // negligible on block models but a real bias on small sample files
+  var auxTypeOverrides = {};
+  for (var ti = 0; ti < auxPreflightData.autoTypes.length; ti++) {
+    auxTypeOverrides[ti] = auxPreflightData.autoTypes[ti];
+  }
+  auxWorker.postMessage({
+    file: auxFile,
+    xyzOverride: xyz.x >= 0 && xyz.y >= 0 && xyz.z >= 0 ? xyz : null,
+    filter: auxFilter ? { expression: auxFilter.expression } : null,
+    typeOverrides: auxTypeOverrides,
+    zipEntry: auxPreflightData.selectedZipEntry || null,
+    skipCols: [],
+    colFilters: {},
+    calcolCode: null,
+    calcolMeta: null,
+    groupBy: null,
+    groupStatsCols: null,
+    dxyzOverride: null,
+    dmEndianness: auxPreflightData.dmEndianness || null,
+    dmFormat: auxPreflightData.dmFormat || null,
+    rowVarOverride: AUX_ROW_VAR
+  });
+
+  auxWorker.onerror = function(e) { fail(e.message || 'unknown error'); };
+  auxWorker.onmessage = function(e) {
+    var m = e.data;
+    if (m.type === 'progress') {
+      if ($status) $status.textContent = Math.min(99, m.percent).toFixed(0) + '%';
+    } else if (m.type === 'complete') {
+      auxCompleteData = { header: m.header, colTypes: m.colTypes, stats: m.stats, rowCount: m.rowCount };
+      auxStale = false;
+      if ($btn) $btn.disabled = false;
+      if ($status) { $status.textContent = m.rowCount.toLocaleString() + ' rows analyzed'; $status.style.color = ''; }
+      auxWorker.terminate();
+      auxWorker = null;
+      if (typeof applyStatsAuxRestore === 'function') applyStatsAuxRestore();
+      if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
+        renderStatsSidebar();
+        renderStatsTable();
+        renderStatsCdfPanel();
+      }
+      autoSaveProject();
+    } else if (m.type === 'error') {
+      fail(m.message);
+    }
+  };
 }
 
 function renderAuxPreview() {
@@ -7910,6 +8023,12 @@ function onAuxConfigChange() {
   if (x && y && z) auxPreflightData.xyz = { x: parseInt(x.value), y: parseInt(y.value), z: parseInt(z.value) };
   var f = document.getElementById('auxFilterInput');
   if (f) { var v = f.value.trim(); auxFilter = v ? { expression: v } : null; }
+  // Completed aux analysis no longer reflects the config — flag it
+  if (auxCompleteData && !auxStale) {
+    auxStale = true;
+    var $st = document.getElementById('auxAnalyzeStatus');
+    if ($st) { $st.textContent = 'Config changed — re-run Analyze'; $st.style.color = 'var(--amber)'; }
+  }
   // Live-update the prefix hint without a full re-render (keeps focus/caret)
   var hint = $auxSidebar.querySelector('.pf-sidebar-section .aux-hint code');
   if (hint && p) hint.textContent = (auxPrefix || 'aux') + ':Fe';
@@ -7959,6 +8078,9 @@ function clearAux() {
   auxData = null;
   auxFilter = null;
   auxPrefix = 'aux';
+  auxStale = false;
+  statsAuxSelected = null;
+  statsCdfAuxSelected = new Set();
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
   if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
   $auxConfig.style.display = 'none';
@@ -7966,6 +8088,11 @@ function clearAux() {
   $auxSidebar.innerHTML = '';
   $auxPreview.innerHTML = '';
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
+  if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
+    renderStatsSidebar();
+    renderStatsTable();
+    renderStatsCdfPanel();
+  }
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
 
@@ -8009,6 +8136,9 @@ if ($auxDropzone) {
   if ($auxSidebar) {
     $auxSidebar.addEventListener('input', onAuxConfigChange);
     $auxSidebar.addEventListener('change', onAuxConfigChange);
+    $auxSidebar.addEventListener('click', function(e) {
+      if (e.target && e.target.id === 'auxAnalyzeBtn') runAuxAnalysis();
+    });
   }
   var $auxClearBtn = document.getElementById('auxClear');
   if ($auxClearBtn) $auxClearBtn.addEventListener('click', clearAux);
@@ -8376,7 +8506,11 @@ function serializeProject() {
       visibleMetrics: statsVisibleMetrics ? Array.from(statsVisibleMetrics) : null,
       percentiles: statsPercentiles,
       cdfSelected: Array.from(statsCdfSelected),
-      cdfScale: statsCdfScale
+      cdfScale: statsCdfScale,
+      auxSelected: (auxCompleteData && statsAuxSelected !== null)
+        ? Array.from(statsAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null,
+      cdfAuxSelected: (auxCompleteData && statsCdfAuxSelected.size > 0)
+        ? Array.from(statsCdfAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null
     },
     categories: {
       focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null,
@@ -8645,6 +8779,7 @@ function clearProject() {
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
   statsCdfScale = 'linear';
+  pendingStatsAuxRestore = null;
   exportColumns = [];
   pendingProjectRestore = null;
   resetExportSettings();
@@ -8728,6 +8863,7 @@ function handleFile(file, handle) {
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
   statsCdfScale = 'linear';
+  pendingStatsAuxRestore = null;
   exportColumns = [];
   pendingProjectRestore = null;
   resetExportSettings();
@@ -8883,6 +9019,7 @@ $backToPreflight.addEventListener('click', () => {
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
   statsCdfScale = 'linear';
+  pendingStatsAuxRestore = null;
   exportColumns = [];
   pendingProjectRestore = null;
   if (exportWorker) { exportWorker.terminate(); exportWorker = null; }
@@ -9301,6 +9438,10 @@ function displayResults(data) {
     if (st.percentiles) statsPercentiles = st.percentiles;
     if (st.cdfSelected) statsCdfSelected = new Set(st.cdfSelected);
     if (st.cdfScale) statsCdfScale = st.cdfScale;
+    if (st.auxSelected || st.cdfAuxSelected) {
+      pendingStatsAuxRestore = { selected: st.auxSelected || null, cdf: st.cdfAuxSelected || null };
+      applyStatsAuxRestore(); // no-op until aux analysis exists; consumed then
+    }
 
     // Re-render stats tab with restored state
     if (lastDisplayedStats && lastDisplayedHeader) {
@@ -10398,6 +10539,53 @@ function tdQuantileFromCentroids(centroids, totalCount, q) {
   return centroids[centroids.length - 1][0];
 }
 
+// Aux numeric columns available for comparison, each with its same-named
+// primary column (case-insensitive) when one exists. Selection defaults to
+// "matched only" until the user materializes a choice.
+function getStatsAuxCols() {
+  if (!auxCompleteData || !auxCompleteData.stats) return [];
+  var primaryByLower = {};
+  for (var i = 0; i < _statsNumCols.length; i++) {
+    var ci = _statsNumCols[i];
+    primaryByLower[(_statsHeader[ci] || '').toLowerCase()] = ci;
+  }
+  var out = [];
+  Object.keys(auxCompleteData.stats).map(Number).sort(function(a, b) { return a - b; }).forEach(function(ai) {
+    var name = auxCompleteData.header[ai];
+    var m = primaryByLower[(name || '').toLowerCase()];
+    out.push({ idx: ai, name: name, matchCi: m !== undefined ? m : null });
+  });
+  return out;
+}
+
+function isStatsAuxSelected(auxCol) {
+  if (statsAuxSelected === null) return auxCol.matchCi !== null;
+  return statsAuxSelected.has(auxCol.idx);
+}
+
+function materializeStatsAuxSelected() {
+  if (statsAuxSelected !== null) return;
+  statsAuxSelected = new Set();
+  getStatsAuxCols().forEach(function(c) { if (c.matchCi !== null) statsAuxSelected.add(c.idx); });
+}
+
+// Convert a project restore (variable names) to aux column indices — callable
+// only once the aux analysis has produced a header
+function applyStatsAuxRestore() {
+  if (!pendingStatsAuxRestore || !auxCompleteData) return;
+  var byName = {};
+  for (var i = 0; i < auxCompleteData.header.length; i++) byName[auxCompleteData.header[i]] = i;
+  if (pendingStatsAuxRestore.selected) {
+    statsAuxSelected = new Set();
+    pendingStatsAuxRestore.selected.forEach(function(n) { if (byName[n] !== undefined) statsAuxSelected.add(byName[n]); });
+  }
+  if (pendingStatsAuxRestore.cdf) {
+    statsCdfAuxSelected = new Set();
+    pendingStatsAuxRestore.cdf.forEach(function(n) { if (byName[n] !== undefined) statsCdfAuxSelected.add(byName[n]); });
+  }
+  pendingStatsAuxRestore = null;
+}
+
 function getStatsMetricColumns() {
   var cols = [];
   for (var m of STATS_ALL_METRICS) {
@@ -10524,6 +10712,23 @@ function renderStatsSidebar() {
     if (isCalcol) html += '<span class="calcol-tag">CALC</span>';
     html += '</div>';
   }
+
+  // Aux variables (when the aux dataset has been analyzed)
+  var auxCols = getStatsAuxCols();
+  if (auxCols.length > 0) {
+    var auxLabel = auxPrefix || 'aux';
+    html += '<div class="stats-aux-divider">' + esc(auxLabel) + ': ' + esc(auxFile ? auxFile.name : '') + '</div>';
+    for (var k = 0; k < auxCols.length; k++) {
+      var ac = auxCols[k];
+      var dispName = auxLabel + ':' + ac.name;
+      if (search && !fuzzyMatch(search, dispName.toLowerCase())) continue;
+      var auxSel = isStatsAuxSelected(ac);
+      html += '<div class="stats-var-item stats-var-item--aux' + (auxSel ? '' : ' unchecked') + '" data-aux-col="' + ac.idx + '">';
+      html += '<input type="checkbox"' + (auxSel ? ' checked' : '') + ' data-aux-col="' + ac.idx + '">';
+      html += '<span class="var-name">' + esc(dispName) + '</span>';
+      html += '</div>';
+    }
+  }
   document.getElementById('statsVarList').innerHTML = html;
 }
 
@@ -10540,7 +10745,26 @@ function renderStatsTable() {
     return statsSelectedVars === null || statsSelectedVars.has(ci);
   });
 
-  if (visCols.length === 0) {
+  // Selected aux columns, paired to their same-named primary where possible
+  var auxSelectedCols = getStatsAuxCols().filter(isStatsAuxSelected);
+  var auxByMatch = {};
+  var auxUnmatched = [];
+  auxSelectedCols.forEach(function(ac) {
+    if (ac.matchCi !== null) (auxByMatch[ac.matchCi] = auxByMatch[ac.matchCi] || []).push(ac);
+    else auxUnmatched.push(ac);
+  });
+  var auxLabel = auxPrefix || 'aux';
+
+  function auxRowHtml(ac) {
+    var as = auxCompleteData.stats[ac.idx];
+    var aCdfActive = statsCdfAuxSelected.has(ac.idx);
+    var aNameClass = aCdfActive ? 'cdf-link cdf-active' : 'cdf-link';
+    var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-aux-col="' + ac.idx + '" href="#">' + esc(auxLabel + ':' + ac.name) + '</a></td>';
+    for (var m of metrics) rowHtml += '<td>' + formatStatValue(getStatValue(as, m), m) + '</td>';
+    return rowHtml + '</tr>';
+  }
+
+  if (visCols.length === 0 && auxSelectedCols.length === 0) {
     $statsContent.innerHTML = '<div style="color:var(--fg-dim);padding:1rem;">No variables selected.</div>';
     return;
   }
@@ -10563,7 +10787,21 @@ function renderStatsTable() {
       html += '<td>' + formatStatValue(val, m) + '</td>';
     }
     html += '</tr>';
+    // Same-named aux rows directly beneath their primary
+    if (auxByMatch[ci]) {
+      for (var am = 0; am < auxByMatch[ci].length; am++) html += auxRowHtml(auxByMatch[ci][am]);
+    }
   }
+  // Matched aux rows whose primary is deselected still render, at the end
+  var visSet = new Set(visCols);
+  Object.keys(auxByMatch).forEach(function(ciKey) {
+    if (!visSet.has(parseInt(ciKey))) {
+      auxByMatch[ciKey].forEach(function(ac) { html += auxRowHtml(ac); });
+    }
+  });
+  // Aux variables with no primary counterpart
+  for (var au = 0; au < auxUnmatched.length; au++) html += auxRowHtml(auxUnmatched[au]);
+
   html += '</tbody></table>';
   $statsContent.innerHTML = html;
 }
@@ -10572,7 +10810,7 @@ function renderStatsCdfPanel() {
   var chart = document.getElementById('statsCdfChart');
   if (!chart) return;
 
-  if (statsCdfSelected.size === 0) {
+  if (statsCdfSelected.size === 0 && statsCdfAuxSelected.size === 0) {
     chart.innerHTML = '<div class="stats-cdf-hint">Click column names to add CDF curves</div>';
     return;
   }
@@ -10587,6 +10825,15 @@ function renderStatsCdfPanel() {
       entries.push([header[ci], stats[ci]]);
     }
   });
+  if (auxCompleteData && auxCompleteData.stats) {
+    var auxLabel = auxPrefix || 'aux';
+    statsCdfAuxSelected.forEach(function(ai) {
+      var as = auxCompleteData.stats[ai];
+      if (as && as.centroids && as.centroids.length > 0) {
+        entries.push([auxLabel + ':' + auxCompleteData.header[ai], as, true]); // [2]=isAux → dashed
+      }
+    });
+  }
 
   if (entries.length === 0) {
     chart.innerHTML = '<div class="stats-cdf-hint">No centroid data for selected columns</div>';
@@ -10679,7 +10926,8 @@ function renderStatsCdfSvg(entries) {
     }
     if (points.length > 0) {
       var pathParts = points.map(function(p, i) { return (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1); });
-      curvesSvg += '<path d="' + pathParts.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="1.5" opacity="0.85"/>';
+      var dash = entries[gi][2] ? ' stroke-dasharray="6,4"' : '';
+      curvesSvg += '<path d="' + pathParts.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="1.5" opacity="0.85"' + dash + '/>';
     }
     if (eStats.mean !== null && (!isLog || eStats.mean > 0)) {
       var mx = sx(eStats.mean);
@@ -10699,7 +10947,7 @@ function renderStatsCdfSvg(entries) {
     var row = Math.floor(li / legCols);
     var lx = pad.left + col * colW;
     var ly = legTop + row * legRowH;
-    legendSvg += '<line x1="' + lx + '" y1="' + (ly + 5) + '" x2="' + (lx + 18) + '" y2="' + (ly + 5) + '" stroke="' + lColor + '" stroke-width="2.5"/>';
+    legendSvg += '<line x1="' + lx + '" y1="' + (ly + 5) + '" x2="' + (lx + 18) + '" y2="' + (ly + 5) + '" stroke="' + lColor + '" stroke-width="2.5"' + (entries[li][2] ? ' stroke-dasharray="4,3"' : '') + '/>';
     legendSvg += '<text x="' + (lx + 24) + '" y="' + (ly + 9) + '" fill="#6a737d" font-size="9.5">' + esc(lName) + '</text>';
   }
 
@@ -10892,6 +11140,18 @@ function wireStatsEventsOnce() {
 
   // --- Variable checkboxes (delegation on container — innerHTML changes) ---
   document.getElementById('statsVarList').addEventListener('change', function(e) {
+    var acb = e.target.closest('input[data-aux-col]');
+    if (acb) {
+      materializeStatsAuxSelected();
+      var aIdx = parseInt(acb.dataset.auxCol);
+      if (acb.checked) statsAuxSelected.add(aIdx);
+      else statsAuxSelected.delete(aIdx);
+      var aItem = acb.closest('.stats-var-item');
+      if (aItem) aItem.classList.toggle('unchecked', !acb.checked);
+      renderStatsTable();
+      autoSaveProject();
+      return;
+    }
     var cb = e.target.closest('input[data-col]');
     if (!cb) return;
     var colIdx = parseInt(cb.dataset.col);
@@ -10909,8 +11169,12 @@ function wireStatsEventsOnce() {
   // --- All/None buttons (static template elements) ---
   document.getElementById('statsVarAll').addEventListener('click', function() {
     if (statsSelectedVars === null) statsSelectedVars = new Set(_statsNumCols);
-    document.getElementById('statsVarList').querySelectorAll('.stats-var-item').forEach(function(el) {
+    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-col]').forEach(function(el) {
       statsSelectedVars.add(parseInt(el.dataset.col));
+    });
+    materializeStatsAuxSelected();
+    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-aux-col]').forEach(function(el) {
+      statsAuxSelected.add(parseInt(el.dataset.auxCol));
     });
     renderStatsSidebar();
     renderStatsTable();
@@ -10918,8 +11182,12 @@ function wireStatsEventsOnce() {
   });
   document.getElementById('statsVarNone').addEventListener('click', function() {
     if (statsSelectedVars === null) statsSelectedVars = new Set(_statsNumCols);
-    document.getElementById('statsVarList').querySelectorAll('.stats-var-item').forEach(function(el) {
+    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-col]').forEach(function(el) {
       statsSelectedVars.delete(parseInt(el.dataset.col));
+    });
+    materializeStatsAuxSelected();
+    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-aux-col]').forEach(function(el) {
+      statsAuxSelected.delete(parseInt(el.dataset.auxCol));
     });
     renderStatsSidebar();
     renderStatsTable();
@@ -10938,9 +11206,15 @@ function wireStatsEventsOnce() {
     var link = e.target.closest('.cdf-link');
     if (!link) return;
     e.preventDefault();
-    var col = parseInt(link.dataset.col);
-    if (statsCdfSelected.has(col)) statsCdfSelected.delete(col);
-    else statsCdfSelected.add(col);
+    if (link.dataset.auxCol !== undefined) {
+      var aCol = parseInt(link.dataset.auxCol);
+      if (statsCdfAuxSelected.has(aCol)) statsCdfAuxSelected.delete(aCol);
+      else statsCdfAuxSelected.add(aCol);
+    } else {
+      var col = parseInt(link.dataset.col);
+      if (statsCdfSelected.has(col)) statsCdfSelected.delete(col);
+      else statsCdfSelected.add(col);
+    }
     renderStatsTable();
     renderStatsCdfPanel();
     autoSaveProject();

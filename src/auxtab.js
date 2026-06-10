@@ -52,9 +52,85 @@ function renderAuxConfig() {
       '<div class="pf-sidebar-section-title">Aux filter</div>' +
       '<textarea class="aux-input aux-filter" id="auxFilterInput" rows="2" spellcheck="false" placeholder="aux.Au > 0">' + esc(auxFilter ? auxFilter.expression : '') + '</textarea>' +
       '<div class="aux-hint">Reference aux columns as <code>aux.</code>… — independent of the display prefix.</div>' +
+    '</div>' +
+    '<div class="pf-sidebar-section">' +
+      '<div class="pf-sidebar-section-title">Analysis</div>' +
+      '<button class="swath-generate" id="auxAnalyzeBtn">Analyze</button>' +
+      '<div class="aux-hint aux-analyze-status" id="auxAnalyzeStatus">' +
+        (auxCompleteData
+          ? (auxStale ? 'Config changed — re-run Analyze' : auxCompleteData.rowCount.toLocaleString() + ' rows analyzed')
+          : 'Run to compare aux statistics on the Statistics tab') +
+      '</div>' +
     '</div>';
 
   renderAuxPreview();
+}
+
+function runAuxAnalysis() {
+  if (!auxFile || !auxPreflightData) return;
+  if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
+  auxWorker = new Worker(workerUrl);
+
+  var $btn = document.getElementById('auxAnalyzeBtn');
+  var $status = document.getElementById('auxAnalyzeStatus');
+  if ($btn) $btn.disabled = true;
+  if ($status) { $status.textContent = '0%'; $status.style.color = ''; }
+
+  function fail(msg) {
+    if ($btn) $btn.disabled = false;
+    if ($status) { $status.textContent = 'Error: ' + msg; $status.style.color = 'var(--red)'; }
+    if (auxWorker) { auxWorker.terminate(); auxWorker = null; }
+  }
+
+  var xyz = auxPreflightData.xyz || { x: -1, y: -1, z: -1 };
+  // Force every column's type from the preflight sample: the worker then
+  // skips its detection warmup, whose rows are excluded from stats —
+  // negligible on block models but a real bias on small sample files
+  var auxTypeOverrides = {};
+  for (var ti = 0; ti < auxPreflightData.autoTypes.length; ti++) {
+    auxTypeOverrides[ti] = auxPreflightData.autoTypes[ti];
+  }
+  auxWorker.postMessage({
+    file: auxFile,
+    xyzOverride: xyz.x >= 0 && xyz.y >= 0 && xyz.z >= 0 ? xyz : null,
+    filter: auxFilter ? { expression: auxFilter.expression } : null,
+    typeOverrides: auxTypeOverrides,
+    zipEntry: auxPreflightData.selectedZipEntry || null,
+    skipCols: [],
+    colFilters: {},
+    calcolCode: null,
+    calcolMeta: null,
+    groupBy: null,
+    groupStatsCols: null,
+    dxyzOverride: null,
+    dmEndianness: auxPreflightData.dmEndianness || null,
+    dmFormat: auxPreflightData.dmFormat || null,
+    rowVarOverride: AUX_ROW_VAR
+  });
+
+  auxWorker.onerror = function(e) { fail(e.message || 'unknown error'); };
+  auxWorker.onmessage = function(e) {
+    var m = e.data;
+    if (m.type === 'progress') {
+      if ($status) $status.textContent = Math.min(99, m.percent).toFixed(0) + '%';
+    } else if (m.type === 'complete') {
+      auxCompleteData = { header: m.header, colTypes: m.colTypes, stats: m.stats, rowCount: m.rowCount };
+      auxStale = false;
+      if ($btn) $btn.disabled = false;
+      if ($status) { $status.textContent = m.rowCount.toLocaleString() + ' rows analyzed'; $status.style.color = ''; }
+      auxWorker.terminate();
+      auxWorker = null;
+      if (typeof applyStatsAuxRestore === 'function') applyStatsAuxRestore();
+      if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
+        renderStatsSidebar();
+        renderStatsTable();
+        renderStatsCdfPanel();
+      }
+      autoSaveProject();
+    } else if (m.type === 'error') {
+      fail(m.message);
+    }
+  };
 }
 
 function renderAuxPreview() {
@@ -74,6 +150,12 @@ function onAuxConfigChange() {
   if (x && y && z) auxPreflightData.xyz = { x: parseInt(x.value), y: parseInt(y.value), z: parseInt(z.value) };
   var f = document.getElementById('auxFilterInput');
   if (f) { var v = f.value.trim(); auxFilter = v ? { expression: v } : null; }
+  // Completed aux analysis no longer reflects the config — flag it
+  if (auxCompleteData && !auxStale) {
+    auxStale = true;
+    var $st = document.getElementById('auxAnalyzeStatus');
+    if ($st) { $st.textContent = 'Config changed — re-run Analyze'; $st.style.color = 'var(--amber)'; }
+  }
   // Live-update the prefix hint without a full re-render (keeps focus/caret)
   var hint = $auxSidebar.querySelector('.pf-sidebar-section .aux-hint code');
   if (hint && p) hint.textContent = (auxPrefix || 'aux') + ':Fe';
@@ -123,6 +205,9 @@ function clearAux() {
   auxData = null;
   auxFilter = null;
   auxPrefix = 'aux';
+  auxStale = false;
+  statsAuxSelected = null;
+  statsCdfAuxSelected = new Set();
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
   if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
   $auxConfig.style.display = 'none';
@@ -130,6 +215,11 @@ function clearAux() {
   $auxSidebar.innerHTML = '';
   $auxPreview.innerHTML = '';
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
+  if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
+    renderStatsSidebar();
+    renderStatsTable();
+    renderStatsCdfPanel();
+  }
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
 
@@ -173,6 +263,9 @@ if ($auxDropzone) {
   if ($auxSidebar) {
     $auxSidebar.addEventListener('input', onAuxConfigChange);
     $auxSidebar.addEventListener('change', onAuxConfigChange);
+    $auxSidebar.addEventListener('click', function(e) {
+      if (e.target && e.target.id === 'auxAnalyzeBtn') runAuxAnalysis();
+    });
   }
   var $auxClearBtn = document.getElementById('auxClear');
   if ($auxClearBtn) $auxClearBtn.addEventListener('click', clearAux);

@@ -360,7 +360,11 @@ function serializeProject() {
       visibleMetrics: statsVisibleMetrics ? Array.from(statsVisibleMetrics) : null,
       percentiles: statsPercentiles,
       cdfSelected: Array.from(statsCdfSelected),
-      cdfScale: statsCdfScale
+      cdfScale: statsCdfScale,
+      auxSelected: (auxCompleteData && statsAuxSelected !== null)
+        ? Array.from(statsAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null,
+      cdfAuxSelected: (auxCompleteData && statsCdfAuxSelected.size > 0)
+        ? Array.from(statsCdfAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null
     },
     categories: {
       focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null,
@@ -629,6 +633,7 @@ function clearProject() {
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
   statsCdfScale = 'linear';
+  pendingStatsAuxRestore = null;
   exportColumns = [];
   pendingProjectRestore = null;
   resetExportSettings();
@@ -712,6 +717,7 @@ function handleFile(file, handle) {
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
   statsCdfScale = 'linear';
+  pendingStatsAuxRestore = null;
   exportColumns = [];
   pendingProjectRestore = null;
   resetExportSettings();
@@ -867,6 +873,7 @@ $backToPreflight.addEventListener('click', () => {
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
   statsCdfScale = 'linear';
+  pendingStatsAuxRestore = null;
   exportColumns = [];
   pendingProjectRestore = null;
   if (exportWorker) { exportWorker.terminate(); exportWorker = null; }
@@ -1285,6 +1292,10 @@ function displayResults(data) {
     if (st.percentiles) statsPercentiles = st.percentiles;
     if (st.cdfSelected) statsCdfSelected = new Set(st.cdfSelected);
     if (st.cdfScale) statsCdfScale = st.cdfScale;
+    if (st.auxSelected || st.cdfAuxSelected) {
+      pendingStatsAuxRestore = { selected: st.auxSelected || null, cdf: st.cdfAuxSelected || null };
+      applyStatsAuxRestore(); // no-op until aux analysis exists; consumed then
+    }
 
     // Re-render stats tab with restored state
     if (lastDisplayedStats && lastDisplayedHeader) {

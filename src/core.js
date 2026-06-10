@@ -23,6 +23,10 @@ let auxFilter = null;          // { expression } — references aux columns via 
 let auxWorker = null;          // worker handle for the aux analysis pass
 let pendingAuxRestore = null;  // aux config from a loaded project, applied once the aux file is (re)loaded
 const AUX_ROW_VAR = 'aux';     // fixed code handle for aux filter/calc expressions (NOT the display prefix)
+let auxStale = false;              // aux config changed since last aux analysis
+let statsAuxSelected = null;       // Set of aux col indices shown in the stats table (null = defaults)
+let statsCdfAuxSelected = new Set(); // aux col indices with CDF curves
+let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes
 
 var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
 
@@ -308,7 +312,8 @@ var _helpTabs = {
       '<div class="help-section"><div class="help-section-title">Configuration</div>' +
       '<div class="help-row"><span><strong>Display prefix</strong> — cosmetic label for aux variables (e.g. <code>aux:Fe</code>). Does not affect expressions.</span></div>' +
       '<div class="help-row"><span><strong>Coordinates</strong> — assign X/Y/Z. Aux and the block model must share the same coordinate space for swath overlays to align.</span></div>' +
-      '<div class="help-row"><span><strong>Aux filter</strong> — pre-filter aux rows. Reference aux columns as <code>aux.</code>… regardless of the display prefix.</span></div></div>' +
+      '<div class="help-row"><span><strong>Aux filter</strong> — pre-filter aux rows. Reference aux columns as <code>aux.</code>… regardless of the display prefix.</span></div>' +
+      '<div class="help-row"><span><strong>Analyze</strong> — run the full aux statistics pass. Required for the Statistics-tab comparison and CDF overlay; the Swath overlay runs its own pass and does not need it.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Scope</div>' +
       '<div class="help-row"><span>Comparison is statistical/spatial — aux is a separate set of rows, not extra columns. No geometry, export, or per-row joins.</span></div></div>'
   },
@@ -366,7 +371,10 @@ var _helpTabs = {
       '<div class="help-row"><span><strong>Percentiles</strong> \u2014 customize which percentiles are shown (preset or custom comma-separated)</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">CDF</div>' +
       '<div class="help-row"><span>Click the <strong>CDF</strong> link on any variable row to open a cumulative distribution overlay.</span></div>' +
-      '<div class="help-row"><span>Toggle multiple variables to compare CDFs. Linear or log scale.</span></div></div>'
+      '<div class="help-row"><span>Toggle multiple variables to compare CDFs. Linear or log scale.</span></div></div>' +
+      '<div class="help-section"><div class="help-section-title">Aux comparison</div>' +
+      '<div class="help-row"><span>After running <strong>Analyze</strong> on the Aux tab, aux variables appear at the bottom of the sidebar. A same-named aux variable shows as an indented row right under its model counterpart — mean against mean, CV against CV.</span></div>' +
+      '<div class="help-row"><span>Click an aux row’s name to overlay its CDF as a dashed curve. A steeper model CDF over a flatter sample CDF is the classic kriging smoothing signature.</span></div></div>'
   },
   categories: {
     title: 'Categories',
