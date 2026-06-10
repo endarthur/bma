@@ -3659,6 +3659,19 @@ table.cat-values td.cat-pct-cell {
 .aux-preview-table th { background: var(--bg2); color: var(--fg-bright); position: sticky; top: 0; }
 .aux-preview-table td { color: var(--fg-dim); }
 
+.aux-remove-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  padding: 0.25rem 0.6rem;
+  border-radius: 3px;
+  cursor: pointer;
+  font: 0.65rem var(--mono);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.aux-remove-btn:hover { color: var(--red); border-color: var(--red); }
+
 /* Aux rows in the swath variable list */
 .swath-aux-divider {
   font: 0.6rem var(--mono); color: var(--fg-dim); letter-spacing: 0.06em;

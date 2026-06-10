@@ -1540,6 +1540,9 @@ async function gtAnalysis(data) {
   var gradeCols = data.gradeCols;
   var gradeRanges = data.gradeRanges;
 
+  // Constant density (t/m3) — takes precedence over a density column
+  var densityConst = (data.densityConst != null && data.densityConst > 0) ? data.densityConst : null;
+
   var csvFile = file;
   if (isZipFile(file)) {
     try { csvFile = await extractCSVFromZip(file, zipEntry); }
@@ -1694,7 +1697,9 @@ async function gtAnalysis(data) {
         volume = blockVolume;
       }
       var density = 1;
-      if (densityColName) {
+      if (densityConst != null) {
+        density = densityConst;
+      } else if (densityColName) {
         var dv = row[densityColName];
         if (typeof dv === 'number' && isFinite(dv) && dv > 0) density = dv;
       }
@@ -1729,7 +1734,8 @@ async function gtAnalysis(data) {
           lVol = blockVolume;
         }
         var lDen = 1;
-        if (densityColName) { var ldv = lastRow[densityColName]; if (typeof ldv === 'number' && isFinite(ldv) && ldv > 0) lDen = ldv; }
+        if (densityConst != null) lDen = densityConst;
+        else if (densityColName) { var ldv = lastRow[densityColName]; if (typeof ldv === 'number' && isFinite(ldv) && ldv > 0) lDen = ldv; }
         var lWt = 1;
         if (weightColName) { var lwv = lastRow[weightColName]; if (typeof lwv === 'number' && isFinite(lwv) && lwv > 0) lWt = lwv; }
         var lTon = lVol * lDen * lWt;

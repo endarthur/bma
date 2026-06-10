@@ -451,7 +451,8 @@ function serializeProject() {
       return {
         gradeCols: gradeCols,
         groupByCol: gb && gb.value !== '-1' && gb.options[gb.selectedIndex] ? gb.options[gb.selectedIndex].textContent : null,
-        densityCol: (function() { var d = document.getElementById('gtDensityCol'); return d && d.value !== '-1' && d.options[d.selectedIndex] ? d.options[d.selectedIndex].textContent : null; })(),
+        densityCol: (function() { var d = document.getElementById('gtDensityCol'); return d && d.value !== '-1' && d.value !== 'const' && d.options[d.selectedIndex] ? d.options[d.selectedIndex].textContent : null; })(),
+        densityConst: (function() { var d = document.getElementById('gtDensityCol'); var c = document.getElementById('gtDensityConst'); return d && d.value === 'const' && c ? (parseFloat(c.value) || null) : null; })(),
         weightCol: (function() { var w = document.getElementById('gtWeightCol'); return w && w.value !== '-1' && w.options[w.selectedIndex] ? w.options[w.selectedIndex].textContent : null; })(),
         localFilter: (document.getElementById('gtLocalFilter') || {}).value || '',
         cutoffMode: mode,
@@ -1367,6 +1368,13 @@ function displayResults(data) {
       for (var di = 0; di < $gDensity.options.length; di++) {
         if ($gDensity.options[di].textContent === gtp.densityCol) { $gDensity.value = $gDensity.options[di].value; break; }
       }
+    }
+    if ($gDensity && gtp.densityConst != null) {
+      $gDensity.value = 'const';
+      var $gDenConst = document.getElementById('gtDensityConst');
+      var $gDenWrap = document.getElementById('gtDensityConstWrap');
+      if ($gDenConst) $gDenConst.value = gtp.densityConst;
+      if ($gDenWrap) $gDenWrap.style.display = 'flex';
     }
     if ($gWeight && gtp.weightCol) {
       for (var wi = 0; wi < $gWeight.options.length; wi++) {

@@ -64,10 +64,12 @@ function renderGtConfig(data) {
       '<select class="gt-var-unit" data-col="' + c.idx + '">' + opts + '</select></label>';
   }).join('');
 
-  var densityOpts = '<option value="-1">\u2014 none</option>' + gtNumCols.map(function(c) {
+  var numColOpts = gtNumCols.map(function(c) {
     return '<option value="' + c.idx + '">' + esc(c.name) + '</option>';
   }).join('');
-  var weightOpts = densityOpts;
+  var densityOpts = '<option value="-1">\u2014 none (tonnage = volume)</option>' +
+    '<option value="const">Constant\u2026</option>' + numColOpts;
+  var weightOpts = '<option value="-1">\u2014 none</option>' + numColOpts;
 
   var tonnageUnitOpts = GT_TONNAGE_UNITS.map(function(u, i) {
     return '<option value="' + i + '">' + esc(u.label) + '</option>';
@@ -98,6 +100,10 @@ function renderGtConfig(data) {
     '<div class="gt-sidebar-section">' +
       '<div class="gt-sidebar-title">Density (optional)</div>' +
       '<select class="gt-select" id="gtDensityCol">' + densityOpts + '</select>' +
+      '<div id="gtDensityConstWrap" style="display:none;margin-top:0.3rem;align-items:center;gap:0.3rem">' +
+        '<input type="number" class="gt-input" id="gtDensityConst" value="2.7" min="0" step="any" placeholder="2.7">' +
+        '<span style="font-size:0.55rem;color:var(--fg-dim);white-space:nowrap">t/m³</span>' +
+      '</div>' +
     '</div>' +
     '<div class="gt-sidebar-section">' +
       '<div class="gt-sidebar-title">Weight (optional)</div>' +
@@ -215,6 +221,10 @@ function renderGtConfig(data) {
     var idx = parseInt($tonnageUnit.value);
     document.getElementById('gtCustomTonnageWrap').style.display = GT_TONNAGE_UNITS[idx].divisor === null ? '' : 'none';
     if (lastGtData) renderGtOutput();
+  });
+  // Constant density input toggle
+  document.getElementById('gtDensityCol').addEventListener('change', function() {
+    document.getElementById('gtDensityConstWrap').style.display = this.value === 'const' ? 'flex' : 'none';
   });
   // Per-variable grade unit change — re-render if results exist
   document.getElementById('gtVarList').addEventListener('change', function(e) {
@@ -337,7 +347,13 @@ function runGt() {
   var gradeCols = getGtCheckedGradeCols();
   if (gradeCols.length === 0) return;
 
-  var densityCol = parseInt(document.getElementById('gtDensityCol').value);
+  var densitySel = document.getElementById('gtDensityCol').value;
+  var densityCol = densitySel === 'const' ? -1 : parseInt(densitySel);
+  var densityConst = null;
+  if (densitySel === 'const') {
+    densityConst = parseFloat(document.getElementById('gtDensityConst').value);
+    if (!(densityConst > 0)) densityConst = null;
+  }
   var weightCol = parseInt(document.getElementById('gtWeightCol').value);
   var groupByCol = parseInt(document.getElementById('gtGroupBy').value);
   var localFilter = document.getElementById('gtLocalFilter').value.trim();
@@ -406,6 +422,7 @@ function runGt() {
     gradeCols: gradeCols,
     gradeRanges: gradeRanges,
     densityCol: densityCol >= 0 ? densityCol : null,
+    densityConst: densityConst,
     weightCol: weightCol >= 0 ? weightCol : null,
     dxyzCols: dxyzCols,
     blockVolume: blockVolume,
@@ -491,6 +508,10 @@ function renderGtOutput() {
     if (gradeResults.length > 1) {
       html += '<div class="gt-chart-title">' + esc(gr.colName) + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') + '</div>';
     }
+    html += '<div class="swath-chart-toolbar">' +
+      '<button class="swath-chart-btn" data-gt-copysvg="' + gi + '">Copy SVG</button>' +
+      '<button class="swath-chart-btn" data-gt-png="' + gi + '" data-col-name="' + esc(gr.colName || '') + '">Download PNG</button>' +
+    '</div>';
     html += '<div class="gt-chart-wrap">' + renderGtChart(gr, cutoffs, units, isGrouped, gi, selectedGroups, showTotal) + '</div>';
     // Collapsible table with per-table copy button
     var tableTitle = gradeResults.length > 1 ? esc(gr.colName) + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') : 'Table';
@@ -525,6 +546,14 @@ function renderGtOutput() {
         setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
       });
     });
+  });
+
+  // Wire chart export buttons
+  $content.querySelectorAll('[data-gt-copysvg]').forEach(function(btn) {
+    btn.addEventListener('click', function() { copyGtSvg(btn.dataset.gtCopysvg, btn); });
+  });
+  $content.querySelectorAll('[data-gt-png]').forEach(function(btn) {
+    btn.addEventListener('click', function() { downloadGtPng(btn.dataset.gtPng, btn.dataset.colName); });
   });
 
   // Wire collapsible table headers
@@ -760,12 +789,72 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
   svg += '<line class="gt-crosshair-line" x1="0" y1="' + pad.top + '" x2="0" y2="' + (H - pad.bottom) + '" stroke="var(--fg-dim)" stroke-width="1" opacity="0" stroke-dasharray="3,3"/>';
   svg += '<g class="gt-crosshair-tooltip" opacity="0"><rect class="gt-tt-bg" rx="3" ry="3"/><text class="gt-tt-text" font-size="9"></text></g>';
 
+  // Variable title inside the SVG, so copied/downloaded charts identify themselves
+  var chartTitle = esc(grData.colName || '') +
+    (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') + ' — Grade-Tonnage';
+
   return '<svg class="gt-svg" data-chart-idx="' + chartIdx + '" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono);width:100%;height:auto" ' +
     'data-pad-left="' + pad.left + '" data-pad-right="' + pad.right + '" data-pad-top="' + pad.top + '" data-pad-bottom="' + pad.bottom + '" ' +
     'data-w="' + W + '" data-h="' + H + '" data-xmin="' + xMin + '" data-xmax="' + xMax + '">' +
     '<rect width="' + W + '" height="' + H + '" fill="var(--bg)" rx="4"/>' +
+    '<text x="' + (W / 2) + '" y="17" text-anchor="middle" fill="#6a737d" font-size="11" font-weight="600">' + chartTitle + '</text>' +
     svg +
     '</svg>';
+}
+
+function copyGtSvg(chartIdx, btn) {
+  var svgEl = document.querySelector('.gt-svg[data-chart-idx="' + chartIdx + '"]');
+  if (!svgEl) return;
+  navigator.clipboard.writeText(svgEl.outerHTML).then(function() {
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = 'Copy SVG'; }, 1500);
+  });
+}
+
+function downloadGtPng(chartIdx, colName) {
+  var svgEl = document.querySelector('.gt-svg[data-chart-idx="' + chartIdx + '"]');
+  if (!svgEl) return;
+  var clone = svgEl.cloneNode(true);
+  var area = clone.querySelector('.gt-crosshair-area');
+  var crossLine = clone.querySelector('.gt-crosshair-line');
+  var ttGroup = clone.querySelector('.gt-crosshair-tooltip');
+  if (area) area.remove();
+  if (crossLine) crossLine.remove();
+  if (ttGroup) ttGroup.remove();
+  var svgData = new XMLSerializer().serializeToString(clone);
+  // Resolve series colors from the live theme, retheme neutrals for light bg
+  var cs = getComputedStyle(document.documentElement);
+  function cssVar(name, fallback) { var v = cs.getPropertyValue(name).trim(); return v || fallback; }
+  svgData = svgData.replace(/var\(--amber\)/g, cssVar('--amber', '#b87333'));
+  svgData = svgData.replace(/var\(--blue\)/g, cssVar('--blue', '#2563eb'));
+  svgData = svgData.replace(/var\(--green\)/g, cssVar('--green', '#1a7a52'));
+  svgData = svgData.replace(/fill="var\(--bg\)"/g, 'fill="white"');
+  svgData = svgData.replace(/var\(--bg1\)/g, '#f5f5f5');
+  svgData = svgData.replace(/var\(--fg-dim\)/g, '#555');
+  svgData = svgData.replace(/var\(--fg\)/g, '#333');
+  svgData = svgData.replace(/var\(--border\)/g, '#ddd');
+  svgData = svgData.replace(/fill="#6a737d"/g, 'fill="#333"');
+  svgData = svgData.replace(/stroke="#1e2228"/g, 'stroke="#ddd"');
+  svgData = svgData.replace(/style="font-family:var\(--mono\)[^"]*"/g, 'style="font-family:monospace"');
+  var canvas = document.createElement('canvas');
+  var scale = 2;
+  var vb = svgEl.getAttribute('viewBox').split(' ').map(Number);
+  canvas.width = vb[2] * scale;
+  canvas.height = vb[3] * scale;
+  var ctx = canvas.getContext('2d');
+  var img = new Image();
+  img.onload = function() {
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(function(blob) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'gt_' + (colName || 'plot').replace(/[^\w-]+/g, '_') + '.png';
+      a.click();
+      URL.revokeObjectURL(url);
+    }, 'image/png');
+  };
+  img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
 }
 
 function wireGtCrosshair(grData, cutoffs, units, chartIdx) {
