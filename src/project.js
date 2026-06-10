@@ -473,6 +473,12 @@ function serializeProject() {
         tonnageUnit: parseInt((document.getElementById('gtTonnageUnit') || {}).value) || 0,
         customTonnageSym: (document.getElementById('gtCustomTonnageSym') || {}).value || '',
         customTonnageDiv: parseFloat((document.getElementById('gtCustomTonnageDiv') || {}).value) || null,
+        metalUnit: parseInt((document.getElementById('gtMetalUnit') || {}).value) || 0,
+        customMetalSym: (document.getElementById('gtCustomMetalSym') || {}).value || '',
+        customMetalDiv: parseFloat((document.getElementById('gtCustomMetalDiv') || {}).value) || null,
+        tonnageDp: (document.getElementById('gtTonnageDp') || {}).value || '',
+        gradeDp: (document.getElementById('gtGradeDp') || {}).value || '',
+        metalDp: (document.getElementById('gtMetalDp') || {}).value || '',
         gradeUnits: (function() {
           var gu = {};
           document.querySelectorAll('.gt-var-unit').forEach(function(sel) {
@@ -1640,6 +1646,21 @@ function displayResults(data) {
     var $gCTDiv = document.getElementById('gtCustomTonnageDiv');
     if ($gCTSym && gtp.customTonnageSym) $gCTSym.value = gtp.customTonnageSym;
     if ($gCTDiv && gtp.customTonnageDiv) $gCTDiv.value = gtp.customTonnageDiv;
+    var $gMetalUnit = document.getElementById('gtMetalUnit');
+    if ($gMetalUnit && gtp.metalUnit != null) {
+      $gMetalUnit.value = gtp.metalUnit;
+      $gMetalUnit.dispatchEvent(new Event('change'));
+    }
+    var $gCMSym = document.getElementById('gtCustomMetalSym');
+    var $gCMDiv = document.getElementById('gtCustomMetalDiv');
+    if ($gCMSym && gtp.customMetalSym) $gCMSym.value = gtp.customMetalSym;
+    if ($gCMDiv && gtp.customMetalDiv) $gCMDiv.value = gtp.customMetalDiv;
+    var $gTDp = document.getElementById('gtTonnageDp');
+    var $gGDp = document.getElementById('gtGradeDp');
+    var $gMDp = document.getElementById('gtMetalDp');
+    if ($gTDp && gtp.tonnageDp) $gTDp.value = gtp.tonnageDp;
+    if ($gGDp && gtp.gradeDp) $gGDp.value = gtp.gradeDp;
+    if ($gMDp && gtp.metalDp) $gMDp.value = gtp.metalDp;
 
     // Per-variable grade units
     var gradeUnits = gtp.gradeUnits || null;

@@ -12,7 +12,7 @@ function renderCategoriesTab(categories, header, origColCount, rowCount) {
     $catColList.innerHTML = '';
     $catToolbar.innerHTML = '';
     $catChart.innerHTML = '';
-    $catValueTable.querySelector('tbody').innerHTML = '';
+    $catValueTable.innerHTML = '<tbody></tbody>'; // loading a new file may have emptied the table entirely
     $catValueSearch.style.display = 'none';
     $catMainContent.innerHTML = '<div class="cat-empty">No categorical columns detected.</div>';
     return;
