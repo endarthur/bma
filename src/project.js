@@ -176,7 +176,8 @@ function promptReselect(name) {
     window.showOpenFilePicker({
       types: [
         { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
-        { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } }
+        { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } },
+        { description: 'Datamine files', accept: { 'application/octet-stream': ['.dm'] } }
       ],
       multiple: false
     }).then(function(handles) {
@@ -392,13 +393,25 @@ function serializeProject() {
         var colName = currentHeader[colIdx];
         if (colName && parseInt(sel.value) !== 0) swathUnits[colName] = parseInt(sel.value);
       });
+      var $azimuth = document.getElementById('swathAzimuth');
+      var $plunge = document.getElementById('swathPlunge');
       return {
         axis: $axis.value,
         binWidth: parseFloat($binWidth.value) || 0,
         stat: $stat ? $stat.value : 'mean_std',
         checkedVars: checkedVars,
         localFilter: $filter ? $filter.value : '',
-        units: Object.keys(swathUnits).length > 0 ? swathUnits : null
+        azimuth: $axis.value === 'custom' ? (parseFloat($azimuth.value) || 0) : null,
+        plunge: $axis.value === 'custom' ? (parseFloat($plunge.value) || 0) : null,
+        units: Object.keys(swathUnits).length > 0 ? swathUnits : null,
+        colorOverrides: Object.keys(swathColorOverrides).length > 0 ? swathColorOverrides : null,
+        display: {
+          showBands: document.getElementById('swathShowBands') ? document.getElementById('swathShowBands').checked : true,
+          showCounts: document.getElementById('swathShowCounts') ? document.getElementById('swathShowCounts').checked : true,
+          showTable: document.getElementById('swathShowTable') ? document.getElementById('swathShowTable').checked : true,
+          yScale: (document.getElementById('swathYScale') || {}).value || 'linear',
+          layout: (document.getElementById('swathLayout') || {}).value || 'overlay'
+        }
       };
     })(),
     gt: (function() {
@@ -1016,7 +1029,9 @@ function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerpr
     calcolCode: currentCalcolCode || null,
     calcolMeta: currentCalcolMeta.length > 0 ? currentCalcolMeta : null,
     groupBy: currentGroupBy,
-    groupStatsCols: currentGroupBy !== null && statsCatSelectedVars.size > 0 ? Array.from(statsCatSelectedVars) : null
+    groupStatsCols: currentGroupBy !== null && statsCatSelectedVars.size > 0 ? Array.from(statsCatSelectedVars) : null,
+    dmEndianness: preflightData && preflightData.dmEndianness || null,
+    dmFormat: preflightData && preflightData.dmFormat || null
   });
 }
 
@@ -1392,6 +1407,12 @@ function displayResults(data) {
     var $sStat = document.getElementById('swathStat');
     var $sFilter = document.getElementById('swathLocalFilter');
     if ($sAxis && swp.axis) $sAxis.value = swp.axis;
+    var $sAzRow = document.getElementById('swathAzimuthRow');
+    var $sAzimuth = document.getElementById('swathAzimuth');
+    var $sPlunge = document.getElementById('swathPlunge');
+    if ($sAzRow) $sAzRow.style.display = swp.axis === 'custom' ? '' : 'none';
+    if ($sAzimuth && swp.azimuth != null) $sAzimuth.value = swp.azimuth;
+    if ($sPlunge && swp.plunge != null) $sPlunge.value = swp.plunge;
     if ($sBinWidth && swp.binWidth) $sBinWidth.value = swp.binWidth;
     if ($sStat && swp.stat) $sStat.value = swp.stat;
     if ($sFilter && swp.localFilter) $sFilter.value = swp.localFilter;
@@ -1411,6 +1432,23 @@ function displayResults(data) {
         var colName = currentHeader[colIdx];
         if (colName && swp.units[colName] != null) sel.value = swp.units[colName];
       });
+    }
+    // Restore swath color overrides
+    if (swp.colorOverrides) {
+      swathColorOverrides = swp.colorOverrides;
+      document.querySelectorAll('#swathVarList .swath-color-swatch').forEach(function(sw) {
+        var colIdx = parseInt(sw.dataset.col);
+        var colName = currentHeader[colIdx];
+        if (colName && swathColorOverrides[colName]) sw.style.background = swathColorOverrides[colName];
+      });
+    }
+    // Restore swath display options
+    if (swp.display) {
+      if (document.getElementById('swathShowBands')) document.getElementById('swathShowBands').checked = swp.display.showBands !== false;
+      if (document.getElementById('swathShowCounts')) document.getElementById('swathShowCounts').checked = swp.display.showCounts !== false;
+      if (document.getElementById('swathShowTable')) document.getElementById('swathShowTable').checked = swp.display.showTable !== false;
+      if (document.getElementById('swathYScale') && swp.display.yScale) document.getElementById('swathYScale').value = swp.display.yScale;
+      if (document.getElementById('swathLayout') && swp.display.layout) document.getElementById('swathLayout').value = swp.display.layout;
     }
   }
 

@@ -409,7 +409,9 @@ function runGt() {
     weightCol: weightCol >= 0 ? weightCol : null,
     dxyzCols: dxyzCols,
     blockVolume: blockVolume,
-    groupByCol: groupByCol >= 0 ? groupByCol : null
+    groupByCol: groupByCol >= 0 ? groupByCol : null,
+    dmEndianness: preflightData && preflightData.dmEndianness || null,
+    dmFormat: preflightData && preflightData.dmFormat || null
   });
 
   gtWorker.onerror = function(e) {

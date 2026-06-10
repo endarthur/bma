@@ -558,6 +558,18 @@ header .logo-mark {
   color: var(--amber);
   border-color: var(--amber);
 }
+.pf-const-badge {
+  font-size: 0.5rem;
+  padding: 0.06rem 0.25rem;
+  border-radius: 2px;
+  border: 1px solid rgba(184,115,51,0.35);
+  color: var(--amber);
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.45;
+  cursor: default;
+}
 .pf-filter-btn {
   font-size: 0.5rem;
   padding: 0.06rem 0.2rem;
@@ -2966,6 +2978,7 @@ table.cat-values td.cat-pct-cell {
   flex-direction: column;
   overflow: hidden;
   background: var(--bg1);
+  position: relative;
 }
 .swath-sidebar-section {
   padding: 0.5rem 0.7rem;
@@ -3043,6 +3056,13 @@ table.cat-values td.cat-pct-cell {
 }
 .swath-var-item:hover { background: var(--bg2); }
 .swath-var-item input { cursor: pointer; accent-color: var(--amber); flex-shrink: 0; }
+.swath-color-swatch {
+  width: 14px; height: 14px;
+  border-radius: 3px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.15);
+  flex-shrink: 0;
+}
+.swath-color-swatch:hover { border-color: var(--fg-bright); }
 .swath-var-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 .swath-var-unit {
   margin-left: auto;
@@ -3064,6 +3084,12 @@ table.cat-values td.cat-pct-cell {
 }
 .swath-var-btns button:hover { border-color: var(--fg-dim); color: var(--fg); }
 .swath-unit-sync { margin-left: auto; }
+.swath-display-opt {
+  display: flex; align-items: center; gap: 0.35rem;
+  font-size: 0.72rem; color: var(--fg); cursor: pointer;
+  padding: 0.15rem 0;
+}
+.swath-display-opt input { accent-color: var(--amber); cursor: pointer; }
 .swath-generate {
   background: var(--amber); color: var(--bg); border: none;
   padding: 0.4rem 1rem; border-radius: 3px; cursor: pointer;
@@ -3071,6 +3097,13 @@ table.cat-values td.cat-pct-cell {
 }
 .swath-generate:hover { filter: brightness(1.15); }
 .swath-generate:disabled { opacity: 0.4; cursor: not-allowed; }
+.swath-color-picker {
+  display: none; position: absolute; z-index: 100;
+  background: var(--bg1); border: 1px solid var(--border);
+  border-radius: 6px; padding: 0.5rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5); width: 175px;
+}
+.swath-color-picker.open { display: block; }
 .swath-progress { display: none; margin-top: 0.4rem; }
 .swath-progress.active { display: block; }
 .swath-progress-bar { height: 4px; background: var(--bg2); border-radius: 2px; overflow: hidden; }
@@ -3085,7 +3118,16 @@ table.cat-values td.cat-pct-cell {
 .swath-chart-card {
   margin-bottom: 1.5rem;
 }
-.swath-chart-card svg { width: 100%; height: auto; max-height: 500px; }
+.swath-chart-toolbar {
+  display: flex; gap: 0.4rem; margin-bottom: 0.35rem;
+}
+.swath-chart-btn {
+  background: none; border: 1px solid var(--border);
+  color: var(--fg-dim); font: 0.65rem var(--mono);
+  padding: 0.2rem 0.6rem; border-radius: 3px; cursor: pointer;
+}
+.swath-chart-btn:hover { border-color: var(--fg-dim); color: var(--fg); }
+.swath-chart-card svg { width: 100%; height: auto; }
 .swath-hint { color: var(--fg-dim); font-size: 0.78rem; padding: 2rem; text-align: center; opacity: 0.5; }
 .swath-table-section { margin-top: 0.5rem; border: 1px solid var(--border); border-radius: 4px; }
 .swath-table-header {

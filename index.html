@@ -571,6 +571,18 @@ header .logo-mark {
   color: var(--amber);
   border-color: var(--amber);
 }
+.pf-const-badge {
+  font-size: 0.5rem;
+  padding: 0.06rem 0.25rem;
+  border-radius: 2px;
+  border: 1px solid rgba(184,115,51,0.35);
+  color: var(--amber);
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.45;
+  cursor: default;
+}
 .pf-filter-btn {
   font-size: 0.5rem;
   padding: 0.06rem 0.2rem;
@@ -2979,6 +2991,7 @@ table.cat-values td.cat-pct-cell {
   flex-direction: column;
   overflow: hidden;
   background: var(--bg1);
+  position: relative;
 }
 .swath-sidebar-section {
   padding: 0.5rem 0.7rem;
@@ -3056,6 +3069,13 @@ table.cat-values td.cat-pct-cell {
 }
 .swath-var-item:hover { background: var(--bg2); }
 .swath-var-item input { cursor: pointer; accent-color: var(--amber); flex-shrink: 0; }
+.swath-color-swatch {
+  width: 14px; height: 14px;
+  border-radius: 3px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.15);
+  flex-shrink: 0;
+}
+.swath-color-swatch:hover { border-color: var(--fg-bright); }
 .swath-var-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 .swath-var-unit {
   margin-left: auto;
@@ -3077,6 +3097,12 @@ table.cat-values td.cat-pct-cell {
 }
 .swath-var-btns button:hover { border-color: var(--fg-dim); color: var(--fg); }
 .swath-unit-sync { margin-left: auto; }
+.swath-display-opt {
+  display: flex; align-items: center; gap: 0.35rem;
+  font-size: 0.72rem; color: var(--fg); cursor: pointer;
+  padding: 0.15rem 0;
+}
+.swath-display-opt input { accent-color: var(--amber); cursor: pointer; }
 .swath-generate {
   background: var(--amber); color: var(--bg); border: none;
   padding: 0.4rem 1rem; border-radius: 3px; cursor: pointer;
@@ -3084,6 +3110,13 @@ table.cat-values td.cat-pct-cell {
 }
 .swath-generate:hover { filter: brightness(1.15); }
 .swath-generate:disabled { opacity: 0.4; cursor: not-allowed; }
+.swath-color-picker {
+  display: none; position: absolute; z-index: 100;
+  background: var(--bg1); border: 1px solid var(--border);
+  border-radius: 6px; padding: 0.5rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5); width: 175px;
+}
+.swath-color-picker.open { display: block; }
 .swath-progress { display: none; margin-top: 0.4rem; }
 .swath-progress.active { display: block; }
 .swath-progress-bar { height: 4px; background: var(--bg2); border-radius: 2px; overflow: hidden; }
@@ -3098,7 +3131,16 @@ table.cat-values td.cat-pct-cell {
 .swath-chart-card {
   margin-bottom: 1.5rem;
 }
-.swath-chart-card svg { width: 100%; height: auto; max-height: 500px; }
+.swath-chart-toolbar {
+  display: flex; gap: 0.4rem; margin-bottom: 0.35rem;
+}
+.swath-chart-btn {
+  background: none; border: 1px solid var(--border);
+  color: var(--fg-dim); font: 0.65rem var(--mono);
+  padding: 0.2rem 0.6rem; border-radius: 3px; cursor: pointer;
+}
+.swath-chart-btn:hover { border-color: var(--fg-dim); color: var(--fg); }
+.swath-chart-card svg { width: 100%; height: auto; }
 .swath-hint { color: var(--fg-dim); font-size: 0.78rem; padding: 2rem; text-align: center; opacity: 0.5; }
 .swath-table-section { margin-top: 0.5rem; border: 1px solid var(--border); border-radius: 4px; }
 .swath-table-header {
@@ -3627,14 +3669,14 @@ table.cat-values td.cat-pct-cell {
   <div class="dropzone" id="dropzone">
     <div class="label">Drop a CSV file here, or <strong>click to browse</strong></div>
     <div class="hint">Supports .csv, .txt, .dat, .zip — streamed, not loaded into memory</div>
-    <input type="file" id="fileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP">
+    <input type="file" id="fileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM">
   </div>
 
   <div class="recent-files" id="recentFiles"></div>
 
   <div class="about-section">
     <h2>What is this?</h2>
-    <p>BMA is a client-side block model inspector. Drop a CSV (or zipped CSV) exported from Isatis, Vulcan, Surpac, Leapfrog, Datamine, or any other mining package and get instant summary statistics, geometry detection, and categorical breakdowns — all without uploading anything to a server.</p>
+    <p>BMA is a client-side block model inspector. Drop a CSV (or zipped CSV) exported from Isatis, Vulcan, Surpac, Leapfrog, or any other mining package and get instant summary statistics, geometry detection, and categorical breakdowns — all without uploading anything to a server.</p>
 
     <p>Everything runs in your browser using streaming File API and Web Workers. Files are parsed row by row, never fully loaded into memory, so multi-gigabyte models work fine on modest hardware.</p>
 
@@ -4499,10 +4541,10 @@ function tdQuantile(td, q) {
 
 const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi),isnum:(v)=>Number.isFinite(v),ifnum:(v,d)=>Number.isFinite(v)?v:(d!==undefined?d:NaN)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;const isnum=fn.isnum;const ifnum=fn.ifnum;';
 
-async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride) {
+async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat) {
   const startTime = performance.now();
 
-  // ZIP extraction
+  // ZIP / DM extraction
   let csvFile = file;
   let zipName = null;
   if (isZipFile(file)) {
@@ -4511,6 +4553,13 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       zipName = csvFile.name;
     } catch(e) {
       self.postMessage({ type: 'error', message: e.message });
+      return;
+    }
+  } else if (isDmFile(file)) {
+    try {
+      csvFile = await extractCSVFromDM(file, dmEndianness || 'little', dmFormat || 'sp');
+    } catch(e2) {
+      self.postMessage({ type: 'error', message: e2.message });
       return;
     }
   }
@@ -5127,6 +5176,9 @@ async function exportCSV(data) {
   if (isZipFile(file)) {
     try { csvFile = await extractCSVFromZip(file, zipEntry); }
     catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  } else if (isDmFile(file)) {
+    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
   }
 
   const sampleLines = await readSample(csvFile, 50);
@@ -5272,12 +5324,15 @@ async function exportCSV(data) {
 
 async function swathAnalysis(data) {
   const { file, zipEntry, globalFilter, localFilter, calcolCode, calcolMeta, resolvedTypes,
-          xyzCols, dxyzCols, axis, varCols, binWidth } = data;
+          xyzCols, dxyzCols, axis, varCols, binWidth, azimuth, plunge } = data;
   const startTime = performance.now();
 
   let csvFile = file;
   if (isZipFile(file)) {
     try { csvFile = await extractCSVFromZip(file, zipEntry); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  } else if (isDmFile(file)) {
+    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
     catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
   }
 
@@ -5319,8 +5374,21 @@ async function swathAnalysis(data) {
     return obj;
   }
 
-  const axisIdx = xyzCols[axis];
-  const axisName = header[axisIdx];
+  var isCustomAzimuth = azimuth != null;
+  var axisName = null, xName = null, yName = null, zName = null;
+  var azRad = 0, plRad = 0, dirX = 0, dirY = 0, dirZ = 0;
+  if (isCustomAzimuth) {
+    xName = header[xyzCols[0]];
+    yName = header[xyzCols[1]];
+    zName = (plunge && plunge !== 0) ? header[xyzCols[2]] : null;
+    azRad = azimuth * Math.PI / 180;
+    plRad = (plunge || 0) * Math.PI / 180;
+    dirX = Math.sin(azRad) * Math.cos(plRad);
+    dirY = Math.cos(azRad) * Math.cos(plRad);
+    dirZ = -Math.sin(plRad);
+  } else {
+    axisName = header[xyzCols[axis]];
+  }
 
   // Resolve variable column names
   const varNames = varCols.map(vi => header[vi]);
@@ -5342,13 +5410,25 @@ async function swathAnalysis(data) {
   }
 
   function processRow(row) {
-    const coord = row[axisName];
-    if (coord == null || isNaN(coord)) return;
-    const bin = getBin(coord);
-    for (let vi = 0; vi < varCols.length; vi++) {
-      const val = row[varNames[vi]];
+    var coord;
+    if (isCustomAzimuth) {
+      var xv = row[xName], yv = row[yName];
+      if (xv == null || isNaN(xv) || yv == null || isNaN(yv)) return;
+      coord = xv * dirX + yv * dirY;
+      if (zName) {
+        var zv = row[zName];
+        if (zv == null || isNaN(zv)) return;
+        coord += zv * dirZ;
+      }
+    } else {
+      coord = row[axisName];
+      if (coord == null || isNaN(coord)) return;
+    }
+    var bin = getBin(coord);
+    for (var vi = 0; vi < varCols.length; vi++) {
+      var val = row[varNames[vi]];
       if (val == null || typeof val !== 'number' || isNaN(val)) continue;
-      const vb = bin.vars[varCols[vi]];
+      var vb = bin.vars[varCols[vi]];
       vb.count++;
       vb.sum += val;
       vb.sumSq += val * val;
@@ -5429,6 +5509,9 @@ async function sectionAnalysis(data) {
   let csvFile = file;
   if (isZipFile(file)) {
     try { csvFile = await extractCSVFromZip(file, zipEntry); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  } else if (isDmFile(file)) {
+    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
     catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
   }
 
@@ -5601,6 +5684,9 @@ async function gtAnalysis(data) {
   var csvFile = file;
   if (isZipFile(file)) {
     try { csvFile = await extractCSVFromZip(file, zipEntry); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  } else if (isDmFile(file)) {
+    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
     catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
   }
 
@@ -5852,6 +5938,212 @@ async function gtAnalysis(data) {
   });
 }
 
+// ─── Datamine .dm binary support (worker) ─────────────────────────────
+
+function isDmFile(file) {
+  return file.name.toLowerCase().endsWith('.dm');
+}
+
+function dmReadTextW(dv, offset, nWords, fmt) {
+  var result = '';
+  var step = fmt === 'ep' ? 8 : 4;
+  for (var w = 0; w < nWords; w++) {
+    var base = offset + w * step;
+    for (var b = 0; b < 4; b++) {
+      var ch = dv.getUint8(base + b);
+      if (ch >= 32 && ch < 127) result += String.fromCharCode(ch);
+    }
+  }
+  return result.trim();
+}
+
+function parseDmDD_worker(dv, endianness, fmt) {
+  var isLE = endianness === 'little';
+  var ws = fmt === 'ep' ? 8 : 4;
+  var pageSize = fmt === 'ep' ? 4096 : 2048;
+  var readNum = fmt === 'ep'
+    ? function(off) { return dv.getFloat64(off, isLE); }
+    : function(off) { return dv.getFloat32(off, isLE); };
+
+  var fileName = dmReadTextW(dv, 0, 2, fmt);
+  var descOff = fmt === 'ep' ? 32 : 16;
+  var description = dmReadTextW(dv, descOff, 20, fmt);
+  var dateOff = fmt === 'ep' ? 192 : 96;
+  var totalFields = Math.round(readNum(dateOff + ws));
+  var lastPage = Math.round(readNum(dateOff + ws * 2));
+  var lastRecordInLastPage = Math.round(readNum(dateOff + ws * 3));
+
+  var fieldStart = dateOff + ws * 4;
+  var fieldSize = ws * 7;
+  var rawFields = [];
+  for (var f = 0; f < totalFields; f++) {
+    var fOff = fieldStart + f * fieldSize;
+    if (fOff + fieldSize > pageSize) break;
+    var name = dmReadTextW(dv, fOff, 2, fmt);
+    var typeStr = dmReadTextW(dv, fOff + ws * 2, 1, fmt);
+    var sw = Math.round(readNum(fOff + ws * 3));
+    var lenf = Math.round(readNum(fOff + ws * 4));
+    var defaultValue = readNum(fOff + ws * 6);
+    rawFields.push({ name: name, type: typeStr.charAt(0).toUpperCase(), sw: sw, lenf: lenf, defaultValue: defaultValue });
+  }
+
+  var colMap = {};
+  var colOrder = [];
+  for (var i = 0; i < rawFields.length; i++) {
+    var rf = rawFields[i];
+    if (!colMap[rf.name]) {
+      colMap[rf.name] = { name: rf.name, rawType: rf.type, entries: [], defaultValue: rf.defaultValue };
+      colOrder.push(rf.name);
+    }
+    colMap[rf.name].entries.push(rf);
+  }
+
+  var columns = [];
+  var maxLen = 0;
+  for (var ci = 0; ci < colOrder.length; ci++) {
+    var cm = colMap[colOrder[ci]];
+    var isConstant = cm.entries[0].sw === 0;
+    var colType = cm.rawType === 'A' ? 'categorical' : 'numeric';
+    var sorted = cm.entries.slice().sort(function(a, b) { return a.lenf - b.lenf; });
+    var swPositions = [];
+    for (var si = 0; si < sorted.length; si++) {
+      swPositions.push(sorted[si].sw);
+      if (sorted[si].sw > maxLen) maxLen = sorted[si].sw;
+    }
+    var constantValue = null;
+    if (isConstant) {
+      if (colType === 'numeric') {
+        constantValue = (Math.abs(cm.defaultValue) > 9.9e29) ? '' : String(cm.defaultValue);
+      } else {
+        constantValue = '';
+        for (var ei = 0; ei < sorted.length; ei++) {
+          var defBytes = sorted[ei].defaultValue;
+          var tmpBuf = new ArrayBuffer(fmt === 'ep' ? 8 : 4);
+          var tmpDv = new DataView(tmpBuf);
+          if (fmt === 'ep') tmpDv.setFloat64(0, defBytes, isLE);
+          else tmpDv.setFloat32(0, defBytes, isLE);
+          for (var bi = 0; bi < 4; bi++) {
+            var cb = tmpDv.getUint8(bi);
+            if (cb >= 32 && cb < 127) constantValue += String.fromCharCode(cb);
+          }
+        }
+        constantValue = constantValue.trim();
+      }
+    }
+    columns.push({
+      name: cm.name, type: colType, swPositions: swPositions,
+      defaultValue: cm.defaultValue, isConstant: isConstant, constantValue: constantValue
+    });
+  }
+
+  var recordsPerPage = maxLen > 0 ? Math.floor(508 / maxLen) : 0;
+  return {
+    fileName: fileName, description: description,
+    totalFields: totalFields, lastPage: lastPage,
+    lastRecordInLastPage: lastRecordInLastPage,
+    columns: columns, maxLen: maxLen,
+    recordsPerPage: recordsPerPage,
+    pageSize: pageSize, wordSize: ws
+  };
+}
+
+function extractCSVFromDM(file, endianness, fmt) {
+  var ws = fmt === 'ep' ? 8 : 4;
+  var pageSize = fmt === 'ep' ? 4096 : 2048;
+  var isLE = endianness === 'little';
+
+  return file.slice(0, pageSize).arrayBuffer().then(function(ddBuf) {
+    var ddView = new DataView(ddBuf);
+    var info = parseDmDD_worker(ddView, endianness, fmt);
+    var columns = info.columns;
+    var maxLen = info.maxLen;
+    var recsPerPage = info.recordsPerPage;
+    var lastPage = info.lastPage;
+    var lastRecInLast = info.lastRecordInLastPage;
+    var totalRecords = lastPage > 1
+      ? (lastPage - 2) * recsPerPage + lastRecInLast
+      : lastRecInLast;
+
+    var readNumFn = fmt === 'ep'
+      ? function(dv, off) { return dv.getFloat64(off, isLE); }
+      : function(dv, off) { return dv.getFloat32(off, isLE); };
+
+    // Build CSV header line
+    var headerParts = [];
+    for (var hi = 0; hi < columns.length; hi++) {
+      var cn = columns[hi].name;
+      if (cn.indexOf(',') >= 0) cn = '"' + cn + '"';
+      headerParts.push(cn);
+    }
+    var headerLine = headerParts.join(',') + '\\n';
+
+    var estSize = totalRecords * columns.length * 10;
+
+    // stream() factory — creates a fresh ReadableStream each call
+    function makeStream() {
+      var curPage = 2;
+      return new ReadableStream({
+        start: function(controller) {
+          var enc = new TextEncoder();
+          controller.enqueue(enc.encode(headerLine));
+        },
+        pull: function(controller) {
+          if (curPage > lastPage) {
+            controller.close();
+            return;
+          }
+          var pgIdx = curPage;
+          curPage++;
+          var offset = (pgIdx - 1) * pageSize;
+          return file.slice(offset, offset + pageSize).arrayBuffer().then(function(pageBuf) {
+            var dv = new DataView(pageBuf);
+            var recsThisPage = (pgIdx === lastPage) ? lastRecInLast : recsPerPage;
+            var lines = '';
+            for (var ri = 0; ri < recsThisPage; ri++) {
+              var recStart = ri * maxLen * ws;
+              var fields = [];
+              for (var ci = 0; ci < columns.length; ci++) {
+                var col = columns[ci];
+                if (col.isConstant) {
+                  var cv = col.constantValue || '';
+                  if (cv.indexOf(',') >= 0) cv = '"' + cv + '"';
+                  fields.push(cv);
+                  continue;
+                }
+                if (col.type === 'numeric') {
+                  var nOff = recStart + (col.swPositions[0] - 1) * ws;
+                  if (nOff + ws > pageBuf.byteLength) { fields.push(''); continue; }
+                  var v = readNumFn(dv, nOff);
+                  if (Math.abs(v) > 9.9e29) fields.push('');
+                  else fields.push(String(v));
+                } else {
+                  var text = '';
+                  for (var si = 0; si < col.swPositions.length; si++) {
+                    var aOff = recStart + (col.swPositions[si] - 1) * ws;
+                    if (aOff + 4 > pageBuf.byteLength) continue;
+                    for (var b = 0; b < 4; b++) {
+                      var ch = dv.getUint8(aOff + b);
+                      if (ch >= 32 && ch < 127) text += String.fromCharCode(ch);
+                    }
+                  }
+                  text = text.trim();
+                  if (text.indexOf(',') >= 0) text = '"' + text + '"';
+                  fields.push(text);
+                }
+              }
+              lines += fields.join(',') + '\\n';
+            }
+            var enc = new TextEncoder();
+            controller.enqueue(enc.encode(lines));
+          });
+        }
+      });
+    }
+
+    return { stream: makeStream, size: estSize, name: file.name.replace(/\\.dm$/i, '.csv') };
+  });
+}
+
 self.onmessage = (e) => {
   if (e.data.mode === 'export') {
     exportCSV(e.data);
@@ -5862,8 +6154,8 @@ self.onmessage = (e) => {
   } else if (e.data.mode === 'gt') {
     gtAnalysis(e.data);
   } else {
-    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride } = e.data;
-    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride);
+    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat } = e.data;
+    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat);
   }
 };
 `;
@@ -6074,6 +6366,12 @@ let currentDXYZ = { dx: -1, dy: -1, dz: -1 };
 let swathWorker = null;
 let lastSwathData = null;
 let swathExprController = null;
+let swathColorOverrides = {};   // { colName: '#hex' }
+
+function getSwathVarColor(colName, paletteIdx) {
+  if (swathColorOverrides[colName]) return swathColorOverrides[colName];
+  return STATSCAT_PALETTE[paletteIdx % STATSCAT_PALETTE.length];
+}
 
 // GT state
 let gtWorker = null;
@@ -6280,15 +6578,25 @@ var _helpTabs = {
       '<div class="help-section"><div class="help-section-title">Overview</div>' +
       '<div class="help-row"><span>Spatial trend plots: bin blocks along an axis and show how variable values change across the model.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Configuration</div>' +
-      '<div class="help-row"><span><strong>Axis</strong> \u2014 X (W\u2192E), Y (S\u2192N), or Z (Bottom\u2192Top)</span></div>' +
+      '<div class="help-row"><span><strong>Axis</strong> \u2014 X (W\u2192E), Y (S\u2192N), Z (Bottom\u2192Top), or Custom (arbitrary azimuth)</span></div>' +
+      '<div class="help-row"><span><strong>Custom axis</strong> \u2014 enter azimuth (0\u00b0=N, clockwise) and optional plunge (\u00b0 below horizontal). Projects XY(Z) onto that direction for binning.</span></div>' +
       '<div class="help-row"><span><strong>Bin width</strong> \u2014 defaults to block size; override for wider bins</span></div>' +
       '<div class="help-row"><span><strong>Statistic</strong> \u2014 Mean\u00b1Std, P25/P50/P75, or P10/P50/P90</span></div>' +
       '<div class="help-row"><span><strong>Variables</strong> \u2014 check one or more. Each gets its own Y-axis + ribbon on the overlay chart.</span></div>' +
+      '<div class="help-row"><span><strong>Color swatch</strong> \u2014 click the colored square next to a variable name to customize its chart color</span></div>' +
       '<div class="help-row"><span><strong>Unit selects</strong> \u2014 per-variable units shown on axis labels, table headers, and tooltip. Inherits from global units.</span></div>' +
       '<div class="help-row"><span><strong>Sync units</strong> \u2014 pull unit assignments from Column Overview</span></div></div>' +
+      '<div class="help-section"><div class="help-section-title">Display</div>' +
+      '<div class="help-row"><span><strong>Show bands</strong> \u2014 toggle the \u00b1 ribbons (std/percentile range). Disable to see center lines only.</span></div>' +
+      '<div class="help-row"><span><strong>Show count bars</strong> \u2014 toggle the count histogram below the chart</span></div>' +
+      '<div class="help-row"><span><strong>Show table</strong> \u2014 toggle the data table below the chart</span></div>' +
+      '<div class="help-row"><span><strong>Y Scale</strong> \u2014 Linear or Log. Log clamps to positive values.</span></div>' +
+      '<div class="help-row"><span><strong>Layout</strong> \u2014 Overlay (all variables on one chart) or Split (one chart per variable, stacked vertically)</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Output</div>' +
       '<div class="help-row"><span>Overlay chart with one ribbon+line per variable. Count bars below show bin population.</span></div>' +
       '<div class="help-row"><span>Hover for crosshair with per-variable center \u00b1 range values.</span></div>' +
+      '<div class="help-row"><span><strong>Copy SVG</strong> \u2014 copy chart as SVG markup to clipboard</span></div>' +
+      '<div class="help-row"><span><strong>Download PNG</strong> \u2014 download chart as a light-themed PNG at 2\u00d7 resolution</span></div>' +
       '<div class="help-row"><span>Collapsible data table with per-bin statistics. Copy to clipboard.</span></div></div>'
   },
   section: {
@@ -6549,13 +6857,275 @@ function guessDXYZMain(header, types) {
   return result;
 }
 
+// ─── Datamine .dm binary support ──────────────────────────────────────
+
+function dmReadText(dv, offset, nWords, format) {
+  var result = '';
+  var step = format === 'ep' ? 8 : 4;
+  for (var w = 0; w < nWords; w++) {
+    var base = offset + w * step;
+    for (var b = 0; b < 4; b++) {
+      var ch = dv.getUint8(base + b);
+      if (ch >= 32 && ch < 127) result += String.fromCharCode(ch);
+    }
+  }
+  return result.trim();
+}
+
+function parseDmDD(dv, endianness, format) {
+  var isLE = endianness === 'little';
+  var ws = format === 'ep' ? 8 : 4; // word size
+  var pageSize = format === 'ep' ? 4096 : 2048;
+  var readNum = format === 'ep'
+    ? function(off) { return dv.getFloat64(off, isLE); }
+    : function(off) { return dv.getFloat32(off, isLE); };
+
+  // DD header fields
+  var fileName = dmReadText(dv, 0, 2, format);
+  // Skip database name (words 3-4)
+  var descOff = format === 'ep' ? 32 : 16;
+  var description = dmReadText(dv, descOff, 20, format);
+  var dateOff = format === 'ep' ? 192 : 96;
+  var dateVal = Math.round(readNum(dateOff));
+  var totalFields = Math.round(readNum(dateOff + ws));
+  var lastPage = Math.round(readNum(dateOff + ws * 2));
+  var lastRecordInLastPage = Math.round(readNum(dateOff + ws * 3));
+
+  // Field definitions start after the header (word 29 for SP = byte 112, word 29 for EP = byte 224)
+  var fieldStart = dateOff + ws * 4;
+  var fieldSize = ws * 7; // 7 words per field definition
+  var rawFields = [];
+  for (var f = 0; f < totalFields; f++) {
+    var fOff = fieldStart + f * fieldSize;
+    if (fOff + fieldSize > pageSize) break;
+    var name = dmReadText(dv, fOff, 2, format);
+    var typeStr = dmReadText(dv, fOff + ws * 2, 1, format);
+    var sw = Math.round(readNum(fOff + ws * 3));
+    var lenf = Math.round(readNum(fOff + ws * 4));
+    // word 6 unused
+    var defaultValue = readNum(fOff + ws * 6);
+    rawFields.push({ name: name, type: typeStr.charAt(0).toUpperCase(), sw: sw, lenf: lenf, defaultValue: defaultValue });
+  }
+
+  // Reconstruct columns: group rawFields by name
+  var colMap = {};
+  var colOrder = [];
+  for (var i = 0; i < rawFields.length; i++) {
+    var rf = rawFields[i];
+    if (!colMap[rf.name]) {
+      colMap[rf.name] = { name: rf.name, rawType: rf.type, entries: [], defaultValue: rf.defaultValue };
+      colOrder.push(rf.name);
+    }
+    colMap[rf.name].entries.push(rf);
+  }
+
+  var columns = [];
+  var maxLen = 0;
+  for (var ci = 0; ci < colOrder.length; ci++) {
+    var cm = colMap[colOrder[ci]];
+    var isConstant = cm.entries[0].sw === 0;
+    var colType = cm.rawType === 'A' ? 'categorical' : 'numeric';
+    // Collect SW positions ordered by LENF
+    var sorted = cm.entries.slice().sort(function(a, b) { return a.lenf - b.lenf; });
+    var swPositions = sorted.map(function(e) { return e.sw; });
+    // Track max SW for record length
+    for (var si = 0; si < swPositions.length; si++) {
+      if (swPositions[si] > maxLen) maxLen = swPositions[si];
+    }
+    // Default value for constants: convert numeric default to string for alpha
+    var constantValue = null;
+    if (isConstant) {
+      if (colType === 'numeric') {
+        constantValue = (Math.abs(cm.defaultValue) > 9.9e29) ? '' : String(cm.defaultValue);
+      } else {
+        // Alpha constant — decode default as text from the raw float bytes
+        constantValue = '';
+        for (var ei = 0; ei < sorted.length; ei++) {
+          var defBytes = sorted[ei].defaultValue;
+          // For alpha constants, the default is stored as a float whose bytes represent ASCII
+          var tmpBuf = new ArrayBuffer(format === 'ep' ? 8 : 4);
+          var tmpDv = new DataView(tmpBuf);
+          if (format === 'ep') tmpDv.setFloat64(0, defBytes, isLE);
+          else tmpDv.setFloat32(0, defBytes, isLE);
+          for (var bi = 0; bi < 4; bi++) {
+            var cb = tmpDv.getUint8(bi);
+            if (cb >= 32 && cb < 127) constantValue += String.fromCharCode(cb);
+          }
+        }
+        constantValue = constantValue.trim();
+      }
+    }
+    columns.push({
+      name: cm.name,
+      type: colType,
+      swPositions: swPositions,
+      defaultValue: cm.defaultValue,
+      isConstant: isConstant,
+      constantValue: constantValue
+    });
+  }
+
+  var recordsPerPage = maxLen > 0 ? Math.floor(508 / maxLen) : 0;
+
+  return {
+    fileName: fileName,
+    description: description,
+    date: dateVal,
+    totalFields: totalFields,
+    lastPage: lastPage,
+    lastRecordInLastPage: lastRecordInLastPage,
+    rawFields: rawFields,
+    columns: columns,
+    maxLen: maxLen,
+    recordsPerPage: recordsPerPage,
+    pageSize: pageSize,
+    wordSize: ws
+  };
+}
+
+async function detectDmFormat(file) {
+  var size = Math.min(4096, file.size);
+  var buf = await file.slice(0, size).arrayBuffer();
+  var dv = new DataView(buf);
+
+  function isPrintableAscii(dv, off, len) {
+    for (var i = 0; i < len; i++) {
+      if (off + i >= dv.byteLength) return false;
+      var ch = dv.getUint8(off + i);
+      if (ch < 32 || ch >= 127) return false;
+    }
+    return true;
+  }
+
+  function tryFormat(fmt, endian) {
+    var ws = fmt === 'ep' ? 8 : 4;
+    var isLE = endian === 'little';
+    // Field count offset: SP=96+ws=100, EP=192+ws=200
+    var dateOff = fmt === 'ep' ? 192 : 96;
+    var fcOff = dateOff + ws;
+    if (fcOff + ws > dv.byteLength) return false;
+    var fc;
+    if (fmt === 'ep') fc = dv.getFloat64(fcOff, isLE);
+    else fc = dv.getFloat32(fcOff, isLE);
+    var rounded = Math.round(fc);
+    if (rounded < 1 || rounded > 500 || Math.abs(fc - rounded) > 0.01) return false;
+    // Check first field name is printable ASCII
+    var fieldStart = dateOff + ws * 4;
+    if (fieldStart + 4 > dv.byteLength) return false;
+    if (!isPrintableAscii(dv, fieldStart, 4)) return false;
+    return true;
+  }
+
+  // Try in order: SP+LE, SP+BE, EP+LE, EP+BE
+  var combos = [
+    { format: 'sp', endianness: 'little' },
+    { format: 'sp', endianness: 'big' },
+    { format: 'ep', endianness: 'little' },
+    { format: 'ep', endianness: 'big' }
+  ];
+  for (var i = 0; i < combos.length; i++) {
+    if (tryFormat(combos[i].format, combos[i].endianness)) return combos[i];
+  }
+  return null;
+}
+
+async function readDmSampleRows(file, dmInfo, maxRows, endianness) {
+  var pageSize = dmInfo.pageSize;
+  var ws = dmInfo.wordSize;
+  var maxLen = dmInfo.maxLen;
+  var recsPerPage = dmInfo.recordsPerPage;
+  var columns = dmInfo.columns;
+  var isLE = endianness === 'little';
+  var format = ws === 8 ? 'ep' : 'sp';
+
+  // Read page 2 (first data page)
+  if (file.size < pageSize * 2) return [];
+  var dataBuf = await file.slice(pageSize, pageSize * 2).arrayBuffer();
+  var dv = new DataView(dataBuf);
+
+  var totalRecords = dmInfo.lastPage > 1
+    ? (dmInfo.lastPage - 2) * recsPerPage + dmInfo.lastRecordInLastPage
+    : dmInfo.lastRecordInLastPage;
+  var recsThisPage = Math.min(recsPerPage, totalRecords, maxRows);
+
+  var readNum = format === 'ep'
+    ? function(off) { return dv.getFloat64(off, isLE); }
+    : function(off) { return dv.getFloat32(off, isLE); };
+
+  var rows = [];
+  for (var ri = 0; ri < recsThisPage; ri++) {
+    var recStart = ri * maxLen * ws;
+    var row = [];
+    for (var ci = 0; ci < columns.length; ci++) {
+      var col = columns[ci];
+      if (col.isConstant) {
+        row.push(col.constantValue || '');
+        continue;
+      }
+      if (col.type === 'numeric') {
+        var off = recStart + (col.swPositions[0] - 1) * ws;
+        if (off + ws > dataBuf.byteLength) { row.push(''); continue; }
+        var v = readNum(off);
+        if (Math.abs(v) > 9.9e29) row.push('');
+        else row.push(String(v));
+      } else {
+        // Alpha — read 4 bytes per SW position
+        var text = '';
+        for (var si = 0; si < col.swPositions.length; si++) {
+          var aOff = recStart + (col.swPositions[si] - 1) * ws;
+          if (aOff + 4 > dataBuf.byteLength) continue;
+          for (var b = 0; b < 4; b++) {
+            var ch = dv.getUint8(aOff + b);
+            if (ch >= 32 && ch < 127) text += String.fromCharCode(ch);
+          }
+        }
+        row.push(text.trim());
+      }
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
 async function runPreflight(file) {
   const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip';
+  const isDm = file.name.toLowerCase().endsWith('.dm');
   let zipEntries = null;
   let lines;
 
   let commentLines = [];
-  if (isZip) {
+  if (isDm) {
+    const dmDetected = await detectDmFormat(file);
+    if (!dmDetected) throw new Error('Unable to detect DM format. File may not be a valid Datamine binary.');
+    const pageSize = dmDetected.format === 'ep' ? 4096 : 2048;
+    const buf = await file.slice(0, pageSize).arrayBuffer();
+    const dv = new DataView(buf);
+    const dmInfo = parseDmDD(dv, dmDetected.endianness, dmDetected.format);
+    const header = dmInfo.columns.map(c => c.name);
+    const autoTypes = dmInfo.columns.map(c => c.type);
+    const sampleRows = await readDmSampleRows(file, dmInfo, 100, dmDetected.endianness);
+    const xyzGuess = guessXYZMain(header, autoTypes);
+    const dxyzGuess = guessDXYZMain(header, autoTypes);
+    const defaultFilters = buildDefaultColFilters(header, autoTypes, xyzGuess);
+    return {
+      header,
+      sampleRows,
+      autoTypes,
+      delimiter: ',',
+      zipEntries: null,
+      selectedZipEntry: null,
+      typeOverrides: {},
+      xyz: { ...xyzGuess },
+      dxyz: { ...dxyzGuess },
+      skipCols: new Set(),
+      colFilters: defaultFilters,
+      commentLines: [],
+      isDm: true,
+      dmFormat: dmDetected.format,
+      dmEndianness: dmDetected.endianness,
+      dmInfo: dmInfo
+    };
+  } else if (isZip) {
     zipEntries = await listZipEntries(file);
     const csvEntries = zipEntries.filter(e => CSV_EXTENSIONS_MAIN.test(e.name));
     if (csvEntries.length === 0) throw new Error('No CSV/TXT/DAT files found in ZIP. Contents: ' + zipEntries.map(e => e.name).join(', '));
@@ -6634,6 +7204,14 @@ function renderPreflight(data) {
   } else if (data.zipEntries && data.zipEntries.length === 1) {
     $preflightZip.innerHTML = `ZIP: <strong style="color:var(--fg-bright)">${esc(data.zipEntries[0].name)}</strong>` +
       `<span class="zip-size">${formatSize(data.zipEntries[0].uncompSize)}</span>`;
+  } else if (data.isDm && data.dmInfo) {
+    const totalRecs = data.dmInfo.lastPage > 1
+      ? (data.dmInfo.lastPage - 2) * data.dmInfo.recordsPerPage + data.dmInfo.lastRecordInLastPage
+      : data.dmInfo.lastRecordInLastPage;
+    const fmtLabel = data.dmFormat === 'ep' ? 'EP (REAL*8)' : 'SP (REAL*4)';
+    const endLabel = data.dmEndianness === 'big' ? 'Big-Endian' : 'Little-Endian';
+    $preflightZip.innerHTML = 'DM: <strong style="color:var(--fg-bright)">' + esc(data.dmInfo.fileName || currentFile.name) + '</strong>' +
+      '<span class="zip-size">' + fmtLabel + ', ' + endLabel + ' \u2014 ' + data.dmInfo.columns.length + ' fields, ' + totalRecs + ' records</span>';
   } else {
     $preflightZip.innerHTML = '';
   }
@@ -6659,6 +7237,27 @@ function renderPreflightSidebar(data) {
     <div id="pfDxyzWrap"></div>
   </div>`;
 
+  // DM format options (only shown for .dm files)
+  if (data.isDm) {
+    html += `<div class="pf-sidebar-section" id="pfDmOptions">
+      <div class="pf-sidebar-section-title">DM Format</div>
+      <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.3rem">
+        <span style="font-size:0.8rem;color:var(--fg-dim)">Byte order</span>
+        <select class="pf-select" id="pfEndianness">
+          <option value="little"${data.dmEndianness === 'little' ? ' selected' : ''}>Little-Endian</option>
+          <option value="big"${data.dmEndianness === 'big' ? ' selected' : ''}>Big-Endian</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:0.5rem;align-items:center">
+        <span style="font-size:0.8rem;color:var(--fg-dim)">Precision</span>
+        <select class="pf-select" id="pfDmFormat">
+          <option value="sp"${data.dmFormat === 'sp' ? ' selected' : ''}>Single (REAL*4)</option>
+          <option value="ep"${data.dmFormat === 'ep' ? ' selected' : ''}>Extended (REAL*8)</option>
+        </select>
+      </div>
+    </div>`;
+  }
+
   // Column list header with search
   html += `<div class="pf-sidebar-section" style="padding-bottom:0.3rem">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem">
@@ -6678,6 +7277,7 @@ function renderPreflightSidebar(data) {
   </div>`;
 
   // Column list — always render both filter buttons; hide via class when not filterable
+  const dmCols = data.isDm && data.dmInfo ? data.dmInfo.columns : null;
   html += '<div class="pf-col-list" id="pfColList">';
   for (let i = 0; i < header.length; i++) {
     const currentType = typeOverrides[i] || autoTypes[i];
@@ -6686,11 +7286,15 @@ function renderPreflightSidebar(data) {
     const cf = colFilters[i] || {};
     const filterable = isFilterableCol(header, i, autoTypes, typeOverrides, data.xyz, skipCols);
     const hideCls = filterable ? '' : ' pf-filter-hidden';
-    html += `<div class="pf-col-item${isSkipped ? ' skipped' : ''}" data-col="${i}" data-name="${esc(header[i]).toLowerCase()}">
+    const isDmConst = dmCols && dmCols[i] && dmCols[i].isConstant;
+    const constStyle = isDmConst ? ' style="border-left:2px solid var(--amber-dim,rgba(184,115,51,0.4))"' : '';
+    const constTooltip = isDmConst ? ' title="File constant \u2014 same value for all records: ' + esc(String(dmCols[i].constantValue || '')) + '"' : '';
+    html += `<div class="pf-col-item${isSkipped ? ' skipped' : ''}" data-col="${i}" data-name="${esc(header[i]).toLowerCase()}"${constStyle}>
       <span class="col-idx">${i}</span>
       <input type="checkbox" class="pf-col-check" data-col="${i}" ${!isSkipped ? 'checked' : ''}>
-      <span class="pf-col-name" title="${esc(header[i])}">${esc(header[i])}</span>
+      <span class="pf-col-name"${isDmConst ? constTooltip : ` title="${esc(header[i])}"`}>${esc(header[i])}</span>
       <div class="pf-col-controls">
+        ${isDmConst ? '<span class="pf-const-badge" title="File constant">CONST</span>' : ''}
         <button class="pf-filter-btn${cf.skipNeg ? ' active' : ''}${hideCls}" data-col="${i}" data-filter="skipNeg" title="Exclude negatives">≥0</button>
         <button class="pf-filter-btn${cf.skipZeros ? ' active' : ''}${hideCls}" data-col="${i}" data-filter="skipZeros" title="Exclude zeros">≠0</button>
         <button class="type-toggle" data-col="${i}" data-type="${currentType}">${label}</button>
@@ -6747,6 +7351,14 @@ function renderPreflightSidebar(data) {
   // Bulk filter buttons
   document.getElementById('pfFilterAllGt0').addEventListener('click', () => handlePfBulkFilterAll(data));
   document.getElementById('pfFilterClear').addEventListener('click', () => handlePfBulkFilterClear(data));
+
+  // DM format override handlers
+  if (data.isDm) {
+    const $pfEnd = document.getElementById('pfEndianness');
+    const $pfFmt = document.getElementById('pfDmFormat');
+    if ($pfEnd) $pfEnd.addEventListener('change', () => handleDmFormatChange(data));
+    if ($pfFmt) $pfFmt.addEventListener('change', () => handleDmFormatChange(data));
+  }
 
 }
 
@@ -6988,6 +7600,34 @@ function handlePfBulkFilterClear(data) {
   }
   updatePfCounts(data);
   markAnalysisStale();
+}
+
+async function handleDmFormatChange(data) {
+  const $pfEnd = document.getElementById('pfEndianness');
+  const $pfFmt = document.getElementById('pfDmFormat');
+  if (!$pfEnd || !$pfFmt) return;
+  const newEndianness = $pfEnd.value;
+  const newFormat = $pfFmt.value;
+  try {
+    const pageSize = newFormat === 'ep' ? 4096 : 2048;
+    const buf = await currentFile.slice(0, pageSize).arrayBuffer();
+    const dv = new DataView(buf);
+    const dmInfo = parseDmDD(dv, newEndianness, newFormat);
+    data.dmEndianness = newEndianness;
+    data.dmFormat = newFormat;
+    data.dmInfo = dmInfo;
+    data.header = dmInfo.columns.map(c => c.name);
+    data.autoTypes = dmInfo.columns.map(c => c.type);
+    data.sampleRows = await readDmSampleRows(currentFile, dmInfo, 100, newEndianness);
+    data.typeOverrides = {};
+    data.skipCols = new Set();
+    data.xyz = guessXYZMain(data.header, data.autoTypes);
+    data.dxyz = guessDXYZMain(data.header, data.autoTypes);
+    data.colFilters = buildDefaultColFilters(data.header, data.autoTypes, data.xyz);
+    renderPreflight(data);
+  } catch(err) {
+    $preflightPreview.innerHTML = '<div style="padding:1rem;color:var(--red)">' + esc(err.message) + '</div>';
+  }
 }
 
 function updatePreviewDimming(data) {
@@ -7267,7 +7907,8 @@ function promptReselect(name) {
     window.showOpenFilePicker({
       types: [
         { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
-        { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } }
+        { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } },
+        { description: 'Datamine files', accept: { 'application/octet-stream': ['.dm'] } }
       ],
       multiple: false
     }).then(function(handles) {
@@ -7483,13 +8124,25 @@ function serializeProject() {
         var colName = currentHeader[colIdx];
         if (colName && parseInt(sel.value) !== 0) swathUnits[colName] = parseInt(sel.value);
       });
+      var $azimuth = document.getElementById('swathAzimuth');
+      var $plunge = document.getElementById('swathPlunge');
       return {
         axis: $axis.value,
         binWidth: parseFloat($binWidth.value) || 0,
         stat: $stat ? $stat.value : 'mean_std',
         checkedVars: checkedVars,
         localFilter: $filter ? $filter.value : '',
-        units: Object.keys(swathUnits).length > 0 ? swathUnits : null
+        azimuth: $axis.value === 'custom' ? (parseFloat($azimuth.value) || 0) : null,
+        plunge: $axis.value === 'custom' ? (parseFloat($plunge.value) || 0) : null,
+        units: Object.keys(swathUnits).length > 0 ? swathUnits : null,
+        colorOverrides: Object.keys(swathColorOverrides).length > 0 ? swathColorOverrides : null,
+        display: {
+          showBands: document.getElementById('swathShowBands') ? document.getElementById('swathShowBands').checked : true,
+          showCounts: document.getElementById('swathShowCounts') ? document.getElementById('swathShowCounts').checked : true,
+          showTable: document.getElementById('swathShowTable') ? document.getElementById('swathShowTable').checked : true,
+          yScale: (document.getElementById('swathYScale') || {}).value || 'linear',
+          layout: (document.getElementById('swathLayout') || {}).value || 'overlay'
+        }
       };
     })(),
     gt: (function() {
@@ -8107,7 +8760,9 @@ function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerpr
     calcolCode: currentCalcolCode || null,
     calcolMeta: currentCalcolMeta.length > 0 ? currentCalcolMeta : null,
     groupBy: currentGroupBy,
-    groupStatsCols: currentGroupBy !== null && statsCatSelectedVars.size > 0 ? Array.from(statsCatSelectedVars) : null
+    groupStatsCols: currentGroupBy !== null && statsCatSelectedVars.size > 0 ? Array.from(statsCatSelectedVars) : null,
+    dmEndianness: preflightData && preflightData.dmEndianness || null,
+    dmFormat: preflightData && preflightData.dmFormat || null
   });
 }
 
@@ -8483,6 +9138,12 @@ function displayResults(data) {
     var $sStat = document.getElementById('swathStat');
     var $sFilter = document.getElementById('swathLocalFilter');
     if ($sAxis && swp.axis) $sAxis.value = swp.axis;
+    var $sAzRow = document.getElementById('swathAzimuthRow');
+    var $sAzimuth = document.getElementById('swathAzimuth');
+    var $sPlunge = document.getElementById('swathPlunge');
+    if ($sAzRow) $sAzRow.style.display = swp.axis === 'custom' ? '' : 'none';
+    if ($sAzimuth && swp.azimuth != null) $sAzimuth.value = swp.azimuth;
+    if ($sPlunge && swp.plunge != null) $sPlunge.value = swp.plunge;
     if ($sBinWidth && swp.binWidth) $sBinWidth.value = swp.binWidth;
     if ($sStat && swp.stat) $sStat.value = swp.stat;
     if ($sFilter && swp.localFilter) $sFilter.value = swp.localFilter;
@@ -8502,6 +9163,23 @@ function displayResults(data) {
         var colName = currentHeader[colIdx];
         if (colName && swp.units[colName] != null) sel.value = swp.units[colName];
       });
+    }
+    // Restore swath color overrides
+    if (swp.colorOverrides) {
+      swathColorOverrides = swp.colorOverrides;
+      document.querySelectorAll('#swathVarList .swath-color-swatch').forEach(function(sw) {
+        var colIdx = parseInt(sw.dataset.col);
+        var colName = currentHeader[colIdx];
+        if (colName && swathColorOverrides[colName]) sw.style.background = swathColorOverrides[colName];
+      });
+    }
+    // Restore swath display options
+    if (swp.display) {
+      if (document.getElementById('swathShowBands')) document.getElementById('swathShowBands').checked = swp.display.showBands !== false;
+      if (document.getElementById('swathShowCounts')) document.getElementById('swathShowCounts').checked = swp.display.showCounts !== false;
+      if (document.getElementById('swathShowTable')) document.getElementById('swathShowTable').checked = swp.display.showTable !== false;
+      if (document.getElementById('swathYScale') && swp.display.yScale) document.getElementById('swathYScale').value = swp.display.yScale;
+      if (document.getElementById('swathLayout') && swp.display.layout) document.getElementById('swathLayout').value = swp.display.layout;
     }
   }
 
@@ -10558,7 +11236,9 @@ function startExport() {
     lineEnding: exportLineEnding,
     nullValue: exportNullValue,
     precision: exportPrecision,
-    decimalSep: exportDecimalSep
+    decimalSep: exportDecimalSep,
+    dmEndianness: preflightData && preflightData.dmEndianness || null,
+    dmFormat: preflightData && preflightData.dmFormat || null
   };
 
   $exportDownload.disabled = true;
@@ -10790,6 +11470,60 @@ var _swathChartParams = null; // stored for crosshair
 
 function resetSwathState() {
   _swathChartParams = null;
+  swathColorOverrides = {};
+}
+
+function showSwathColorPicker(colName, colIdx, anchorEl) {
+  var $picker = document.getElementById('swathColorPicker');
+  if (!$picker) return;
+  // Find palette index for this variable based on its position in the checked list
+  var vi = 0;
+  var items = document.querySelectorAll('#swathVarList .swath-var-item');
+  items.forEach(function(item, idx) {
+    if (parseInt(item.querySelector('input').value) === colIdx) vi = idx;
+  });
+  var currentColor = getSwathVarColor(colName, vi);
+
+  var html = '<div class="cat-color-grid">';
+  for (var i = 0; i < STATSCAT_PALETTE.length; i++) {
+    var c = STATSCAT_PALETTE[i];
+    var sel = c.toLowerCase() === currentColor.toLowerCase() ? ' selected' : '';
+    html += '<div class="cat-color-swatch' + sel + '" style="background:' + c + '" data-color="' + c + '"></div>';
+  }
+  html += '</div>';
+  html += '<input type="text" class="cat-hex-input" placeholder="#hex" value="' + esc(currentColor) + '">';
+
+  $picker.innerHTML = html;
+  $picker.dataset.colName = colName;
+  $picker.dataset.colIdx = colIdx;
+
+  // Position near the anchor
+  var rect = anchorEl.getBoundingClientRect();
+  var sidebar = document.getElementById('swathSidebar');
+  var sidebarRect = sidebar.getBoundingClientRect();
+  $picker.style.top = (rect.bottom - sidebarRect.top + 4) + 'px';
+  $picker.style.left = Math.max(0, rect.left - sidebarRect.left - 60) + 'px';
+  $picker.classList.add('open');
+}
+
+function hideSwathColorPicker() {
+  var $picker = document.getElementById('swathColorPicker');
+  if ($picker) $picker.classList.remove('open');
+}
+
+function applySwathColor(colName, color) {
+  swathColorOverrides[colName] = color;
+  // Update the swatch in the sidebar
+  document.querySelectorAll('#swathVarList .swath-color-swatch').forEach(function(sw) {
+    var ci = parseInt(sw.dataset.col);
+    if (currentHeader[ci] === colName) sw.style.background = color;
+  });
+  // Re-render chart from cache
+  if (lastSwathData) {
+    var stat = document.getElementById('swathStat');
+    renderSwathCharts(lastSwathData, stat ? stat.value : 'mean_std');
+  }
+  autoSaveProject();
 }
 
 function getSwathUnit(colIdx) {
@@ -10799,6 +11533,52 @@ function getSwathUnit(colIdx) {
     idx = globalUnits[currentHeader[colIdx]];
   var u = GRADE_UNITS[idx] || GRADE_UNITS[0];
   return { unitIdx: idx, symbol: u.symbol };
+}
+
+function getSwathDisplay() {
+  return {
+    showBands: document.getElementById('swathShowBands') ? document.getElementById('swathShowBands').checked : true,
+    showCounts: document.getElementById('swathShowCounts') ? document.getElementById('swathShowCounts').checked : true,
+    showTable: document.getElementById('swathShowTable') ? document.getElementById('swathShowTable').checked : true,
+    yScale: (document.getElementById('swathYScale') || {}).value || 'linear',
+    layout: (document.getElementById('swathLayout') || {}).value || 'overlay'
+  };
+}
+
+function formatAzimuthLabel(deg) {
+  deg = ((deg % 360) + 360) % 360;
+  if (deg === 0 || deg === 360) return 'N';
+  if (deg === 90) return 'E';
+  if (deg === 180) return 'S';
+  if (deg === 270) return 'W';
+  if (deg > 0 && deg < 90) return 'N' + Math.round(deg) + '\u00b0E';
+  if (deg > 90 && deg < 180) return 'S' + Math.round(180 - deg) + '\u00b0E';
+  if (deg > 180 && deg < 270) return 'S' + Math.round(deg - 180) + '\u00b0W';
+  return 'N' + Math.round(360 - deg) + '\u00b0W';
+}
+
+function getSwathDirectionLabels(swathData) {
+  if (swathData.azimuth != null) {
+    var fwd = formatAzimuthLabel(swathData.azimuth);
+    var back = formatAzimuthLabel((swathData.azimuth + 180) % 360);
+    if (swathData.plunge && swathData.plunge !== 0) {
+      return { left: back + ' (up)', right: fwd + ' (down)' };
+    }
+    return { left: back, right: fwd };
+  }
+  var axisKey = swathData.axis;
+  if (axisKey === 'x') return { left: 'W', right: 'E' };
+  if (axisKey === 'y') return { left: 'S', right: 'N' };
+  return { left: 'Bottom', right: 'Top' };
+}
+
+function getSwathXAxisLabel(swathData) {
+  if (swathData.azimuth != null) {
+    var label = 'Az ' + Math.round(swathData.azimuth) + '\u00b0';
+    if (swathData.plunge && swathData.plunge !== 0) label += '/Pl ' + Math.round(swathData.plunge) + '\u00b0';
+    return label + ' Projected';
+  }
+  return swathData.axis.toUpperCase() + ' Coordinate';
 }
 
 function renderSwathConfig(data) {
@@ -10823,15 +11603,19 @@ function renderSwathConfig(data) {
   const axes = [
     { key: 'x', label: 'X', bs: geometry.x.blockSize },
     { key: 'y', label: 'Y', bs: geometry.y.blockSize },
-    { key: 'z', label: 'Z', bs: geometry.z.blockSize }
+    { key: 'z', label: 'Z', bs: geometry.z.blockSize },
+    { key: 'custom', label: 'Custom', bs: Math.min(geometry.x.blockSize, geometry.y.blockSize) }
   ];
   const defaultBs = axes[0].bs;
-  const varItems = swathNumCols.map(function(c) {
+  const varItems = swathNumCols.map(function(c, vi) {
     var defUnit = globalUnits[c.name] || 0;
     var unitOpts = GRADE_UNITS.map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
-    return '<label class="swath-var-item"><input type="checkbox" value="' + c.idx + '" checked><span>' + esc(c.name) + '</span>' +
+    var varColor = getSwathVarColor(c.name, vi);
+    return '<label class="swath-var-item"><input type="checkbox" value="' + c.idx + '" checked>' +
+      '<div class="swath-color-swatch" data-col="' + c.idx + '" style="background:' + varColor + '"></div>' +
+      '<span>' + esc(c.name) + '</span>' +
       '<select class="swath-var-unit" data-col="' + c.idx + '">' + unitOpts + '</select></label>';
   }).join('');
 
@@ -10839,6 +11623,12 @@ function renderSwathConfig(data) {
     '<div class="swath-sidebar-section">' +
       '<div class="swath-sidebar-title">Axis</div>' +
       '<select class="swath-select" id="swathAxis">' + axes.map(a => '<option value="' + a.key + '">' + a.label + '</option>').join('') + '</select>' +
+      '<div id="swathAzimuthRow" style="display:none; margin-top:0.4rem">' +
+        '<div class="swath-sidebar-title">Azimuth (\u00b0 from N, clockwise)</div>' +
+        '<input type="number" class="swath-input" id="swathAzimuth" value="0" min="0" max="360" step="1">' +
+        '<div class="swath-sidebar-title" style="margin-top:0.3rem">Plunge (\u00b0 below horizontal)</div>' +
+        '<input type="number" class="swath-input" id="swathPlunge" value="0" min="0" max="90" step="1">' +
+      '</div>' +
       '<div style="margin-top:0.4rem">' +
         '<div class="swath-sidebar-title">Bin Width</div>' +
         '<input type="number" class="swath-input" id="swathBinWidth" value="' + defaultBs + '" min="0.001" step="any">' +
@@ -10852,6 +11642,20 @@ function renderSwathConfig(data) {
         '<option value="p25_50_75">P25 / P50 / P75</option>' +
         '<option value="p10_50_90">P10 / P50 / P90</option>' +
       '</select>' +
+    '</div>' +
+    '<div class="swath-sidebar-section">' +
+      '<div class="swath-sidebar-title">Display</div>' +
+      '<label class="swath-display-opt"><input type="checkbox" id="swathShowBands" checked> Show bands</label>' +
+      '<label class="swath-display-opt"><input type="checkbox" id="swathShowCounts" checked> Show count bars</label>' +
+      '<label class="swath-display-opt"><input type="checkbox" id="swathShowTable" checked> Show table</label>' +
+      '<div style="margin-top:0.3rem">' +
+        '<div class="swath-sidebar-title">Y Scale</div>' +
+        '<select class="swath-select" id="swathYScale"><option value="linear">Linear</option><option value="log">Log</option></select>' +
+      '</div>' +
+      '<div style="margin-top:0.3rem">' +
+        '<div class="swath-sidebar-title">Layout</div>' +
+        '<select class="swath-select" id="swathLayout"><option value="overlay">Overlay</option><option value="split">Split</option></select>' +
+      '</div>' +
     '</div>' +
     '<div class="swath-sidebar-section--grow">' +
       '<div class="swath-sidebar-title">Variables</div>' +
@@ -10873,7 +11677,8 @@ function renderSwathConfig(data) {
         '<div class="swath-progress-bar"><div class="swath-progress-fill" id="swathProgressFill"></div></div>' +
         '<div class="swath-progress-label" id="swathProgressLabel"></div>' +
       '</div>' +
-    '</div>';
+    '</div>' +
+    '<div class="swath-color-picker" id="swathColorPicker"></div>';
 
   $content.innerHTML = '<div class="swath-hint">Select variables and click Generate to create swath plots.</div>';
 
@@ -10881,12 +11686,14 @@ function renderSwathConfig(data) {
   var $axis = document.getElementById('swathAxis');
   var $binWidth = document.getElementById('swathBinWidth');
   var $binLabel = document.getElementById('swathBinLabel');
+  var $azRow = document.getElementById('swathAzimuthRow');
   $axis.addEventListener('change', function() {
     var a = axes.find(function(ax) { return ax.key === $axis.value; });
     if (a) {
       $binWidth.value = a.bs;
       $binLabel.textContent = a.bs + 'm blocks';
     }
+    $azRow.style.display = $axis.value === 'custom' ? '' : 'none';
   });
   // Fix: show the typed value, not blockSize
   $binWidth.addEventListener('input', function() {
@@ -10937,6 +11744,14 @@ function renderSwathConfig(data) {
     if (lastSwathData) renderSwathCharts(lastSwathData, document.getElementById('swathStat').value);
   });
 
+  // Display option changes re-render from cache
+  ['swathShowBands','swathShowCounts','swathShowTable','swathYScale','swathLayout'].forEach(function(id) {
+    document.getElementById(id).addEventListener('change', function() {
+      if (lastSwathData) renderSwathCharts(lastSwathData, document.getElementById('swathStat').value);
+      autoSaveProject();
+    });
+  });
+
   // Swath per-variable unit change — re-render from cache
   document.getElementById('swathVarList').addEventListener('change', function(e) {
     if (e.target.classList.contains('swath-var-unit') && lastSwathData) {
@@ -10947,6 +11762,51 @@ function renderSwathConfig(data) {
   // Local filter autocomplete
   if (swathExprController) swathExprController.destroy();
   swathExprController = createExprInput(document.getElementById('swathLocalFilter'), { mode: 'filter' });
+
+  // Color swatch click handler
+  document.getElementById('swathVarList').addEventListener('click', function(e) {
+    var swatch = e.target.closest('.swath-color-swatch');
+    if (swatch) {
+      e.preventDefault();
+      e.stopPropagation();
+      var colIdx = parseInt(swatch.dataset.col);
+      showSwathColorPicker(currentHeader[colIdx], colIdx, swatch);
+    }
+  });
+
+  // Color picker delegation
+  var $swathPicker = document.getElementById('swathColorPicker');
+  $swathPicker.addEventListener('click', function(e) {
+    var swatch = e.target.closest('.cat-color-swatch');
+    if (swatch) {
+      var cn = $swathPicker.dataset.colName;
+      applySwathColor(cn, swatch.dataset.color);
+      hideSwathColorPicker();
+    }
+  });
+  $swathPicker.addEventListener('change', function(e) {
+    if (e.target.classList.contains('cat-hex-input')) {
+      var hex = e.target.value.trim();
+      if (/^#?[0-9a-fA-F]{3,8}$/.test(hex)) {
+        if (hex[0] !== '#') hex = '#' + hex;
+        var cn = $swathPicker.dataset.colName;
+        applySwathColor(cn, hex);
+        hideSwathColorPicker();
+      }
+    }
+  });
+
+  // Close color picker on click outside
+  document.addEventListener('click', function(e) {
+    if ($swathPicker.classList.contains('open') && !$swathPicker.contains(e.target) && !e.target.classList.contains('swath-color-swatch')) {
+      hideSwathColorPicker();
+    }
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && $swathPicker.classList.contains('open')) {
+      hideSwathColorPicker();
+    }
+  });
 
   // Autosave on any sidebar change
   $sidebar.addEventListener('change', function() { autoSaveProject(); });
@@ -10996,9 +11856,22 @@ function runSwath() {
   var filterPayload = currentFilter ? { expression: currentFilter.expression } : null;
   var zipEntry = preflightData ? (preflightData.selectedZipEntry || null) : null;
 
-  var axisIdx = axisVal === 'x' ? 0 : (axisVal === 'y' ? 1 : 2);
+  var isCustom = axisVal === 'custom';
+  var axisIdx = isCustom ? null : (axisVal === 'x' ? 0 : (axisVal === 'y' ? 1 : 2));
   var xyzCols = [currentXYZ.x, currentXYZ.y, currentXYZ.z];
   var dxyzCols = [currentDXYZ.dx, currentDXYZ.dy, currentDXYZ.dz];
+
+  var azimuthDeg = null, plungeDeg = null;
+  if (isCustom) {
+    azimuthDeg = parseFloat(document.getElementById('swathAzimuth').value);
+    if (isNaN(azimuthDeg)) {
+      $binLabel.textContent = 'Invalid azimuth';
+      $binLabel.style.color = 'var(--red)';
+      setTimeout(function() { $binLabel.style.color = ''; $binLabel.textContent = '?m bins'; }, 2000);
+      return;
+    }
+    plungeDeg = parseFloat(document.getElementById('swathPlunge').value) || 0;
+  }
 
   swathWorker.postMessage({
     mode: 'swath',
@@ -11013,7 +11886,11 @@ function runSwath() {
     dxyzCols: dxyzCols,
     axis: axisIdx,
     varCols: varCols,
-    binWidth: binWidth
+    binWidth: binWidth,
+    azimuth: azimuthDeg,
+    plunge: plungeDeg,
+    dmEndianness: preflightData && preflightData.dmEndianness || null,
+    dmFormat: preflightData && preflightData.dmFormat || null
   });
 
   swathWorker.onerror = function(e) {
@@ -11036,7 +11913,7 @@ function runSwath() {
       $label.textContent = 'Done';
       setTimeout(function() { $progress.classList.remove('active'); }, 800);
       if ($btn) $btn.disabled = false;
-      lastSwathData = { vars: m.vars, axis: axisVal, axisIdx: axisIdx, binWidth: binWidth, varCols: varCols, elapsed: m.elapsed };
+      lastSwathData = { vars: m.vars, axis: axisVal, axisIdx: axisIdx, binWidth: binWidth, varCols: varCols, elapsed: m.elapsed, azimuth: azimuthDeg, plunge: plungeDeg };
       renderSwathCharts(lastSwathData, stat);
       // Update tab badge
       var totalBins = Object.values(m.vars).reduce(function(s, arr) { return Math.max(s, arr.length); }, 0);
@@ -11110,7 +11987,7 @@ function renderSwathCharts(swathData, stat) {
     varEntries.push({
       colIdx: colIdx,
       name: currentHeader[colIdx] || 'Variable',
-      color: STATSCAT_PALETTE[vi % STATSCAT_PALETTE.length],
+      color: getSwathVarColor(currentHeader[colIdx] || 'Variable', vi),
       bins: bins,
       centerLine: centerLine,
       upperLine: upperLine,
@@ -11124,15 +12001,25 @@ function renderSwathCharts(swathData, stat) {
     return;
   }
 
-  var html = '<div class="swath-chart-card">' + renderSwathOverlaySvg(varEntries, swathData, stat) + '</div>';
-  html += renderSwathTable(varEntries, swathData, stat);
+  var display = getSwathDisplay();
+  var chartSvg = display.layout === 'split'
+    ? renderSwathSplitSvg(varEntries, swathData, stat, display)
+    : renderSwathOverlaySvg(varEntries, swathData, stat, display);
+  var html = '<div class="swath-chart-card">' +
+    '<div class="swath-chart-toolbar">' +
+      '<button class="swath-chart-btn" id="swathCopySvg">Copy SVG</button>' +
+      '<button class="swath-chart-btn" id="swathDownloadPng">Download PNG</button>' +
+    '</div>' +
+    chartSvg + '</div>';
+  if (display.showTable) html += renderSwathTable(varEntries, swathData, stat);
   $content.innerHTML = html;
 
   wireSwathCrosshair();
-  wireSwathTableEvents();
+  wireSwathChartActions();
+  if (display.showTable) wireSwathTableEvents();
 }
 
-function renderSwathOverlaySvg(varEntries, swathData, stat) {
+function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
   var numVars = varEntries.length;
   var bw = swathData.binWidth;
 
@@ -11150,8 +12037,9 @@ function renderSwathOverlaySvg(varEntries, swathData, stat) {
   var legendCols = 3;
   var legendRows = Math.ceil(numVars / legendCols);
   var legendH = legendRows * 16 + 10;
-  var countBarH = 20;
-  var H = pad.top + plotH + 30 + countBarH + 10 + legendH + pad.bottom;
+  var countBarH = display.showCounts ? 20 : 0;
+  var countGap = display.showCounts ? 30 : 10;
+  var H = pad.top + plotH + countGap + countBarH + 10 + legendH + pad.bottom;
 
   // Shared X scale
   var xMin = refBins[0].center - bw / 2;
@@ -11175,7 +12063,28 @@ function renderSwathOverlaySvg(varEntries, swathData, stat) {
     yMaxs.push(yMax);
   }
 
+  var useLog = display.yScale === 'log';
+  // For log scale, compute log-space min/max
+  var logYMins = [], logYMaxs = [];
+  if (useLog) {
+    for (var vi = 0; vi < varEntries.length; vi++) {
+      var logMin = yMins[vi] > 0 ? Math.log10(yMins[vi]) : -1;
+      var logMax = yMaxs[vi] > 0 ? Math.log10(yMaxs[vi]) : 1;
+      if (logMax <= logMin) logMax = logMin + 1;
+      logYMins.push(logMin);
+      logYMaxs.push(logMax);
+    }
+  }
+
   function syFn(vi) {
+    if (useLog) {
+      var lmn = logYMins[vi], lmx = logYMaxs[vi];
+      var lr = lmx - lmn || 1;
+      return function(v) {
+        var lv = v > 0 ? Math.log10(v) : lmn;
+        return pad.top + ((lmx - lv) / lr) * plotH;
+      };
+    }
     var ymn = yMins[vi], ymx = yMaxs[vi];
     var yr = ymx - ymn || 1;
     return function(v) { return pad.top + ((ymx - v) / yr) * plotH; };
@@ -11183,6 +12092,7 @@ function renderSwathOverlaySvg(varEntries, swathData, stat) {
 
   // Store params for crosshair
   _swathChartParams = {
+    layout: 'overlay',
     varEntries: varEntries,
     xMin: xMin, xMax: xMax,
     yMins: yMins, yMaxs: yMaxs,
@@ -11206,10 +12116,22 @@ function renderSwathOverlaySvg(varEntries, swathData, stat) {
   // Y grid from first variable only
   var sy0 = syFn(0);
   var nyTicks = 6;
-  var yRange0 = yMaxs[0] - yMins[0] || 1;
-  for (var i = 0; i <= nyTicks; i++) {
-    var v = yMins[0] + (yRange0 * i / nyTicks);
-    var y = sy0(v);
+  var yGridVals = [];
+  if (useLog) {
+    var lFloor = Math.floor(logYMins[0]), lCeil = Math.ceil(logYMaxs[0]);
+    for (var p = lFloor; p <= lCeil; p++) { yGridVals.push(Math.pow(10, p)); }
+    if (yGridVals.length < 3) {
+      for (var i = 0; i <= nyTicks; i++) {
+        var lv = logYMins[0] + ((logYMaxs[0] - logYMins[0]) * i / nyTicks);
+        yGridVals.push(Math.pow(10, lv));
+      }
+    }
+  } else {
+    var yRange0 = yMaxs[0] - yMins[0] || 1;
+    for (var i = 0; i <= nyTicks; i++) yGridVals.push(yMins[0] + (yRange0 * i / nyTicks));
+  }
+  for (var i = 0; i < yGridVals.length; i++) {
+    var y = sy0(yGridVals[i]);
     svg += '<line x1="' + pad.left + '" y1="' + y.toFixed(1) + '" x2="' + (pad.left + plotW) + '" y2="' + y.toFixed(1) + '" stroke="#1e2228" stroke-width="1"/>';
   }
 
@@ -11219,16 +12141,18 @@ function renderSwathOverlaySvg(varEntries, swathData, stat) {
     var sy = syFn(vi);
     var color = entry.color;
 
-    // Ribbon
-    var ribbonPath = '';
-    for (var i = 0; i < entry.bins.length; i++) {
-      ribbonPath += (i === 0 ? 'M' : 'L') + sx(entry.upperLine[i].x).toFixed(1) + ',' + sy(entry.upperLine[i].y != null ? entry.upperLine[i].y : 0).toFixed(1);
+    // Ribbon (bands)
+    if (display.showBands) {
+      var ribbonPath = '';
+      for (var i = 0; i < entry.bins.length; i++) {
+        ribbonPath += (i === 0 ? 'M' : 'L') + sx(entry.upperLine[i].x).toFixed(1) + ',' + sy(entry.upperLine[i].y != null ? entry.upperLine[i].y : 0).toFixed(1);
+      }
+      for (var i = entry.bins.length - 1; i >= 0; i--) {
+        ribbonPath += 'L' + sx(entry.lowerLine[i].x).toFixed(1) + ',' + sy(entry.lowerLine[i].y != null ? entry.lowerLine[i].y : 0).toFixed(1);
+      }
+      ribbonPath += 'Z';
+      svg += '<path d="' + ribbonPath + '" fill="' + color + '" opacity="0.15"/>';
     }
-    for (var i = entry.bins.length - 1; i >= 0; i--) {
-      ribbonPath += 'L' + sx(entry.lowerLine[i].x).toFixed(1) + ',' + sy(entry.lowerLine[i].y != null ? entry.lowerLine[i].y : 0).toFixed(1);
-    }
-    ribbonPath += 'Z';
-    svg += '<path d="' + ribbonPath + '" fill="' + color + '" opacity="0.15"/>';
 
     // Center line
     var centerPath = '';
@@ -11245,10 +12169,26 @@ function renderSwathOverlaySvg(varEntries, swathData, stat) {
     var color = entry.color;
     var yr = yMaxs[vi] - yMins[vi] || 1;
 
+    // Generate tick values for this variable's axis
+    var tickVals = [];
+    if (useLog) {
+      var lFloorV = Math.floor(logYMins[vi]), lCeilV = Math.ceil(logYMaxs[vi]);
+      for (var p = lFloorV; p <= lCeilV; p++) tickVals.push(Math.pow(10, p));
+      if (tickVals.length < 3) {
+        tickVals = [];
+        for (var ti = 0; ti <= nyTicks; ti++) {
+          var lv = logYMins[vi] + ((logYMaxs[vi] - logYMins[vi]) * ti / nyTicks);
+          tickVals.push(Math.pow(10, lv));
+        }
+      }
+    } else {
+      for (var ti = 0; ti <= nyTicks; ti++) tickVals.push(yMins[vi] + (yr * ti / nyTicks));
+    }
+
     if (vi === 0) {
       // Left Y-axis
-      for (var i = 0; i <= nyTicks; i++) {
-        var v = yMins[vi] + (yr * i / nyTicks);
+      for (var ti = 0; ti < tickVals.length; ti++) {
+        var v = tickVals[ti];
         var y = sy(v);
         svg += '<text x="' + (pad.left - 6) + '" y="' + (y + 3) + '" text-anchor="end" fill="' + color + '" font-size="9">' + formatNum(v) + '</text>';
       }
@@ -11257,8 +12197,8 @@ function renderSwathOverlaySvg(varEntries, swathData, stat) {
     } else {
       // Right Y-axis — offset by (vi - 1) * 55
       var axisX = pad.left + plotW + (vi - 1) * 55 + 10;
-      for (var i = 0; i <= nyTicks; i++) {
-        var v = yMins[vi] + (yr * i / nyTicks);
+      for (var ti = 0; ti < tickVals.length; ti++) {
+        var v = tickVals[ti];
         var y = sy(v);
         svg += '<text x="' + (axisX + 6) + '" y="' + (y + 3) + '" text-anchor="start" fill="' + color + '" font-size="9">' + formatNum(v) + '</text>';
       }
@@ -11267,29 +12207,27 @@ function renderSwathOverlaySvg(varEntries, swathData, stat) {
   }
 
   // Count bars below plot
-  var maxCount = 0;
-  for (var i = 0; i < refBins.length; i++) { if (refBins[i].count > maxCount) maxCount = refBins[i].count; }
-  var barTop = pad.top + plotH + 26;
-  for (var i = 0; i < refBins.length; i++) {
-    var bin = refBins[i];
-    var bx = sx(bin.center - bw / 2);
-    var bwPx = sx(bin.center + bw / 2) - bx;
-    var bh = maxCount > 0 ? (bin.count / maxCount) * countBarH : 0;
-    svg += '<rect x="' + bx.toFixed(1) + '" y="' + (barTop + countBarH - bh).toFixed(1) + '" width="' + Math.max(1, bwPx - 1).toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="rgba(240,178,50,0.3)"/>';
+  var barTop = pad.top + plotH + countGap - 4;
+  if (display.showCounts) {
+    var maxCount = 0;
+    for (var i = 0; i < refBins.length; i++) { if (refBins[i].count > maxCount) maxCount = refBins[i].count; }
+    for (var i = 0; i < refBins.length; i++) {
+      var bin = refBins[i];
+      var bx = sx(bin.center - bw / 2);
+      var bwPx = sx(bin.center + bw / 2) - bx;
+      var bh = maxCount > 0 ? (bin.count / maxCount) * countBarH : 0;
+      svg += '<rect x="' + bx.toFixed(1) + '" y="' + (barTop + countBarH - bh).toFixed(1) + '" width="' + Math.max(1, bwPx - 1).toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="rgba(240,178,50,0.3)"/>';
+    }
   }
 
   // Direction labels
-  var axisKey = swathData.axis;
-  var dirLeft = '', dirRight = '';
-  if (axisKey === 'x') { dirLeft = 'W'; dirRight = 'E'; }
-  else if (axisKey === 'y') { dirLeft = 'S'; dirRight = 'N'; }
-  else { dirLeft = 'Bottom'; dirRight = 'Top'; }
-  svg += '<text x="' + (pad.left + 4) + '" y="' + (pad.top - 8) + '" fill="#6a737d" font-size="10">' + dirLeft + ' (' + formatNum(xMin) + ')</text>';
-  svg += '<text x="' + (pad.left + plotW - 4) + '" y="' + (pad.top - 8) + '" text-anchor="end" fill="#6a737d" font-size="10">' + dirRight + ' (' + formatNum(xMax) + ')</text>';
+  var dirLabels = getSwathDirectionLabels(swathData);
+  svg += '<text x="' + (pad.left + 4) + '" y="' + (pad.top - 8) + '" fill="#6a737d" font-size="10">' + dirLabels.left + ' (' + formatNum(xMin) + ')</text>';
+  svg += '<text x="' + (pad.left + plotW - 4) + '" y="' + (pad.top - 8) + '" text-anchor="end" fill="#6a737d" font-size="10">' + dirLabels.right + ' (' + formatNum(xMax) + ')</text>';
 
   // X axis label
   var statLabels = { mean_std: 'Mean \u00b1 Std', p25_50_75: 'P25/P50/P75', p10_50_90: 'P10/P50/P90' };
-  svg += '<text x="' + (pad.left + plotW / 2) + '" y="' + (barTop + countBarH + 14) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + swathData.axis.toUpperCase() + ' Coordinate (' + (statLabels[stat] || stat) + ')</text>';
+  svg += '<text x="' + (pad.left + plotW / 2) + '" y="' + (barTop + countBarH + 14) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + getSwathXAxisLabel(swathData) + ' (' + (statLabels[stat] || stat) + ')</text>';
 
   // Legend — 3 columns
   var legendTop = barTop + countBarH + 24;
@@ -11315,6 +12253,208 @@ function renderSwathOverlaySvg(varEntries, swathData, stat) {
   return '<svg class="swath-overlay-svg" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono);width:100%;height:100%"' +
     ' data-pad-left="' + pad.left + '" data-pad-right="' + pad.right + '" data-w="' + W + '"' +
     ' data-xmin="' + xMin + '" data-xmax="' + xMax + '" data-plot-w="' + plotW + '" data-plot-h="' + plotH + '">' +
+    svg + '</svg>';
+}
+
+function renderSwathSplitSvg(varEntries, swathData, stat, display) {
+  var numVars = varEntries.length;
+  var bw = swathData.binWidth;
+  var refBins = varEntries[0].bins;
+
+  // Dimensions
+  var W = 720;
+  var pad = { top: 20, right: 20, bottom: 40, left: 65 };
+  var plotW = W - pad.left - pad.right;
+  var subH = 150; // height per sub-chart
+  var subGap = 24; // gap between sub-charts
+  var countBarH = display.showCounts ? 20 : 0;
+  var countGap = display.showCounts ? 10 : 0;
+  var totalH = pad.top + numVars * subH + (numVars - 1) * subGap + countGap + countBarH + pad.bottom;
+
+  // Shared X scale
+  var xMin = refBins[0].center - bw / 2;
+  var xMax = refBins[refBins.length - 1].center + bw / 2;
+  var xRange = xMax - xMin || 1;
+  var sx = function(v) { return pad.left + ((v - xMin) / xRange) * plotW; };
+
+  var useLog = display.yScale === 'log';
+
+  // Per-variable Y ranges
+  var yMins = [], yMaxs = [], logYMinsSplit = [], logYMaxsSplit = [];
+  for (var vi = 0; vi < varEntries.length; vi++) {
+    var entry = varEntries[vi];
+    var allY = [];
+    for (var j = 0; j < entry.centerLine.length; j++) { if (entry.centerLine[j].y != null) allY.push(entry.centerLine[j].y); }
+    for (var j = 0; j < entry.upperLine.length; j++) { if (entry.upperLine[j].y != null) allY.push(entry.upperLine[j].y); }
+    for (var j = 0; j < entry.lowerLine.length; j++) { if (entry.lowerLine[j].y != null) allY.push(entry.lowerLine[j].y); }
+    var yMin = allY.length > 0 ? Math.min.apply(null, allY) : 0;
+    var yMax = allY.length > 0 ? Math.max.apply(null, allY) : 1;
+    var yPad = (yMax - yMin) * 0.1 || 1;
+    yMin -= yPad; yMax += yPad;
+    yMins.push(yMin); yMaxs.push(yMax);
+    if (useLog) {
+      var lMin = yMin > 0 ? Math.log10(yMin) : -1;
+      var lMax = yMax > 0 ? Math.log10(yMax) : 1;
+      if (lMax <= lMin) lMax = lMin + 1;
+      logYMinsSplit.push(lMin); logYMaxsSplit.push(lMax);
+    }
+  }
+
+  function subTop(vi) { return pad.top + vi * (subH + subGap); }
+
+  function syFn(vi) {
+    var st = subTop(vi);
+    if (useLog) {
+      var lmn = logYMinsSplit[vi], lmx = logYMaxsSplit[vi];
+      var lr = lmx - lmn || 1;
+      return function(v) {
+        var lv = v > 0 ? Math.log10(v) : lmn;
+        return st + ((lmx - lv) / lr) * subH;
+      };
+    }
+    var ymn = yMins[vi], ymx = yMaxs[vi], yr = ymx - ymn || 1;
+    return function(v) { return st + ((ymx - v) / yr) * subH; };
+  }
+
+  // Store params for crosshair
+  _swathChartParams = {
+    layout: 'split',
+    varEntries: varEntries,
+    xMin: xMin, xMax: xMax,
+    yMins: yMins, yMaxs: yMaxs,
+    pad: pad, plotW: plotW, subH: subH, subGap: subGap,
+    W: W, H: totalH, bw: bw,
+    stat: stat, refBins: refBins, numVars: numVars,
+    subTop: subTop
+  };
+
+  var svg = '';
+  svg += '<rect width="' + W + '" height="' + totalH + '" fill="var(--bg)" rx="4"/>';
+
+  // Direction labels on top of first sub-chart
+  var dirLabels = getSwathDirectionLabels(swathData);
+  svg += '<text x="' + (pad.left + 4) + '" y="' + (pad.top - 6) + '" fill="#6a737d" font-size="10">' + dirLabels.left + ' (' + formatNum(xMin) + ')</text>';
+  svg += '<text x="' + (pad.left + plotW - 4) + '" y="' + (pad.top - 6) + '" text-anchor="end" fill="#6a737d" font-size="10">' + dirLabels.right + ' (' + formatNum(xMax) + ')</text>';
+
+  // Render each sub-chart
+  for (var vi = 0; vi < numVars; vi++) {
+    var entry = varEntries[vi];
+    var sy = syFn(vi);
+    var st = subTop(vi);
+    var color = entry.color;
+
+    // Background for sub-chart
+    svg += '<rect x="' + pad.left + '" y="' + st + '" width="' + plotW + '" height="' + subH + '" fill="var(--bg)" stroke="var(--border)" stroke-width="0.5"/>';
+
+    // X grid lines (light)
+    var nxTicks = Math.min(10, refBins.length);
+    for (var i = 0; i <= nxTicks; i++) {
+      var v = xMin + (xRange * i / nxTicks);
+      var x = sx(v);
+      svg += '<line x1="' + x.toFixed(1) + '" y1="' + st + '" x2="' + x.toFixed(1) + '" y2="' + (st + subH) + '" stroke="#1e2228" stroke-width="1"/>';
+    }
+
+    // Y grid lines
+    var nyTicks = 4;
+    var yr = yMaxs[vi] - yMins[vi] || 1;
+    if (useLog) {
+      var lFloor = Math.floor(logYMinsSplit[vi]), lCeil = Math.ceil(logYMaxsSplit[vi]);
+      for (var p = lFloor; p <= lCeil; p++) {
+        var gv = Math.pow(10, p);
+        var gy = sy(gv);
+        svg += '<line x1="' + pad.left + '" y1="' + gy.toFixed(1) + '" x2="' + (pad.left + plotW) + '" y2="' + gy.toFixed(1) + '" stroke="#1e2228" stroke-width="1"/>';
+      }
+    } else {
+      for (var i = 0; i <= nyTicks; i++) {
+        var v = yMins[vi] + (yr * i / nyTicks);
+        var gy = sy(v);
+        svg += '<line x1="' + pad.left + '" y1="' + gy.toFixed(1) + '" x2="' + (pad.left + plotW) + '" y2="' + gy.toFixed(1) + '" stroke="#1e2228" stroke-width="1"/>';
+      }
+    }
+
+    // Ribbon (bands)
+    if (display.showBands) {
+      var ribbonPath = '';
+      for (var i = 0; i < entry.bins.length; i++) {
+        ribbonPath += (i === 0 ? 'M' : 'L') + sx(entry.upperLine[i].x).toFixed(1) + ',' + sy(entry.upperLine[i].y != null ? entry.upperLine[i].y : 0).toFixed(1);
+      }
+      for (var i = entry.bins.length - 1; i >= 0; i--) {
+        ribbonPath += 'L' + sx(entry.lowerLine[i].x).toFixed(1) + ',' + sy(entry.lowerLine[i].y != null ? entry.lowerLine[i].y : 0).toFixed(1);
+      }
+      ribbonPath += 'Z';
+      svg += '<path d="' + ribbonPath + '" fill="' + color + '" opacity="0.15"/>';
+    }
+
+    // Center line
+    var centerPath = '';
+    for (var i = 0; i < entry.bins.length; i++) {
+      centerPath += (i === 0 ? 'M' : 'L') + sx(entry.centerLine[i].x).toFixed(1) + ',' + sy(entry.centerLine[i].y != null ? entry.centerLine[i].y : 0).toFixed(1);
+    }
+    svg += '<path d="' + centerPath + '" fill="none" stroke="' + color + '" stroke-width="1.5"/>';
+
+    // Left Y-axis ticks
+    var tickVals = [];
+    if (useLog) {
+      var lFloorV = Math.floor(logYMinsSplit[vi]), lCeilV = Math.ceil(logYMaxsSplit[vi]);
+      for (var p = lFloorV; p <= lCeilV; p++) tickVals.push(Math.pow(10, p));
+      if (tickVals.length < 3) {
+        tickVals = [];
+        for (var ti = 0; ti <= nyTicks; ti++) {
+          var lv = logYMinsSplit[vi] + ((logYMaxsSplit[vi] - logYMinsSplit[vi]) * ti / nyTicks);
+          tickVals.push(Math.pow(10, lv));
+        }
+      }
+    } else {
+      for (var ti = 0; ti <= nyTicks; ti++) tickVals.push(yMins[vi] + (yr * ti / nyTicks));
+    }
+    for (var ti = 0; ti < tickVals.length; ti++) {
+      var y = sy(tickVals[ti]);
+      svg += '<text x="' + (pad.left - 6) + '" y="' + (y + 3) + '" text-anchor="end" fill="' + color + '" font-size="9">' + formatNum(tickVals[ti]) + '</text>';
+    }
+
+    // Variable name label
+    var uSym = entry.unit && entry.unit.symbol ? ' (' + esc(entry.unit.symbol) + ')' : '';
+    svg += '<text x="' + (pad.left + 4) + '" y="' + (st + 12) + '" fill="' + color + '" font-size="10" font-weight="600">' + esc(entry.name) + uSym + '</text>';
+  }
+
+  // Count bars at the bottom (only once, below last sub-chart)
+  if (display.showCounts) {
+    var cbTop = subTop(numVars - 1) + subH + countGap;
+    var maxCount = 0;
+    for (var i = 0; i < refBins.length; i++) { if (refBins[i].count > maxCount) maxCount = refBins[i].count; }
+    for (var i = 0; i < refBins.length; i++) {
+      var bin = refBins[i];
+      var bx = sx(bin.center - bw / 2);
+      var bwPx = sx(bin.center + bw / 2) - bx;
+      var bh = maxCount > 0 ? (bin.count / maxCount) * countBarH : 0;
+      svg += '<rect x="' + bx.toFixed(1) + '" y="' + (cbTop + countBarH - bh).toFixed(1) + '" width="' + Math.max(1, bwPx - 1).toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="rgba(240,178,50,0.3)"/>';
+    }
+  }
+
+  // X axis labels at the very bottom
+  var xLabelY = totalH - pad.bottom + 14;
+  var nxLabels = Math.min(10, refBins.length);
+  for (var i = 0; i <= nxLabels; i++) {
+    var v = xMin + (xRange * i / nxLabels);
+    var x = sx(v);
+    svg += '<text x="' + x.toFixed(1) + '" y="' + xLabelY + '" text-anchor="middle" fill="#6a737d" font-size="9">' + formatNum(v) + '</text>';
+  }
+  var statLabels = { mean_std: 'Mean \u00b1 Std', p25_50_75: 'P25/P50/P75', p10_50_90: 'P10/P50/P90' };
+  svg += '<text x="' + (pad.left + plotW / 2) + '" y="' + (xLabelY + 14) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + getSwathXAxisLabel(swathData) + ' (' + (statLabels[stat] || stat) + ')</text>';
+
+  // Crosshair overlay — spans all sub-charts
+  var crosshairTop = pad.top;
+  var crosshairBottom = subTop(numVars - 1) + subH;
+  svg += '<rect class="swath-crosshair-area" x="' + pad.left + '" y="' + crosshairTop + '" width="' + plotW + '" height="' + (crosshairBottom - crosshairTop) + '" fill="transparent" cursor="crosshair"/>';
+  svg += '<line class="swath-crosshair-line" x1="0" y1="' + crosshairTop + '" x2="0" y2="' + crosshairBottom + '" opacity="0" stroke="var(--fg-dim)" stroke-width="1" stroke-dasharray="3,3" pointer-events="none"/>';
+  svg += '<g class="swath-crosshair-tooltip" opacity="0" pointer-events="none">';
+  svg += '<rect class="swath-tt-bg" rx="3"/>';
+  svg += '<text class="swath-tt-text" font-size="9"/>';
+  svg += '</g>';
+
+  return '<svg class="swath-overlay-svg" viewBox="0 0 ' + W + ' ' + totalH + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono);width:100%;height:100%"' +
+    ' data-pad-left="' + pad.left + '" data-pad-right="' + pad.right + '" data-w="' + W + '"' +
+    ' data-xmin="' + xMin + '" data-xmax="' + xMax + '" data-plot-w="' + plotW + '">' +
     svg + '</svg>';
 }
 
@@ -11378,7 +12518,8 @@ function wireSwathCrosshair() {
     var ttW = 180;
     var ttH = lines.length * lineH + 8;
     var tx = snapX + 12;
-    var ty = p.pad.top + 10;
+    var ty = p.layout === 'split' ? Math.max(p.pad.top, svgPt.y - ttH / 2) : p.pad.top + 10;
+    if (ty + ttH > p.H - 10) ty = p.H - ttH - 10;
     if (tx + ttW > p.W - 10) tx = snapX - ttW - 12;
 
     ttBg.setAttribute('x', tx);
@@ -11407,6 +12548,11 @@ function wireSwathCrosshair() {
 
 function swathData_axisLabel() {
   if (!lastSwathData) return 'Coord';
+  if (lastSwathData.azimuth != null) {
+    var label = 'Az' + Math.round(lastSwathData.azimuth) + '\u00b0';
+    if (lastSwathData.plunge && lastSwathData.plunge !== 0) label += '/Pl' + Math.round(lastSwathData.plunge) + '\u00b0';
+    return label;
+  }
   return lastSwathData.axis.toUpperCase();
 }
 
@@ -11474,6 +12620,66 @@ function renderSwathTable(varEntries, swathData, stat) {
       '</div>' +
     '</div>' +
   '</div>';
+}
+
+function wireSwathChartActions() {
+  var copySvg = document.getElementById('swathCopySvg');
+  var dlPng = document.getElementById('swathDownloadPng');
+  var svgEl = document.querySelector('.swath-overlay-svg');
+  if (!svgEl) return;
+
+  if (copySvg) {
+    copySvg.addEventListener('click', function() {
+      navigator.clipboard.writeText(svgEl.outerHTML).then(function() {
+        copySvg.textContent = 'Copied!';
+        setTimeout(function() { copySvg.textContent = 'Copy SVG'; }, 1500);
+      });
+    });
+  }
+
+  if (dlPng) {
+    dlPng.addEventListener('click', function() {
+      // Clone and clean for export
+      var clone = svgEl.cloneNode(true);
+      // Remove interactive crosshair elements
+      var area = clone.querySelector('.swath-crosshair-area');
+      var crossLine = clone.querySelector('.swath-crosshair-line');
+      var ttGroup = clone.querySelector('.swath-crosshair-tooltip');
+      if (area) area.remove();
+      if (crossLine) crossLine.remove();
+      if (ttGroup) ttGroup.remove();
+      var svgData = new XMLSerializer().serializeToString(clone);
+      // Retheme for light background
+      svgData = svgData.replace(/fill="var\(--bg\)"/g, 'fill="white"');
+      svgData = svgData.replace(/fill="var\(--bg1\)"/g, 'fill="#f5f5f5"');
+      svgData = svgData.replace(/fill="#6a737d"/g, 'fill="#333"');
+      svgData = svgData.replace(/stroke="#1e2228"/g, 'stroke="#ddd"');
+      svgData = svgData.replace(/fill="var\(--fg-dim\)"/g, 'fill="#666"');
+      svgData = svgData.replace(/fill="var\(--fg\)"/g, 'fill="#333"');
+      svgData = svgData.replace(/stroke="var\(--fg-dim\)"/g, 'stroke="#999"');
+      svgData = svgData.replace(/stroke="var\(--border\)"/g, 'stroke="#ddd"');
+      svgData = svgData.replace(/style="font-family:var\(--mono\)[^"]*"/g, 'style="font-family:monospace"');
+      var canvas = document.createElement('canvas');
+      var scale = 2;
+      var vb = svgEl.getAttribute('viewBox').split(' ').map(Number);
+      canvas.width = vb[2] * scale;
+      canvas.height = vb[3] * scale;
+      var ctx = canvas.getContext('2d');
+      var img = new Image();
+      img.onload = function() {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(function(blob) {
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = 'swath_plot.png';
+          a.click();
+          URL.revokeObjectURL(url);
+        }, 'image/png');
+      };
+      img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+    });
+  }
 }
 
 function wireSwathTableEvents() {
@@ -11928,7 +13134,9 @@ function runGt() {
     weightCol: weightCol >= 0 ? weightCol : null,
     dxyzCols: dxyzCols,
     blockVolume: blockVolume,
-    groupByCol: groupByCol >= 0 ? groupByCol : null
+    groupByCol: groupByCol >= 0 ? groupByCol : null,
+    dmEndianness: preflightData && preflightData.dmEndianness || null,
+    dmFormat: preflightData && preflightData.dmFormat || null
   });
 
   gtWorker.onerror = function(e) {
@@ -12605,7 +13813,9 @@ function runSection() {
     normalAxis: normalAxisIdx,
     slicePos,
     tolerance,
-    varCol
+    varCol,
+    dmEndianness: preflightData && preflightData.dmEndianness || null,
+    dmFormat: preflightData && preflightData.dmFormat || null
   });
 
   sectionWorker.onerror = (e) => {
@@ -14031,7 +15241,8 @@ if (HAS_FSAA) {
       var handles = await window.showOpenFilePicker({
         types: [
           { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
-          { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } }
+          { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } },
+          { description: 'Datamine files', accept: { 'application/octet-stream': ['.dm'] } }
         ],
         multiple: false
       });

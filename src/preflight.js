@@ -183,13 +183,275 @@ function guessDXYZMain(header, types) {
   return result;
 }
 
+// ─── Datamine .dm binary support ──────────────────────────────────────
+
+function dmReadText(dv, offset, nWords, format) {
+  var result = '';
+  var step = format === 'ep' ? 8 : 4;
+  for (var w = 0; w < nWords; w++) {
+    var base = offset + w * step;
+    for (var b = 0; b < 4; b++) {
+      var ch = dv.getUint8(base + b);
+      if (ch >= 32 && ch < 127) result += String.fromCharCode(ch);
+    }
+  }
+  return result.trim();
+}
+
+function parseDmDD(dv, endianness, format) {
+  var isLE = endianness === 'little';
+  var ws = format === 'ep' ? 8 : 4; // word size
+  var pageSize = format === 'ep' ? 4096 : 2048;
+  var readNum = format === 'ep'
+    ? function(off) { return dv.getFloat64(off, isLE); }
+    : function(off) { return dv.getFloat32(off, isLE); };
+
+  // DD header fields
+  var fileName = dmReadText(dv, 0, 2, format);
+  // Skip database name (words 3-4)
+  var descOff = format === 'ep' ? 32 : 16;
+  var description = dmReadText(dv, descOff, 20, format);
+  var dateOff = format === 'ep' ? 192 : 96;
+  var dateVal = Math.round(readNum(dateOff));
+  var totalFields = Math.round(readNum(dateOff + ws));
+  var lastPage = Math.round(readNum(dateOff + ws * 2));
+  var lastRecordInLastPage = Math.round(readNum(dateOff + ws * 3));
+
+  // Field definitions start after the header (word 29 for SP = byte 112, word 29 for EP = byte 224)
+  var fieldStart = dateOff + ws * 4;
+  var fieldSize = ws * 7; // 7 words per field definition
+  var rawFields = [];
+  for (var f = 0; f < totalFields; f++) {
+    var fOff = fieldStart + f * fieldSize;
+    if (fOff + fieldSize > pageSize) break;
+    var name = dmReadText(dv, fOff, 2, format);
+    var typeStr = dmReadText(dv, fOff + ws * 2, 1, format);
+    var sw = Math.round(readNum(fOff + ws * 3));
+    var lenf = Math.round(readNum(fOff + ws * 4));
+    // word 6 unused
+    var defaultValue = readNum(fOff + ws * 6);
+    rawFields.push({ name: name, type: typeStr.charAt(0).toUpperCase(), sw: sw, lenf: lenf, defaultValue: defaultValue });
+  }
+
+  // Reconstruct columns: group rawFields by name
+  var colMap = {};
+  var colOrder = [];
+  for (var i = 0; i < rawFields.length; i++) {
+    var rf = rawFields[i];
+    if (!colMap[rf.name]) {
+      colMap[rf.name] = { name: rf.name, rawType: rf.type, entries: [], defaultValue: rf.defaultValue };
+      colOrder.push(rf.name);
+    }
+    colMap[rf.name].entries.push(rf);
+  }
+
+  var columns = [];
+  var maxLen = 0;
+  for (var ci = 0; ci < colOrder.length; ci++) {
+    var cm = colMap[colOrder[ci]];
+    var isConstant = cm.entries[0].sw === 0;
+    var colType = cm.rawType === 'A' ? 'categorical' : 'numeric';
+    // Collect SW positions ordered by LENF
+    var sorted = cm.entries.slice().sort(function(a, b) { return a.lenf - b.lenf; });
+    var swPositions = sorted.map(function(e) { return e.sw; });
+    // Track max SW for record length
+    for (var si = 0; si < swPositions.length; si++) {
+      if (swPositions[si] > maxLen) maxLen = swPositions[si];
+    }
+    // Default value for constants: convert numeric default to string for alpha
+    var constantValue = null;
+    if (isConstant) {
+      if (colType === 'numeric') {
+        constantValue = (Math.abs(cm.defaultValue) > 9.9e29) ? '' : String(cm.defaultValue);
+      } else {
+        // Alpha constant — decode default as text from the raw float bytes
+        constantValue = '';
+        for (var ei = 0; ei < sorted.length; ei++) {
+          var defBytes = sorted[ei].defaultValue;
+          // For alpha constants, the default is stored as a float whose bytes represent ASCII
+          var tmpBuf = new ArrayBuffer(format === 'ep' ? 8 : 4);
+          var tmpDv = new DataView(tmpBuf);
+          if (format === 'ep') tmpDv.setFloat64(0, defBytes, isLE);
+          else tmpDv.setFloat32(0, defBytes, isLE);
+          for (var bi = 0; bi < 4; bi++) {
+            var cb = tmpDv.getUint8(bi);
+            if (cb >= 32 && cb < 127) constantValue += String.fromCharCode(cb);
+          }
+        }
+        constantValue = constantValue.trim();
+      }
+    }
+    columns.push({
+      name: cm.name,
+      type: colType,
+      swPositions: swPositions,
+      defaultValue: cm.defaultValue,
+      isConstant: isConstant,
+      constantValue: constantValue
+    });
+  }
+
+  var recordsPerPage = maxLen > 0 ? Math.floor(508 / maxLen) : 0;
+
+  return {
+    fileName: fileName,
+    description: description,
+    date: dateVal,
+    totalFields: totalFields,
+    lastPage: lastPage,
+    lastRecordInLastPage: lastRecordInLastPage,
+    rawFields: rawFields,
+    columns: columns,
+    maxLen: maxLen,
+    recordsPerPage: recordsPerPage,
+    pageSize: pageSize,
+    wordSize: ws
+  };
+}
+
+async function detectDmFormat(file) {
+  var size = Math.min(4096, file.size);
+  var buf = await file.slice(0, size).arrayBuffer();
+  var dv = new DataView(buf);
+
+  function isPrintableAscii(dv, off, len) {
+    for (var i = 0; i < len; i++) {
+      if (off + i >= dv.byteLength) return false;
+      var ch = dv.getUint8(off + i);
+      if (ch < 32 || ch >= 127) return false;
+    }
+    return true;
+  }
+
+  function tryFormat(fmt, endian) {
+    var ws = fmt === 'ep' ? 8 : 4;
+    var isLE = endian === 'little';
+    // Field count offset: SP=96+ws=100, EP=192+ws=200
+    var dateOff = fmt === 'ep' ? 192 : 96;
+    var fcOff = dateOff + ws;
+    if (fcOff + ws > dv.byteLength) return false;
+    var fc;
+    if (fmt === 'ep') fc = dv.getFloat64(fcOff, isLE);
+    else fc = dv.getFloat32(fcOff, isLE);
+    var rounded = Math.round(fc);
+    if (rounded < 1 || rounded > 500 || Math.abs(fc - rounded) > 0.01) return false;
+    // Check first field name is printable ASCII
+    var fieldStart = dateOff + ws * 4;
+    if (fieldStart + 4 > dv.byteLength) return false;
+    if (!isPrintableAscii(dv, fieldStart, 4)) return false;
+    return true;
+  }
+
+  // Try in order: SP+LE, SP+BE, EP+LE, EP+BE
+  var combos = [
+    { format: 'sp', endianness: 'little' },
+    { format: 'sp', endianness: 'big' },
+    { format: 'ep', endianness: 'little' },
+    { format: 'ep', endianness: 'big' }
+  ];
+  for (var i = 0; i < combos.length; i++) {
+    if (tryFormat(combos[i].format, combos[i].endianness)) return combos[i];
+  }
+  return null;
+}
+
+async function readDmSampleRows(file, dmInfo, maxRows, endianness) {
+  var pageSize = dmInfo.pageSize;
+  var ws = dmInfo.wordSize;
+  var maxLen = dmInfo.maxLen;
+  var recsPerPage = dmInfo.recordsPerPage;
+  var columns = dmInfo.columns;
+  var isLE = endianness === 'little';
+  var format = ws === 8 ? 'ep' : 'sp';
+
+  // Read page 2 (first data page)
+  if (file.size < pageSize * 2) return [];
+  var dataBuf = await file.slice(pageSize, pageSize * 2).arrayBuffer();
+  var dv = new DataView(dataBuf);
+
+  var totalRecords = dmInfo.lastPage > 1
+    ? (dmInfo.lastPage - 2) * recsPerPage + dmInfo.lastRecordInLastPage
+    : dmInfo.lastRecordInLastPage;
+  var recsThisPage = Math.min(recsPerPage, totalRecords, maxRows);
+
+  var readNum = format === 'ep'
+    ? function(off) { return dv.getFloat64(off, isLE); }
+    : function(off) { return dv.getFloat32(off, isLE); };
+
+  var rows = [];
+  for (var ri = 0; ri < recsThisPage; ri++) {
+    var recStart = ri * maxLen * ws;
+    var row = [];
+    for (var ci = 0; ci < columns.length; ci++) {
+      var col = columns[ci];
+      if (col.isConstant) {
+        row.push(col.constantValue || '');
+        continue;
+      }
+      if (col.type === 'numeric') {
+        var off = recStart + (col.swPositions[0] - 1) * ws;
+        if (off + ws > dataBuf.byteLength) { row.push(''); continue; }
+        var v = readNum(off);
+        if (Math.abs(v) > 9.9e29) row.push('');
+        else row.push(String(v));
+      } else {
+        // Alpha — read 4 bytes per SW position
+        var text = '';
+        for (var si = 0; si < col.swPositions.length; si++) {
+          var aOff = recStart + (col.swPositions[si] - 1) * ws;
+          if (aOff + 4 > dataBuf.byteLength) continue;
+          for (var b = 0; b < 4; b++) {
+            var ch = dv.getUint8(aOff + b);
+            if (ch >= 32 && ch < 127) text += String.fromCharCode(ch);
+          }
+        }
+        row.push(text.trim());
+      }
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
 async function runPreflight(file) {
   const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip';
+  const isDm = file.name.toLowerCase().endsWith('.dm');
   let zipEntries = null;
   let lines;
 
   let commentLines = [];
-  if (isZip) {
+  if (isDm) {
+    const dmDetected = await detectDmFormat(file);
+    if (!dmDetected) throw new Error('Unable to detect DM format. File may not be a valid Datamine binary.');
+    const pageSize = dmDetected.format === 'ep' ? 4096 : 2048;
+    const buf = await file.slice(0, pageSize).arrayBuffer();
+    const dv = new DataView(buf);
+    const dmInfo = parseDmDD(dv, dmDetected.endianness, dmDetected.format);
+    const header = dmInfo.columns.map(c => c.name);
+    const autoTypes = dmInfo.columns.map(c => c.type);
+    const sampleRows = await readDmSampleRows(file, dmInfo, 100, dmDetected.endianness);
+    const xyzGuess = guessXYZMain(header, autoTypes);
+    const dxyzGuess = guessDXYZMain(header, autoTypes);
+    const defaultFilters = buildDefaultColFilters(header, autoTypes, xyzGuess);
+    return {
+      header,
+      sampleRows,
+      autoTypes,
+      delimiter: ',',
+      zipEntries: null,
+      selectedZipEntry: null,
+      typeOverrides: {},
+      xyz: { ...xyzGuess },
+      dxyz: { ...dxyzGuess },
+      skipCols: new Set(),
+      colFilters: defaultFilters,
+      commentLines: [],
+      isDm: true,
+      dmFormat: dmDetected.format,
+      dmEndianness: dmDetected.endianness,
+      dmInfo: dmInfo
+    };
+  } else if (isZip) {
     zipEntries = await listZipEntries(file);
     const csvEntries = zipEntries.filter(e => CSV_EXTENSIONS_MAIN.test(e.name));
     if (csvEntries.length === 0) throw new Error('No CSV/TXT/DAT files found in ZIP. Contents: ' + zipEntries.map(e => e.name).join(', '));
@@ -268,6 +530,14 @@ function renderPreflight(data) {
   } else if (data.zipEntries && data.zipEntries.length === 1) {
     $preflightZip.innerHTML = `ZIP: <strong style="color:var(--fg-bright)">${esc(data.zipEntries[0].name)}</strong>` +
       `<span class="zip-size">${formatSize(data.zipEntries[0].uncompSize)}</span>`;
+  } else if (data.isDm && data.dmInfo) {
+    const totalRecs = data.dmInfo.lastPage > 1
+      ? (data.dmInfo.lastPage - 2) * data.dmInfo.recordsPerPage + data.dmInfo.lastRecordInLastPage
+      : data.dmInfo.lastRecordInLastPage;
+    const fmtLabel = data.dmFormat === 'ep' ? 'EP (REAL*8)' : 'SP (REAL*4)';
+    const endLabel = data.dmEndianness === 'big' ? 'Big-Endian' : 'Little-Endian';
+    $preflightZip.innerHTML = 'DM: <strong style="color:var(--fg-bright)">' + esc(data.dmInfo.fileName || currentFile.name) + '</strong>' +
+      '<span class="zip-size">' + fmtLabel + ', ' + endLabel + ' \u2014 ' + data.dmInfo.columns.length + ' fields, ' + totalRecs + ' records</span>';
   } else {
     $preflightZip.innerHTML = '';
   }
@@ -293,6 +563,27 @@ function renderPreflightSidebar(data) {
     <div id="pfDxyzWrap"></div>
   </div>`;
 
+  // DM format options (only shown for .dm files)
+  if (data.isDm) {
+    html += `<div class="pf-sidebar-section" id="pfDmOptions">
+      <div class="pf-sidebar-section-title">DM Format</div>
+      <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.3rem">
+        <span style="font-size:0.8rem;color:var(--fg-dim)">Byte order</span>
+        <select class="pf-select" id="pfEndianness">
+          <option value="little"${data.dmEndianness === 'little' ? ' selected' : ''}>Little-Endian</option>
+          <option value="big"${data.dmEndianness === 'big' ? ' selected' : ''}>Big-Endian</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:0.5rem;align-items:center">
+        <span style="font-size:0.8rem;color:var(--fg-dim)">Precision</span>
+        <select class="pf-select" id="pfDmFormat">
+          <option value="sp"${data.dmFormat === 'sp' ? ' selected' : ''}>Single (REAL*4)</option>
+          <option value="ep"${data.dmFormat === 'ep' ? ' selected' : ''}>Extended (REAL*8)</option>
+        </select>
+      </div>
+    </div>`;
+  }
+
   // Column list header with search
   html += `<div class="pf-sidebar-section" style="padding-bottom:0.3rem">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem">
@@ -312,6 +603,7 @@ function renderPreflightSidebar(data) {
   </div>`;
 
   // Column list — always render both filter buttons; hide via class when not filterable
+  const dmCols = data.isDm && data.dmInfo ? data.dmInfo.columns : null;
   html += '<div class="pf-col-list" id="pfColList">';
   for (let i = 0; i < header.length; i++) {
     const currentType = typeOverrides[i] || autoTypes[i];
@@ -320,11 +612,15 @@ function renderPreflightSidebar(data) {
     const cf = colFilters[i] || {};
     const filterable = isFilterableCol(header, i, autoTypes, typeOverrides, data.xyz, skipCols);
     const hideCls = filterable ? '' : ' pf-filter-hidden';
-    html += `<div class="pf-col-item${isSkipped ? ' skipped' : ''}" data-col="${i}" data-name="${esc(header[i]).toLowerCase()}">
+    const isDmConst = dmCols && dmCols[i] && dmCols[i].isConstant;
+    const constStyle = isDmConst ? ' style="border-left:2px solid var(--amber-dim,rgba(184,115,51,0.4))"' : '';
+    const constTooltip = isDmConst ? ' title="File constant \u2014 same value for all records: ' + esc(String(dmCols[i].constantValue || '')) + '"' : '';
+    html += `<div class="pf-col-item${isSkipped ? ' skipped' : ''}" data-col="${i}" data-name="${esc(header[i]).toLowerCase()}"${constStyle}>
       <span class="col-idx">${i}</span>
       <input type="checkbox" class="pf-col-check" data-col="${i}" ${!isSkipped ? 'checked' : ''}>
-      <span class="pf-col-name" title="${esc(header[i])}">${esc(header[i])}</span>
+      <span class="pf-col-name"${isDmConst ? constTooltip : ` title="${esc(header[i])}"`}>${esc(header[i])}</span>
       <div class="pf-col-controls">
+        ${isDmConst ? '<span class="pf-const-badge" title="File constant">CONST</span>' : ''}
         <button class="pf-filter-btn${cf.skipNeg ? ' active' : ''}${hideCls}" data-col="${i}" data-filter="skipNeg" title="Exclude negatives">≥0</button>
         <button class="pf-filter-btn${cf.skipZeros ? ' active' : ''}${hideCls}" data-col="${i}" data-filter="skipZeros" title="Exclude zeros">≠0</button>
         <button class="type-toggle" data-col="${i}" data-type="${currentType}">${label}</button>
@@ -381,6 +677,14 @@ function renderPreflightSidebar(data) {
   // Bulk filter buttons
   document.getElementById('pfFilterAllGt0').addEventListener('click', () => handlePfBulkFilterAll(data));
   document.getElementById('pfFilterClear').addEventListener('click', () => handlePfBulkFilterClear(data));
+
+  // DM format override handlers
+  if (data.isDm) {
+    const $pfEnd = document.getElementById('pfEndianness');
+    const $pfFmt = document.getElementById('pfDmFormat');
+    if ($pfEnd) $pfEnd.addEventListener('change', () => handleDmFormatChange(data));
+    if ($pfFmt) $pfFmt.addEventListener('change', () => handleDmFormatChange(data));
+  }
 
 }
 
@@ -622,6 +926,34 @@ function handlePfBulkFilterClear(data) {
   }
   updatePfCounts(data);
   markAnalysisStale();
+}
+
+async function handleDmFormatChange(data) {
+  const $pfEnd = document.getElementById('pfEndianness');
+  const $pfFmt = document.getElementById('pfDmFormat');
+  if (!$pfEnd || !$pfFmt) return;
+  const newEndianness = $pfEnd.value;
+  const newFormat = $pfFmt.value;
+  try {
+    const pageSize = newFormat === 'ep' ? 4096 : 2048;
+    const buf = await currentFile.slice(0, pageSize).arrayBuffer();
+    const dv = new DataView(buf);
+    const dmInfo = parseDmDD(dv, newEndianness, newFormat);
+    data.dmEndianness = newEndianness;
+    data.dmFormat = newFormat;
+    data.dmInfo = dmInfo;
+    data.header = dmInfo.columns.map(c => c.name);
+    data.autoTypes = dmInfo.columns.map(c => c.type);
+    data.sampleRows = await readDmSampleRows(currentFile, dmInfo, 100, newEndianness);
+    data.typeOverrides = {};
+    data.skipCols = new Set();
+    data.xyz = guessXYZMain(data.header, data.autoTypes);
+    data.dxyz = guessDXYZMain(data.header, data.autoTypes);
+    data.colFilters = buildDefaultColFilters(data.header, data.autoTypes, data.xyz);
+    renderPreflight(data);
+  } catch(err) {
+    $preflightPreview.innerHTML = '<div style="padding:1rem;color:var(--red)">' + esc(err.message) + '</div>';
+  }
 }
 
 function updatePreviewDimming(data) {

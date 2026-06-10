@@ -204,6 +204,12 @@ let currentDXYZ = { dx: -1, dy: -1, dz: -1 };
 let swathWorker = null;
 let lastSwathData = null;
 let swathExprController = null;
+let swathColorOverrides = {};   // { colName: '#hex' }
+
+function getSwathVarColor(colName, paletteIdx) {
+  if (swathColorOverrides[colName]) return swathColorOverrides[colName];
+  return STATSCAT_PALETTE[paletteIdx % STATSCAT_PALETTE.length];
+}
 
 // GT state
 let gtWorker = null;
@@ -410,15 +416,25 @@ var _helpTabs = {
       '<div class="help-section"><div class="help-section-title">Overview</div>' +
       '<div class="help-row"><span>Spatial trend plots: bin blocks along an axis and show how variable values change across the model.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Configuration</div>' +
-      '<div class="help-row"><span><strong>Axis</strong> \u2014 X (W\u2192E), Y (S\u2192N), or Z (Bottom\u2192Top)</span></div>' +
+      '<div class="help-row"><span><strong>Axis</strong> \u2014 X (W\u2192E), Y (S\u2192N), Z (Bottom\u2192Top), or Custom (arbitrary azimuth)</span></div>' +
+      '<div class="help-row"><span><strong>Custom axis</strong> \u2014 enter azimuth (0\u00b0=N, clockwise) and optional plunge (\u00b0 below horizontal). Projects XY(Z) onto that direction for binning.</span></div>' +
       '<div class="help-row"><span><strong>Bin width</strong> \u2014 defaults to block size; override for wider bins</span></div>' +
       '<div class="help-row"><span><strong>Statistic</strong> \u2014 Mean\u00b1Std, P25/P50/P75, or P10/P50/P90</span></div>' +
       '<div class="help-row"><span><strong>Variables</strong> \u2014 check one or more. Each gets its own Y-axis + ribbon on the overlay chart.</span></div>' +
+      '<div class="help-row"><span><strong>Color swatch</strong> \u2014 click the colored square next to a variable name to customize its chart color</span></div>' +
       '<div class="help-row"><span><strong>Unit selects</strong> \u2014 per-variable units shown on axis labels, table headers, and tooltip. Inherits from global units.</span></div>' +
       '<div class="help-row"><span><strong>Sync units</strong> \u2014 pull unit assignments from Column Overview</span></div></div>' +
+      '<div class="help-section"><div class="help-section-title">Display</div>' +
+      '<div class="help-row"><span><strong>Show bands</strong> \u2014 toggle the \u00b1 ribbons (std/percentile range). Disable to see center lines only.</span></div>' +
+      '<div class="help-row"><span><strong>Show count bars</strong> \u2014 toggle the count histogram below the chart</span></div>' +
+      '<div class="help-row"><span><strong>Show table</strong> \u2014 toggle the data table below the chart</span></div>' +
+      '<div class="help-row"><span><strong>Y Scale</strong> \u2014 Linear or Log. Log clamps to positive values.</span></div>' +
+      '<div class="help-row"><span><strong>Layout</strong> \u2014 Overlay (all variables on one chart) or Split (one chart per variable, stacked vertically)</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Output</div>' +
       '<div class="help-row"><span>Overlay chart with one ribbon+line per variable. Count bars below show bin population.</span></div>' +
       '<div class="help-row"><span>Hover for crosshair with per-variable center \u00b1 range values.</span></div>' +
+      '<div class="help-row"><span><strong>Copy SVG</strong> \u2014 copy chart as SVG markup to clipboard</span></div>' +
+      '<div class="help-row"><span><strong>Download PNG</strong> \u2014 download chart as a light-themed PNG at 2\u00d7 resolution</span></div>' +
       '<div class="help-row"><span>Collapsible data table with per-bin statistics. Copy to clipboard.</span></div></div>'
   },
   section: {

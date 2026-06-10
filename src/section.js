@@ -145,7 +145,9 @@ function runSection() {
     normalAxis: normalAxisIdx,
     slicePos,
     tolerance,
-    varCol
+    varCol,
+    dmEndianness: preflightData && preflightData.dmEndianness || null,
+    dmFormat: preflightData && preflightData.dmFormat || null
   });
 
   sectionWorker.onerror = (e) => {

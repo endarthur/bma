@@ -41,14 +41,14 @@
   <div class="dropzone" id="dropzone">
     <div class="label">Drop a CSV file here, or <strong>click to browse</strong></div>
     <div class="hint">Supports .csv, .txt, .dat, .zip — streamed, not loaded into memory</div>
-    <input type="file" id="fileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP">
+    <input type="file" id="fileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM">
   </div>
 
   <div class="recent-files" id="recentFiles"></div>
 
   <div class="about-section">
     <h2>What is this?</h2>
-    <p>BMA is a client-side block model inspector. Drop a CSV (or zipped CSV) exported from Isatis, Vulcan, Surpac, Leapfrog, Datamine, or any other mining package and get instant summary statistics, geometry detection, and categorical breakdowns — all without uploading anything to a server.</p>
+    <p>BMA is a client-side block model inspector. Drop a CSV (or zipped CSV) exported from Isatis, Vulcan, Surpac, Leapfrog, or any other mining package and get instant summary statistics, geometry detection, and categorical breakdowns — all without uploading anything to a server.</p>
 
     <p>Everything runs in your browser using streaming File API and Web Workers. Files are parsed row by row, never fully loaded into memory, so multi-gigabyte models work fine on modest hardware.</p>
 

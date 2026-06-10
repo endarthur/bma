@@ -377,10 +377,10 @@ function tdQuantile(td, q) {
 
 const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi),isnum:(v)=>Number.isFinite(v),ifnum:(v,d)=>Number.isFinite(v)?v:(d!==undefined?d:NaN)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;const isnum=fn.isnum;const ifnum=fn.ifnum;';
 
-async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride) {
+async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat) {
   const startTime = performance.now();
 
-  // ZIP extraction
+  // ZIP / DM extraction
   let csvFile = file;
   let zipName = null;
   if (isZipFile(file)) {
@@ -389,6 +389,13 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       zipName = csvFile.name;
     } catch(e) {
       self.postMessage({ type: 'error', message: e.message });
+      return;
+    }
+  } else if (isDmFile(file)) {
+    try {
+      csvFile = await extractCSVFromDM(file, dmEndianness || 'little', dmFormat || 'sp');
+    } catch(e2) {
+      self.postMessage({ type: 'error', message: e2.message });
       return;
     }
   }
@@ -1005,6 +1012,9 @@ async function exportCSV(data) {
   if (isZipFile(file)) {
     try { csvFile = await extractCSVFromZip(file, zipEntry); }
     catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  } else if (isDmFile(file)) {
+    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
   }
 
   const sampleLines = await readSample(csvFile, 50);
@@ -1150,12 +1160,15 @@ async function exportCSV(data) {
 
 async function swathAnalysis(data) {
   const { file, zipEntry, globalFilter, localFilter, calcolCode, calcolMeta, resolvedTypes,
-          xyzCols, dxyzCols, axis, varCols, binWidth } = data;
+          xyzCols, dxyzCols, axis, varCols, binWidth, azimuth, plunge } = data;
   const startTime = performance.now();
 
   let csvFile = file;
   if (isZipFile(file)) {
     try { csvFile = await extractCSVFromZip(file, zipEntry); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  } else if (isDmFile(file)) {
+    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
     catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
   }
 
@@ -1197,8 +1210,21 @@ async function swathAnalysis(data) {
     return obj;
   }
 
-  const axisIdx = xyzCols[axis];
-  const axisName = header[axisIdx];
+  var isCustomAzimuth = azimuth != null;
+  var axisName = null, xName = null, yName = null, zName = null;
+  var azRad = 0, plRad = 0, dirX = 0, dirY = 0, dirZ = 0;
+  if (isCustomAzimuth) {
+    xName = header[xyzCols[0]];
+    yName = header[xyzCols[1]];
+    zName = (plunge && plunge !== 0) ? header[xyzCols[2]] : null;
+    azRad = azimuth * Math.PI / 180;
+    plRad = (plunge || 0) * Math.PI / 180;
+    dirX = Math.sin(azRad) * Math.cos(plRad);
+    dirY = Math.cos(azRad) * Math.cos(plRad);
+    dirZ = -Math.sin(plRad);
+  } else {
+    axisName = header[xyzCols[axis]];
+  }
 
   // Resolve variable column names
   const varNames = varCols.map(vi => header[vi]);
@@ -1220,13 +1246,25 @@ async function swathAnalysis(data) {
   }
 
   function processRow(row) {
-    const coord = row[axisName];
-    if (coord == null || isNaN(coord)) return;
-    const bin = getBin(coord);
-    for (let vi = 0; vi < varCols.length; vi++) {
-      const val = row[varNames[vi]];
+    var coord;
+    if (isCustomAzimuth) {
+      var xv = row[xName], yv = row[yName];
+      if (xv == null || isNaN(xv) || yv == null || isNaN(yv)) return;
+      coord = xv * dirX + yv * dirY;
+      if (zName) {
+        var zv = row[zName];
+        if (zv == null || isNaN(zv)) return;
+        coord += zv * dirZ;
+      }
+    } else {
+      coord = row[axisName];
+      if (coord == null || isNaN(coord)) return;
+    }
+    var bin = getBin(coord);
+    for (var vi = 0; vi < varCols.length; vi++) {
+      var val = row[varNames[vi]];
       if (val == null || typeof val !== 'number' || isNaN(val)) continue;
-      const vb = bin.vars[varCols[vi]];
+      var vb = bin.vars[varCols[vi]];
       vb.count++;
       vb.sum += val;
       vb.sumSq += val * val;
@@ -1307,6 +1345,9 @@ async function sectionAnalysis(data) {
   let csvFile = file;
   if (isZipFile(file)) {
     try { csvFile = await extractCSVFromZip(file, zipEntry); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  } else if (isDmFile(file)) {
+    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
     catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
   }
 
@@ -1479,6 +1520,9 @@ async function gtAnalysis(data) {
   var csvFile = file;
   if (isZipFile(file)) {
     try { csvFile = await extractCSVFromZip(file, zipEntry); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  } else if (isDmFile(file)) {
+    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
     catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
   }
 
@@ -1730,6 +1774,212 @@ async function gtAnalysis(data) {
   });
 }
 
+// ─── Datamine .dm binary support (worker) ─────────────────────────────
+
+function isDmFile(file) {
+  return file.name.toLowerCase().endsWith('.dm');
+}
+
+function dmReadTextW(dv, offset, nWords, fmt) {
+  var result = '';
+  var step = fmt === 'ep' ? 8 : 4;
+  for (var w = 0; w < nWords; w++) {
+    var base = offset + w * step;
+    for (var b = 0; b < 4; b++) {
+      var ch = dv.getUint8(base + b);
+      if (ch >= 32 && ch < 127) result += String.fromCharCode(ch);
+    }
+  }
+  return result.trim();
+}
+
+function parseDmDD_worker(dv, endianness, fmt) {
+  var isLE = endianness === 'little';
+  var ws = fmt === 'ep' ? 8 : 4;
+  var pageSize = fmt === 'ep' ? 4096 : 2048;
+  var readNum = fmt === 'ep'
+    ? function(off) { return dv.getFloat64(off, isLE); }
+    : function(off) { return dv.getFloat32(off, isLE); };
+
+  var fileName = dmReadTextW(dv, 0, 2, fmt);
+  var descOff = fmt === 'ep' ? 32 : 16;
+  var description = dmReadTextW(dv, descOff, 20, fmt);
+  var dateOff = fmt === 'ep' ? 192 : 96;
+  var totalFields = Math.round(readNum(dateOff + ws));
+  var lastPage = Math.round(readNum(dateOff + ws * 2));
+  var lastRecordInLastPage = Math.round(readNum(dateOff + ws * 3));
+
+  var fieldStart = dateOff + ws * 4;
+  var fieldSize = ws * 7;
+  var rawFields = [];
+  for (var f = 0; f < totalFields; f++) {
+    var fOff = fieldStart + f * fieldSize;
+    if (fOff + fieldSize > pageSize) break;
+    var name = dmReadTextW(dv, fOff, 2, fmt);
+    var typeStr = dmReadTextW(dv, fOff + ws * 2, 1, fmt);
+    var sw = Math.round(readNum(fOff + ws * 3));
+    var lenf = Math.round(readNum(fOff + ws * 4));
+    var defaultValue = readNum(fOff + ws * 6);
+    rawFields.push({ name: name, type: typeStr.charAt(0).toUpperCase(), sw: sw, lenf: lenf, defaultValue: defaultValue });
+  }
+
+  var colMap = {};
+  var colOrder = [];
+  for (var i = 0; i < rawFields.length; i++) {
+    var rf = rawFields[i];
+    if (!colMap[rf.name]) {
+      colMap[rf.name] = { name: rf.name, rawType: rf.type, entries: [], defaultValue: rf.defaultValue };
+      colOrder.push(rf.name);
+    }
+    colMap[rf.name].entries.push(rf);
+  }
+
+  var columns = [];
+  var maxLen = 0;
+  for (var ci = 0; ci < colOrder.length; ci++) {
+    var cm = colMap[colOrder[ci]];
+    var isConstant = cm.entries[0].sw === 0;
+    var colType = cm.rawType === 'A' ? 'categorical' : 'numeric';
+    var sorted = cm.entries.slice().sort(function(a, b) { return a.lenf - b.lenf; });
+    var swPositions = [];
+    for (var si = 0; si < sorted.length; si++) {
+      swPositions.push(sorted[si].sw);
+      if (sorted[si].sw > maxLen) maxLen = sorted[si].sw;
+    }
+    var constantValue = null;
+    if (isConstant) {
+      if (colType === 'numeric') {
+        constantValue = (Math.abs(cm.defaultValue) > 9.9e29) ? '' : String(cm.defaultValue);
+      } else {
+        constantValue = '';
+        for (var ei = 0; ei < sorted.length; ei++) {
+          var defBytes = sorted[ei].defaultValue;
+          var tmpBuf = new ArrayBuffer(fmt === 'ep' ? 8 : 4);
+          var tmpDv = new DataView(tmpBuf);
+          if (fmt === 'ep') tmpDv.setFloat64(0, defBytes, isLE);
+          else tmpDv.setFloat32(0, defBytes, isLE);
+          for (var bi = 0; bi < 4; bi++) {
+            var cb = tmpDv.getUint8(bi);
+            if (cb >= 32 && cb < 127) constantValue += String.fromCharCode(cb);
+          }
+        }
+        constantValue = constantValue.trim();
+      }
+    }
+    columns.push({
+      name: cm.name, type: colType, swPositions: swPositions,
+      defaultValue: cm.defaultValue, isConstant: isConstant, constantValue: constantValue
+    });
+  }
+
+  var recordsPerPage = maxLen > 0 ? Math.floor(508 / maxLen) : 0;
+  return {
+    fileName: fileName, description: description,
+    totalFields: totalFields, lastPage: lastPage,
+    lastRecordInLastPage: lastRecordInLastPage,
+    columns: columns, maxLen: maxLen,
+    recordsPerPage: recordsPerPage,
+    pageSize: pageSize, wordSize: ws
+  };
+}
+
+function extractCSVFromDM(file, endianness, fmt) {
+  var ws = fmt === 'ep' ? 8 : 4;
+  var pageSize = fmt === 'ep' ? 4096 : 2048;
+  var isLE = endianness === 'little';
+
+  return file.slice(0, pageSize).arrayBuffer().then(function(ddBuf) {
+    var ddView = new DataView(ddBuf);
+    var info = parseDmDD_worker(ddView, endianness, fmt);
+    var columns = info.columns;
+    var maxLen = info.maxLen;
+    var recsPerPage = info.recordsPerPage;
+    var lastPage = info.lastPage;
+    var lastRecInLast = info.lastRecordInLastPage;
+    var totalRecords = lastPage > 1
+      ? (lastPage - 2) * recsPerPage + lastRecInLast
+      : lastRecInLast;
+
+    var readNumFn = fmt === 'ep'
+      ? function(dv, off) { return dv.getFloat64(off, isLE); }
+      : function(dv, off) { return dv.getFloat32(off, isLE); };
+
+    // Build CSV header line
+    var headerParts = [];
+    for (var hi = 0; hi < columns.length; hi++) {
+      var cn = columns[hi].name;
+      if (cn.indexOf(',') >= 0) cn = '"' + cn + '"';
+      headerParts.push(cn);
+    }
+    var headerLine = headerParts.join(',') + '\n';
+
+    var estSize = totalRecords * columns.length * 10;
+
+    // stream() factory — creates a fresh ReadableStream each call
+    function makeStream() {
+      var curPage = 2;
+      return new ReadableStream({
+        start: function(controller) {
+          var enc = new TextEncoder();
+          controller.enqueue(enc.encode(headerLine));
+        },
+        pull: function(controller) {
+          if (curPage > lastPage) {
+            controller.close();
+            return;
+          }
+          var pgIdx = curPage;
+          curPage++;
+          var offset = (pgIdx - 1) * pageSize;
+          return file.slice(offset, offset + pageSize).arrayBuffer().then(function(pageBuf) {
+            var dv = new DataView(pageBuf);
+            var recsThisPage = (pgIdx === lastPage) ? lastRecInLast : recsPerPage;
+            var lines = '';
+            for (var ri = 0; ri < recsThisPage; ri++) {
+              var recStart = ri * maxLen * ws;
+              var fields = [];
+              for (var ci = 0; ci < columns.length; ci++) {
+                var col = columns[ci];
+                if (col.isConstant) {
+                  var cv = col.constantValue || '';
+                  if (cv.indexOf(',') >= 0) cv = '"' + cv + '"';
+                  fields.push(cv);
+                  continue;
+                }
+                if (col.type === 'numeric') {
+                  var nOff = recStart + (col.swPositions[0] - 1) * ws;
+                  if (nOff + ws > pageBuf.byteLength) { fields.push(''); continue; }
+                  var v = readNumFn(dv, nOff);
+                  if (Math.abs(v) > 9.9e29) fields.push('');
+                  else fields.push(String(v));
+                } else {
+                  var text = '';
+                  for (var si = 0; si < col.swPositions.length; si++) {
+                    var aOff = recStart + (col.swPositions[si] - 1) * ws;
+                    if (aOff + 4 > pageBuf.byteLength) continue;
+                    for (var b = 0; b < 4; b++) {
+                      var ch = dv.getUint8(aOff + b);
+                      if (ch >= 32 && ch < 127) text += String.fromCharCode(ch);
+                    }
+                  }
+                  text = text.trim();
+                  if (text.indexOf(',') >= 0) text = '"' + text + '"';
+                  fields.push(text);
+                }
+              }
+              lines += fields.join(',') + '\n';
+            }
+            var enc = new TextEncoder();
+            controller.enqueue(enc.encode(lines));
+          });
+        }
+      });
+    }
+
+    return { stream: makeStream, size: estSize, name: file.name.replace(/\.dm$/i, '.csv') };
+  });
+}
+
 self.onmessage = (e) => {
   if (e.data.mode === 'export') {
     exportCSV(e.data);
@@ -1740,7 +1990,7 @@ self.onmessage = (e) => {
   } else if (e.data.mode === 'gt') {
     gtAnalysis(e.data);
   } else {
-    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride } = e.data;
-    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride);
+    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat } = e.data;
+    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat);
   }
 };

@@ -25,7 +25,8 @@ if (HAS_FSAA) {
       var handles = await window.showOpenFilePicker({
         types: [
           { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
-          { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } }
+          { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } },
+          { description: 'Datamine files', accept: { 'application/octet-stream': ['.dm'] } }
         ],
         multiple: false
       });

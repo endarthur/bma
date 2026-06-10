@@ -502,7 +502,9 @@ function startExport() {
     lineEnding: exportLineEnding,
     nullValue: exportNullValue,
     precision: exportPrecision,
-    decimalSep: exportDecimalSep
+    decimalSep: exportDecimalSep,
+    dmEndianness: preflightData && preflightData.dmEndianness || null,
+    dmFormat: preflightData && preflightData.dmFormat || null
   };
 
   $exportDownload.disabled = true;
