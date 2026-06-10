@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bma-v1';
+const CACHE_NAME = 'bma-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -37,11 +37,17 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Fetch: cache-first for app shell, network-first for fonts (to get fresh woff2 files)
+// Fetch strategy:
+// - App navigations / index.html: NETWORK-FIRST with cache fallback. The app
+//   is one file; users should always get the latest deploy when online, and
+//   the cached copy keeps it working offline. (Cache-first here once made
+//   deploys invisible to installed PWAs — never again.)
+// - Fonts: cache-first with background refresh.
+// - Everything else same-origin: stale-while-revalidate.
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
-  // Google Fonts: cache font files when fetched
+  // Google Fonts: serve cached, refresh in background
   if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
     e.respondWith(
       caches.match(e.request).then(cached => {
@@ -58,8 +64,33 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // App shell: cache-first
+  // The app itself: network-first, fall back to cache when offline
+  const isShell = e.request.mode === 'navigate' ||
+    url.pathname.endsWith('/index.html') || url.pathname.endsWith('/');
+  if (isShell) {
+    e.respondWith(
+      fetch(e.request).then(response => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+        }
+        return response;
+      }).catch(() => caches.match(e.request).then(c => c || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // Other same-origin assets: stale-while-revalidate
   e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request))
+    caches.match(e.request).then(cached => {
+      const fetchPromise = fetch(e.request).then(response => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+        }
+        return response;
+      }).catch(() => cached);
+      return cached || fetchPromise;
+    })
   );
 });
