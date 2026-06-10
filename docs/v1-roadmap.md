@@ -1,6 +1,6 @@
 # V1 Roadmap — Feature Architecture
 
-Tab bar: `Preflight · Summary · Calc · Statistics · Categories · StatsCat · Export · GT · Swath · Section`
+Tab bar: `Preflight · Aux · Summary · Calc · Statistics · Categories · StatsCat · GT · Swath · Section · Export`
 
 ## 1. Calc tab — done
 
