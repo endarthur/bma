@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const src = (...p) => path.join(__dirname, 'src', ...p);
 const read = (f) => fs.readFileSync(f, 'utf-8');
@@ -28,6 +29,7 @@ const APP_MODULES = [
   'categories.js',
   'cdf.js',
   'example.js',
+  'pwa.js',
 ];
 const app = APP_MODULES.map(f => read(src(f)).trimEnd()).join('\n\n');
 
@@ -48,5 +50,14 @@ let output = template
   .replace('// __INJECT_WORKER__', () => workerBlock)
   .replace('// __INJECT_APP__', () => app);
 
+// Build id: short content hash of the assembled bundle (deterministic — same
+// src, same hash). Injected into the page (corner badge) and the service
+// worker cache name, so every deploy auto-busts old SW caches.
+const buildId = crypto.createHash('sha256').update(output).digest('hex').slice(0, 7);
+output = output.replace(/__BMA_BUILD__/g, buildId);
+
+const swSource = read(src('sw.js')).replace(/__BMA_BUILD__/g, buildId);
+fs.writeFileSync(path.join(__dirname, 'sw.js'), swSource);
+
 fs.writeFileSync(path.join(__dirname, 'index.html'), output);
-console.log('Built index.html (%d bytes)', Buffer.byteLength(output));
+console.log('Built index.html (%d bytes) — build %s', Buffer.byteLength(output), buildId);

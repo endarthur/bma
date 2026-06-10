@@ -10,9 +10,7 @@ function showCDF(colIdx) {
   renderCDFModal(s, name);
 }
 
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js');
-}
+// (service worker registration lives in pwa.js)
 
 // Load recent files on page load
 renderRecentFiles();

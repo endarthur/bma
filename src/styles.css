@@ -3671,6 +3671,30 @@ table.cat-values td.cat-pct-cell {
 .aux-preview-table th { background: var(--bg2); color: var(--fg-bright); position: sticky; top: 0; }
 .aux-preview-table td { color: var(--fg-dim); }
 
+/* Build badge + update banner */
+.build-badge {
+  position: fixed; bottom: 6px; right: 8px; z-index: 90;
+  font: 0.58rem var(--mono); color: var(--fg-dim); opacity: 0.45;
+  cursor: pointer; user-select: none; letter-spacing: 0.04em;
+}
+.build-badge:hover { opacity: 1; color: var(--amber); }
+.update-banner {
+  display: none; position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 300; align-items: center; gap: 0.7rem;
+  background: var(--bg1); border: 1px solid var(--amber); border-radius: 4px;
+  padding: 0.45rem 0.8rem; font-size: 0.78rem; color: var(--fg);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+.update-banner.on { display: flex; }
+.update-banner button {
+  background: var(--amber); color: var(--bg); border: none; border-radius: 3px;
+  font: 600 0.7rem var(--mono); padding: 0.25rem 0.7rem; cursor: pointer;
+}
+.update-banner #updateDismiss {
+  background: none; color: var(--fg-dim); border: 1px solid var(--border);
+}
+.update-banner #updateDismiss:hover { color: var(--fg); }
+
 /* Pack-project modal */
 .pack-modal-inner { max-width: 420px; }
 .pack-field { margin-bottom: 0.9rem; }
