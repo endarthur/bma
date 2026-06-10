@@ -6,6 +6,22 @@ const GT_TONNAGE_UNITS = [
   { label: 'Mt', symbol: 'Mt', divisor: 1e6 },
   { label: 'Custom\u2026', symbol: null, divisor: null }
 ];
+// Metal column/curve units \u2014 divisor is tonnes of metal per displayed unit.
+// 'tonnage' means follow the tonnage unit (historic default).
+const GT_METAL_UNITS = [
+  { label: '= tonnage', symbol: null, divisor: 'tonnage' },
+  { label: 't',   symbol: 't',   divisor: 1 },
+  { label: 'kt',  symbol: 'kt',  divisor: 1e3 },
+  { label: 'Mt',  symbol: 'Mt',  divisor: 1e6 },
+  { label: 'kg',  symbol: 'kg',  divisor: 1e-3 },
+  { label: 'oz',  symbol: 'oz',  divisor: 3.11034768e-5 },
+  { label: 'koz', symbol: 'koz', divisor: 3.11034768e-2 },
+  { label: 'Moz', symbol: 'Moz', divisor: 31.1034768 },
+  { label: 'lb',  symbol: 'lb',  divisor: 4.5359237e-4 },
+  { label: 'klb', symbol: 'klb', divisor: 0.45359237 },
+  { label: 'Mlb', symbol: 'Mlb', divisor: 453.59237 },
+  { label: 'Custom\u2026', symbol: null, divisor: null }
+];
 const GT_GRADE_UNITS = GRADE_UNITS.concat([{ label: 'Custom\u2026', symbol: null, factor: null }]);
 
 let gtNumCols = [];
@@ -74,6 +90,11 @@ function renderGtConfig(data) {
   var tonnageUnitOpts = GT_TONNAGE_UNITS.map(function(u, i) {
     return '<option value="' + i + '">' + esc(u.label) + '</option>';
   }).join('');
+  var metalUnitOpts = GT_METAL_UNITS.map(function(u, i) {
+    return '<option value="' + i + '">' + esc(u.label) + '</option>';
+  }).join('');
+  var dpOpts = '<option value="">auto</option>';
+  for (var dpi = 0; dpi <= 6; dpi++) dpOpts += '<option value="' + dpi + '">' + dpi + ' dp</option>';
 
   // Group-by dropdown
   var groupByOpts = '<option value="-1">\u2014 none</option>' + gtCatCols.map(function(c) {
@@ -126,14 +147,22 @@ function renderGtConfig(data) {
       '</div>' +
     '</div>' +
     '<div class="gt-sidebar-section">' +
-      '<div class="gt-sidebar-title">Tonnage Unit</div>' +
-      '<select class="gt-select" id="gtTonnageUnit">' + tonnageUnitOpts + '</select>' +
-      '<div id="gtCustomTonnageWrap" style="display:none;margin-top:0.3rem">' +
+      '<div class="gt-sidebar-title">Units &amp; Format</div>' +
+      '<div class="gt-unit-row"><span class="gt-unit-label">Tonnage</span><select class="gt-select" id="gtTonnageUnit">' + tonnageUnitOpts + '</select><select class="gt-select gt-dp-select" id="gtTonnageDp" title="Decimal places">' + dpOpts + '</select></div>' +
+      '<div id="gtCustomTonnageWrap" style="display:none;margin-bottom:0.3rem">' +
         '<div style="display:flex;gap:0.3rem">' +
           '<input type="text" class="gt-input" id="gtCustomTonnageSym" placeholder="symbol" style="width:50px">' +
           '<input type="number" class="gt-input" id="gtCustomTonnageDiv" placeholder="divisor" step="any">' +
         '</div>' +
       '</div>' +
+      '<div class="gt-unit-row"><span class="gt-unit-label">Metal</span><select class="gt-select" id="gtMetalUnit">' + metalUnitOpts + '</select><select class="gt-select gt-dp-select" id="gtMetalDp" title="Decimal places">' + dpOpts + '</select></div>' +
+      '<div id="gtCustomMetalWrap" style="display:none;margin-bottom:0.3rem">' +
+        '<div style="display:flex;gap:0.3rem">' +
+          '<input type="text" class="gt-input" id="gtCustomMetalSym" placeholder="symbol" style="width:50px">' +
+          '<input type="number" class="gt-input" id="gtCustomMetalDiv" placeholder="t per unit" step="any" title="Tonnes of metal per displayed unit">' +
+        '</div>' +
+      '</div>' +
+      '<div class="gt-unit-row"><span class="gt-unit-label">Grade</span><span class="gt-unit-note">unit set per variable</span><select class="gt-select gt-dp-select" id="gtGradeDp" title="Decimal places">' + dpOpts + '</select></div>' +
     '</div>' +
     '<div class="gt-sidebar-section">' +
       '<div class="gt-sidebar-title">Cutoffs</div>' +
@@ -147,6 +176,9 @@ function renderGtConfig(data) {
           '<label style="flex:1;display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.55rem;color:var(--fg-dim)">Max</span><input type="number" class="gt-input" id="gtCutoffMax" value="' + defMax + '" step="any"></label>' +
           '<label style="flex:1;display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.55rem;color:var(--fg-dim)">Step</span><input type="number" class="gt-input" id="gtCutoffStep" value="' + defStep + '" step="any" min="0"></label>' +
         '</div>' +
+        '<select class="gt-select" id="gtRangeFrom" style="margin-top:0.3rem" title="Set Min/Max/Step from a variable’s data range">' +
+          '<option value="">↧ copy range from variable…</option>' + numColOpts +
+        '</select>' +
       '</div>' +
       '<div id="gtCutoffCustom" style="display:none">' +
         '<input type="text" class="gt-input" id="gtCutoffCustomText" placeholder="0.2, 0.5, 1.0, 2.0, 5.0" spellcheck="false">' +
@@ -221,6 +253,33 @@ function renderGtConfig(data) {
     var idx = parseInt($tonnageUnit.value);
     document.getElementById('gtCustomTonnageWrap').style.display = GT_TONNAGE_UNITS[idx].divisor === null ? '' : 'none';
     if (lastGtData) renderGtOutput();
+  });
+  var $metalUnit = document.getElementById('gtMetalUnit');
+  $metalUnit.addEventListener('change', function() {
+    var idx = parseInt($metalUnit.value);
+    document.getElementById('gtCustomMetalWrap').style.display = (GT_METAL_UNITS[idx] || {}).divisor === null ? '' : 'none';
+    if (lastGtData) renderGtOutput();
+  });
+  // Decimal-place selects and custom unit fields — live re-render
+  ['gtTonnageDp', 'gtGradeDp', 'gtMetalDp', 'gtCustomTonnageSym', 'gtCustomTonnageDiv', 'gtCustomMetalSym', 'gtCustomMetalDiv'].forEach(function(id) {
+    document.getElementById(id).addEventListener('change', function() {
+      if (lastGtData) renderGtOutput();
+    });
+  });
+
+  // Copy cutoff Min/Max/Step from a variable's analyzed range
+  document.getElementById('gtRangeFrom').addEventListener('change', function() {
+    var idx = parseInt(this.value);
+    this.value = '';
+    if (!(idx >= 0) || !lastCompleteData || !lastCompleteData.stats || !lastCompleteData.stats[idx]) return;
+    var st = lastCompleteData.stats[idx];
+    if (st.min == null || st.max == null) return;
+    var mn = Math.floor(st.min * 100) / 100;
+    var mx = Math.ceil(st.max * 100) / 100;
+    document.getElementById('gtCutoffMin').value = mn;
+    document.getElementById('gtCutoffMax').value = mx;
+    document.getElementById('gtCutoffStep').value = +((mx - mn) / 20).toPrecision(2) || 0.05;
+    autoSaveProject();
   });
   // Constant density input toggle
   document.getElementById('gtDensityCol').addEventListener('change', function() {
@@ -299,7 +358,29 @@ function getGtTonnageUnit() {
     tonnageSymbol = document.getElementById('gtCustomTonnageSym').value || 'units';
     tonnageDivisor = parseFloat(document.getElementById('gtCustomTonnageDiv').value) || 1;
   }
-  return { tonnageDivisor: tonnageDivisor, tonnageSymbol: tonnageSymbol, metalSymbol: tonnageSymbol };
+  var mSel = document.getElementById('gtMetalUnit');
+  var mu = GT_METAL_UNITS[mSel ? parseInt(mSel.value) : 0] || GT_METAL_UNITS[0];
+  var metalDivisor = mu.divisor;
+  var metalSymbol = mu.symbol;
+  if (metalDivisor === 'tonnage') {
+    metalDivisor = tonnageDivisor;
+    metalSymbol = tonnageSymbol;
+  } else if (metalDivisor === null) {
+    metalSymbol = document.getElementById('gtCustomMetalSym').value || 'units';
+    metalDivisor = parseFloat(document.getElementById('gtCustomMetalDiv').value) || 1;
+  }
+  return { tonnageDivisor: tonnageDivisor, tonnageSymbol: tonnageSymbol, metalDivisor: metalDivisor, metalSymbol: metalSymbol };
+}
+
+function getGtFormats() {
+  function dp(id) { var el = document.getElementById(id); return el && el.value !== '' ? parseInt(el.value) : null; }
+  return { tonnageDp: dp('gtTonnageDp'), gradeDp: dp('gtGradeDp'), metalDp: dp('gtMetalDp') };
+}
+
+// Fixed decimal places when set, formatNum auto-formatting otherwise
+function gtFmt(v, dp) {
+  if (v == null || !isFinite(v) || dp == null) return formatNum(v);
+  return addThousandsSep(v.toFixed(dp));
 }
 
 function getGtGradeUnit(colIdx) {
@@ -476,6 +557,21 @@ function renderGtOutput() {
   if (!$content) return;
   var cutoffs = getGtCutoffs();
   var tonnageUnit = getGtTonnageUnit();
+  var fmts = getGtFormats();
+  function unitsFor(colIdx) {
+    var g = getGtGradeUnit(colIdx);
+    return {
+      tonnageDivisor: tonnageUnit.tonnageDivisor,
+      tonnageSymbol: tonnageUnit.tonnageSymbol,
+      metalDivisor: tonnageUnit.metalDivisor,
+      metalSymbol: tonnageUnit.metalSymbol,
+      gradeFactor: g.gradeFactor,
+      gradeSymbol: g.gradeSymbol,
+      tonnageDp: fmts.tonnageDp,
+      gradeDp: fmts.gradeDp,
+      metalDp: fmts.metalDp
+    };
+  }
   if (cutoffs.length === 0) {
     $content.innerHTML = '<div class="gt-hint">No valid cutoffs defined.</div>';
     return;
@@ -497,14 +593,7 @@ function renderGtOutput() {
 
   for (var gi = 0; gi < gradeResults.length; gi++) {
     var gr = gradeResults[gi];
-    var gradeUnit = getGtGradeUnit(gr.colIdx);
-    var units = {
-      tonnageDivisor: tonnageUnit.tonnageDivisor,
-      tonnageSymbol: tonnageUnit.tonnageSymbol,
-      metalSymbol: tonnageUnit.metalSymbol,
-      gradeFactor: gradeUnit.gradeFactor,
-      gradeSymbol: gradeUnit.gradeSymbol
-    };
+    var units = unitsFor(gr.colIdx);
     if (gradeResults.length > 1) {
       html += '<div class="gt-chart-title">' + esc(gr.colName) + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') + '</div>';
     }
@@ -574,15 +663,7 @@ function renderGtOutput() {
 
   // Wire crosshairs for each chart
   for (var ci = 0; ci < gradeResults.length; ci++) {
-    var chGradeUnit = getGtGradeUnit(gradeResults[ci].colIdx);
-    var chUnits = {
-      tonnageDivisor: tonnageUnit.tonnageDivisor,
-      tonnageSymbol: tonnageUnit.tonnageSymbol,
-      metalSymbol: tonnageUnit.metalSymbol,
-      gradeFactor: chGradeUnit.gradeFactor,
-      gradeSymbol: chGradeUnit.gradeSymbol
-    };
-    wireGtCrosshair(gradeResults[ci], cutoffs, chUnits, ci);
+    wireGtCrosshair(gradeResults[ci], cutoffs, unitsFor(gradeResults[ci].colIdx), ci);
   }
 }
 
@@ -592,9 +673,11 @@ function interpolateGt(results, cutoff, binWidth, gradeMin) {
   if (!binWidth || !isFinite(binWidth)) return results[0] || zero;
   var idx = (cutoff - gradeMin) / binWidth;
   if (!isFinite(idx)) return results[0] || zero;
+  // Clamp the index, not just the bin: cutoffs outside the histogram range
+  // must not extrapolate (a cutoff below the data min includes everything)
+  if (idx < 0) idx = 0;
+  if (idx > results.length - 1) idx = results.length - 1;
   var lo = Math.floor(idx);
-  if (lo < 0) lo = 0;
-  if (lo >= results.length) lo = results.length - 1;
   var hi = lo + 1;
   if (hi >= results.length) hi = results.length - 1;
   if (lo === hi) return results[lo] || zero;
@@ -616,6 +699,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
   var totalTonnage = grData.totalTonnage;
   var td = units.tonnageDivisor || 1;
   var gf = units.gradeFactor || 1;
+  var md = units.metalDivisor || td;
   var clipId = 'gt-clip-' + chartIdx;
 
   // Determine if we render grouped overlay
@@ -632,7 +716,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
   // Sample curve at cutoffs (overall)
   var points = cutoffs.map(function(c) {
     var p = interpolateGt(results, c, binWidth, gradeMin);
-    return { cutoff: c, tonnage: p.tonnage / td, grade: p.grade, metal: p.metal * gf / td };
+    return { cutoff: c, tonnage: p.tonnage / td, grade: p.grade, metal: p.metal * gf / md };
   });
 
   var W = 720, H = 380;
@@ -669,16 +753,16 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
     var v = xMin + (xRange * i / nxTicks);
     var x = sx(v);
     svg += '<line x1="' + x.toFixed(1) + '" y1="' + pad.top + '" x2="' + x.toFixed(1) + '" y2="' + (H - pad.bottom) + '" stroke="#1e2228" stroke-width="1"/>';
-    svg += '<text x="' + x.toFixed(1) + '" y="' + (H - pad.bottom + 14) + '" text-anchor="middle" fill="#6a737d" font-size="9">' + formatNum(v) + '</text>';
+    svg += '<text x="' + x.toFixed(1) + '" y="' + (H - pad.bottom + 14) + '" text-anchor="middle" fill="#6a737d" font-size="9">' + gtFmt(v, units.gradeDp) + '</text>';
   }
   var nyTicks = 6;
   for (var j = 0; j <= nyTicks; j++) {
     var tv = tMin + ((tMax - tMin) * j / nyTicks);
     var y = syT(tv);
     svg += '<line x1="' + pad.left + '" y1="' + y.toFixed(1) + '" x2="' + (W - pad.right) + '" y2="' + y.toFixed(1) + '" stroke="#1e2228" stroke-width="1"/>';
-    svg += '<text x="' + (pad.left - 6) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end" fill="var(--amber)" font-size="9">' + formatNum(tv) + '</text>';
+    svg += '<text x="' + (pad.left - 6) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end" fill="var(--amber)" font-size="9">' + gtFmt(tv, units.tonnageDp) + '</text>';
     var gv = gMin + ((gMax - gMin) * j / nyTicks);
-    svg += '<text x="' + (W - pad.right + 6) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="start" fill="var(--blue)" font-size="9">' + formatNum(gv) + '</text>';
+    svg += '<text x="' + (W - pad.right + 6) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="start" fill="var(--blue)" font-size="9">' + gtFmt(gv, units.gradeDp) + '</text>';
   }
 
   // Clip path
@@ -781,7 +865,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
     svg += '<rect x="' + (pad.left + 10) + '" y="' + (pad.top + 18) + '" width="10" height="3" fill="var(--blue)" rx="1"/>';
     svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 22) + '" fill="var(--blue)" font-size="8">Grade</text>';
     svg += '<line x1="' + (pad.left + 10) + '" y1="' + (pad.top + 31.5) + '" x2="' + (pad.left + 20) + '" y2="' + (pad.top + 31.5) + '" stroke="var(--green)" stroke-width="1.5" stroke-dasharray="3,2"/>';
-    svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 34) + '" fill="var(--green)" font-size="8">Metal</text>';
+    svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 34) + '" fill="var(--green)" font-size="8">Metal (' + esc(units.metalSymbol) + ')</text>';
   }
 
   // Crosshair overlay area
@@ -849,7 +933,7 @@ function downloadGtPng(chartIdx, colName) {
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'gt_' + (colName || 'plot').replace(/[^\w-]+/g, '_') + '.png';
+      a.download = 'gt_' + (colName || 'plot').replace(/[^\p{L}\p{N}_-]+/gu, '_') + '.png';
       a.click();
       URL.revokeObjectURL(url);
     }, 'image/png');
@@ -885,9 +969,10 @@ function wireGtCrosshair(grData, cutoffs, units, chartIdx) {
     var p = interpolateGt(grData.results, cutoff, grData.binWidth, grData.gradeMin);
     var td = units.tonnageDivisor;
     var gf = units.gradeFactor;
+    var md = units.metalDivisor || td;
     var tonnage = p.tonnage / td;
     var grade = p.grade;
-    var metal = p.metal * gf / td;
+    var metal = p.metal * gf / md;
     var pctTotal = grData.totalTonnage > 0 ? (p.tonnage / grData.totalTonnage * 100) : 0;
 
     line.setAttribute('x1', svgX.toFixed(1));
@@ -895,10 +980,10 @@ function wireGtCrosshair(grData, cutoffs, units, chartIdx) {
     line.setAttribute('opacity', '1');
 
     var lines = [
-      'Cutoff: ' + formatNum(cutoff),
-      'Tonnage: ' + formatNum(tonnage) + ' ' + units.tonnageSymbol,
-      'Grade: ' + formatNum(grade) + (units.gradeSymbol ? ' ' + units.gradeSymbol : ''),
-      'Metal: ' + formatNum(metal) + ' ' + units.metalSymbol,
+      'Cutoff: ' + gtFmt(cutoff, units.gradeDp),
+      'Tonnage: ' + gtFmt(tonnage, units.tonnageDp) + ' ' + units.tonnageSymbol,
+      'Grade: ' + gtFmt(grade, units.gradeDp) + (units.gradeSymbol ? ' ' + units.gradeSymbol : ''),
+      'Metal: ' + gtFmt(metal, units.metalDp) + ' ' + units.metalSymbol,
       '% Total: ' + pctTotal.toFixed(1) + '%'
     ];
 
@@ -940,6 +1025,7 @@ function renderGtTable(grData, cutoffs, units, isGrouped, tableIdx, selectedGrou
   var totalTonnage = grData.totalTonnage;
   var td = units.tonnageDivisor;
   var gf = units.gradeFactor;
+  var md = units.metalDivisor || td;
   var groupResults = isGrouped && grData.groupResults ? grData.groupResults : null;
   var allGroupNames = groupResults ? Object.keys(groupResults).sort() : [];
   var groupNames = allGroupNames;
@@ -969,14 +1055,14 @@ function renderGtTable(grData, cutoffs, units, isGrouped, tableIdx, selectedGrou
         var p = interpolateGt(results, c, binWidth, gradeMin);
         var tonnage = p.tonnage / td;
         var grade = p.grade;
-        var metal = p.metal * gf / td;
+        var metal = p.metal * gf / md;
         var pctTotal = totalTonnage > 0 ? (p.tonnage / totalTonnage * 100) : 0;
         html += '<tr>';
         if (ti === 0) html += '<td rowspan="' + cutoffs.length + '" style="color:var(--amber);font-weight:600">Total</td>';
-        html += '<td>' + formatNum(c) + '</td>';
-        html += '<td>' + formatNum(tonnage) + '</td>';
-        html += '<td>' + formatNum(grade) + '</td>';
-        html += '<td>' + formatNum(metal) + '</td>';
+        html += '<td>' + gtFmt(c, units.gradeDp) + '</td>';
+        html += '<td>' + gtFmt(tonnage, units.tonnageDp) + '</td>';
+        html += '<td>' + gtFmt(grade, units.gradeDp) + '</td>';
+        html += '<td>' + gtFmt(metal, units.metalDp) + '</td>';
         html += '<td>' + pctTotal.toFixed(1) + '%</td>';
         html += '</tr>';
       }
@@ -990,14 +1076,14 @@ function renderGtTable(grData, cutoffs, units, isGrouped, tableIdx, selectedGrou
         var p = interpolateGt(grd.results, c, binWidth, gradeMin);
         var tonnage = p.tonnage / td;
         var grade = p.grade;
-        var metal = p.metal * gf / td;
+        var metal = p.metal * gf / md;
         var pctTotal = grd.totalTonnage > 0 ? (p.tonnage / grd.totalTonnage * 100) : 0;
         html += '<tr>';
         if (ci === 0) html += '<td rowspan="' + cutoffs.length + '">' + esc(gn) + '</td>';
-        html += '<td>' + formatNum(c) + '</td>';
-        html += '<td>' + formatNum(tonnage) + '</td>';
-        html += '<td>' + formatNum(grade) + '</td>';
-        html += '<td>' + formatNum(metal) + '</td>';
+        html += '<td>' + gtFmt(c, units.gradeDp) + '</td>';
+        html += '<td>' + gtFmt(tonnage, units.tonnageDp) + '</td>';
+        html += '<td>' + gtFmt(grade, units.gradeDp) + '</td>';
+        html += '<td>' + gtFmt(metal, units.metalDp) + '</td>';
         html += '<td>' + pctTotal.toFixed(1) + '%</td>';
         html += '</tr>';
       }
@@ -1009,13 +1095,13 @@ function renderGtTable(grData, cutoffs, units, isGrouped, tableIdx, selectedGrou
       var p = interpolateGt(results, c, binWidth, gradeMin);
       var tonnage = p.tonnage / td;
       var grade = p.grade;
-      var metal = p.metal * gf / td;
+      var metal = p.metal * gf / md;
       var pctTotal = totalTonnage > 0 ? (p.tonnage / totalTonnage * 100) : 0;
       html += '<tr>';
-      html += '<td>' + formatNum(c) + '</td>';
-      html += '<td>' + formatNum(tonnage) + '</td>';
-      html += '<td>' + formatNum(grade) + '</td>';
-      html += '<td>' + formatNum(metal) + '</td>';
+      html += '<td>' + gtFmt(c, units.gradeDp) + '</td>';
+      html += '<td>' + gtFmt(tonnage, units.tonnageDp) + '</td>';
+      html += '<td>' + gtFmt(grade, units.gradeDp) + '</td>';
+      html += '<td>' + gtFmt(metal, units.metalDp) + '</td>';
       html += '<td>' + pctTotal.toFixed(1) + '%</td>';
       html += '</tr>';
     }

@@ -285,8 +285,11 @@ function renderSection() {
 
   // Swath overlay
   const showSwathCb = document.getElementById('sectionShowSwath');
-  if (showSwathCb && showSwathCb.checked && lastSwathData) {
-    const swathAxisKey = lastSwathData.axis;
+  if (showSwathCb && showSwathCb.checked && lastSwathData && lastSwathData.directions) {
+    // Overlay follows the direction active on the Swath tab; only orthogonal
+    // directions map onto section axes (custom vectors draw no stripes)
+    const sdir = lastSwathData.directions.find(d => d.key === lastSwathData.activeKey) || lastSwathData.directions[0];
+    const swathAxisKey = sdir.axis != null ? 'xyz'[sdir.axis] : 'custom';
     const sectionAxisEl = document.getElementById('sectionAxis');
     const normalAxis = sectionAxisEl ? sectionAxisEl.value : 'z';
     // Determine which display axis the swath axis maps to
@@ -302,10 +305,11 @@ function renderSection() {
       else if (swathAxisKey === 'z') swathOnV = true;
     }
     if (swathOnH || swathOnV) {
-      const bw = lastSwathData.binWidth;
-      // Get bins from first available variable
+      const bw = sdir.binWidth;
+      // Get bins from first available variable of the active direction
+      const dirVars = (lastSwathData.results && lastSwathData.results[sdir.key]) || {};
       const firstVarKey = lastSwathData.varCols && lastSwathData.varCols.length > 0 ? lastSwathData.varCols[0] : null;
-      const swathBins = firstVarKey != null && lastSwathData.vars && lastSwathData.vars[firstVarKey] ? lastSwathData.vars[firstVarKey] : [];
+      const swathBins = firstVarKey != null && dirVars[firstVarKey] ? dirVars[firstVarKey] : [];
       const binMin = swathBins.length > 0 ? swathBins[0].center - bw / 2 : 0;
       const binMax = swathBins.length > 0 ? swathBins[swathBins.length - 1].center + bw / 2 : 0;
       ctx.save();

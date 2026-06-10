@@ -467,9 +467,9 @@ var _helpTabs = {
       '<div class="help-section"><div class="help-section-title">Overview</div>' +
       '<div class="help-row"><span>Spatial trend plots: bin blocks along an axis and show how variable values change across the model.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Configuration</div>' +
-      '<div class="help-row"><span><strong>Axis</strong> \u2014 X (W\u2192E), Y (S\u2192N), Z (Bottom\u2192Top), or Custom (arbitrary azimuth)</span></div>' +
-      '<div class="help-row"><span><strong>Custom axis</strong> \u2014 enter azimuth (0\u00b0=N, clockwise) and optional plunge (\u00b0 below horizontal). Projects XY(Z) onto that direction for binning.</span></div>' +
-      '<div class="help-row"><span><strong>Bin width</strong> \u2014 defaults to block size; override for wider bins</span></div>' +
+      '<div class="help-row"><span><strong>Directions</strong> \u2014 check any combination of X (W\u2192E), Y (S\u2192N), Z (Bottom\u2192Top); all checked directions are computed in one pass and each gets its own output tab.</span></div>' +
+      '<div class="help-row"><span><strong>Custom (rotated U/V/W)</strong> \u2014 enter dip direction (0\u00b0=N, clockwise), dip (\u00b0 below horizontal) and rake (\u00b0 from strike in the plane, 90\u00b0 = down-dip). U is the rake direction in the plane, V the in-plane perpendicular, W the pole. Check any of U/V/W to swath along the rotated axes \u2014 the old azimuth/plunge axis equals dipdir=azimuth, dip=plunge, rake=90\u00b0, U.</span></div>' +
+      '<div class="help-row"><span><strong>Bin width</strong> \u2014 set per direction; defaults to the matching block size</span></div>' +
       '<div class="help-row"><span><strong>Statistic</strong> \u2014 Mean\u00b1Std, P25/P50/P75, or P10/P50/P90</span></div>' +
       '<div class="help-row"><span><strong>Weight (model)</strong> \u2014 weight the model series\u2019 bin statistics by a column or calcol. The aux series uses the weight set on the Aux tab.</span></div>' +
       '<div class="help-row"><span><strong>Variables</strong> \u2014 check one or more. Each gets its own Y-axis + ribbon on the overlay chart.</span></div>' +

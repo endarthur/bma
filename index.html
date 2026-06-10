@@ -173,6 +173,7 @@ body {
 .app.has-results > .dropzone,
 .app.has-results > .about-section,
 .app.has-results > .recent-files,
+.app.has-results > .example-download,
 .app.has-results > .landing-footer { display: none; }
 .app.has-results > .error-msg { display: none; }
 .app.has-results > .error-msg.active { display: block; }
@@ -3040,6 +3041,37 @@ table.cat-values td.cat-pct-cell {
 .swath-bin-label {
   font-size: 0.6rem; color: var(--fg-dim); margin-top: 0.15rem;
 }
+.swath-dir-hint {
+  font-size: 0.58rem; color: var(--fg-dim); opacity: 0.7; margin: 0.25rem 0;
+}
+.swath-dir-row {
+  display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.25rem;
+}
+.swath-dir-row label {
+  font-size: 0.7rem; color: var(--fg); cursor: pointer; flex: 1; white-space: nowrap;
+}
+.swath-dir-row label input { accent-color: var(--amber); cursor: pointer; margin-right: 0.2rem; }
+.swath-dir-row .swath-dir-bin { width: 5rem; flex-shrink: 0; }
+.swath-angle-row {
+  display: flex; gap: 0.3rem; margin-bottom: 0.35rem;
+}
+.swath-angle-row label {
+  flex: 1; display: flex; flex-direction: column; gap: 0.1rem;
+  font-size: 0.55rem; color: var(--fg-dim);
+}
+.swath-dir-tabs {
+  display: flex; gap: 2px; margin-bottom: 0.5rem;
+}
+.swath-dir-tab {
+  font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+  background: var(--bg1); color: var(--fg-dim);
+  border: 1px solid var(--border); border-radius: 3px;
+  padding: 0.25rem 0.9rem; cursor: pointer;
+}
+.swath-dir-tab:hover { color: var(--fg); border-color: var(--fg-dim); }
+.swath-dir-tab.active {
+  background: var(--amber-glow); color: var(--amber); border-color: var(--amber);
+}
 .swath-search {
   width: 100%;
   background: var(--bg);
@@ -3239,6 +3271,11 @@ table.cat-values td.cat-pct-cell {
 .gt-vol-display {
   font-size: 0.65rem; color: var(--fg-dim); margin-bottom: 0.2rem;
 }
+.gt-unit-row { display: flex; gap: 0.3rem; align-items: center; margin-bottom: 0.3rem; }
+.gt-unit-row:last-child { margin-bottom: 0; }
+.gt-unit-label { font-size: 0.62rem; color: var(--fg-dim); width: 3.2rem; flex-shrink: 0; }
+.gt-unit-note { font-size: 0.58rem; color: var(--fg-dim); opacity: 0.7; flex: 1; white-space: nowrap; }
+.gt-dp-select { width: 4.4rem; flex-shrink: 0; }
 .gt-radio-label {
   font-size: 0.68rem; color: var(--fg); margin-right: 0.7rem; cursor: pointer;
 }
@@ -3955,10 +3992,10 @@ table.stats tr.stats-aux-row td:first-child { padding-left: 1.1rem; }
       <button class="results-tab" data-tab="statistics">Statistics</button>
       <button class="results-tab" data-tab="categories">Categories</button>
       <button class="results-tab" data-tab="statscat">StatsCat</button>
-      <button class="results-tab" data-tab="export">Export</button>
       <button class="results-tab" data-tab="gt">GT</button>
       <button class="results-tab" data-tab="swath">Swath</button>
       <button class="results-tab" data-tab="section" style="display:none">Section</button>
+      <button class="results-tab" data-tab="export">Export</button>
     </div>
     <div class="results-panels">
       <div class="help-overlay" id="helpOverlay">
@@ -4402,7 +4439,7 @@ table.stats tr.stats-aux-row td:first-child { padding-left: 1.1rem; }
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build c18b3dc — click to check for updates">c18b3dc</div>
+<div class="build-badge" id="buildBadge" title="build 495f4ae — click to check for updates">495f4ae</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -5698,7 +5735,7 @@ async function exportCSV(data) {
 
 async function swathAnalysis(data) {
   const { file, zipEntry, globalFilter, localFilter, calcolCode, calcolMeta, resolvedTypes,
-          xyzCols, dxyzCols, axis, varCols, binWidth, azimuth, plunge } = data;
+          xyzCols, dxyzCols, varCols, directions } = data;
   const startTime = performance.now();
 
   let csvFile = file;
@@ -5752,21 +5789,20 @@ async function swathAnalysis(data) {
     return obj;
   }
 
-  var isCustomAzimuth = azimuth != null;
-  var axisName = null, xName = null, yName = null, zName = null;
-  var azRad = 0, plRad = 0, dirX = 0, dirY = 0, dirZ = 0;
-  if (isCustomAzimuth) {
-    xName = header[xyzCols[0]];
-    yName = header[xyzCols[1]];
-    zName = (plunge && plunge !== 0) ? header[xyzCols[2]] : null;
-    azRad = azimuth * Math.PI / 180;
-    plRad = (plunge || 0) * Math.PI / 180;
-    dirX = Math.sin(azRad) * Math.cos(plRad);
-    dirY = Math.cos(azRad) * Math.cos(plRad);
-    dirZ = -Math.sin(plRad);
-  } else {
-    axisName = header[xyzCols[axis]];
-  }
+  // Directions: [{ key, axis: 0|1|2|null, dir: [dx,dy,dz]|null, binWidth }].
+  // All directions are binned in the same streaming pass — an orthogonal
+  // direction reads its coordinate column directly, a vector direction
+  // projects the row's XYZ onto the unit vector.
+  const xName = header[xyzCols[0]], yName = header[xyzCols[1]], zName = header[xyzCols[2]];
+  const dirCfgs = directions.map(function(d) {
+    return {
+      key: d.key,
+      binWidth: d.binWidth,
+      coordName: d.axis != null ? header[xyzCols[d.axis]] : null,
+      dir: d.axis != null ? null : d.dir,
+      bins: new Map()
+    };
+  });
 
   // Resolve variable column names against the extended header — calcol
   // indices live past the raw columns, and calcolFn sets them on the row
@@ -5779,48 +5815,50 @@ async function swathAnalysis(data) {
   let weightName = null;
   if (data.weightColName && extHeader.indexOf(data.weightColName) >= 0) weightName = data.weightColName;
 
-  // Per-variable bins: Map<binIdx, {vars: {varIdx: {count,sum,sumSq,td}}, center}>
-  const bins = new Map();
-
-  function getBin(coord) {
-    const idx = Math.floor(coord / binWidth);
-    let b = bins.get(idx);
+  // Per-direction, per-variable bins: Map<binIdx, {vars: {varIdx: {count,sum,sumSq,td}}, center}>
+  function getBin(cfg, coord) {
+    const idx = Math.floor(coord / cfg.binWidth);
+    let b = cfg.bins.get(idx);
     if (!b) {
-      b = { center: (idx + 0.5) * binWidth, vars: {} };
+      b = { center: (idx + 0.5) * cfg.binWidth, vars: {} };
       for (const vi of varCols) {
         b.vars[vi] = { count: 0, wsum: 0, sum: 0, sumSq: 0, td: newTDigest() };
       }
-      bins.set(idx, b);
+      cfg.bins.set(idx, b);
     }
     return b;
   }
 
   function processRow(row, w) {
-    var coord;
-    if (isCustomAzimuth) {
-      var xv = row[xName], yv = row[yName];
-      if (xv == null || isNaN(xv) || yv == null || isNaN(yv)) return;
-      coord = xv * dirX + yv * dirY;
-      if (zName) {
-        var zv = row[zName];
-        if (zv == null || isNaN(zv)) return;
-        coord += zv * dirZ;
-      }
-    } else {
-      coord = row[axisName];
-      if (coord == null || isNaN(coord)) return;
-    }
     if (w === undefined) w = 1;
-    var bin = getBin(coord);
-    for (var vi = 0; vi < varCols.length; vi++) {
-      var val = row[varNames[vi]];
-      if (val == null || typeof val !== 'number' || isNaN(val)) continue;
-      var vb = bin.vars[varCols[vi]];
-      vb.count++;
-      vb.wsum += w;
-      vb.sum += val * w;
-      vb.sumSq += val * val * w;
-      tdAdd(vb.td, val, w);
+    for (var di = 0; di < dirCfgs.length; di++) {
+      var cfg = dirCfgs[di];
+      var coord;
+      if (cfg.coordName) {
+        coord = row[cfg.coordName];
+        if (coord == null || isNaN(coord)) continue;
+      } else {
+        // Project onto the unit vector; only components the direction actually
+        // uses are required (a horizontal direction tolerates a missing Z)
+        var dv = cfg.dir;
+        coord = 0;
+        var ok = true;
+        if (Math.abs(dv[0]) > 1e-12) { var xv = row[xName]; if (xv == null || isNaN(xv)) ok = false; else coord += xv * dv[0]; }
+        if (ok && Math.abs(dv[1]) > 1e-12) { var yv = row[yName]; if (yv == null || isNaN(yv)) ok = false; else coord += yv * dv[1]; }
+        if (ok && Math.abs(dv[2]) > 1e-12) { var zv = row[zName]; if (zv == null || isNaN(zv)) ok = false; else coord += zv * dv[2]; }
+        if (!ok) continue;
+      }
+      var bin = getBin(cfg, coord);
+      for (var vi = 0; vi < varCols.length; vi++) {
+        var val = row[varNames[vi]];
+        if (val == null || typeof val !== 'number' || isNaN(val)) continue;
+        var vb = bin.vars[varCols[vi]];
+        vb.count++;
+        vb.wsum += w;
+        vb.sum += val * w;
+        vb.sumSq += val * val * w;
+        tdAdd(vb.td, val, w);
+      }
     }
   }
 
@@ -5877,32 +5915,36 @@ async function swathAnalysis(data) {
     }
   }
 
-  // Finalize: produce per-variable bin arrays
-  const vars = {};
-  for (const vi of varCols) {
-    const arr = [];
-    for (const [, b] of bins) {
-      const vb = b.vars[vi];
-      if (vb.count === 0) continue;
-      tdFlush(vb.td);
-      const mean = vb.sum / vb.wsum;
-      // Weighted runs use population variance; unweighted keeps the original
-      // sample formula (wsum === count there, so sums are unchanged)
-      const variance = weightName
-        ? (vb.wsum > 0 ? Math.max(0, vb.sumSq / vb.wsum - mean * mean) : 0)
-        : (vb.count > 1 ? (vb.sumSq - vb.sum * vb.sum / vb.count) / (vb.count - 1) : 0);
-      arr.push({
-        center: b.center, count: vb.count, mean,
-        std: Math.sqrt(Math.max(0, variance)),
-        centroids: vb.td.centroids.map(c => [c.mean, c.count])
-      });
+  // Finalize: per-direction, per-variable bin arrays
+  const results = {};
+  for (const cfg of dirCfgs) {
+    const vars = {};
+    for (const vi of varCols) {
+      const arr = [];
+      for (const [, b] of cfg.bins) {
+        const vb = b.vars[vi];
+        if (vb.count === 0) continue;
+        tdFlush(vb.td);
+        const mean = vb.sum / vb.wsum;
+        // Weighted runs use population variance; unweighted keeps the original
+        // sample formula (wsum === count there, so sums are unchanged)
+        const variance = weightName
+          ? (vb.wsum > 0 ? Math.max(0, vb.sumSq / vb.wsum - mean * mean) : 0)
+          : (vb.count > 1 ? (vb.sumSq - vb.sum * vb.sum / vb.count) / (vb.count - 1) : 0);
+        arr.push({
+          center: b.center, count: vb.count, mean,
+          std: Math.sqrt(Math.max(0, variance)),
+          centroids: vb.td.centroids.map(c => [c.mean, c.count])
+        });
+      }
+      arr.sort((a, b) => a.center - b.center);
+      vars[vi] = arr;
     }
-    arr.sort((a, b) => a.center - b.center);
-    vars[vi] = arr;
+    results[cfg.key] = vars;
   }
 
   const elapsed = performance.now() - startTime;
-  self.postMessage({ type: 'swath-complete', vars, elapsed, axis });
+  self.postMessage({ type: 'swath-complete', results, elapsed });
 }
 
 async function sectionAnalysis(data) {
@@ -7105,9 +7147,9 @@ var _helpTabs = {
       '<div class="help-section"><div class="help-section-title">Overview</div>' +
       '<div class="help-row"><span>Spatial trend plots: bin blocks along an axis and show how variable values change across the model.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Configuration</div>' +
-      '<div class="help-row"><span><strong>Axis</strong> \u2014 X (W\u2192E), Y (S\u2192N), Z (Bottom\u2192Top), or Custom (arbitrary azimuth)</span></div>' +
-      '<div class="help-row"><span><strong>Custom axis</strong> \u2014 enter azimuth (0\u00b0=N, clockwise) and optional plunge (\u00b0 below horizontal). Projects XY(Z) onto that direction for binning.</span></div>' +
-      '<div class="help-row"><span><strong>Bin width</strong> \u2014 defaults to block size; override for wider bins</span></div>' +
+      '<div class="help-row"><span><strong>Directions</strong> \u2014 check any combination of X (W\u2192E), Y (S\u2192N), Z (Bottom\u2192Top); all checked directions are computed in one pass and each gets its own output tab.</span></div>' +
+      '<div class="help-row"><span><strong>Custom (rotated U/V/W)</strong> \u2014 enter dip direction (0\u00b0=N, clockwise), dip (\u00b0 below horizontal) and rake (\u00b0 from strike in the plane, 90\u00b0 = down-dip). U is the rake direction in the plane, V the in-plane perpendicular, W the pole. Check any of U/V/W to swath along the rotated axes \u2014 the old azimuth/plunge axis equals dipdir=azimuth, dip=plunge, rake=90\u00b0, U.</span></div>' +
+      '<div class="help-row"><span><strong>Bin width</strong> \u2014 set per direction; defaults to the matching block size</span></div>' +
       '<div class="help-row"><span><strong>Statistic</strong> \u2014 Mean\u00b1Std, P25/P50/P75, or P10/P50/P90</span></div>' +
       '<div class="help-row"><span><strong>Weight (model)</strong> \u2014 weight the model series\u2019 bin statistics by a column or calcol. The aux series uses the weight set on the Aux tab.</span></div>' +
       '<div class="help-row"><span><strong>Variables</strong> \u2014 check one or more. Each gets its own Y-axis + ribbon on the overlay chart.</span></div>' +
@@ -8694,6 +8736,7 @@ if ($auxDropzone) {
   $auxDropzone.addEventListener('dragleave', function() { $auxDropzone.classList.remove('drag-over'); });
   $auxDropzone.addEventListener('drop', async function(e) {
     e.preventDefault();
+    e.stopPropagation(); // keep the $results drop handler from loading this as the main dataset
     $auxDropzone.classList.remove('drag-over');
     var handle = null;
     if (HAS_FSAA && e.dataTransfer.items && e.dataTransfer.items[0] && e.dataTransfer.items[0].getAsFileSystemHandle) {
@@ -9146,11 +9189,10 @@ function serializeProject() {
       decimalSep: exportDecimalSep
     },
     swath: (function() {
-      var $axis = document.getElementById('swathAxis');
-      var $binWidth = document.getElementById('swathBinWidth');
+      var $dirMode = document.getElementById('swathDirMode');
       var $stat = document.getElementById('swathStat');
       var $filter = document.getElementById('swathLocalFilter');
-      if (!$axis) return null;
+      if (!$dirMode) return null;
       var checkedVars = [];
       document.querySelectorAll('#swathVarList input[type="checkbox"]:checked').forEach(function(cb) {
         var colIdx = parseInt(cb.value);
@@ -9163,8 +9205,6 @@ function serializeProject() {
         var colName = currentHeader[colIdx];
         if (colName && parseInt(sel.value) !== 0) swathUnits[colName] = parseInt(sel.value);
       });
-      var $azimuth = document.getElementById('swathAzimuth');
-      var $plunge = document.getElementById('swathPlunge');
       var swathAuxChecked = null;
       var swathAuxUnits = {};
       if (auxFile) {
@@ -9176,14 +9216,21 @@ function serializeProject() {
           if (sel.dataset.auxName && parseInt(sel.value) !== 0) swathAuxUnits[sel.dataset.auxName] = parseInt(sel.value);
         });
       }
+      var swathDirs = {};
+      document.querySelectorAll('#swathSidebar .swath-dir-on').forEach(function(cb) {
+        var k = cb.dataset.dir;
+        var bin = parseFloat((document.getElementById('swathBin_' + k) || {}).value);
+        swathDirs[k] = { on: cb.checked, bin: isFinite(bin) ? bin : null };
+      });
       return {
-        axis: $axis.value,
-        binWidth: parseFloat($binWidth.value) || 0,
+        dirMode: $dirMode.value,
+        directions: swathDirs,
+        dipDir: parseFloat((document.getElementById('swathDipDir') || {}).value) || 0,
+        dip: parseFloat((document.getElementById('swathDip') || {}).value) || 0,
+        rake: (function() { var v = parseFloat((document.getElementById('swathRake') || {}).value); return isFinite(v) ? v : 90; })(),
         stat: $stat ? $stat.value : 'mean_std',
         checkedVars: checkedVars,
         localFilter: $filter ? $filter.value : '',
-        azimuth: $axis.value === 'custom' ? (parseFloat($azimuth.value) || 0) : null,
-        plunge: $axis.value === 'custom' ? (parseFloat($plunge.value) || 0) : null,
         weight: (document.getElementById('swathWeight') || {}).value || null,
         auxCheckedVars: swathAuxChecked,
         auxUnits: Object.keys(swathAuxUnits).length > 0 ? swathAuxUnits : null,
@@ -9224,6 +9271,12 @@ function serializeProject() {
         tonnageUnit: parseInt((document.getElementById('gtTonnageUnit') || {}).value) || 0,
         customTonnageSym: (document.getElementById('gtCustomTonnageSym') || {}).value || '',
         customTonnageDiv: parseFloat((document.getElementById('gtCustomTonnageDiv') || {}).value) || null,
+        metalUnit: parseInt((document.getElementById('gtMetalUnit') || {}).value) || 0,
+        customMetalSym: (document.getElementById('gtCustomMetalSym') || {}).value || '',
+        customMetalDiv: parseFloat((document.getElementById('gtCustomMetalDiv') || {}).value) || null,
+        tonnageDp: (document.getElementById('gtTonnageDp') || {}).value || '',
+        gradeDp: (document.getElementById('gtGradeDp') || {}).value || '',
+        metalDp: (document.getElementById('gtMetalDp') || {}).value || '',
         gradeUnits: (function() {
           var gu = {};
           document.querySelectorAll('.gt-var-unit').forEach(function(sel) {
@@ -9432,7 +9485,9 @@ async function runPack() {
     var compress = !!document.getElementById('packCompress').checked;
 
     var stem = currentFile.name.replace(/\.[^.]+$/, '');
-    var slug = projectTitle ? projectTitle.replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') : '';
+    // Unicode-aware slug: \w is ASCII-only and would strip accented letters
+    // ("Jatobá" → "Jatob"); keep letters/digits from any script
+    var slug = projectTitle ? projectTitle.replace(/[^\p{L}\p{N}_-]+/gu, '_').replace(/^_+|_+$/g, '') : '';
     var json = JSON.stringify(serializeProject(), null, 2);
 
     // Never re-deflate archives; everything else follows the toggle
@@ -9876,7 +9931,10 @@ $results.addEventListener('drop', async (e) => {
     try { handle = await e.dataTransfer.items[0].getAsFileSystemHandle(); } catch (ex) {}
   }
   var file = handle ? await handle.getFile() : (e.dataTransfer.files[0] || null);
-  if (file) handleFile(file, handle);
+  if (!file) return;
+  // Drops anywhere on the Aux panel load the aux dataset, not the main model
+  if (e.target && e.target.closest && e.target.closest('#panelAux')) loadAuxFile(file, handle);
+  else handleFile(file, handle);
 });
 
 // Keyboard shortcuts
@@ -10312,7 +10370,7 @@ function displayResults(data) {
   var gtSnapshot = null;
   var swathSnapshot = null;
   if (!restoredProject) {
-    var snapSer = (document.getElementById('gtVarList') || document.getElementById('swathAxis')) ? serializeProject() : null;
+    var snapSer = (document.getElementById('gtVarList') || document.getElementById('swathDirMode')) ? serializeProject() : null;
     if (snapSer) {
       gtSnapshot = snapSer.gt;
       swathSnapshot = snapSer.swath;
@@ -10388,6 +10446,21 @@ function displayResults(data) {
     var $gCTDiv = document.getElementById('gtCustomTonnageDiv');
     if ($gCTSym && gtp.customTonnageSym) $gCTSym.value = gtp.customTonnageSym;
     if ($gCTDiv && gtp.customTonnageDiv) $gCTDiv.value = gtp.customTonnageDiv;
+    var $gMetalUnit = document.getElementById('gtMetalUnit');
+    if ($gMetalUnit && gtp.metalUnit != null) {
+      $gMetalUnit.value = gtp.metalUnit;
+      $gMetalUnit.dispatchEvent(new Event('change'));
+    }
+    var $gCMSym = document.getElementById('gtCustomMetalSym');
+    var $gCMDiv = document.getElementById('gtCustomMetalDiv');
+    if ($gCMSym && gtp.customMetalSym) $gCMSym.value = gtp.customMetalSym;
+    if ($gCMDiv && gtp.customMetalDiv) $gCMDiv.value = gtp.customMetalDiv;
+    var $gTDp = document.getElementById('gtTonnageDp');
+    var $gGDp = document.getElementById('gtGradeDp');
+    var $gMDp = document.getElementById('gtMetalDp');
+    if ($gTDp && gtp.tonnageDp) $gTDp.value = gtp.tonnageDp;
+    if ($gGDp && gtp.gradeDp) $gGDp.value = gtp.gradeDp;
+    if ($gMDp && gtp.metalDp) $gMDp.value = gtp.metalDp;
 
     // Per-variable grade units
     var gradeUnits = gtp.gradeUnits || null;
@@ -10426,18 +10499,45 @@ function displayResults(data) {
   // Restore Swath sidebar from project or snapshot
   var swp = (restoredProject && restoredProject.swath) ? restoredProject.swath : swathSnapshot;
   if (swp) {
-    var $sAxis = document.getElementById('swathAxis');
-    var $sBinWidth = document.getElementById('swathBinWidth');
     var $sStat = document.getElementById('swathStat');
     var $sFilter = document.getElementById('swathLocalFilter');
-    if ($sAxis && swp.axis) $sAxis.value = swp.axis;
-    var $sAzRow = document.getElementById('swathAzimuthRow');
-    var $sAzimuth = document.getElementById('swathAzimuth');
-    var $sPlunge = document.getElementById('swathPlunge');
-    if ($sAzRow) $sAzRow.style.display = swp.axis === 'custom' ? '' : 'none';
-    if ($sAzimuth && swp.azimuth != null) $sAzimuth.value = swp.azimuth;
-    if ($sPlunge && swp.plunge != null) $sPlunge.value = swp.plunge;
-    if ($sBinWidth && swp.binWidth) $sBinWidth.value = swp.binWidth;
+    var $sDirMode = document.getElementById('swathDirMode');
+    // Back-compat: map old single-axis projects (axis/binWidth/azimuth/plunge)
+    // onto the directions model — the old azimuth/plunge line is exactly
+    // dipdir=azimuth, dip=plunge, rake=90, swathed along U only
+    var swpDirMode = swp.dirMode, swpDirs = swp.directions;
+    var swpDipDir = swp.dipDir, swpDip = swp.dip, swpRake = swp.rake;
+    if (!swpDirs && swp.axis) {
+      if (swp.axis === 'custom') {
+        swpDirMode = 'custom';
+        swpDipDir = swp.azimuth || 0;
+        swpDip = swp.plunge || 0;
+        swpRake = 90;
+        swpDirs = { u: { on: true, bin: swp.binWidth || null }, v: { on: false }, w: { on: false } };
+      } else {
+        swpDirMode = 'ortho';
+        swpDirs = { x: { on: false }, y: { on: false }, z: { on: false } };
+        swpDirs[swp.axis] = { on: true, bin: swp.binWidth || null };
+      }
+    }
+    if ($sDirMode && swpDirMode) {
+      $sDirMode.value = swpDirMode;
+      $sDirMode.dispatchEvent(new Event('change'));
+    }
+    if (swpDirs) {
+      document.querySelectorAll('#swathSidebar .swath-dir-on').forEach(function(cb) {
+        var conf = swpDirs[cb.dataset.dir];
+        if (!conf) return;
+        cb.checked = conf.on !== false;
+        if (conf.bin) {
+          var bi = document.getElementById('swathBin_' + cb.dataset.dir);
+          if (bi) bi.value = conf.bin;
+        }
+      });
+    }
+    if (swpDipDir != null && document.getElementById('swathDipDir')) document.getElementById('swathDipDir').value = swpDipDir;
+    if (swpDip != null && document.getElementById('swathDip')) document.getElementById('swathDip').value = swpDip;
+    if (swpRake != null && document.getElementById('swathRake')) document.getElementById('swathRake').value = swpRake;
     if ($sStat && swp.stat) $sStat.value = swp.stat;
     var $sWeight = document.getElementById('swathWeight');
     if ($sWeight && swp.weight != null) $sWeight.value = swp.weight;
@@ -13126,10 +13226,7 @@ function applySwathColor(colName, color) {
     if (currentHeader[ci] === colName) sw.style.background = color;
   });
   // Re-render chart from cache
-  if (lastSwathData) {
-    var stat = document.getElementById('swathStat');
-    renderSwathCharts(lastSwathData, stat ? stat.value : 'mean_std');
-  }
+  if (lastSwathData) renderSwathOutput();
   autoSaveProject();
 }
 
@@ -13187,11 +13284,14 @@ function formatAzimuthLabel(deg) {
 
 function getSwathDirectionLabels(swathData) {
   if (swathData.azimuth != null) {
+    var pl = swathData.plunge || 0;
+    // Near-vertical vectors: compass labels are meaningless
+    if (pl > 80) return { left: 'Up', right: 'Down' };
+    if (pl < -80) return { left: 'Down', right: 'Up' };
     var fwd = formatAzimuthLabel(swathData.azimuth);
     var back = formatAzimuthLabel((swathData.azimuth + 180) % 360);
-    if (swathData.plunge && swathData.plunge !== 0) {
-      return { left: back + ' (up)', right: fwd + ' (down)' };
-    }
+    if (pl > 0.5) return { left: back + ' (up)', right: fwd + ' (down)' };
+    if (pl < -0.5) return { left: back + ' (down)', right: fwd + ' (up)' };
     return { left: back, right: fwd };
   }
   var axisKey = swathData.axis;
@@ -13202,11 +13302,68 @@ function getSwathDirectionLabels(swathData) {
 
 function getSwathXAxisLabel(swathData) {
   if (swathData.azimuth != null) {
-    var label = 'Az ' + Math.round(swathData.azimuth) + '\u00b0';
-    if (swathData.plunge && swathData.plunge !== 0) label += '/Pl ' + Math.round(swathData.plunge) + '\u00b0';
+    var label = swathData.key ? swathData.key.toUpperCase() + ' \u2014 ' : '';
+    label += 'Az ' + Math.round(swathData.azimuth) + '\u00b0';
+    if (swathData.plunge && Math.round(swathData.plunge) !== 0) label += '/Pl ' + Math.round(swathData.plunge) + '\u00b0';
     return label + ' Projected';
   }
   return swathData.axis.toUpperCase() + ' Coordinate';
+}
+
+// Single-direction view over the multi-direction result cache \u2014 the shape
+// renderSwathCharts and friends consume (vars/auxVars/binWidth/axis/az/pl)
+function swathDirView(sd, key) {
+  var d = sd.directions[0];
+  for (var i = 0; i < sd.directions.length; i++) {
+    if (sd.directions[i].key === key) { d = sd.directions[i]; break; }
+  }
+  return {
+    key: d.key,
+    axis: d.axis != null ? 'xyz'[d.axis] : null,
+    azimuth: d.dir ? d.azimuth : null,
+    plunge: d.dir ? d.plunge : null,
+    binWidth: d.binWidth,
+    vars: (sd.results && sd.results[d.key]) || {},
+    auxVars: sd.auxResults ? (sd.auxResults[d.key] || null) : null,
+    varCols: sd.varCols,
+    auxVarCols: sd.auxVarCols,
+    auxHeader: sd.auxHeader,
+    auxError: sd.auxError
+  };
+}
+
+// Render the swath output area: a tab per computed direction (when more
+// than one), with the active direction's chart + table below.
+function renderSwathOutput(stat) {
+  var $content = document.getElementById('swathContent');
+  if (!$content) return;
+  if (!lastSwathData || !lastSwathData.directions) {
+    $content.innerHTML = '<div class="swath-hint">Configure settings and click Generate to create swath plots.</div>';
+    return;
+  }
+  if (!stat) stat = (document.getElementById('swathStat') || {}).value || 'mean_std';
+  var sd = lastSwathData;
+  var keys = sd.directions.map(function(d) { return d.key; });
+  if (!sd.activeKey || keys.indexOf(sd.activeKey) < 0) sd.activeKey = keys[0];
+
+  var html = '';
+  if (sd.directions.length > 1) {
+    html += '<div class="swath-dir-tabs">' + sd.directions.map(function(d) {
+      var title = d.dir ? 'Az ' + Math.round(d.azimuth) + '\u00b0 / Pl ' + Math.round(d.plunge) + '\u00b0' : d.key.toUpperCase() + ' axis';
+      return '<button class="swath-dir-tab' + (d.key === sd.activeKey ? ' active' : '') + '" data-dir-key="' + d.key + '" title="' + esc(title) + '">' + d.key.toUpperCase() + '</button>';
+    }).join('') + '</div>';
+  }
+  html += '<div id="swathDirPanel"></div>';
+  $content.innerHTML = html;
+
+  $content.querySelectorAll('.swath-dir-tab').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      sd.activeKey = btn.dataset.dirKey;
+      renderSwathOutput();
+    });
+  });
+
+  renderSwathCharts(swathDirView(sd, sd.activeKey), stat, document.getElementById('swathDirPanel'));
 }
 
 function renderSwathConfig(data) {
@@ -13228,13 +13385,14 @@ function renderSwathConfig(data) {
     $content.innerHTML = '<div class="swath-hint">No numeric variable columns available for swath analysis.</div>';
     return;
   }
-  const axes = [
-    { key: 'x', label: 'X', bs: geometry.x.blockSize },
-    { key: 'y', label: 'Y', bs: geometry.y.blockSize },
-    { key: 'z', label: 'Z', bs: geometry.z.blockSize },
-    { key: 'custom', label: 'Custom', bs: Math.min(geometry.x.blockSize, geometry.y.blockSize) }
-  ];
-  const defaultBs = axes[0].bs;
+  const bsx = geometry.x.blockSize, bsy = geometry.y.blockSize, bsz = geometry.z.blockSize;
+  const inPlaneBs = Math.min(bsx, bsy);
+  function dirRow(key, label, bs, checked, title) {
+    return '<div class="swath-dir-row">' +
+      '<label' + (title ? ' title="' + esc(title) + '"' : '') + '><input type="checkbox" class="swath-dir-on" data-dir="' + key + '"' + (checked ? ' checked' : '') + '> ' + label + '</label>' +
+      '<input type="number" class="swath-input swath-dir-bin" id="swathBin_' + key + '" value="' + bs + '" min="0.001" step="any" title="Bin width (m)">' +
+    '</div>';
+  }
   const varItems = swathNumCols.map(function(c, vi) {
     var defUnit = globalUnits[c.name] || 0;
     var unitOpts = GRADE_UNITS.map(function(u, ui) {
@@ -13249,18 +13407,27 @@ function renderSwathConfig(data) {
 
   $sidebar.innerHTML =
     '<div class="swath-sidebar-section">' +
-      '<div class="swath-sidebar-title">Axis</div>' +
-      '<select class="swath-select" id="swathAxis">' + axes.map(a => '<option value="' + a.key + '">' + a.label + '</option>').join('') + '</select>' +
-      '<div id="swathAzimuthRow" style="display:none; margin-top:0.4rem">' +
-        '<div class="swath-sidebar-title">Azimuth (\u00b0 from N, clockwise)</div>' +
-        '<input type="number" class="swath-input" id="swathAzimuth" value="0" min="0" max="360" step="1">' +
-        '<div class="swath-sidebar-title" style="margin-top:0.3rem">Plunge (\u00b0 below horizontal)</div>' +
-        '<input type="number" class="swath-input" id="swathPlunge" value="0" min="0" max="90" step="1">' +
+      '<div class="swath-sidebar-title">Directions</div>' +
+      '<select class="swath-select" id="swathDirMode">' +
+        '<option value="ortho">Orthogonal X/Y/Z</option>' +
+        '<option value="custom">Custom (rotated U/V/W)</option>' +
+      '</select>' +
+      '<div class="swath-dir-hint">check directions to swath \u00b7 bin width (m) per direction</div>' +
+      '<div id="swathOrthoDirs">' +
+        dirRow('x', 'X', bsx, true) +
+        dirRow('y', 'Y', bsy, false) +
+        dirRow('z', 'Z', bsz, false) +
       '</div>' +
-      '<div style="margin-top:0.4rem">' +
-        '<div class="swath-sidebar-title">Bin Width</div>' +
-        '<input type="number" class="swath-input" id="swathBinWidth" value="' + defaultBs + '" min="0.001" step="any">' +
-        '<div class="swath-bin-label" id="swathBinLabel">' + defaultBs + 'm blocks</div>' +
+      '<div id="swathCustomDirs" style="display:none">' +
+        '<div class="swath-angle-row">' +
+          '<label title="Dip direction (\u00b0 from N, clockwise)">Dipdir<input type="number" class="swath-input" id="swathDipDir" value="0" min="0" max="360" step="1"></label>' +
+          '<label title="Dip (\u00b0 below horizontal)">Dip<input type="number" class="swath-input" id="swathDip" value="0" min="0" max="90" step="1"></label>' +
+          '<label title="Rake of U in the plane (\u00b0 from strike, 90 = down-dip)">Rake<input type="number" class="swath-input" id="swathRake" value="90" min="-180" max="180" step="1"></label>' +
+        '</div>' +
+        dirRow('u', 'U', inPlaneBs, true, 'In-plane, along the rake direction') +
+        dirRow('v', 'V', inPlaneBs, false, 'In-plane, perpendicular to U') +
+        dirRow('w', 'W', bsz, false, 'Pole to the plane (normal)') +
+        '<div class="swath-dir-hint">U: rake direction in the dipdir/dip plane \u00b7 V: in-plane \u22a5 U \u00b7 W: pole</div>' +
       '</div>' +
     '</div>' +
     '<div class="swath-sidebar-section">' +
@@ -13316,24 +13483,11 @@ function renderSwathConfig(data) {
 
   $content.innerHTML = '<div class="swath-hint">Select variables and click Generate to create swath plots.</div>';
 
-  // Update bin width + label when axis changes
-  var $axis = document.getElementById('swathAxis');
-  var $binWidth = document.getElementById('swathBinWidth');
-  var $binLabel = document.getElementById('swathBinLabel');
-  var $azRow = document.getElementById('swathAzimuthRow');
-  $axis.addEventListener('change', function() {
-    var a = axes.find(function(ax) { return ax.key === $axis.value; });
-    if (a) {
-      $binWidth.value = a.bs;
-      $binLabel.textContent = a.bs + 'm blocks';
-    }
-    $azRow.style.display = $axis.value === 'custom' ? '' : 'none';
-  });
-  // Fix: show the typed value, not blockSize
-  $binWidth.addEventListener('input', function() {
-    var v = $binWidth.value;
-    $binLabel.textContent = (v || '?') + 'm bins';
-    $binLabel.style.color = '';
+  // Direction mode toggle — show the matching direction rows
+  var $dirMode = document.getElementById('swathDirMode');
+  $dirMode.addEventListener('change', function() {
+    document.getElementById('swathOrthoDirs').style.display = $dirMode.value === 'ortho' ? '' : 'none';
+    document.getElementById('swathCustomDirs').style.display = $dirMode.value === 'custom' ? '' : 'none';
   });
 
   // Variable search filter (fuzzy)
@@ -13366,7 +13520,7 @@ function renderSwathConfig(data) {
       var colName = sel.dataset.auxCol != null ? sel.dataset.auxName : currentHeader[parseInt(sel.dataset.col)];
       sel.value = (colName && globalUnits[colName]) ? globalUnits[colName] : 0;
     });
-    if (lastSwathData) renderSwathCharts(lastSwathData, document.getElementById('swathStat').value);
+    if (lastSwathData) renderSwathOutput();
     autoSaveProject();
   });
 
@@ -13375,13 +13529,13 @@ function renderSwathConfig(data) {
 
   // Stat change re-renders from cache
   document.getElementById('swathStat').addEventListener('change', function() {
-    if (lastSwathData) renderSwathCharts(lastSwathData, document.getElementById('swathStat').value);
+    if (lastSwathData) renderSwathOutput();
   });
 
   // Display option changes re-render from cache
   ['swathShowBands','swathShowCounts','swathShowTable','swathYScale','swathLayout'].forEach(function(id) {
     document.getElementById(id).addEventListener('change', function() {
-      if (lastSwathData) renderSwathCharts(lastSwathData, document.getElementById('swathStat').value);
+      if (lastSwathData) renderSwathOutput();
       autoSaveProject();
     });
   });
@@ -13389,7 +13543,7 @@ function renderSwathConfig(data) {
   // Swath per-variable unit change — re-render from cache
   document.getElementById('swathVarList').addEventListener('change', function(e) {
     if (e.target.classList.contains('swath-var-unit') && lastSwathData) {
-      renderSwathCharts(lastSwathData, document.getElementById('swathStat').value);
+      renderSwathOutput();
     }
   });
 
@@ -13528,19 +13682,89 @@ function renderSwathAuxVars() {
   wrap.innerHTML = html;
 }
 
+// Orthonormal frame from dip direction / dip / rake (E=x, N=y, Up=z):
+// U = lineation in the plane at the given rake (measured from strike,
+// dip to the right of strike, 90° = down-dip), W = pole to the plane,
+// V = W × U (in-plane, perpendicular to U).
+function computeSwathUVW(dipDirDeg, dipDeg, rakeDeg) {
+  var a = dipDirDeg * Math.PI / 180, d = dipDeg * Math.PI / 180, r = rakeDeg * Math.PI / 180;
+  var s = [-Math.cos(a), Math.sin(a), 0];                                  // strike
+  var dd = [Math.sin(a) * Math.cos(d), Math.cos(a) * Math.cos(d), -Math.sin(d)]; // down-dip
+  var w = [Math.sin(a) * Math.sin(d), Math.cos(a) * Math.sin(d), Math.cos(d)];   // pole (up)
+  var u = [
+    s[0] * Math.cos(r) + dd[0] * Math.sin(r),
+    s[1] * Math.cos(r) + dd[1] * Math.sin(r),
+    s[2] * Math.cos(r) + dd[2] * Math.sin(r)
+  ];
+  var v = [
+    w[1] * u[2] - w[2] * u[1],
+    w[2] * u[0] - w[0] * u[2],
+    w[0] * u[1] - w[1] * u[0]
+  ];
+  return { u: u, v: v, w: w };
+}
+
+// Read the checked directions (+ per-direction bin widths) from the sidebar.
+// Vector directions carry display azimuth/plunge derived from the vector.
+function getSwathDirections() {
+  var mode = (document.getElementById('swathDirMode') || {}).value || 'ortho';
+  var dirs = [];
+  function pushDir(key, axis, vec) {
+    var cb = document.querySelector('#swathSidebar .swath-dir-on[data-dir="' + key + '"]');
+    if (!cb || !cb.checked) return;
+    var bw = parseFloat((document.getElementById('swathBin_' + key) || {}).value);
+    var d = { key: key, axis: axis, dir: vec, binWidth: bw };
+    if (vec) {
+      d.azimuth = (Math.atan2(vec[0], vec[1]) * 180 / Math.PI + 360) % 360;
+      d.plunge = -Math.asin(Math.max(-1, Math.min(1, vec[2]))) * 180 / Math.PI;
+    }
+    dirs.push(d);
+  }
+  var angles = null;
+  if (mode === 'ortho') {
+    pushDir('x', 0, null);
+    pushDir('y', 1, null);
+    pushDir('z', 2, null);
+  } else {
+    var dipDir = parseFloat((document.getElementById('swathDipDir') || {}).value) || 0;
+    var dip = parseFloat((document.getElementById('swathDip') || {}).value) || 0;
+    var rake = parseFloat((document.getElementById('swathRake') || {}).value);
+    if (isNaN(rake)) rake = 90;
+    angles = { dipDir: dipDir, dip: dip, rake: rake };
+    var f = computeSwathUVW(dipDir, dip, rake);
+    pushDir('u', null, f.u);
+    pushDir('v', null, f.v);
+    pushDir('w', null, f.w);
+  }
+  return { mode: mode, dirs: dirs, angles: angles };
+}
+
+function swathConfigError(msg) {
+  var $progress = document.getElementById('swathProgress');
+  var $label = document.getElementById('swathProgressLabel');
+  if (!$progress || !$label) return;
+  $progress.classList.add('active');
+  $label.textContent = msg;
+  $label.style.color = 'var(--red)';
+  setTimeout(function() { $progress.classList.remove('active'); $label.style.color = ''; $label.textContent = ''; }, 2500);
+}
+
 function runSwath() {
   if (swathExprController) { var r = swathExprController.validate(); if (!r.valid) return; }
-  var axisVal = document.getElementById('swathAxis').value;
-  var binWidth = parseFloat(document.getElementById('swathBinWidth').value);
   var stat = document.getElementById('swathStat').value;
   var localFilter = document.getElementById('swathLocalFilter').value.trim();
-  var $binLabel = document.getElementById('swathBinLabel');
 
-  if (!binWidth || binWidth <= 0 || isNaN(binWidth)) {
-    $binLabel.textContent = 'Invalid bin width';
-    $binLabel.style.color = 'var(--red)';
-    setTimeout(function() { $binLabel.style.color = ''; $binLabel.textContent = '?m bins'; }, 2000);
+  var dcfg = getSwathDirections();
+  if (dcfg.dirs.length === 0) {
+    swathConfigError('Check at least one direction');
     return;
+  }
+  for (var di = 0; di < dcfg.dirs.length; di++) {
+    var dbw = dcfg.dirs[di].binWidth;
+    if (!dbw || dbw <= 0 || isNaN(dbw)) {
+      swathConfigError('Invalid bin width for ' + dcfg.dirs[di].key.toUpperCase());
+      return;
+    }
   }
 
   // Gather selected variable column indices (primary and aux are separate
@@ -13559,21 +13783,10 @@ function runSwath() {
   }
   if (varCols.length === 0 && auxVarCols.length === 0) return;
 
-  var isCustom = axisVal === 'custom';
-  var axisIdx = isCustom ? null : (axisVal === 'x' ? 0 : (axisVal === 'y' ? 1 : 2));
-
-  // Validate azimuth before any worker spawns or UI state changes
-  var azimuthDeg = null, plungeDeg = null;
-  if (isCustom) {
-    azimuthDeg = parseFloat(document.getElementById('swathAzimuth').value);
-    if (isNaN(azimuthDeg)) {
-      $binLabel.textContent = 'Invalid azimuth';
-      $binLabel.style.color = 'var(--red)';
-      setTimeout(function() { $binLabel.style.color = ''; $binLabel.textContent = '?m bins'; }, 2000);
-      return;
-    }
-    plungeDeg = parseFloat(document.getElementById('swathPlunge').value) || 0;
-  }
+  // Worker payload: direction geometry only (no display fields)
+  var workerDirs = dcfg.dirs.map(function(d) {
+    return { key: d.key, axis: d.axis, dir: d.dir, binWidth: d.binWidth };
+  });
 
   if (swathWorker) { swathWorker.terminate(); swathWorker = null; }
   if (swathAuxWorker) { swathAuxWorker.terminate(); swathAuxWorker = null; }
@@ -13591,7 +13804,7 @@ function runSwath() {
   if ($btn) $btn.disabled = true;
 
   var pending = 0;
-  var out = { vars: {}, auxVars: null, auxError: null, elapsed: 0 };
+  var out = { results: {}, auxResults: null, auxError: null, elapsed: 0 };
 
   function finalize() {
     if (pending > 0) return;
@@ -13599,18 +13812,27 @@ function runSwath() {
     $label.textContent = 'Done';
     setTimeout(function() { $progress.classList.remove('active'); }, 800);
     if ($btn) $btn.disabled = false;
+    // Keep the active output tab when the new run still has that direction
+    var prevKey = lastSwathData && lastSwathData.activeKey;
     lastSwathData = {
-      vars: out.vars, axis: axisVal, axisIdx: axisIdx, binWidth: binWidth,
-      varCols: varCols, elapsed: out.elapsed, azimuth: azimuthDeg, plunge: plungeDeg,
-      auxVars: out.auxVars, auxVarCols: auxVarCols,
+      directions: dcfg.dirs, mode: dcfg.mode, angles: dcfg.angles,
+      results: out.results, auxResults: out.auxResults,
+      varCols: varCols, auxVarCols: auxVarCols, elapsed: out.elapsed,
       auxHeader: auxReady ? auxPreflightData.header.concat(auxCalcolMeta.map(function(m) { return m.name; })) : null,
-      auxError: out.auxError
+      auxError: out.auxError,
+      activeKey: dcfg.dirs.some(function(d) { return d.key === prevKey; }) ? prevKey : dcfg.dirs[0].key
     };
-    renderSwathCharts(lastSwathData, stat);
-    // Update tab badge
+    renderSwathOutput(stat);
+    // Update tab badge: max bin count across directions and variables
     var totalBins = 0;
-    Object.values(out.vars).forEach(function(arr) { totalBins = Math.max(totalBins, arr.length); });
-    if (out.auxVars) Object.values(out.auxVars).forEach(function(arr) { totalBins = Math.max(totalBins, arr.length); });
+    function scanBins(res) {
+      if (!res) return;
+      Object.values(res).forEach(function(varsObj) {
+        Object.values(varsObj || {}).forEach(function(arr) { totalBins = Math.max(totalBins, arr.length); });
+      });
+    }
+    scanBins(out.results);
+    scanBins(out.auxResults);
     var swathTab = document.querySelector('.results-tab[data-tab="swath"]');
     if (swathTab) swathTab.innerHTML = 'Swath <span class="tab-badge">' + totalBins + ' bins</span>';
     autoSaveProject();
@@ -13640,11 +13862,8 @@ function runSwath() {
       resolvedTypes: currentColTypes.slice(0, currentOrigColCount),
       xyzCols: [currentXYZ.x, currentXYZ.y, currentXYZ.z],
       dxyzCols: [currentDXYZ.dx, currentDXYZ.dy, currentDXYZ.dz],
-      axis: axisIdx,
+      directions: workerDirs,
       varCols: varCols,
-      binWidth: binWidth,
-      azimuth: azimuthDeg,
-      plunge: plungeDeg,
       weightColName: (document.getElementById('swathWeight') || {}).value || null,
       dmEndianness: preflightData && preflightData.dmEndianness || null,
       dmFormat: preflightData && preflightData.dmFormat || null
@@ -13659,7 +13878,7 @@ function runSwath() {
         $fill.style.width = pct.toFixed(1) + '%';
         $label.textContent = pct.toFixed(0) + '%';
       } else if (m.type === 'swath-complete') {
-        out.vars = m.vars;
+        out.results = m.results;
         out.elapsed = m.elapsed;
         swathWorker.terminate();
         swathWorker = null;
@@ -13685,11 +13904,8 @@ function runSwath() {
       resolvedTypes: auxPreflightData.autoTypes,
       xyzCols: [auxPreflightData.xyz.x, auxPreflightData.xyz.y, auxPreflightData.xyz.z],
       dxyzCols: [-1, -1, -1],
-      axis: axisIdx,
+      directions: workerDirs,
       varCols: auxVarCols,
-      binWidth: binWidth,
-      azimuth: azimuthDeg,
-      plunge: plungeDeg,
       rowVarOverride: AUX_ROW_VAR,
       weightColName: auxWeightName,
       dmEndianness: auxPreflightData.dmEndianness || null,
@@ -13710,7 +13926,7 @@ function runSwath() {
           $label.textContent = pct.toFixed(0) + '%';
         }
       } else if (m.type === 'swath-complete') {
-        out.auxVars = m.vars;
+        out.auxResults = m.results;
         swathAuxWorker.terminate();
         swathAuxWorker = null;
         pending--;
@@ -13784,8 +14000,8 @@ function buildSwathScaleGroups(varEntries) {
   return groups;
 }
 
-function renderSwathCharts(swathData, stat) {
-  var $content = document.getElementById('swathContent');
+function renderSwathCharts(swathData, stat, $target) {
+  var $content = $target || document.getElementById('swathContent');
   if (!$content || !swathData || !swathData.vars) {
     if ($content) $content.innerHTML = '<div class="swath-hint">No data.</div>';
     return;
@@ -13962,6 +14178,8 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
   // Store params for crosshair
   _swathChartParams = {
     layout: 'overlay',
+    shortLabel: swathData.azimuth != null ? (swathData.key || 'u').toUpperCase() : (swathData.axis || 'coord').toUpperCase(),
+    dirKey: swathData.key || swathData.axis || 'plot',
     varEntries: varEntries,
     xMin: xMin, xMax: xMax,
     yMins: yMins, yMaxs: yMaxs,
@@ -14225,6 +14443,8 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
   // Store params for crosshair
   _swathChartParams = {
     layout: 'split',
+    shortLabel: swathData.azimuth != null ? (swathData.key || 'u').toUpperCase() : (swathData.axis || 'coord').toUpperCase(),
+    dirKey: swathData.key || swathData.axis || 'plot',
     varEntries: varEntries,
     xMin: xMin, xMax: xMax,
     yMins: yMins, yMaxs: yMaxs,
@@ -14426,7 +14646,7 @@ function wireSwathCrosshair() {
 
     // Build tooltip lines
     var lines = [];
-    lines.push({ text: p.varEntries[0].bins[0] ? swathData_axisLabel() + ': ' + formatNum(nearBin.center) : formatNum(nearBin.center), color: 'var(--fg)' });
+    lines.push({ text: p.shortLabel + ': ' + formatNum(nearBin.center), color: 'var(--fg)' });
     lines.push({ text: 'Count: ' + nearBin.count, color: 'var(--fg-dim)' });
     for (var vi = 0; vi < p.varEntries.length; vi++) {
       var entry = p.varEntries[vi];
@@ -14477,16 +14697,6 @@ function wireSwathCrosshair() {
 
   area.addEventListener('mousemove', onMove);
   area.addEventListener('mouseleave', onLeave);
-}
-
-function swathData_axisLabel() {
-  if (!lastSwathData) return 'Coord';
-  if (lastSwathData.azimuth != null) {
-    var label = 'Az' + Math.round(lastSwathData.azimuth) + '\u00b0';
-    if (lastSwathData.plunge && lastSwathData.plunge !== 0) label += '/Pl' + Math.round(lastSwathData.plunge) + '\u00b0';
-    return label;
-  }
-  return lastSwathData.axis.toUpperCase();
 }
 
 function renderSwathTable(varEntries, swathData, stat) {
@@ -14611,7 +14821,7 @@ function wireSwathChartActions() {
           var url = URL.createObjectURL(blob);
           var a = document.createElement('a');
           a.href = url;
-          a.download = 'swath_plot.png';
+          a.download = 'swath_' + ((_swathChartParams && _swathChartParams.dirKey) || 'plot') + '.png';
           a.click();
           URL.revokeObjectURL(url);
         }, 'image/png');
@@ -14668,6 +14878,22 @@ const GT_TONNAGE_UNITS = [
   { label: 't',  symbol: 't',  divisor: 1 },
   { label: 'kt', symbol: 'kt', divisor: 1e3 },
   { label: 'Mt', symbol: 'Mt', divisor: 1e6 },
+  { label: 'Custom\u2026', symbol: null, divisor: null }
+];
+// Metal column/curve units \u2014 divisor is tonnes of metal per displayed unit.
+// 'tonnage' means follow the tonnage unit (historic default).
+const GT_METAL_UNITS = [
+  { label: '= tonnage', symbol: null, divisor: 'tonnage' },
+  { label: 't',   symbol: 't',   divisor: 1 },
+  { label: 'kt',  symbol: 'kt',  divisor: 1e3 },
+  { label: 'Mt',  symbol: 'Mt',  divisor: 1e6 },
+  { label: 'kg',  symbol: 'kg',  divisor: 1e-3 },
+  { label: 'oz',  symbol: 'oz',  divisor: 3.11034768e-5 },
+  { label: 'koz', symbol: 'koz', divisor: 3.11034768e-2 },
+  { label: 'Moz', symbol: 'Moz', divisor: 31.1034768 },
+  { label: 'lb',  symbol: 'lb',  divisor: 4.5359237e-4 },
+  { label: 'klb', symbol: 'klb', divisor: 0.45359237 },
+  { label: 'Mlb', symbol: 'Mlb', divisor: 453.59237 },
   { label: 'Custom\u2026', symbol: null, divisor: null }
 ];
 const GT_GRADE_UNITS = GRADE_UNITS.concat([{ label: 'Custom\u2026', symbol: null, factor: null }]);
@@ -14738,6 +14964,11 @@ function renderGtConfig(data) {
   var tonnageUnitOpts = GT_TONNAGE_UNITS.map(function(u, i) {
     return '<option value="' + i + '">' + esc(u.label) + '</option>';
   }).join('');
+  var metalUnitOpts = GT_METAL_UNITS.map(function(u, i) {
+    return '<option value="' + i + '">' + esc(u.label) + '</option>';
+  }).join('');
+  var dpOpts = '<option value="">auto</option>';
+  for (var dpi = 0; dpi <= 6; dpi++) dpOpts += '<option value="' + dpi + '">' + dpi + ' dp</option>';
 
   // Group-by dropdown
   var groupByOpts = '<option value="-1">\u2014 none</option>' + gtCatCols.map(function(c) {
@@ -14790,14 +15021,22 @@ function renderGtConfig(data) {
       '</div>' +
     '</div>' +
     '<div class="gt-sidebar-section">' +
-      '<div class="gt-sidebar-title">Tonnage Unit</div>' +
-      '<select class="gt-select" id="gtTonnageUnit">' + tonnageUnitOpts + '</select>' +
-      '<div id="gtCustomTonnageWrap" style="display:none;margin-top:0.3rem">' +
+      '<div class="gt-sidebar-title">Units &amp; Format</div>' +
+      '<div class="gt-unit-row"><span class="gt-unit-label">Tonnage</span><select class="gt-select" id="gtTonnageUnit">' + tonnageUnitOpts + '</select><select class="gt-select gt-dp-select" id="gtTonnageDp" title="Decimal places">' + dpOpts + '</select></div>' +
+      '<div id="gtCustomTonnageWrap" style="display:none;margin-bottom:0.3rem">' +
         '<div style="display:flex;gap:0.3rem">' +
           '<input type="text" class="gt-input" id="gtCustomTonnageSym" placeholder="symbol" style="width:50px">' +
           '<input type="number" class="gt-input" id="gtCustomTonnageDiv" placeholder="divisor" step="any">' +
         '</div>' +
       '</div>' +
+      '<div class="gt-unit-row"><span class="gt-unit-label">Metal</span><select class="gt-select" id="gtMetalUnit">' + metalUnitOpts + '</select><select class="gt-select gt-dp-select" id="gtMetalDp" title="Decimal places">' + dpOpts + '</select></div>' +
+      '<div id="gtCustomMetalWrap" style="display:none;margin-bottom:0.3rem">' +
+        '<div style="display:flex;gap:0.3rem">' +
+          '<input type="text" class="gt-input" id="gtCustomMetalSym" placeholder="symbol" style="width:50px">' +
+          '<input type="number" class="gt-input" id="gtCustomMetalDiv" placeholder="t per unit" step="any" title="Tonnes of metal per displayed unit">' +
+        '</div>' +
+      '</div>' +
+      '<div class="gt-unit-row"><span class="gt-unit-label">Grade</span><span class="gt-unit-note">unit set per variable</span><select class="gt-select gt-dp-select" id="gtGradeDp" title="Decimal places">' + dpOpts + '</select></div>' +
     '</div>' +
     '<div class="gt-sidebar-section">' +
       '<div class="gt-sidebar-title">Cutoffs</div>' +
@@ -14811,6 +15050,9 @@ function renderGtConfig(data) {
           '<label style="flex:1;display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.55rem;color:var(--fg-dim)">Max</span><input type="number" class="gt-input" id="gtCutoffMax" value="' + defMax + '" step="any"></label>' +
           '<label style="flex:1;display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.55rem;color:var(--fg-dim)">Step</span><input type="number" class="gt-input" id="gtCutoffStep" value="' + defStep + '" step="any" min="0"></label>' +
         '</div>' +
+        '<select class="gt-select" id="gtRangeFrom" style="margin-top:0.3rem" title="Set Min/Max/Step from a variable’s data range">' +
+          '<option value="">↧ copy range from variable…</option>' + numColOpts +
+        '</select>' +
       '</div>' +
       '<div id="gtCutoffCustom" style="display:none">' +
         '<input type="text" class="gt-input" id="gtCutoffCustomText" placeholder="0.2, 0.5, 1.0, 2.0, 5.0" spellcheck="false">' +
@@ -14885,6 +15127,33 @@ function renderGtConfig(data) {
     var idx = parseInt($tonnageUnit.value);
     document.getElementById('gtCustomTonnageWrap').style.display = GT_TONNAGE_UNITS[idx].divisor === null ? '' : 'none';
     if (lastGtData) renderGtOutput();
+  });
+  var $metalUnit = document.getElementById('gtMetalUnit');
+  $metalUnit.addEventListener('change', function() {
+    var idx = parseInt($metalUnit.value);
+    document.getElementById('gtCustomMetalWrap').style.display = (GT_METAL_UNITS[idx] || {}).divisor === null ? '' : 'none';
+    if (lastGtData) renderGtOutput();
+  });
+  // Decimal-place selects and custom unit fields — live re-render
+  ['gtTonnageDp', 'gtGradeDp', 'gtMetalDp', 'gtCustomTonnageSym', 'gtCustomTonnageDiv', 'gtCustomMetalSym', 'gtCustomMetalDiv'].forEach(function(id) {
+    document.getElementById(id).addEventListener('change', function() {
+      if (lastGtData) renderGtOutput();
+    });
+  });
+
+  // Copy cutoff Min/Max/Step from a variable's analyzed range
+  document.getElementById('gtRangeFrom').addEventListener('change', function() {
+    var idx = parseInt(this.value);
+    this.value = '';
+    if (!(idx >= 0) || !lastCompleteData || !lastCompleteData.stats || !lastCompleteData.stats[idx]) return;
+    var st = lastCompleteData.stats[idx];
+    if (st.min == null || st.max == null) return;
+    var mn = Math.floor(st.min * 100) / 100;
+    var mx = Math.ceil(st.max * 100) / 100;
+    document.getElementById('gtCutoffMin').value = mn;
+    document.getElementById('gtCutoffMax').value = mx;
+    document.getElementById('gtCutoffStep').value = +((mx - mn) / 20).toPrecision(2) || 0.05;
+    autoSaveProject();
   });
   // Constant density input toggle
   document.getElementById('gtDensityCol').addEventListener('change', function() {
@@ -14963,7 +15232,29 @@ function getGtTonnageUnit() {
     tonnageSymbol = document.getElementById('gtCustomTonnageSym').value || 'units';
     tonnageDivisor = parseFloat(document.getElementById('gtCustomTonnageDiv').value) || 1;
   }
-  return { tonnageDivisor: tonnageDivisor, tonnageSymbol: tonnageSymbol, metalSymbol: tonnageSymbol };
+  var mSel = document.getElementById('gtMetalUnit');
+  var mu = GT_METAL_UNITS[mSel ? parseInt(mSel.value) : 0] || GT_METAL_UNITS[0];
+  var metalDivisor = mu.divisor;
+  var metalSymbol = mu.symbol;
+  if (metalDivisor === 'tonnage') {
+    metalDivisor = tonnageDivisor;
+    metalSymbol = tonnageSymbol;
+  } else if (metalDivisor === null) {
+    metalSymbol = document.getElementById('gtCustomMetalSym').value || 'units';
+    metalDivisor = parseFloat(document.getElementById('gtCustomMetalDiv').value) || 1;
+  }
+  return { tonnageDivisor: tonnageDivisor, tonnageSymbol: tonnageSymbol, metalDivisor: metalDivisor, metalSymbol: metalSymbol };
+}
+
+function getGtFormats() {
+  function dp(id) { var el = document.getElementById(id); return el && el.value !== '' ? parseInt(el.value) : null; }
+  return { tonnageDp: dp('gtTonnageDp'), gradeDp: dp('gtGradeDp'), metalDp: dp('gtMetalDp') };
+}
+
+// Fixed decimal places when set, formatNum auto-formatting otherwise
+function gtFmt(v, dp) {
+  if (v == null || !isFinite(v) || dp == null) return formatNum(v);
+  return addThousandsSep(v.toFixed(dp));
 }
 
 function getGtGradeUnit(colIdx) {
@@ -15140,6 +15431,21 @@ function renderGtOutput() {
   if (!$content) return;
   var cutoffs = getGtCutoffs();
   var tonnageUnit = getGtTonnageUnit();
+  var fmts = getGtFormats();
+  function unitsFor(colIdx) {
+    var g = getGtGradeUnit(colIdx);
+    return {
+      tonnageDivisor: tonnageUnit.tonnageDivisor,
+      tonnageSymbol: tonnageUnit.tonnageSymbol,
+      metalDivisor: tonnageUnit.metalDivisor,
+      metalSymbol: tonnageUnit.metalSymbol,
+      gradeFactor: g.gradeFactor,
+      gradeSymbol: g.gradeSymbol,
+      tonnageDp: fmts.tonnageDp,
+      gradeDp: fmts.gradeDp,
+      metalDp: fmts.metalDp
+    };
+  }
   if (cutoffs.length === 0) {
     $content.innerHTML = '<div class="gt-hint">No valid cutoffs defined.</div>';
     return;
@@ -15161,14 +15467,7 @@ function renderGtOutput() {
 
   for (var gi = 0; gi < gradeResults.length; gi++) {
     var gr = gradeResults[gi];
-    var gradeUnit = getGtGradeUnit(gr.colIdx);
-    var units = {
-      tonnageDivisor: tonnageUnit.tonnageDivisor,
-      tonnageSymbol: tonnageUnit.tonnageSymbol,
-      metalSymbol: tonnageUnit.metalSymbol,
-      gradeFactor: gradeUnit.gradeFactor,
-      gradeSymbol: gradeUnit.gradeSymbol
-    };
+    var units = unitsFor(gr.colIdx);
     if (gradeResults.length > 1) {
       html += '<div class="gt-chart-title">' + esc(gr.colName) + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') + '</div>';
     }
@@ -15238,15 +15537,7 @@ function renderGtOutput() {
 
   // Wire crosshairs for each chart
   for (var ci = 0; ci < gradeResults.length; ci++) {
-    var chGradeUnit = getGtGradeUnit(gradeResults[ci].colIdx);
-    var chUnits = {
-      tonnageDivisor: tonnageUnit.tonnageDivisor,
-      tonnageSymbol: tonnageUnit.tonnageSymbol,
-      metalSymbol: tonnageUnit.metalSymbol,
-      gradeFactor: chGradeUnit.gradeFactor,
-      gradeSymbol: chGradeUnit.gradeSymbol
-    };
-    wireGtCrosshair(gradeResults[ci], cutoffs, chUnits, ci);
+    wireGtCrosshair(gradeResults[ci], cutoffs, unitsFor(gradeResults[ci].colIdx), ci);
   }
 }
 
@@ -15256,9 +15547,11 @@ function interpolateGt(results, cutoff, binWidth, gradeMin) {
   if (!binWidth || !isFinite(binWidth)) return results[0] || zero;
   var idx = (cutoff - gradeMin) / binWidth;
   if (!isFinite(idx)) return results[0] || zero;
+  // Clamp the index, not just the bin: cutoffs outside the histogram range
+  // must not extrapolate (a cutoff below the data min includes everything)
+  if (idx < 0) idx = 0;
+  if (idx > results.length - 1) idx = results.length - 1;
   var lo = Math.floor(idx);
-  if (lo < 0) lo = 0;
-  if (lo >= results.length) lo = results.length - 1;
   var hi = lo + 1;
   if (hi >= results.length) hi = results.length - 1;
   if (lo === hi) return results[lo] || zero;
@@ -15280,6 +15573,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
   var totalTonnage = grData.totalTonnage;
   var td = units.tonnageDivisor || 1;
   var gf = units.gradeFactor || 1;
+  var md = units.metalDivisor || td;
   var clipId = 'gt-clip-' + chartIdx;
 
   // Determine if we render grouped overlay
@@ -15296,7 +15590,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
   // Sample curve at cutoffs (overall)
   var points = cutoffs.map(function(c) {
     var p = interpolateGt(results, c, binWidth, gradeMin);
-    return { cutoff: c, tonnage: p.tonnage / td, grade: p.grade, metal: p.metal * gf / td };
+    return { cutoff: c, tonnage: p.tonnage / td, grade: p.grade, metal: p.metal * gf / md };
   });
 
   var W = 720, H = 380;
@@ -15333,16 +15627,16 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
     var v = xMin + (xRange * i / nxTicks);
     var x = sx(v);
     svg += '<line x1="' + x.toFixed(1) + '" y1="' + pad.top + '" x2="' + x.toFixed(1) + '" y2="' + (H - pad.bottom) + '" stroke="#1e2228" stroke-width="1"/>';
-    svg += '<text x="' + x.toFixed(1) + '" y="' + (H - pad.bottom + 14) + '" text-anchor="middle" fill="#6a737d" font-size="9">' + formatNum(v) + '</text>';
+    svg += '<text x="' + x.toFixed(1) + '" y="' + (H - pad.bottom + 14) + '" text-anchor="middle" fill="#6a737d" font-size="9">' + gtFmt(v, units.gradeDp) + '</text>';
   }
   var nyTicks = 6;
   for (var j = 0; j <= nyTicks; j++) {
     var tv = tMin + ((tMax - tMin) * j / nyTicks);
     var y = syT(tv);
     svg += '<line x1="' + pad.left + '" y1="' + y.toFixed(1) + '" x2="' + (W - pad.right) + '" y2="' + y.toFixed(1) + '" stroke="#1e2228" stroke-width="1"/>';
-    svg += '<text x="' + (pad.left - 6) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end" fill="var(--amber)" font-size="9">' + formatNum(tv) + '</text>';
+    svg += '<text x="' + (pad.left - 6) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end" fill="var(--amber)" font-size="9">' + gtFmt(tv, units.tonnageDp) + '</text>';
     var gv = gMin + ((gMax - gMin) * j / nyTicks);
-    svg += '<text x="' + (W - pad.right + 6) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="start" fill="var(--blue)" font-size="9">' + formatNum(gv) + '</text>';
+    svg += '<text x="' + (W - pad.right + 6) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="start" fill="var(--blue)" font-size="9">' + gtFmt(gv, units.gradeDp) + '</text>';
   }
 
   // Clip path
@@ -15445,7 +15739,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
     svg += '<rect x="' + (pad.left + 10) + '" y="' + (pad.top + 18) + '" width="10" height="3" fill="var(--blue)" rx="1"/>';
     svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 22) + '" fill="var(--blue)" font-size="8">Grade</text>';
     svg += '<line x1="' + (pad.left + 10) + '" y1="' + (pad.top + 31.5) + '" x2="' + (pad.left + 20) + '" y2="' + (pad.top + 31.5) + '" stroke="var(--green)" stroke-width="1.5" stroke-dasharray="3,2"/>';
-    svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 34) + '" fill="var(--green)" font-size="8">Metal</text>';
+    svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 34) + '" fill="var(--green)" font-size="8">Metal (' + esc(units.metalSymbol) + ')</text>';
   }
 
   // Crosshair overlay area
@@ -15513,7 +15807,7 @@ function downloadGtPng(chartIdx, colName) {
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'gt_' + (colName || 'plot').replace(/[^\w-]+/g, '_') + '.png';
+      a.download = 'gt_' + (colName || 'plot').replace(/[^\p{L}\p{N}_-]+/gu, '_') + '.png';
       a.click();
       URL.revokeObjectURL(url);
     }, 'image/png');
@@ -15549,9 +15843,10 @@ function wireGtCrosshair(grData, cutoffs, units, chartIdx) {
     var p = interpolateGt(grData.results, cutoff, grData.binWidth, grData.gradeMin);
     var td = units.tonnageDivisor;
     var gf = units.gradeFactor;
+    var md = units.metalDivisor || td;
     var tonnage = p.tonnage / td;
     var grade = p.grade;
-    var metal = p.metal * gf / td;
+    var metal = p.metal * gf / md;
     var pctTotal = grData.totalTonnage > 0 ? (p.tonnage / grData.totalTonnage * 100) : 0;
 
     line.setAttribute('x1', svgX.toFixed(1));
@@ -15559,10 +15854,10 @@ function wireGtCrosshair(grData, cutoffs, units, chartIdx) {
     line.setAttribute('opacity', '1');
 
     var lines = [
-      'Cutoff: ' + formatNum(cutoff),
-      'Tonnage: ' + formatNum(tonnage) + ' ' + units.tonnageSymbol,
-      'Grade: ' + formatNum(grade) + (units.gradeSymbol ? ' ' + units.gradeSymbol : ''),
-      'Metal: ' + formatNum(metal) + ' ' + units.metalSymbol,
+      'Cutoff: ' + gtFmt(cutoff, units.gradeDp),
+      'Tonnage: ' + gtFmt(tonnage, units.tonnageDp) + ' ' + units.tonnageSymbol,
+      'Grade: ' + gtFmt(grade, units.gradeDp) + (units.gradeSymbol ? ' ' + units.gradeSymbol : ''),
+      'Metal: ' + gtFmt(metal, units.metalDp) + ' ' + units.metalSymbol,
       '% Total: ' + pctTotal.toFixed(1) + '%'
     ];
 
@@ -15604,6 +15899,7 @@ function renderGtTable(grData, cutoffs, units, isGrouped, tableIdx, selectedGrou
   var totalTonnage = grData.totalTonnage;
   var td = units.tonnageDivisor;
   var gf = units.gradeFactor;
+  var md = units.metalDivisor || td;
   var groupResults = isGrouped && grData.groupResults ? grData.groupResults : null;
   var allGroupNames = groupResults ? Object.keys(groupResults).sort() : [];
   var groupNames = allGroupNames;
@@ -15633,14 +15929,14 @@ function renderGtTable(grData, cutoffs, units, isGrouped, tableIdx, selectedGrou
         var p = interpolateGt(results, c, binWidth, gradeMin);
         var tonnage = p.tonnage / td;
         var grade = p.grade;
-        var metal = p.metal * gf / td;
+        var metal = p.metal * gf / md;
         var pctTotal = totalTonnage > 0 ? (p.tonnage / totalTonnage * 100) : 0;
         html += '<tr>';
         if (ti === 0) html += '<td rowspan="' + cutoffs.length + '" style="color:var(--amber);font-weight:600">Total</td>';
-        html += '<td>' + formatNum(c) + '</td>';
-        html += '<td>' + formatNum(tonnage) + '</td>';
-        html += '<td>' + formatNum(grade) + '</td>';
-        html += '<td>' + formatNum(metal) + '</td>';
+        html += '<td>' + gtFmt(c, units.gradeDp) + '</td>';
+        html += '<td>' + gtFmt(tonnage, units.tonnageDp) + '</td>';
+        html += '<td>' + gtFmt(grade, units.gradeDp) + '</td>';
+        html += '<td>' + gtFmt(metal, units.metalDp) + '</td>';
         html += '<td>' + pctTotal.toFixed(1) + '%</td>';
         html += '</tr>';
       }
@@ -15654,14 +15950,14 @@ function renderGtTable(grData, cutoffs, units, isGrouped, tableIdx, selectedGrou
         var p = interpolateGt(grd.results, c, binWidth, gradeMin);
         var tonnage = p.tonnage / td;
         var grade = p.grade;
-        var metal = p.metal * gf / td;
+        var metal = p.metal * gf / md;
         var pctTotal = grd.totalTonnage > 0 ? (p.tonnage / grd.totalTonnage * 100) : 0;
         html += '<tr>';
         if (ci === 0) html += '<td rowspan="' + cutoffs.length + '">' + esc(gn) + '</td>';
-        html += '<td>' + formatNum(c) + '</td>';
-        html += '<td>' + formatNum(tonnage) + '</td>';
-        html += '<td>' + formatNum(grade) + '</td>';
-        html += '<td>' + formatNum(metal) + '</td>';
+        html += '<td>' + gtFmt(c, units.gradeDp) + '</td>';
+        html += '<td>' + gtFmt(tonnage, units.tonnageDp) + '</td>';
+        html += '<td>' + gtFmt(grade, units.gradeDp) + '</td>';
+        html += '<td>' + gtFmt(metal, units.metalDp) + '</td>';
         html += '<td>' + pctTotal.toFixed(1) + '%</td>';
         html += '</tr>';
       }
@@ -15673,13 +15969,13 @@ function renderGtTable(grData, cutoffs, units, isGrouped, tableIdx, selectedGrou
       var p = interpolateGt(results, c, binWidth, gradeMin);
       var tonnage = p.tonnage / td;
       var grade = p.grade;
-      var metal = p.metal * gf / td;
+      var metal = p.metal * gf / md;
       var pctTotal = totalTonnage > 0 ? (p.tonnage / totalTonnage * 100) : 0;
       html += '<tr>';
-      html += '<td>' + formatNum(c) + '</td>';
-      html += '<td>' + formatNum(tonnage) + '</td>';
-      html += '<td>' + formatNum(grade) + '</td>';
-      html += '<td>' + formatNum(metal) + '</td>';
+      html += '<td>' + gtFmt(c, units.gradeDp) + '</td>';
+      html += '<td>' + gtFmt(tonnage, units.tonnageDp) + '</td>';
+      html += '<td>' + gtFmt(grade, units.gradeDp) + '</td>';
+      html += '<td>' + gtFmt(metal, units.metalDp) + '</td>';
       html += '<td>' + pctTotal.toFixed(1) + '%</td>';
       html += '</tr>';
     }
@@ -15981,8 +16277,11 @@ function renderSection() {
 
   // Swath overlay
   const showSwathCb = document.getElementById('sectionShowSwath');
-  if (showSwathCb && showSwathCb.checked && lastSwathData) {
-    const swathAxisKey = lastSwathData.axis;
+  if (showSwathCb && showSwathCb.checked && lastSwathData && lastSwathData.directions) {
+    // Overlay follows the direction active on the Swath tab; only orthogonal
+    // directions map onto section axes (custom vectors draw no stripes)
+    const sdir = lastSwathData.directions.find(d => d.key === lastSwathData.activeKey) || lastSwathData.directions[0];
+    const swathAxisKey = sdir.axis != null ? 'xyz'[sdir.axis] : 'custom';
     const sectionAxisEl = document.getElementById('sectionAxis');
     const normalAxis = sectionAxisEl ? sectionAxisEl.value : 'z';
     // Determine which display axis the swath axis maps to
@@ -15998,10 +16297,11 @@ function renderSection() {
       else if (swathAxisKey === 'z') swathOnV = true;
     }
     if (swathOnH || swathOnV) {
-      const bw = lastSwathData.binWidth;
-      // Get bins from first available variable
+      const bw = sdir.binWidth;
+      // Get bins from first available variable of the active direction
+      const dirVars = (lastSwathData.results && lastSwathData.results[sdir.key]) || {};
       const firstVarKey = lastSwathData.varCols && lastSwathData.varCols.length > 0 ? lastSwathData.varCols[0] : null;
-      const swathBins = firstVarKey != null && lastSwathData.vars && lastSwathData.vars[firstVarKey] ? lastSwathData.vars[firstVarKey] : [];
+      const swathBins = firstVarKey != null && dirVars[firstVarKey] ? dirVars[firstVarKey] : [];
       const binMin = swathBins.length > 0 ? swathBins[0].center - bw / 2 : 0;
       const binMax = swathBins.length > 0 ? swathBins[swathBins.length - 1].center + bw / 2 : 0;
       ctx.save();
@@ -18214,7 +18514,7 @@ function renderCategoriesTab(categories, header, origColCount, rowCount) {
     $catColList.innerHTML = '';
     $catToolbar.innerHTML = '';
     $catChart.innerHTML = '';
-    $catValueTable.querySelector('tbody').innerHTML = '';
+    $catValueTable.innerHTML = '<tbody></tbody>'; // loading a new file may have emptied the table entirely
     $catValueSearch.style.display = 'none';
     $catMainContent.innerHTML = '<div class="cat-empty">No categorical columns detected.</div>';
     return;
@@ -18866,7 +19166,9 @@ function assembleZip(entriesIn, opts) {
   var entries = entriesIn.map(function(f) {
     return {
       nameBytes: enc.encode(f.name), data: f.data, crc: f.crc,
-      method: f.method || 0, uncompSize: f.uncompSize != null ? f.uncompSize : f.data.size
+      method: f.method || 0, uncompSize: f.uncompSize != null ? f.uncompSize : f.data.size,
+      // Bit 11: name is UTF-8 — without it readers decode non-ASCII as CP437
+      flags: /[^\x00-\x7F]/.test(f.name) ? 0x0800 : 0
     };
   });
   var offset = 0;
@@ -18884,7 +19186,7 @@ function assembleZip(entriesIn, opts) {
   entries.forEach(function(e) {
     var verNeed = e.sizes64 ? 45 : 20;
     parts.push(record(30 + e.nameBytes.length + (e.sizes64 ? 20 : 0), function(w) {
-      w.u32(0x04034b50); w.u16(verNeed); w.u16(0); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
+      w.u32(0x04034b50); w.u16(verNeed); w.u16(e.flags); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
       w.u32(e.crc);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.data.size);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.uncompSize);
@@ -18901,7 +19203,7 @@ function assembleZip(entriesIn, opts) {
     var recLen = 46 + e.nameBytes.length + extraLen;
     parts.push(record(recLen, function(w) {
       w.u32(0x02014b50); w.u16(zip64Mode ? 45 : 20); w.u16(e.sizes64 || e.offset64 ? 45 : 20);
-      w.u16(0); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
+      w.u16(e.flags); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
       w.u32(e.crc);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.data.size);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.uncompSize);
@@ -19073,9 +19375,11 @@ var EXAMPLE_TUTORIAL = [
 '',
 '## 5. Swath plots',
 '',
-'On the Swath tab: keep axis X, check Fe and SiO2, Generate. Fe climbs',
-'eastward while SiO2 mirrors it downward (they are anticorrelated).',
-'Try Layout: Split, and a Custom axis at azimuth 45.',
+'On the Swath tab: keep direction X checked, check Fe and SiO2, Generate.',
+'Fe climbs eastward while SiO2 mirrors it downward (anticorrelated).',
+'Check Y and Z too and Generate again: each direction gets its own tab',
+'above the chart. Try Layout: Split, or Custom (rotated U/V/W) with',
+'dip direction 45 to swath along a rotated frame.',
 '',
 '## 6. The aux dataset — model vs samples',
 '',
@@ -19146,9 +19450,11 @@ function exampleProjectJson(modelSize, samplesSize) {
       cutoffMode: 'range', cutoffMin: 44, cutoffMax: 62, cutoffStep: 1, cutoffCustom: ''
     },
     swath: {
-      axis: 'x', binWidth: 10, stat: 'mean_std',
-      checkedVars: ['Fe', 'SiO2'], localFilter: '',
-      azimuth: null, plunge: null, weight: null,
+      dirMode: 'ortho',
+      directions: { x: { on: true, bin: 10 }, y: { on: false, bin: 10 }, z: { on: false, bin: 5 } },
+      dipDir: 0, dip: 0, rake: 90,
+      stat: 'mean_std',
+      checkedVars: ['Fe', 'SiO2'], localFilter: '', weight: null,
       auxCheckedVars: ['Fe'], auxUnits: null, units: null, colorOverrides: null,
       display: { showBands: true, showCounts: true, showTable: true, yScale: 'linear', layout: 'overlay' }
     },

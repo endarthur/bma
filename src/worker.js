@@ -1260,7 +1260,7 @@ async function exportCSV(data) {
 
 async function swathAnalysis(data) {
   const { file, zipEntry, globalFilter, localFilter, calcolCode, calcolMeta, resolvedTypes,
-          xyzCols, dxyzCols, axis, varCols, binWidth, azimuth, plunge } = data;
+          xyzCols, dxyzCols, varCols, directions } = data;
   const startTime = performance.now();
 
   let csvFile = file;
@@ -1314,21 +1314,20 @@ async function swathAnalysis(data) {
     return obj;
   }
 
-  var isCustomAzimuth = azimuth != null;
-  var axisName = null, xName = null, yName = null, zName = null;
-  var azRad = 0, plRad = 0, dirX = 0, dirY = 0, dirZ = 0;
-  if (isCustomAzimuth) {
-    xName = header[xyzCols[0]];
-    yName = header[xyzCols[1]];
-    zName = (plunge && plunge !== 0) ? header[xyzCols[2]] : null;
-    azRad = azimuth * Math.PI / 180;
-    plRad = (plunge || 0) * Math.PI / 180;
-    dirX = Math.sin(azRad) * Math.cos(plRad);
-    dirY = Math.cos(azRad) * Math.cos(plRad);
-    dirZ = -Math.sin(plRad);
-  } else {
-    axisName = header[xyzCols[axis]];
-  }
+  // Directions: [{ key, axis: 0|1|2|null, dir: [dx,dy,dz]|null, binWidth }].
+  // All directions are binned in the same streaming pass — an orthogonal
+  // direction reads its coordinate column directly, a vector direction
+  // projects the row's XYZ onto the unit vector.
+  const xName = header[xyzCols[0]], yName = header[xyzCols[1]], zName = header[xyzCols[2]];
+  const dirCfgs = directions.map(function(d) {
+    return {
+      key: d.key,
+      binWidth: d.binWidth,
+      coordName: d.axis != null ? header[xyzCols[d.axis]] : null,
+      dir: d.axis != null ? null : d.dir,
+      bins: new Map()
+    };
+  });
 
   // Resolve variable column names against the extended header — calcol
   // indices live past the raw columns, and calcolFn sets them on the row
@@ -1341,48 +1340,50 @@ async function swathAnalysis(data) {
   let weightName = null;
   if (data.weightColName && extHeader.indexOf(data.weightColName) >= 0) weightName = data.weightColName;
 
-  // Per-variable bins: Map<binIdx, {vars: {varIdx: {count,sum,sumSq,td}}, center}>
-  const bins = new Map();
-
-  function getBin(coord) {
-    const idx = Math.floor(coord / binWidth);
-    let b = bins.get(idx);
+  // Per-direction, per-variable bins: Map<binIdx, {vars: {varIdx: {count,sum,sumSq,td}}, center}>
+  function getBin(cfg, coord) {
+    const idx = Math.floor(coord / cfg.binWidth);
+    let b = cfg.bins.get(idx);
     if (!b) {
-      b = { center: (idx + 0.5) * binWidth, vars: {} };
+      b = { center: (idx + 0.5) * cfg.binWidth, vars: {} };
       for (const vi of varCols) {
         b.vars[vi] = { count: 0, wsum: 0, sum: 0, sumSq: 0, td: newTDigest() };
       }
-      bins.set(idx, b);
+      cfg.bins.set(idx, b);
     }
     return b;
   }
 
   function processRow(row, w) {
-    var coord;
-    if (isCustomAzimuth) {
-      var xv = row[xName], yv = row[yName];
-      if (xv == null || isNaN(xv) || yv == null || isNaN(yv)) return;
-      coord = xv * dirX + yv * dirY;
-      if (zName) {
-        var zv = row[zName];
-        if (zv == null || isNaN(zv)) return;
-        coord += zv * dirZ;
-      }
-    } else {
-      coord = row[axisName];
-      if (coord == null || isNaN(coord)) return;
-    }
     if (w === undefined) w = 1;
-    var bin = getBin(coord);
-    for (var vi = 0; vi < varCols.length; vi++) {
-      var val = row[varNames[vi]];
-      if (val == null || typeof val !== 'number' || isNaN(val)) continue;
-      var vb = bin.vars[varCols[vi]];
-      vb.count++;
-      vb.wsum += w;
-      vb.sum += val * w;
-      vb.sumSq += val * val * w;
-      tdAdd(vb.td, val, w);
+    for (var di = 0; di < dirCfgs.length; di++) {
+      var cfg = dirCfgs[di];
+      var coord;
+      if (cfg.coordName) {
+        coord = row[cfg.coordName];
+        if (coord == null || isNaN(coord)) continue;
+      } else {
+        // Project onto the unit vector; only components the direction actually
+        // uses are required (a horizontal direction tolerates a missing Z)
+        var dv = cfg.dir;
+        coord = 0;
+        var ok = true;
+        if (Math.abs(dv[0]) > 1e-12) { var xv = row[xName]; if (xv == null || isNaN(xv)) ok = false; else coord += xv * dv[0]; }
+        if (ok && Math.abs(dv[1]) > 1e-12) { var yv = row[yName]; if (yv == null || isNaN(yv)) ok = false; else coord += yv * dv[1]; }
+        if (ok && Math.abs(dv[2]) > 1e-12) { var zv = row[zName]; if (zv == null || isNaN(zv)) ok = false; else coord += zv * dv[2]; }
+        if (!ok) continue;
+      }
+      var bin = getBin(cfg, coord);
+      for (var vi = 0; vi < varCols.length; vi++) {
+        var val = row[varNames[vi]];
+        if (val == null || typeof val !== 'number' || isNaN(val)) continue;
+        var vb = bin.vars[varCols[vi]];
+        vb.count++;
+        vb.wsum += w;
+        vb.sum += val * w;
+        vb.sumSq += val * val * w;
+        tdAdd(vb.td, val, w);
+      }
     }
   }
 
@@ -1439,32 +1440,36 @@ async function swathAnalysis(data) {
     }
   }
 
-  // Finalize: produce per-variable bin arrays
-  const vars = {};
-  for (const vi of varCols) {
-    const arr = [];
-    for (const [, b] of bins) {
-      const vb = b.vars[vi];
-      if (vb.count === 0) continue;
-      tdFlush(vb.td);
-      const mean = vb.sum / vb.wsum;
-      // Weighted runs use population variance; unweighted keeps the original
-      // sample formula (wsum === count there, so sums are unchanged)
-      const variance = weightName
-        ? (vb.wsum > 0 ? Math.max(0, vb.sumSq / vb.wsum - mean * mean) : 0)
-        : (vb.count > 1 ? (vb.sumSq - vb.sum * vb.sum / vb.count) / (vb.count - 1) : 0);
-      arr.push({
-        center: b.center, count: vb.count, mean,
-        std: Math.sqrt(Math.max(0, variance)),
-        centroids: vb.td.centroids.map(c => [c.mean, c.count])
-      });
+  // Finalize: per-direction, per-variable bin arrays
+  const results = {};
+  for (const cfg of dirCfgs) {
+    const vars = {};
+    for (const vi of varCols) {
+      const arr = [];
+      for (const [, b] of cfg.bins) {
+        const vb = b.vars[vi];
+        if (vb.count === 0) continue;
+        tdFlush(vb.td);
+        const mean = vb.sum / vb.wsum;
+        // Weighted runs use population variance; unweighted keeps the original
+        // sample formula (wsum === count there, so sums are unchanged)
+        const variance = weightName
+          ? (vb.wsum > 0 ? Math.max(0, vb.sumSq / vb.wsum - mean * mean) : 0)
+          : (vb.count > 1 ? (vb.sumSq - vb.sum * vb.sum / vb.count) / (vb.count - 1) : 0);
+        arr.push({
+          center: b.center, count: vb.count, mean,
+          std: Math.sqrt(Math.max(0, variance)),
+          centroids: vb.td.centroids.map(c => [c.mean, c.count])
+        });
+      }
+      arr.sort((a, b) => a.center - b.center);
+      vars[vi] = arr;
     }
-    arr.sort((a, b) => a.center - b.center);
-    vars[vi] = arr;
+    results[cfg.key] = vars;
   }
 
   const elapsed = performance.now() - startTime;
-  self.postMessage({ type: 'swath-complete', vars, elapsed, axis });
+  self.postMessage({ type: 'swath-complete', results, elapsed });
 }
 
 async function sectionAnalysis(data) {

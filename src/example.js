@@ -61,7 +61,9 @@ function assembleZip(entriesIn, opts) {
   var entries = entriesIn.map(function(f) {
     return {
       nameBytes: enc.encode(f.name), data: f.data, crc: f.crc,
-      method: f.method || 0, uncompSize: f.uncompSize != null ? f.uncompSize : f.data.size
+      method: f.method || 0, uncompSize: f.uncompSize != null ? f.uncompSize : f.data.size,
+      // Bit 11: name is UTF-8 — without it readers decode non-ASCII as CP437
+      flags: /[^\x00-\x7F]/.test(f.name) ? 0x0800 : 0
     };
   });
   var offset = 0;
@@ -79,7 +81,7 @@ function assembleZip(entriesIn, opts) {
   entries.forEach(function(e) {
     var verNeed = e.sizes64 ? 45 : 20;
     parts.push(record(30 + e.nameBytes.length + (e.sizes64 ? 20 : 0), function(w) {
-      w.u32(0x04034b50); w.u16(verNeed); w.u16(0); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
+      w.u32(0x04034b50); w.u16(verNeed); w.u16(e.flags); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
       w.u32(e.crc);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.data.size);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.uncompSize);
@@ -96,7 +98,7 @@ function assembleZip(entriesIn, opts) {
     var recLen = 46 + e.nameBytes.length + extraLen;
     parts.push(record(recLen, function(w) {
       w.u32(0x02014b50); w.u16(zip64Mode ? 45 : 20); w.u16(e.sizes64 || e.offset64 ? 45 : 20);
-      w.u16(0); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
+      w.u16(e.flags); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
       w.u32(e.crc);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.data.size);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.uncompSize);
@@ -268,9 +270,11 @@ var EXAMPLE_TUTORIAL = [
 '',
 '## 5. Swath plots',
 '',
-'On the Swath tab: keep axis X, check Fe and SiO2, Generate. Fe climbs',
-'eastward while SiO2 mirrors it downward (they are anticorrelated).',
-'Try Layout: Split, and a Custom axis at azimuth 45.',
+'On the Swath tab: keep direction X checked, check Fe and SiO2, Generate.',
+'Fe climbs eastward while SiO2 mirrors it downward (anticorrelated).',
+'Check Y and Z too and Generate again: each direction gets its own tab',
+'above the chart. Try Layout: Split, or Custom (rotated U/V/W) with',
+'dip direction 45 to swath along a rotated frame.',
 '',
 '## 6. The aux dataset — model vs samples',
 '',
@@ -341,9 +345,11 @@ function exampleProjectJson(modelSize, samplesSize) {
       cutoffMode: 'range', cutoffMin: 44, cutoffMax: 62, cutoffStep: 1, cutoffCustom: ''
     },
     swath: {
-      axis: 'x', binWidth: 10, stat: 'mean_std',
-      checkedVars: ['Fe', 'SiO2'], localFilter: '',
-      azimuth: null, plunge: null, weight: null,
+      dirMode: 'ortho',
+      directions: { x: { on: true, bin: 10 }, y: { on: false, bin: 10 }, z: { on: false, bin: 5 } },
+      dipDir: 0, dip: 0, rake: 90,
+      stat: 'mean_std',
+      checkedVars: ['Fe', 'SiO2'], localFilter: '', weight: null,
       auxCheckedVars: ['Fe'], auxUnits: null, units: null, colorOverrides: null,
       display: { showBands: true, showCounts: true, showTable: true, yScale: 'linear', layout: 'overlay' }
     },
