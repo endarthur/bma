@@ -3671,6 +3671,15 @@ table.cat-values td.cat-pct-cell {
 .aux-preview-table th { background: var(--bg2); color: var(--fg-bright); position: sticky; top: 0; }
 .aux-preview-table td { color: var(--fg-dim); }
 
+/* Categories aux comparison */
+table.cat-values td.cat-aux-cell { font-style: italic; opacity: 0.85; }
+table.cat-values tr.cat-aux-only td { background: rgba(184,115,51,0.05); }
+.cat-aux-only-tag {
+  font-size: 0.52rem; padding: 0.04rem 0.25rem; border-radius: 2px;
+  border: 1px solid rgba(184,115,51,0.35); color: var(--amber);
+  font-family: var(--mono); opacity: 0.6; margin-left: 0.3rem;
+}
+
 /* Build badge + update banner */
 .build-badge {
   position: fixed; bottom: 6px; right: 8px; z-index: 90;

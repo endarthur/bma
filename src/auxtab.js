@@ -131,7 +131,7 @@ function runAuxAnalysis() {
     if (m.type === 'progress') {
       if ($status) $status.textContent = Math.min(99, m.percent).toFixed(0) + '%';
     } else if (m.type === 'complete') {
-      auxCompleteData = { header: m.header, colTypes: m.colTypes, stats: m.stats, rowCount: m.rowCount };
+      auxCompleteData = { header: m.header, colTypes: m.colTypes, stats: m.stats, categories: m.categories, rowCount: m.rowCount };
       auxStale = false;
       if ($btn) $btn.disabled = false;
       if ($status) { $status.textContent = m.rowCount.toLocaleString() + ' rows analyzed'; $status.style.color = ''; }
@@ -143,6 +143,7 @@ function runAuxAnalysis() {
         renderStatsTable();
         renderStatsCdfPanel();
       }
+      if (typeof renderCatMain === 'function' && catFocusedCol !== null) renderCatMain();
       autoSaveProject();
     } else if (m.type === 'error') {
       fail(m.message);
@@ -308,6 +309,7 @@ function clearAux() {
   $auxPreview.innerHTML = '';
   renderAuxFromMain();
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
+  if (typeof renderCatMain === 'function' && catFocusedCol !== null) renderCatMain();
   if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
   if (typeof updateCalcolBadge === 'function') updateCalcolBadge();
   if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {

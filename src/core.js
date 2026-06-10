@@ -404,7 +404,8 @@ var _helpTabs = {
       '<div class="help-row"><span><strong>Sort</strong> \u2014 cycle through count-desc, count-asc, alphabetical, and custom drag order</span></div>' +
       '<div class="help-row"><span><strong>Colors</strong> \u2014 click a color swatch in the value table to customize. Colors are used consistently across all tabs.</span></div>' +
       '<div class="help-row"><span><strong>Filter checkboxes</strong> \u2014 uncheck values to add them to the global filter expression</span></div>' +
-      '<div class="help-row"><span><strong>Custom order</strong> \u2014 drag rows in the value table to reorder; used in StatsCat, GT group-by, etc.</span></div></div>'
+      '<div class="help-row"><span><strong>Custom order</strong> \u2014 drag rows in the value table to reorder; used in StatsCat, GT group-by, etc.</span></div>' +
+      '<div class="help-row"><span><strong>Aux comparison</strong> \u2014 when the analyzed aux dataset shares a same-named categorical column, the chart overlays open diamonds at the aux shares (same axis as the bars) and the table gains aux n / aux % columns, with aux-only values listed at the bottom. Domain proportions model-vs-samples at a glance.</span></div></div>'
   },
   statscat: {
     title: 'StatsCat',

@@ -192,15 +192,21 @@ function exampleData() {
 
   // Composites: 420 samples in the same volume, same geology but with a
   // planted +2% Fe bias, more noise (point support), and composite lengths
-  var samples = 'EAST,NORTH,ELEV,Fe,SiO2,Al2O3,SUPPORT\n';
+  var samples = 'EAST,NORTH,ELEV,Fe,SiO2,Al2O3,LITO,SUPPORT\n';
   for (var si = 0; si < 420; si++) {
     var sx = rnd() * 240, sy = rnd() * 240, sz = rnd() * 100;
     var sfe = clampv(feAt(sx / 10, sy / 10, sz / 10) + 2.0 + gauss() * 3.2, 25, 70);
     var ssio2 = clampv(38 - 0.45 * sfe + gauss() * 2.4, 0.3, 34);
     var sal = clampv(3.5 + 1.2 * Math.cos(sx / 40) + gauss() * 1.1, 0.1, 11);
+    // Same lithology rule as the model, applied to the BIASED Fe — so the
+    // logged proportions disagree with the model's (more HEM/ITA), which is
+    // exactly what the Categories comparison exists to show. A few samples
+    // log a unit the model never used.
+    var slito = sfe > 58 ? 'HEM' : (sfe > 48 ? 'ITA' : 'CGA');
+    if (rnd() < 0.02) slito = 'CAN';
     var sup = (0.5 + rnd() * 2.5);
     samples += (600000 + sx).toFixed(1) + ',' + (7780000 + sy).toFixed(1) + ',' + (800 + sz).toFixed(1) + ',' +
-      sfe.toFixed(2) + ',' + ssio2.toFixed(2) + ',' + sal.toFixed(2) + ',' + sup.toFixed(2) + '\n';
+      sfe.toFixed(2) + ',' + ssio2.toFixed(2) + ',' + sal.toFixed(2) + ',' + slito + ',' + sup.toFixed(2) + '\n';
   }
 
   return { model: model, samples: samples };
@@ -214,7 +220,7 @@ var EXAMPLE_TUTORIAL = [
 '- bma-example-model.csv   — a 24 x 24 x 10 block model (10 m blocks):',
 '                            X,Y,Z, Fe, SiO2, Al2O3, DENSITY, LITO',
 '- bma-example-samples.csv — 420 drillhole composites: EAST,NORTH,ELEV,',
-'                            Fe, SiO2, Al2O3, SUPPORT (composite length, m)',
+'                            Fe, SiO2, Al2O3, LITO, SUPPORT (composite length, m)',
 '',
 'Fe trends from ~44% in the west to ~57% in the east, with a fold along Y.',
 'Two things are planted for you to find: the samples carry a +2% Fe bias',
@@ -279,6 +285,12 @@ var EXAMPLE_TUTORIAL = [
 '- On Swath, the aux variables appear at the bottom of the list, already',
 '  checked. Generate: the dashed sample line rides above the solid model',
 '  line in every bin. Same color = same variable, dashed = other dataset.',
+'- In Statistics, switch the CDF panel to Q-Q mode with Fe and aux:Fe',
+'  selected: the points sit parallel to-but-above the identity line.',
+'  That offset IS the bias, read quantile by quantile.',
+'- On Categories, focus LITO: open diamonds mark the logged shares over',
+'  the modelled bars (the samples log more HEM/ITA — biased Fe, same',
+'  classification rule), and a rare unit appears as "aux only".',
 '',
 '## 7. Aux calculated columns',
 '',

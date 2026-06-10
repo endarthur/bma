@@ -68,6 +68,27 @@ function renderCatMain() {
   renderCatValueTable();
 }
 
+// Aux counterpart of a categorical column (matched by name, case-insensitive):
+// { counts, total, overflow } or null. Lets the chart/table compare category
+// proportions model-vs-samples — e.g. lithology shares.
+function getCatAuxCounts(colName) {
+  if (!auxCompleteData || !auxCompleteData.categories || !colName) return null;
+  var lower = colName.toLowerCase();
+  var idxs = Object.keys(auxCompleteData.categories);
+  for (var i = 0; i < idxs.length; i++) {
+    var ai = idxs[i];
+    var aName = auxCompleteData.header[ai];
+    if (aName && aName.toLowerCase() === lower) {
+      var cat = auxCompleteData.categories[ai];
+      if (!cat || !cat.counts) return null;
+      var total = 0;
+      for (var v in cat.counts) total += cat.counts[v];
+      return { counts: cat.counts, total: total, overflow: !!cat.overflow };
+    }
+  }
+  return null;
+}
+
 function getCatSortedEntries(colIdx) {
   if (!_catData) return [];
   var cat = _catData.categories[colIdx];
@@ -130,9 +151,11 @@ function renderCatToolbar() {
   html += '</div>';
 
   // Meta badges
+  var auxCat = getCatAuxCounts(colName);
   html += '<span style="font-size:0.62rem;color:var(--fg-dim)">' + uniqueCount + ' unique';
   if (nullCount > 0) html += ' \u00B7 ' + nullCount.toLocaleString() + ' null';
   if (maxEntropy > 0) html += ' \u00B7 H=' + entropy.toFixed(2) + ' (' + normPct + '%)';
+  if (auxCat) html += ' \u00B7 vs ' + esc((auxPrefix || 'aux') + ':' + colName) + ' (' + auxCat.total.toLocaleString() + (auxCat.overflow ? '+' : '') + ')';
   html += '</span>';
 
   // Sort buttons
@@ -164,7 +187,12 @@ function renderCatBarChart() {
   var showEntries = showAll ? entries : entries.slice(0, 20);
 
   var barH = 18, gap = 2, labelW = 120, rightPad = 60;
-  var chartH = showEntries.length * (barH + gap) + 30; // +30 for Pareto line clearance
+  // Aux comparison: scale aux shares onto the same axis as the bars
+  // (bars are count/maxCount, i.e. share/maxShare)
+  var auxCat = getCatAuxCounts(colName);
+  var maxShare = total > 0 ? maxCount / total : 0;
+  var auxLegendH = auxCat ? 16 : 0;
+  var chartH = showEntries.length * (barH + gap) + 30 + auxLegendH; // +30 for Pareto line clearance
   var chartW = 600;
   var barAreaW = chartW - labelW - rightPad;
 
@@ -191,9 +219,30 @@ function renderCatBarChart() {
     var pct = total > 0 ? (count / total * 100).toFixed(1) : '0.0';
     svg += '<text x="' + (labelW + barW + 4) + '" y="' + (y + barH / 2 + 3.5) + '" fill="var(--fg-dim)" font-size="8.5">' + count.toLocaleString() + ' (' + pct + '%)</text>';
 
+    // Aux share marker: open diamond at the aux proportion, on the bar axis
+    if (auxCat && auxCat.total > 0 && maxShare > 0) {
+      var auxShare = (auxCat.counts[val] || 0) / auxCat.total;
+      var amx = labelW + Math.min(auxShare / maxShare, 1) * barAreaW;
+      var amy = y + barH / 2;
+      svg += '<path d="M' + amx.toFixed(1) + ',' + (amy - 4.2).toFixed(1) +
+        ' L' + (amx + 4.2).toFixed(1) + ',' + amy.toFixed(1) +
+        ' L' + amx.toFixed(1) + ',' + (amy + 4.2).toFixed(1) +
+        ' L' + (amx - 4.2).toFixed(1) + ',' + amy.toFixed(1) + ' Z"' +
+        ' fill="none" stroke="var(--fg-bright)" stroke-width="1.2" opacity="0.85">' +
+        '<title>' + esc((auxPrefix || 'aux') + ':' + colName) + ' — ' + (auxShare * 100).toFixed(1) + '%</title></path>';
+    }
+
     // Pareto accumulation
     cumPct += total > 0 ? count / total * 100 : 0;
     paretoPoints.push({ x: labelW + barW, y: y + barH / 2, pct: cumPct });
+  }
+
+  // Aux legend line
+  if (auxCat) {
+    var legY = showEntries.length * (barH + gap) + 24;
+    var lgx = labelW;
+    svg += '<path d="M' + lgx + ',' + (legY - 3) + ' L' + (lgx + 4.2) + ',' + (legY + 1.2) + ' L' + lgx + ',' + (legY + 5.4) + ' L' + (lgx - 4.2) + ',' + (legY + 1.2) + ' Z" fill="none" stroke="var(--fg-bright)" stroke-width="1.2" opacity="0.85"/>';
+    svg += '<text x="' + (lgx + 10) + '" y="' + (legY + 4) + '" fill="var(--fg-dim)" font-size="8.5">' + esc((auxPrefix || 'aux') + ':' + colName) + ' share, same axis' + (auxCat.overflow ? ' (aux overflowed — partial)' : '') + '</text>';
   }
 
   // Pareto line
@@ -239,9 +288,14 @@ function renderCatValueTable() {
   // Limit to 500 values
   var show = entries.slice(0, 500);
 
+  var auxCat = getCatAuxCounts(colName);
+  var auxLabel = (auxPrefix || 'aux') + ':' + colName;
+
   var html = '<thead><tr>';
   if (isCustom) html += '<th></th>'; // drag handle column
-  html += '<th></th><th></th><th>Value</th><th>Count</th><th>%</th></tr></thead><tbody>';
+  html += '<th></th><th></th><th>Value</th><th>Count</th><th>%</th>';
+  if (auxCat) html += '<th title="' + esc(auxLabel) + '">aux n</th><th title="' + esc(auxLabel) + '">aux %</th>';
+  html += '</tr></thead><tbody>';
 
   for (var ri = 0; ri < show.length; ri++) {
     var val = show[ri][0];
@@ -258,11 +312,39 @@ function renderCatValueTable() {
     html += '<td class="cat-val-cell">' + esc(val) + '</td>';
     html += '<td class="cat-count-cell">' + count.toLocaleString() + '</td>';
     html += '<td class="cat-pct-cell">' + pct + '%</td>';
+    if (auxCat) {
+      var an = auxCat.counts[val] || 0;
+      var apct = auxCat.total > 0 ? (an / auxCat.total * 100).toFixed(1) : '0.0';
+      html += '<td class="cat-count-cell cat-aux-cell">' + (an > 0 ? an.toLocaleString() : '\u2014') + '</td>';
+      html += '<td class="cat-pct-cell cat-aux-cell">' + (an > 0 ? apct + '%' : '\u2014') + '</td>';
+    }
     html += '</tr>';
   }
 
+  // Values present in aux but absent from the model \u2014 disagreements worth seeing
+  if (auxCat) {
+    var primarySet = {};
+    for (var pi = 0; pi < entries.length; pi++) primarySet[entries[pi][0]] = true;
+    var auxOnly = Object.keys(auxCat.counts).filter(function(v) { return !primarySet[v]; });
+    auxOnly.sort(function(a, b) { return auxCat.counts[b] - auxCat.counts[a]; });
+    for (var ai = 0; ai < auxOnly.length; ai++) {
+      var av = auxOnly[ai];
+      if (search && !fuzzyMatch(search, av.toLowerCase())) continue;
+      var aOnly = auxCat.counts[av];
+      var aOnlyPct = auxCat.total > 0 ? (aOnly / auxCat.total * 100).toFixed(1) : '0.0';
+      html += '<tr class="cat-aux-only" data-val="' + esc(av) + '">';
+      if (isCustom) html += '<td></td>';
+      html += '<td></td><td></td>';
+      html += '<td class="cat-val-cell">' + esc(av) + ' <span class="cat-aux-only-tag">aux only</span></td>';
+      html += '<td class="cat-count-cell">\u2014</td><td class="cat-pct-cell">\u2014</td>';
+      html += '<td class="cat-count-cell cat-aux-cell">' + aOnly.toLocaleString() + '</td>';
+      html += '<td class="cat-pct-cell cat-aux-cell">' + aOnlyPct + '%</td>';
+      html += '</tr>';
+    }
+  }
+
   if (entries.length > 500) {
-    var colSpan = isCustom ? 7 : 6;
+    var colSpan = (isCustom ? 7 : 6) + (auxCat ? 2 : 0);
     html += '<tr><td colspan="' + colSpan + '" style="color:var(--fg-dim);text-align:center;font-size:0.65rem;padding:0.4rem;">Showing 500 of ' + entries.length + ' values</td></tr>';
   }
 
