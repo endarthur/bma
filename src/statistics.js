@@ -374,13 +374,141 @@ function renderStatsCdfPanel() {
     return;
   }
 
-  chart.innerHTML = renderStatsCdfSvg(entries);
-  wireStatsCdfTooltip();
+  if (statsCdfMode === 'qq') {
+    if (entries.length < 2) {
+      chart.innerHTML = '<div class="stats-cdf-hint">Q–Q needs two curves — click another variable name (the first selected is the reference axis)</div>';
+    } else {
+      chart.innerHTML = renderStatsQqSvg(entries);
+    }
+  } else {
+    chart.innerHTML = renderStatsCdfSvg(entries);
+    wireStatsCdfTooltip();
+  }
 
-  // Update scale buttons
+  // Update toolbar buttons
   document.querySelectorAll('#statsCdfToolbar .stats-scale').forEach(function(btn) {
     btn.classList.toggle('active', btn.dataset.scale === statsCdfScale);
   });
+  document.querySelectorAll('#statsCdfToolbar .stats-cdfmode').forEach(function(btn) {
+    btn.classList.toggle('active', btn.dataset.cdfmode === statsCdfMode);
+  });
+}
+
+// Quantile–quantile plot: the first selected curve is the reference (X);
+// every other curve plots its quantiles against the reference's at matched
+// percentiles. Bias reads as offset from the 45° identity line; support
+// smoothing as slope rotation. The classic model-vs-samples companion to
+// the CDF overlay.
+function renderStatsQqSvg(entries) {
+  var isLog = statsCdfScale === 'log';
+  var W = 700, plotBaseH = 420;
+  var pad = { top: 20, right: 30, bottom: 64, left: 70 };
+  var plotW = W - pad.left - pad.right;
+  var plotH = plotBaseH - pad.top - pad.bottom;
+
+  var legCols = 3;
+  var legRowH = 16;
+  var legRows = Math.ceil((entries.length - 1) / legCols);
+  var legendH = 12 + legRows * legRowH + 6;
+  var H = plotBaseH + legendH;
+
+  // Quantile pairs at P1..P99
+  var ref = entries[0];
+  var qs = [];
+  for (var p = 1; p <= 99; p++) qs.push(p / 100);
+  var refQ = qs.map(function(q) { return tdQuantileFromCentroids(ref[1].centroids, ref[1].count, q); });
+
+  var series = [];
+  for (var si = 1; si < entries.length; si++) {
+    var e = entries[si];
+    series.push({
+      name: e[0],
+      isAux: !!e[2],
+      color: STATSCAT_PALETTE[si % STATSCAT_PALETTE.length],
+      q: qs.map(function(q) { return tdQuantileFromCentroids(e[1].centroids, e[1].count, q); })
+    });
+  }
+
+  // Shared square range over everything plotted (identity line must be 45°)
+  var lo = Infinity, hi = -Infinity;
+  function take(v) { if (v == null) return; if (isLog && v <= 0) return; if (v < lo) lo = v; if (v > hi) hi = v; }
+  refQ.forEach(take);
+  series.forEach(function(s) { s.q.forEach(take); });
+  if (!isFinite(lo) || !isFinite(hi)) return '<div class="stats-cdf-hint">No plottable quantiles' + (isLog ? ' (log scale needs positive values)' : '') + '</div>';
+  if (hi <= lo) hi = lo + 1;
+  var pad5 = isLog ? 0 : (hi - lo) * 0.05;
+  lo -= pad5; hi += pad5;
+  var lLo = isLog ? Math.log10(Math.max(lo, 1e-10)) : 0;
+  var lHi = isLog ? Math.log10(Math.max(hi, 1e-9)) : 0;
+  if (isLog && lHi <= lLo) lHi = lLo + 1;
+
+  function sx(v) {
+    if (isLog) return pad.left + ((Math.log10(Math.max(v, 1e-10)) - lLo) / (lHi - lLo)) * plotW;
+    return pad.left + ((v - lo) / (hi - lo)) * plotW;
+  }
+  function sy(v) {
+    if (isLog) return pad.top + plotH - ((Math.log10(Math.max(v, 1e-10)) - lLo) / (lHi - lLo)) * plotH;
+    return pad.top + plotH - ((v - lo) / (hi - lo)) * plotH;
+  }
+
+  // Grid + ticks (same values both axes — the plot is square by construction)
+  var gridSvg = '';
+  var nTicks = 6;
+  for (var ti = 0; ti <= nTicks; ti++) {
+    var v = isLog ? Math.pow(10, lLo + ((lHi - lLo) * ti / nTicks)) : (lo + ((hi - lo) * ti / nTicks));
+    var label = Math.abs(v) >= 1e5 || (Math.abs(v) < 0.01 && v !== 0) ? v.toExponential(1) : v.toFixed(Math.abs(v) < 10 ? 2 : 0);
+    var x = sx(v), y = sy(v);
+    gridSvg += '<line x1="' + x.toFixed(1) + '" y1="' + pad.top + '" x2="' + x.toFixed(1) + '" y2="' + (pad.top + plotH) + '" stroke="#1e2228" stroke-width="1"/>';
+    gridSvg += '<text x="' + x.toFixed(1) + '" y="' + (pad.top + plotH + 16) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + label + '</text>';
+    gridSvg += '<line x1="' + pad.left + '" y1="' + y.toFixed(1) + '" x2="' + (pad.left + plotW) + '" y2="' + y.toFixed(1) + '" stroke="#1e2228" stroke-width="1"/>';
+    gridSvg += '<text x="' + (pad.left - 8) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" fill="#6a737d" font-size="10">' + label + '</text>';
+  }
+
+  // 45° identity line
+  var idSvg = '<line x1="' + sx(isLog ? Math.pow(10, lLo) : lo) + '" y1="' + sy(isLog ? Math.pow(10, lLo) : lo) +
+    '" x2="' + sx(isLog ? Math.pow(10, lHi) : hi) + '" y2="' + sy(isLog ? Math.pow(10, lHi) : hi) +
+    '" stroke="#6a737d" stroke-width="1" stroke-dasharray="5,4" opacity="0.7"/>';
+
+  // Points — emphasized deciles, native <title> tooltips
+  var ptsSvg = '';
+  series.forEach(function(s) {
+    for (var i = 0; i < qs.length; i++) {
+      var xv = refQ[i], yv = s.q[i];
+      if (xv == null || yv == null) continue;
+      if (isLog && (xv <= 0 || yv <= 0)) continue;
+      var isDecile = ((i + 1) % 10) === 0 || i === 49;
+      var r = isDecile ? 3.4 : 2;
+      var fill = s.isAux ? 'none' : s.color;
+      var stroke = s.isAux ? ' stroke="' + s.color + '" stroke-width="1.2"' : '';
+      ptsSvg += '<circle cx="' + sx(xv).toFixed(1) + '" cy="' + sy(yv).toFixed(1) + '" r="' + r + '" fill="' + fill + '"' + stroke + ' opacity="0.85">' +
+        '<title>P' + (i + 1) + ' — ' + esc(entries[0][0]) + ': ' + formatNum(xv) + ' · ' + esc(s.name) + ': ' + formatNum(yv) + '</title></circle>';
+    }
+  });
+
+  // Legend (series only; reference is the X axis)
+  var legTop = plotBaseH + 12;
+  var colW = plotW / legCols;
+  var legendSvg = '';
+  series.forEach(function(s, li) {
+    var col = li % legCols;
+    var row = Math.floor(li / legCols);
+    var lx = pad.left + col * colW;
+    var ly = legTop + row * legRowH;
+    legendSvg += s.isAux
+      ? '<circle cx="' + (lx + 6) + '" cy="' + (ly + 5) + '" r="3.4" fill="none" stroke="' + s.color + '" stroke-width="1.4"/>'
+      : '<circle cx="' + (lx + 6) + '" cy="' + (ly + 5) + '" r="3.4" fill="' + s.color + '"/>';
+    legendSvg += '<text x="' + (lx + 16) + '" y="' + (ly + 9) + '" fill="#6a737d" font-size="9.5">' + esc(s.name) + '</text>';
+  });
+
+  var scaleLabel = isLog ? ' (log–log)' : '';
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)" id="statsCdfSvg">' +
+    '<rect width="' + W + '" height="' + H + '" fill="var(--bg)" rx="4"/>' +
+    gridSvg + idSvg + ptsSvg +
+    '<text x="' + (W / 2) + '" y="' + (plotBaseH - 18) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + esc(entries[0][0]) + ' quantiles' + scaleLabel + '</text>' +
+    '<text x="14" y="' + (pad.top + plotH / 2) + '" text-anchor="middle" fill="#6a737d" font-size="10" transform="rotate(-90, 14, ' + (pad.top + plotH / 2) + ')">compared quantiles</text>' +
+    '<text x="' + (W / 2) + '" y="' + (plotBaseH - 4) + '" text-anchor="middle" fill="#6a737d" font-size="9" opacity="0.7">P1–P99 · large dots at deciles · dashed = identity (no bias)</text>' +
+    legendSvg +
+    '</svg>';
 }
 
 function renderStatsCdfSvg(entries) {
@@ -762,8 +890,15 @@ function wireStatsEventsOnce() {
     autoSaveProject();
   });
 
-  // --- CDF scale buttons (static template elements) ---
+  // --- CDF scale + mode buttons (static template elements) ---
   document.getElementById('statsCdfToolbar').addEventListener('click', function(e) {
+    var modeBtn = e.target.closest('.stats-cdfmode');
+    if (modeBtn) {
+      statsCdfMode = modeBtn.dataset.cdfmode;
+      renderStatsCdfPanel();
+      autoSaveProject();
+      return;
+    }
     var btn = e.target.closest('.stats-scale');
     if (!btn) return;
     statsCdfScale = btn.dataset.scale;

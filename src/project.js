@@ -367,6 +367,7 @@ function serializeProject() {
       percentiles: statsPercentiles,
       cdfSelected: Array.from(statsCdfSelected),
       cdfScale: statsCdfScale,
+      cdfMode: statsCdfMode,
       auxSelected: (auxCompleteData && statsAuxSelected !== null)
         ? Array.from(statsAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null,
       cdfAuxSelected: (auxCompleteData && statsCdfAuxSelected.size > 0)
@@ -763,6 +764,7 @@ function clearProject() {
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
   statsCdfScale = 'linear';
+  statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
   currentWeightName = null;
   projectTitle = null;
@@ -917,6 +919,7 @@ async function handleFile(file, handle) {
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
   statsCdfScale = 'linear';
+  statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
   currentWeightName = null;
   projectTitle = null;
@@ -1086,6 +1089,7 @@ $backToPreflight.addEventListener('click', () => {
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
   statsCdfScale = 'linear';
+  statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
   currentWeightName = null;
   projectTitle = null;
@@ -1508,6 +1512,7 @@ function displayResults(data) {
     if (st.percentiles) statsPercentiles = st.percentiles;
     if (st.cdfSelected) statsCdfSelected = new Set(st.cdfSelected);
     if (st.cdfScale) statsCdfScale = st.cdfScale;
+    if (st.cdfMode) statsCdfMode = st.cdfMode;
     if (st.auxSelected || st.cdfAuxSelected) {
       pendingStatsAuxRestore = { selected: st.auxSelected || null, cdf: st.cdfAuxSelected || null };
       applyStatsAuxRestore(); // no-op until aux analysis exists; consumed then
