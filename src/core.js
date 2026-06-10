@@ -12,6 +12,18 @@ let currentRowVar = 'r';
 let worker = null;
 let preflightData = null; // { header, sampleRows, autoTypes, delimiter, zipEntries, selectedZipEntry }
 
+// ─── Aux dataset state (compare block model vs source samples/composites) ──
+let auxFile = null;            // the loaded auxiliary File
+let auxHandle = null;          // FSAA handle for re-open (if available)
+let auxPreflightData = null;   // runPreflight() result for the aux file (header, xyz, types, sampleRows)
+let auxCompleteData = null;    // snapshot of the last aux analysis (parallel to lastCompleteData)
+let auxData = null;            // aux stats object for comparison rendering
+let auxPrefix = 'aux';         // display-only label prefix for aux pseudo-columns (e.g. "aux:Fe")
+let auxFilter = null;          // { expression } — references aux columns via the fixed AUX_ROW_VAR handle
+let auxWorker = null;          // worker handle for the aux analysis pass
+let pendingAuxRestore = null;  // aux config from a loaded project, applied once the aux file is (re)loaded
+const AUX_ROW_VAR = 'aux';     // fixed code handle for aux filter/calc expressions (NOT the display prefix)
+
 var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
 
 // Fuzzy subsequence match — returns true if all chars in query appear in order within target.
@@ -288,6 +300,18 @@ var _helpShortcuts =
   '<div class="help-row"><kbd>Alt+Shift+A</kbd> <span>Deselect all visible</span></div></div>';
 
 var _helpTabs = {
+  aux: {
+    title: 'Aux',
+    html:
+      '<div class="help-section"><div class="help-section-title">Overview</div>' +
+      '<div class="help-row"><span>Load a second dataset — e.g. the composites/samples behind this block model — to compare against it. Aux runs as its own analysis pass; its variables appear across Statistics, CDF, and Swath with a label prefix.</span></div></div>' +
+      '<div class="help-section"><div class="help-section-title">Configuration</div>' +
+      '<div class="help-row"><span><strong>Display prefix</strong> — cosmetic label for aux variables (e.g. <code>aux:Fe</code>). Does not affect expressions.</span></div>' +
+      '<div class="help-row"><span><strong>Coordinates</strong> — assign X/Y/Z. Aux and the block model must share the same coordinate space for swath overlays to align.</span></div>' +
+      '<div class="help-row"><span><strong>Aux filter</strong> — pre-filter aux rows. Reference aux columns as <code>aux.</code>… regardless of the display prefix.</span></div></div>' +
+      '<div class="help-section"><div class="help-section-title">Scope</div>' +
+      '<div class="help-row"><span>Comparison is statistical/spatial — aux is a separate set of rows, not extra columns. No geometry, export, or per-row joins.</span></div></div>'
+  },
   preflight: {
     title: 'Preflight',
     html:

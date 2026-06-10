@@ -14,6 +14,7 @@ const workerRaw = read(src('worker.js')).trimEnd();
 const APP_MODULES = [
   'core.js',
   'preflight.js',
+  'auxtab.js',
   'project.js',
   'statistics.js',
   'export.js',

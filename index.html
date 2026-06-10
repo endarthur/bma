@@ -3640,6 +3640,37 @@ table.cat-values td.cat-pct-cell {
 
 @media (min-width: 1400px) {
 }
+
+/* ─── Aux dataset tab ─────────────────────────────────────────────── */
+#panelAux { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.aux-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1rem; padding: 2rem; height: 100%; text-align: center;
+}
+.aux-dropzone { max-width: 520px; width: 100%; }
+.aux-empty-hint {
+  max-width: 520px; color: var(--fg-dim); font-size: 0.8rem; line-height: 1.5; opacity: 0.8;
+}
+.aux-config { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.aux-config .preflight-body { flex: 1; min-height: 0; }
+.aux-input, .aux-select {
+  width: 100%; box-sizing: border-box;
+  background: var(--bg2); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 3px; padding: 0.3rem 0.4rem; font: 0.78rem var(--mono);
+}
+.aux-input:focus, .aux-select:focus { outline: none; border-color: var(--amber); }
+.aux-filter { resize: vertical; }
+.aux-xyz-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; }
+.aux-xyz-row label { width: 1.2rem; color: var(--fg-dim); font: 0.72rem var(--mono); }
+.aux-xyz-row select { flex: 1; min-width: 0; }
+.aux-hint { color: var(--fg-dim); font-size: 0.68rem; line-height: 1.45; margin-top: 0.35rem; opacity: 0.75; }
+.aux-hint code { color: var(--amber); }
+.aux-preview-table { border-collapse: collapse; font: 0.72rem var(--mono); width: 100%; }
+.aux-preview-table th, .aux-preview-table td {
+  border: 1px solid var(--border); padding: 0.18rem 0.4rem; text-align: left; white-space: nowrap;
+}
+.aux-preview-table th { background: var(--bg2); color: var(--fg-bright); position: sticky; top: 0; }
+.aux-preview-table td { color: var(--fg-dim); }
 </style>
 <script>try{var t=JSON.parse(localStorage.getItem('bma:settings')||'{}').theme;if(t&&t!=='default')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 </head>
@@ -3765,6 +3796,7 @@ table.cat-values td.cat-pct-cell {
     </div>
     <div class="results-tabs" id="resultsTabs">
       <button class="results-tab active" data-tab="preflight">Preflight</button>
+      <button class="results-tab" data-tab="aux">Aux</button>
       <button class="results-tab" data-tab="summary">Summary</button>
       <button class="results-tab" data-tab="calcols">Calc</button>
       <button class="results-tab" data-tab="statistics">Statistics</button>
@@ -3773,7 +3805,7 @@ table.cat-values td.cat-pct-cell {
       <button class="results-tab" data-tab="export">Export</button>
       <button class="results-tab" data-tab="gt">GT</button>
       <button class="results-tab" data-tab="swath">Swath</button>
-      <button class="results-tab" data-tab="section">Section</button>
+      <button class="results-tab" data-tab="section" style="display:none">Section</button>
     </div>
     <div class="results-panels">
       <div class="help-overlay" id="helpOverlay">
@@ -3793,6 +3825,29 @@ table.cat-values td.cat-pct-cell {
           <div class="preflight-sidebar" id="preflightSidebar"></div>
           <div class="preflight-preview-wrap">
             <div class="preflight-preview" id="preflightPreview"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="results-panel" id="panelAux" data-tab="aux">
+        <div class="aux-empty" id="auxEmpty">
+          <div class="dropzone aux-dropzone" id="auxDropzone">
+            <div class="label">Drop an auxiliary dataset, or <strong>click to browse</strong></div>
+            <div class="hint">A second CSV/.dm with X, Y, Z columns — e.g. the composites/samples behind this block model</div>
+            <input type="file" id="auxFileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM">
+          </div>
+          <div class="aux-empty-hint">Aux variables appear across Statistics, CDF, and Swath with a <strong>prefix</strong> so you can compare them against the block model. No geometry, export, or per-row joins — comparison is statistical/spatial only.</div>
+        </div>
+        <div class="aux-config" id="auxConfig" style="display:none">
+          <div class="preflight-head" id="auxHead">
+            <span class="preflight-zip" id="auxFileInfo"></span>
+            <button class="preflight-back-btn" id="auxClear" title="Remove aux dataset">Remove</button>
+          </div>
+          <div class="preflight-body">
+            <div class="preflight-sidebar" id="auxSidebar"></div>
+            <div class="preflight-preview-wrap">
+              <div class="preflight-preview" id="auxPreview"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -6174,6 +6229,18 @@ let currentRowVar = 'r';
 let worker = null;
 let preflightData = null; // { header, sampleRows, autoTypes, delimiter, zipEntries, selectedZipEntry }
 
+// ─── Aux dataset state (compare block model vs source samples/composites) ──
+let auxFile = null;            // the loaded auxiliary File
+let auxHandle = null;          // FSAA handle for re-open (if available)
+let auxPreflightData = null;   // runPreflight() result for the aux file (header, xyz, types, sampleRows)
+let auxCompleteData = null;    // snapshot of the last aux analysis (parallel to lastCompleteData)
+let auxData = null;            // aux stats object for comparison rendering
+let auxPrefix = 'aux';         // display-only label prefix for aux pseudo-columns (e.g. "aux:Fe")
+let auxFilter = null;          // { expression } — references aux columns via the fixed AUX_ROW_VAR handle
+let auxWorker = null;          // worker handle for the aux analysis pass
+let pendingAuxRestore = null;  // aux config from a loaded project, applied once the aux file is (re)loaded
+const AUX_ROW_VAR = 'aux';     // fixed code handle for aux filter/calc expressions (NOT the display prefix)
+
 var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
 
 // Fuzzy subsequence match — returns true if all chars in query appear in order within target.
@@ -6450,6 +6517,18 @@ var _helpShortcuts =
   '<div class="help-row"><kbd>Alt+Shift+A</kbd> <span>Deselect all visible</span></div></div>';
 
 var _helpTabs = {
+  aux: {
+    title: 'Aux',
+    html:
+      '<div class="help-section"><div class="help-section-title">Overview</div>' +
+      '<div class="help-row"><span>Load a second dataset — e.g. the composites/samples behind this block model — to compare against it. Aux runs as its own analysis pass; its variables appear across Statistics, CDF, and Swath with a label prefix.</span></div></div>' +
+      '<div class="help-section"><div class="help-section-title">Configuration</div>' +
+      '<div class="help-row"><span><strong>Display prefix</strong> — cosmetic label for aux variables (e.g. <code>aux:Fe</code>). Does not affect expressions.</span></div>' +
+      '<div class="help-row"><span><strong>Coordinates</strong> — assign X/Y/Z. Aux and the block model must share the same coordinate space for swath overlays to align.</span></div>' +
+      '<div class="help-row"><span><strong>Aux filter</strong> — pre-filter aux rows. Reference aux columns as <code>aux.</code>… regardless of the display prefix.</span></div></div>' +
+      '<div class="help-section"><div class="help-section-title">Scope</div>' +
+      '<div class="help-row"><span>Comparison is statistical/spatial — aux is a separate set of rows, not extra columns. No geometry, export, or per-row joins.</span></div></div>'
+  },
   preflight: {
     title: 'Preflight',
     html:
@@ -7729,6 +7808,180 @@ function delimName(d) {
   return JSON.stringify(d);
 }
 
+// ─── Aux dataset tab ──────────────────────────────────────────────────
+// Loads a second dataset (e.g. composites/samples behind the block model)
+// and configures it for comparison. Aux runs as its own analysis pass; its
+// variables surface across Statistics / CDF / Swath with a display prefix.
+// The display prefix (auxPrefix) is cosmetic only — aux filter/calc always
+// reference columns through the fixed AUX_ROW_VAR handle ("aux.").
+
+var $auxEmpty = document.getElementById('auxEmpty');
+var $auxConfig = document.getElementById('auxConfig');
+var $auxDropzone = document.getElementById('auxDropzone');
+var $auxFileInput = document.getElementById('auxFileInput');
+var $auxFileInfo = document.getElementById('auxFileInfo');
+var $auxSidebar = document.getElementById('auxSidebar');
+var $auxPreview = document.getElementById('auxPreview');
+
+function auxColOptions(selectedIdx) {
+  var opts = '<option value="-1">— none —</option>';
+  var h = auxPreflightData.header;
+  for (var i = 0; i < h.length; i++) {
+    opts += '<option value="' + i + '"' + (i === selectedIdx ? ' selected' : '') + '>' + esc(h[i]) + '</option>';
+  }
+  return opts;
+}
+
+function renderAuxConfig() {
+  if (!auxPreflightData) return;
+  var d = auxPreflightData;
+  var xyz = d.xyz || { x: -1, y: -1, z: -1 };
+
+  // File info banner
+  var meta = d.header.length + ' columns';
+  if (d.isDm) meta += ' · DM ' + (d.dmFormat === 'ep' ? 'EP' : 'SP');
+  else if (d.zipEntries) meta += ' · ZIP';
+  $auxFileInfo.innerHTML = 'Aux: <strong style="color:var(--fg-bright)">' + esc(auxFile.name) + '</strong>' +
+    '<span class="zip-size">' + formatBytes(auxFile.size) + ' — ' + meta + '</span>';
+
+  // Sidebar: prefix + coordinates + aux filter
+  $auxSidebar.innerHTML =
+    '<div class="pf-sidebar-section">' +
+      '<div class="pf-sidebar-section-title">Display prefix</div>' +
+      '<input type="text" class="aux-input" id="auxPrefixInput" value="' + esc(auxPrefix) + '" placeholder="aux" spellcheck="false">' +
+      '<div class="aux-hint">Label for aux variables in selection lists and plot labels (e.g. <code>' + esc(auxPrefix || 'aux') + ':Fe</code>). Cosmetic only.</div>' +
+    '</div>' +
+    '<div class="pf-sidebar-section">' +
+      '<div class="pf-sidebar-section-title">Coordinates</div>' +
+      '<div class="aux-xyz-row"><label>X</label><select class="aux-select" id="auxX">' + auxColOptions(xyz.x) + '</select></div>' +
+      '<div class="aux-xyz-row"><label>Y</label><select class="aux-select" id="auxY">' + auxColOptions(xyz.y) + '</select></div>' +
+      '<div class="aux-xyz-row"><label>Z</label><select class="aux-select" id="auxZ">' + auxColOptions(xyz.z) + '</select></div>' +
+      '<div class="aux-hint">Aux and the block model must share the same coordinate space for swath overlays to line up.</div>' +
+    '</div>' +
+    '<div class="pf-sidebar-section">' +
+      '<div class="pf-sidebar-section-title">Aux filter</div>' +
+      '<textarea class="aux-input aux-filter" id="auxFilterInput" rows="2" spellcheck="false" placeholder="aux.Au > 0">' + esc(auxFilter ? auxFilter.expression : '') + '</textarea>' +
+      '<div class="aux-hint">Reference aux columns as <code>aux.</code>… — independent of the display prefix.</div>' +
+    '</div>';
+
+  renderAuxPreview();
+}
+
+function renderAuxPreview() {
+  var d = auxPreflightData;
+  var head = '<tr>' + d.header.map(function(h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
+  var rows = d.sampleRows.slice(0, 20).map(function(r) {
+    return '<tr>' + r.map(function(c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>';
+  }).join('');
+  $auxPreview.innerHTML = '<table class="aux-preview-table"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table>';
+}
+
+function onAuxConfigChange() {
+  if (!auxPreflightData) return;
+  var p = document.getElementById('auxPrefixInput');
+  if (p) auxPrefix = p.value.trim() || 'aux';
+  var x = document.getElementById('auxX'), y = document.getElementById('auxY'), z = document.getElementById('auxZ');
+  if (x && y && z) auxPreflightData.xyz = { x: parseInt(x.value), y: parseInt(y.value), z: parseInt(z.value) };
+  var f = document.getElementById('auxFilterInput');
+  if (f) { var v = f.value.trim(); auxFilter = v ? { expression: v } : null; }
+  // Live-update the prefix hint without a full re-render (keeps focus/caret)
+  var hint = $auxSidebar.querySelector('.pf-sidebar-section .aux-hint code');
+  if (hint && p) hint.textContent = (auxPrefix || 'aux') + ':Fe';
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+
+function applyAuxRestore(saved) {
+  auxPrefix = saved.prefix || 'aux';
+  auxFilter = saved.filter ? { expression: saved.filter } : null;
+  if (saved.xyz && auxPreflightData) auxPreflightData.xyz = saved.xyz;
+}
+
+function loadAuxFile(file, handle) {
+  auxFile = file;
+  auxHandle = handle || null;
+  $auxFileInfo.textContent = 'Loading ' + file.name + '…';
+  $auxEmpty.style.display = 'none';
+  $auxConfig.style.display = '';
+  runPreflight(file).then(function(data) {
+    auxPreflightData = data;
+    if (pendingAuxRestore && pendingAuxRestore.fileName === file.name) {
+      applyAuxRestore(pendingAuxRestore);
+      pendingAuxRestore = null;
+    }
+    renderAuxConfig();
+    if (typeof autoSaveProject === 'function') autoSaveProject();
+  }).catch(function(err) {
+    auxFile = null;
+    auxPreflightData = null;
+    $auxConfig.style.display = 'none';
+    $auxEmpty.style.display = '';
+    $auxFileInfo.textContent = '';
+    var hint = $auxEmpty.querySelector('.aux-empty-hint');
+    if (hint) hint.innerHTML = '<span style="color:var(--red)">Aux load failed: ' + esc(err.message) + '</span>';
+  });
+}
+
+function clearAux() {
+  auxFile = null;
+  auxHandle = null;
+  auxPreflightData = null;
+  auxCompleteData = null;
+  auxData = null;
+  auxFilter = null;
+  auxPrefix = 'aux';
+  if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
+  $auxConfig.style.display = 'none';
+  $auxEmpty.style.display = '';
+  $auxSidebar.innerHTML = '';
+  $auxPreview.innerHTML = '';
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+
+// ─── Wiring (runs at load; DOM is already parsed) ─────────────────────
+if ($auxDropzone) {
+  $auxDropzone.addEventListener('dragover', function(e) { e.preventDefault(); $auxDropzone.classList.add('drag-over'); });
+  $auxDropzone.addEventListener('dragleave', function() { $auxDropzone.classList.remove('drag-over'); });
+  $auxDropzone.addEventListener('drop', async function(e) {
+    e.preventDefault();
+    $auxDropzone.classList.remove('drag-over');
+    var handle = null;
+    if (HAS_FSAA && e.dataTransfer.items && e.dataTransfer.items[0] && e.dataTransfer.items[0].getAsFileSystemHandle) {
+      try { handle = await e.dataTransfer.items[0].getAsFileSystemHandle(); } catch (ex) {}
+    }
+    var file = handle ? await handle.getFile() : (e.dataTransfer.files[0] || null);
+    if (file) loadAuxFile(file, handle);
+  });
+
+  if (HAS_FSAA) {
+    $auxDropzone.addEventListener('click', async function(e) {
+      if (e.target === $auxFileInput) return;
+      e.preventDefault();
+      try {
+        var handles = await window.showOpenFilePicker({
+          types: [
+            { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
+            { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } },
+            { description: 'Datamine files', accept: { 'application/octet-stream': ['.dm'] } }
+          ],
+          multiple: false
+        });
+        var handle = handles[0];
+        var file = await handle.getFile();
+        loadAuxFile(file, handle);
+      } catch (ex) { /* cancelled */ }
+    });
+    if ($auxFileInput) $auxFileInput.style.display = 'none';
+  }
+
+  if ($auxFileInput) $auxFileInput.addEventListener('change', function(e) { if (e.target.files.length) loadAuxFile(e.target.files[0], null); });
+  if ($auxSidebar) {
+    $auxSidebar.addEventListener('input', onAuxConfigChange);
+    $auxSidebar.addEventListener('change', onAuxConfigChange);
+  }
+  var $auxClearBtn = document.getElementById('auxClear');
+  if ($auxClearBtn) $auxClearBtn.addEventListener('click', clearAux);
+}
+
 // ─── Result Cache (IndexedDB) ──────────────────────────────────────────
 
 function openCacheDB() {
@@ -8061,6 +8314,13 @@ function serializeProject() {
       dxyz: preflightData?.dxyz || { dx: -1, dy: -1, dz: -1 },
       selectedZipEntry: preflightData?.selectedZipEntry || null
     },
+    aux: auxFile ? {
+      fileName: auxFile.name,
+      fileSize: auxFile.size,
+      prefix: auxPrefix,
+      xyz: auxPreflightData ? auxPreflightData.xyz : null,
+      filter: auxFilter ? auxFilter.expression : ''
+    } : null,
     calcolCode: currentCalcolCode,
     calcolMeta: currentCalcolMeta,
     globalUnits: Object.keys(globalUnits).length > 0 ? Object.assign({}, globalUnits) : null,
@@ -8272,6 +8532,9 @@ async function applyProject(project) {
   const sc = project.statsCat || {};
   if (sc.groupBy != null) currentGroupBy = sc.groupBy;
   if (sc.selectedVars) statsCatSelectedVars = new Set(sc.selectedVars);
+
+  // Stash aux config; applied when the aux file is (re)loaded on the Aux tab
+  pendingAuxRestore = project.aux || null;
 
   // Stash remaining post-analysis config for when displayResults runs
   pendingProjectRestore = project;

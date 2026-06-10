@@ -137,6 +137,7 @@
     </div>
     <div class="results-tabs" id="resultsTabs">
       <button class="results-tab active" data-tab="preflight">Preflight</button>
+      <button class="results-tab" data-tab="aux">Aux</button>
       <button class="results-tab" data-tab="summary">Summary</button>
       <button class="results-tab" data-tab="calcols">Calc</button>
       <button class="results-tab" data-tab="statistics">Statistics</button>
@@ -145,7 +146,7 @@
       <button class="results-tab" data-tab="export">Export</button>
       <button class="results-tab" data-tab="gt">GT</button>
       <button class="results-tab" data-tab="swath">Swath</button>
-      <button class="results-tab" data-tab="section">Section</button>
+      <button class="results-tab" data-tab="section" style="display:none">Section</button>
     </div>
     <div class="results-panels">
       <div class="help-overlay" id="helpOverlay">
@@ -165,6 +166,29 @@
           <div class="preflight-sidebar" id="preflightSidebar"></div>
           <div class="preflight-preview-wrap">
             <div class="preflight-preview" id="preflightPreview"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="results-panel" id="panelAux" data-tab="aux">
+        <div class="aux-empty" id="auxEmpty">
+          <div class="dropzone aux-dropzone" id="auxDropzone">
+            <div class="label">Drop an auxiliary dataset, or <strong>click to browse</strong></div>
+            <div class="hint">A second CSV/.dm with X, Y, Z columns — e.g. the composites/samples behind this block model</div>
+            <input type="file" id="auxFileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM">
+          </div>
+          <div class="aux-empty-hint">Aux variables appear across Statistics, CDF, and Swath with a <strong>prefix</strong> so you can compare them against the block model. No geometry, export, or per-row joins — comparison is statistical/spatial only.</div>
+        </div>
+        <div class="aux-config" id="auxConfig" style="display:none">
+          <div class="preflight-head" id="auxHead">
+            <span class="preflight-zip" id="auxFileInfo"></span>
+            <button class="preflight-back-btn" id="auxClear" title="Remove aux dataset">Remove</button>
+          </div>
+          <div class="preflight-body">
+            <div class="preflight-sidebar" id="auxSidebar"></div>
+            <div class="preflight-preview-wrap">
+              <div class="preflight-preview" id="auxPreview"></div>
+            </div>
           </div>
         </div>
       </div>

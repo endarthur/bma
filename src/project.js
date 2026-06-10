@@ -330,6 +330,13 @@ function serializeProject() {
       dxyz: preflightData?.dxyz || { dx: -1, dy: -1, dz: -1 },
       selectedZipEntry: preflightData?.selectedZipEntry || null
     },
+    aux: auxFile ? {
+      fileName: auxFile.name,
+      fileSize: auxFile.size,
+      prefix: auxPrefix,
+      xyz: auxPreflightData ? auxPreflightData.xyz : null,
+      filter: auxFilter ? auxFilter.expression : ''
+    } : null,
     calcolCode: currentCalcolCode,
     calcolMeta: currentCalcolMeta,
     globalUnits: Object.keys(globalUnits).length > 0 ? Object.assign({}, globalUnits) : null,
@@ -541,6 +548,9 @@ async function applyProject(project) {
   const sc = project.statsCat || {};
   if (sc.groupBy != null) currentGroupBy = sc.groupBy;
   if (sc.selectedVars) statsCatSelectedVars = new Set(sc.selectedVars);
+
+  // Stash aux config; applied when the aux file is (re)loaded on the Aux tab
+  pendingAuxRestore = project.aux || null;
 
   // Stash remaining post-analysis config for when displayResults runs
   pendingProjectRestore = project;
