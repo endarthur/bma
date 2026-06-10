@@ -6,3 +6,4 @@ Thumbs.db
 .claude/
 experiments/
 CLAUDE.md
+node_modules/
