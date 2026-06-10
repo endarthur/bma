@@ -8,6 +8,7 @@ const STATS_PRESETS = {
 
 const STATS_ALL_METRICS = [
   { key: 'count', label: 'Count' },
+  { key: 'sumw', label: 'ΣW' },
   { key: 'nulls', label: 'Nulls' },
   { key: 'zeros', label: 'Zeros' },
   { key: 'min', label: 'Min' },
@@ -118,6 +119,7 @@ function getStatValue(s, metric) {
   }
   switch (metric.key) {
     case 'count': return s.count;
+    case 'sumw': return s.sumW != null ? s.sumW : null;
     case 'nulls': return s.nulls;
     case 'zeros': return s.zeros;
     case 'min': return s.min;
@@ -207,6 +209,25 @@ function renderStatsSidebar() {
     customInput.value = statsPercentiles.join(',');
   } else {
     customInput.style.display = 'none';
+  }
+
+  // Weight select — numeric variables (incl. calcols), choice kept by name
+  var $wSel = document.getElementById('statsWeightSel');
+  if ($wSel) {
+    var wOpts = '<option value="">— none</option>';
+    for (var wci of numCols) {
+      var wName = header[wci];
+      wOpts += '<option value="' + esc(wName) + '"' + (wName === currentWeightName ? ' selected' : '') + '>' + esc(wName) + '</option>';
+    }
+    $wSel.innerHTML = wOpts;
+    if (currentWeightName && $wSel.value !== currentWeightName) $wSel.value = '';
+    var $wNote = document.getElementById('statsWeightNote');
+    if ($wNote) {
+      var noteParts = [];
+      if (currentWeightName && lastCompleteData && lastCompleteData.weightApplied !== currentWeightName) noteParts.push('re-run analysis to apply');
+      if (lastCompleteData && lastCompleteData.weightExcluded > 0) noteParts.push(lastCompleteData.weightExcluded.toLocaleString() + ' rows excluded (invalid weight)');
+      $wNote.textContent = noteParts.join(' · ');
+    }
   }
 
   // Variable list
@@ -632,6 +653,14 @@ function wireStatsEventsOnce() {
       renderStatsTable();
       autoSaveProject();
     }
+  });
+
+  // --- Weight select (static template element) ---
+  document.getElementById('statsWeightSel').addEventListener('change', function() {
+    currentWeightName = this.value || null;
+    markAnalysisStale();
+    renderStatsSidebar();
+    autoSaveProject();
   });
 
   // --- Metric toggles (delegation on container — innerHTML changes) ---

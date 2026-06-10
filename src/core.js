@@ -27,6 +27,8 @@ let auxStale = false;              // aux config changed since last aux analysis
 let auxCalcolCode = '';            // calculated-columns code block for the aux dataset (uses aux.)
 let auxCalcolMeta = [];            // [{name, type}] detected from aux calcol simulation
 let calcolMode = 'primary';        // which dataset the Calc editor is editing: 'primary' | 'aux'
+let currentWeightName = null;      // weight column (by name, raw or calcol) for the primary analysis
+let auxWeightName = null;          // weight column (by name) for the aux passes — set on the Aux tab
 let statsAuxSelected = null;       // Set of aux col indices shown in the stats table (null = defaults)
 let statsCdfAuxSelected = new Set(); // aux col indices with CDF curves
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes
@@ -316,6 +318,7 @@ var _helpTabs = {
       '<div class="help-row"><span><strong>Display prefix</strong> — cosmetic label for aux variables (e.g. <code>aux:Fe</code>). Does not affect expressions.</span></div>' +
       '<div class="help-row"><span><strong>Coordinates</strong> — assign X/Y/Z. Aux and the block model must share the same coordinate space for swath overlays to align.</span></div>' +
       '<div class="help-row"><span><strong>Aux filter</strong> — pre-filter aux rows. Reference aux columns as <code>aux.</code>… regardless of the display prefix.</span></div>' +
+      '<div class="help-row"><span><strong>Weight</strong> — e.g. declustering weights (a column or an aux calcol). Applied to every aux statistic: Statistics rows, CDF overlay, and the swath series. Rows with missing/≤0 weight are excluded.</span></div>' +
       '<div class="help-row"><span><strong>Analyze</strong> — run the full aux statistics pass. Required for the Statistics-tab comparison and CDF overlay; the Swath overlay runs its own pass and does not need it.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Scope</div>' +
       '<div class="help-row"><span>Comparison is statistical/spatial — aux is a separate set of rows, not extra columns. No geometry, export, or per-row joins.</span></div></div>'
@@ -372,7 +375,8 @@ var _helpTabs = {
       '<div class="help-section"><div class="help-section-title">Sidebar</div>' +
       '<div class="help-row"><span><strong>Variables</strong> \u2014 check/uncheck to show/hide columns in the table</span></div>' +
       '<div class="help-row"><span><strong>Metrics</strong> \u2014 toggle which statistics rows to display (mean, std, min, max, percentiles, etc.)</span></div>' +
-      '<div class="help-row"><span><strong>Percentiles</strong> \u2014 customize which percentiles are shown (preset or custom comma-separated)</span></div></div>' +
+      '<div class="help-row"><span><strong>Percentiles</strong> \u2014 customize which percentiles are shown (preset or custom comma-separated)</span></div>' +
+      '<div class="help-row"><span><strong>Weight</strong> \u2014 weight all numeric statistics by a column or calcol (e.g. ore proportion). Re-run analysis to apply. Weighted runs use population-form std/skew/kurt; rows with missing/\u22640 weight are excluded (count shown below the select). Toggle the <strong>\u03a3W</strong> metric to see weight totals.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">CDF</div>' +
       '<div class="help-row"><span>Click the <strong>CDF</strong> link on any variable row to open a cumulative distribution overlay.</span></div>' +
       '<div class="help-row"><span>Toggle multiple variables to compare CDFs. Linear or log scale.</span></div></div>' +
@@ -456,6 +460,7 @@ var _helpTabs = {
       '<div class="help-row"><span><strong>Custom axis</strong> \u2014 enter azimuth (0\u00b0=N, clockwise) and optional plunge (\u00b0 below horizontal). Projects XY(Z) onto that direction for binning.</span></div>' +
       '<div class="help-row"><span><strong>Bin width</strong> \u2014 defaults to block size; override for wider bins</span></div>' +
       '<div class="help-row"><span><strong>Statistic</strong> \u2014 Mean\u00b1Std, P25/P50/P75, or P10/P50/P90</span></div>' +
+      '<div class="help-row"><span><strong>Weight (model)</strong> \u2014 weight the model series\u2019 bin statistics by a column or calcol. The aux series uses the weight set on the Aux tab.</span></div>' +
       '<div class="help-row"><span><strong>Variables</strong> \u2014 check one or more. Each gets its own Y-axis + ribbon on the overlay chart.</span></div>' +
       '<div class="help-row"><span><strong>Color swatch</strong> \u2014 click the colored square next to a variable name to customize its chart color</span></div>' +
       '<div class="help-row"><span><strong>Unit selects</strong> \u2014 per-variable units shown on axis labels, table headers, and tooltip. Inherits from global units.</span></div>' +

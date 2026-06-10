@@ -54,6 +54,11 @@ function renderAuxConfig() {
       '<div class="aux-hint">Reference aux columns as <code>aux.</code>… — independent of the display prefix.</div>' +
     '</div>' +
     '<div class="pf-sidebar-section">' +
+      '<div class="pf-sidebar-section-title">Weight (optional)</div>' +
+      '<select class="aux-select" id="auxWeightSel">' + auxWeightOptions() + '</select>' +
+      '<div class="aux-hint">e.g. declustering weights — applied to all aux statistics (Statistics, CDF, Swath). Rows with missing or ≤0 weight are excluded.</div>' +
+    '</div>' +
+    '<div class="pf-sidebar-section">' +
       '<div class="pf-sidebar-section-title">Analysis</div>' +
       '<button class="swath-generate" id="auxAnalyzeBtn">Analyze</button>' +
       '<div class="aux-hint aux-analyze-status" id="auxAnalyzeStatus">' +
@@ -105,7 +110,8 @@ function runAuxAnalysis() {
     dxyzOverride: null,
     dmEndianness: auxPreflightData.dmEndianness || null,
     dmFormat: auxPreflightData.dmFormat || null,
-    rowVarOverride: AUX_ROW_VAR
+    rowVarOverride: AUX_ROW_VAR,
+    weightColName: auxWeightName
   });
 
   auxWorker.onerror = function(e) { fail(e.message || 'unknown error'); };
@@ -133,6 +139,30 @@ function runAuxAnalysis() {
   };
 }
 
+// Weight candidates: aux numeric columns + numeric aux calcols, by name
+function auxWeightOptions() {
+  var opts = '<option value="">— none</option>';
+  if (!auxPreflightData) return opts;
+  for (var i = 0; i < auxPreflightData.header.length; i++) {
+    if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
+    var n = auxPreflightData.header[i];
+    opts += '<option value="' + esc(n) + '"' + (n === auxWeightName ? ' selected' : '') + '>' + esc(n) + '</option>';
+  }
+  for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
+    if (auxCalcolMeta[ci].type !== 'numeric') continue;
+    var cn = auxCalcolMeta[ci].name;
+    opts += '<option value="' + esc(cn) + '"' + (cn === auxWeightName ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
+  }
+  return opts;
+}
+
+// Refresh just the weight select (e.g. after aux calcols change) without
+// rebuilding the sidebar — preserves focus elsewhere
+function renderAuxWeightOptions() {
+  var sel = document.getElementById('auxWeightSel');
+  if (sel) sel.innerHTML = auxWeightOptions();
+}
+
 function renderAuxPreview() {
   var d = auxPreflightData;
   var head = '<tr>' + d.header.map(function(h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
@@ -150,6 +180,8 @@ function onAuxConfigChange() {
   if (x && y && z) auxPreflightData.xyz = { x: parseInt(x.value), y: parseInt(y.value), z: parseInt(z.value) };
   var f = document.getElementById('auxFilterInput');
   if (f) { var v = f.value.trim(); auxFilter = v ? { expression: v } : null; }
+  var wSel = document.getElementById('auxWeightSel');
+  if (wSel) auxWeightName = wSel.value || null;
   markAuxStale();
   // Live-update the prefix hint without a full re-render (keeps focus/caret)
   var hint = $auxSidebar.querySelector('.pf-sidebar-section .aux-hint code');
@@ -171,6 +203,7 @@ function markAuxStale() {
 function applyAuxRestore(saved) {
   auxPrefix = saved.prefix || 'aux';
   auxFilter = saved.filter ? { expression: saved.filter } : null;
+  auxWeightName = saved.weight || null;
   if (saved.xyz && auxPreflightData) auxPreflightData.xyz = saved.xyz;
   auxCalcolCode = saved.calcolCode || '';
   auxCalcolMeta = saved.calcolMeta || [];
@@ -220,6 +253,7 @@ function clearAux() {
   statsCdfAuxSelected = new Set();
   auxCalcolCode = '';
   auxCalcolMeta = [];
+  auxWeightName = null;
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
   if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
   $auxConfig.style.display = 'none';

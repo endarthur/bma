@@ -692,6 +692,8 @@ function simulateCalcol() {
 
   calcolStoreMeta(meta);
   updateCalcolBadge();
+  // Aux calcols are weight candidates — keep the Aux tab's select in sync
+  if (calcolIsAux() && typeof renderAuxWeightOptions === 'function') renderAuxWeightOptions();
 
   // Render detected columns
   if (meta.length === 0) {

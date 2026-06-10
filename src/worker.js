@@ -303,21 +303,25 @@ function newTDigest() {
   return { centroids: [], buffer: [], totalCount: 0 };
 }
 
-function tdAdd(td, value) {
-  td.buffer.push(value);
-  td.totalCount++;
+// Weighted ingest: each buffered point is [value, weight]. Centroid counts
+// are continuous quantities everywhere downstream (compress, quantile, CDF),
+// so fractional weights flow through untouched. Unweighted callers omit w.
+function tdAdd(td, value, w) {
+  if (w === undefined) w = 1;
+  td.buffer.push([value, w]);
+  td.totalCount += w;
   if (td.buffer.length >= TD_BUFFER_SIZE) tdFlush(td);
 }
 
 function tdFlush(td) {
   if (td.buffer.length === 0) return;
-  td.buffer.sort((a, b) => a - b);
+  td.buffer.sort((a, b) => a[0] - b[0]);
   // Merge sorted buffer with sorted centroids
   const merged = [];
   let bi = 0, ci = 0;
   while (bi < td.buffer.length || ci < td.centroids.length) {
-    if (bi < td.buffer.length && (ci >= td.centroids.length || td.buffer[bi] <= td.centroids[ci].mean)) {
-      merged.push({ mean: td.buffer[bi], count: 1 });
+    if (bi < td.buffer.length && (ci >= td.centroids.length || td.buffer[bi][0] <= td.centroids[ci].mean)) {
+      merged.push({ mean: td.buffer[bi][0], count: td.buffer[bi][1] });
       bi++;
     } else {
       merged.push({ mean: td.centroids[ci].mean, count: td.centroids[ci].count });
@@ -377,8 +381,10 @@ function tdQuantile(td, q) {
 
 const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi),isnum:(v)=>Number.isFinite(v),ifnum:(v,d)=>Number.isFinite(v)?v:(d!==undefined?d:NaN)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;const isnum=fn.isnum;const ifnum=fn.ifnum;';
 
-async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride) {
+async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName) {
   const startTime = performance.now();
+  let weightName = null;      // resolved weight column (raw or calcol), null = unweighted
+  let weightExcluded = 0;     // rows dropped for missing/non-positive weight
 
   // ZIP / DM extraction
   let csvFile = file;
@@ -526,9 +532,16 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     const skip = skipCols ? new Set(skipCols.map(Number)) : new Set();
     numericCols = header.map((_, i) => i).filter(i => colTypes[i] === 'numeric' && !skip.has(i));
     catCols = header.map((_, i) => i).filter(i => colTypes[i] === 'categorical' && !skip.has(i));
+    // Resolve the weight column by name (raw column or calcol)
+    weightName = null;
+    if (weightColName) {
+      const inRaw = header.indexOf(weightColName) >= 0;
+      const inCalc = calcolMeta ? calcolMeta.some(cm => cm.name === weightColName) : false;
+      if (inRaw || inCalc) weightName = weightColName;
+    }
     stats = {};
     for (const i of numericCols) {
-      stats[i] = { count: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, td: newTDigest() };
+      stats[i] = newAcc();
     }
     catCounts = {};
     catOverflow = new Set();
@@ -549,7 +562,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         const idx = nCols + ci;
         if (cm.type === 'numeric') {
           calcolNumCols.push(idx);
-          stats[idx] = { count: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, td: newTDigest() };
+          stats[idx] = newAcc();
         } else {
           calcolCatCols.push(idx);
           catCounts[idx] = {};
@@ -621,25 +634,31 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     return obj;
   }
 
-  function welfordAdd(s, v) {
+  // Weighted one-pass moments: merge the accumulator with a single point of
+  // weight w (Chan/Pébay pairwise-merge formulas with the point's own
+  // M2..M4 = 0). At w = 1 these reduce algebraically to the classic
+  // unweighted Pébay update this replaces.
+  function welfordAdd(s, v, w) {
+    if (w === undefined) w = 1;
     s.count++;
     if (v === 0) s.zeros++;
     if (v < s.min) s.min = v;
     if (v > s.max) s.max = v;
-    const n = s.count;
+    const wa = s.sumW;        // old weight total
+    const W = wa + w;
     const delta = v - s.m1;
-    const delta_n = delta / n;
-    const delta_n2 = delta_n * delta_n;
-    const term1 = delta * delta_n * (n - 1);
-    s.m4 += term1 * delta_n2 * (n * n - 3 * n + 3) + 6 * delta_n2 * s.m2 - 4 * delta_n * s.m3;
-    s.m3 += term1 * delta_n * (n - 2) - 3 * delta_n * s.m2;
-    s.m2 += term1;
-    s.m1 += delta_n;
-    tdAdd(s.td, v);
+    const r = delta * w / W;  // m1 increment
+    const t = delta * r * wa; // M2 increment
+    s.m4 += t * delta * delta * (wa * wa - wa * w + w * w) / (W * W) + 6 * r * r * s.m2 - 4 * r * s.m3;
+    s.m3 += t * delta * (wa - w) / W - 3 * r * s.m2;
+    s.m2 += t;
+    s.m1 += r;
+    s.sumW = W;
+    tdAdd(s.td, v, w);
   }
 
   function newAcc() {
-    return { count: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, td: newTDigest() };
+    return { count: 0, sumW: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, td: newTDigest() };
   }
 
   function getGroupAcc(map, gv) {
@@ -653,17 +672,26 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
 
   function finalizeAcc(s) {
     const n = s.count;
-    const variance = n > 1 ? s.m2 / (n - 1) : null;
-    const std = variance !== null ? Math.sqrt(variance) : null;
-    let skewness = null;
-    if (n > 2 && s.m2 > 0) {
-      skewness = (Math.sqrt(n) * s.m3) / Math.pow(s.m2, 1.5);
-      skewness *= Math.sqrt(n * (n - 1)) / (n - 2);
-    }
-    let kurtosis = null;
-    if (n > 3 && s.m2 > 0) {
-      kurtosis = (n * s.m4) / (s.m2 * s.m2) - 3;
-      kurtosis = ((n - 1) / ((n - 2) * (n - 3))) * ((n + 1) * kurtosis + 6);
+    let variance, std = null, skewness = null, kurtosis = null;
+    if (weightName) {
+      // Weighted run: population-form estimators — count-based small-sample
+      // bias corrections don't apply to arbitrary-scale weights
+      const W = s.sumW;
+      variance = (n > 1 && W > 0) ? s.m2 / W : null;
+      std = variance !== null ? Math.sqrt(Math.max(0, variance)) : null;
+      if (n > 2 && s.m2 > 0 && W > 0) skewness = (Math.sqrt(W) * s.m3) / Math.pow(s.m2, 1.5);
+      if (n > 3 && s.m2 > 0) kurtosis = (W * s.m4) / (s.m2 * s.m2) - 3;
+    } else {
+      variance = n > 1 ? s.m2 / (n - 1) : null;
+      std = variance !== null ? Math.sqrt(variance) : null;
+      if (n > 2 && s.m2 > 0) {
+        skewness = (Math.sqrt(n) * s.m3) / Math.pow(s.m2, 1.5);
+        skewness *= Math.sqrt(n * (n - 1)) / (n - 2);
+      }
+      if (n > 3 && s.m2 > 0) {
+        kurtosis = (n * s.m4) / (s.m2 * s.m2) - 3;
+        kurtosis = ((n - 1) / ((n - 2) * (n - 3))) * ((n + 1) * kurtosis + 6);
+      }
     }
     let quantiles = null;
     let centroids = null;
@@ -679,13 +707,13 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       centroids = s.td.centroids.map(c => [c.mean, c.count]);
     }
     return {
-      count: n, nulls: s.nulls, zeros: s.zeros,
+      count: n, sumW: s.sumW, nulls: s.nulls, zeros: s.zeros,
       min: n > 0 ? s.min : null, max: n > 0 ? s.max : null,
       mean: n > 0 ? s.m1 : null, std, skewness, kurtosis, quantiles, centroids
     };
   }
 
-  function processCalcolStats(row) {
+  function processCalcolStats(row, w) {
     const gv = groupByCol !== null ? String(row[groupByColName] ?? '') : null;
     for (const idx of calcolNumCols) {
       const cm = calcolMeta[idx - nCols];
@@ -699,10 +727,10 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         if (cf.skipZeros && v === 0) { s.nulls++; if (gv !== null && groupStats[idx]) { const ga = getGroupAcc(groupStats[idx], gv); if (ga) ga.nulls++; } continue; }
         if (cf.skipNeg && v < 0) { s.nulls++; if (gv !== null && groupStats[idx]) { const ga = getGroupAcc(groupStats[idx], gv); if (ga) ga.nulls++; } continue; }
       }
-      welfordAdd(s, v);
+      welfordAdd(s, v, w);
       if (gv !== null && groupStats[idx]) {
         const ga = getGroupAcc(groupStats[idx], gv);
-        if (ga) welfordAdd(ga, v);
+        if (ga) welfordAdd(ga, v, w);
       }
     }
     for (const idx of calcolCatCols) {
@@ -723,7 +751,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     }
   }
 
-  function processRowStats(fields, row) {
+  function processRowStats(fields, row, w) {
     const gv = groupByCol !== null ? (groupByCol >= nCols && row ? String(row[groupByColName] ?? '') : (fields[groupByCol] || '').trim().replace(/^["']|["']$/g, '')) : null;
     for (const i of numericCols) {
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
@@ -737,10 +765,10 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         if (cf.skipZeros && v === 0) { s.nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
         if (cf.skipNeg && v < 0) { s.nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
       }
-      welfordAdd(s, v);
+      welfordAdd(s, v, w);
       if (gv !== null && groupStats[i]) {
         const ga = getGroupAcc(groupStats[i], gv);
-        if (ga) welfordAdd(ga, v);
+        if (ga) welfordAdd(ga, v, w);
       }
     }
     for (const i of catCols) {
@@ -851,15 +879,21 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
 
       // ── Stats phase (filter + accumulate) ──
       const hasCalcols = calcolFn !== null;
-      const needsRow = hasCalcols || filterFn || (groupByCol !== null && groupByCol >= nCols);
+      const needsRow = hasCalcols || filterFn || (groupByCol !== null && groupByCol >= nCols) || weightName !== null;
       let row = null;
       if (needsRow) row = buildRow(fields);
       if (filterFn) {
         if (!filterFn(row)) continue;
       }
+      let rowW = 1;
+      if (weightName) {
+        const wv = row[weightName];
+        if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) { weightExcluded++; continue; }
+        rowW = wv;
+      }
       rowCount++;
-      processRowStats(fields, row);
-      if (hasCalcols) processCalcolStats(row);
+      processRowStats(fields, row, rowW);
+      if (hasCalcols) processCalcolStats(row, rowW);
 
       // Progress
       if (totalRowCount - lastProgress >= 25000) {
@@ -889,15 +923,23 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         initStatsPhase();
       } else {
         const hasCalcols2 = calcolFn !== null;
-        const needsRow2 = hasCalcols2 || filterFn || (groupByCol !== null && groupByCol >= nCols);
+        const needsRow2 = hasCalcols2 || filterFn || (groupByCol !== null && groupByCol >= nCols) || weightName !== null;
         let row2 = null;
         if (needsRow2) row2 = buildRow(fields);
         let passFilter = true;
         if (filterFn) passFilter = filterFn(row2);
         if (passFilter) {
-          rowCount++;
-          processRowStats(fields, row2);
-          if (hasCalcols2) processCalcolStats(row2);
+          let w2 = 1, w2ok = true;
+          if (weightName) {
+            const wv2 = row2[weightName];
+            if (typeof wv2 !== 'number' || !isFinite(wv2) || wv2 <= 0) { weightExcluded++; w2ok = false; }
+            else w2 = wv2;
+          }
+          if (w2ok) {
+            rowCount++;
+            processRowStats(fields, row2, w2);
+            if (hasCalcols2) processCalcolStats(row2, w2);
+          }
         }
       }
     }
@@ -998,6 +1040,8 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     commentCount,
     elapsed,
     rowVarName,
+    weightApplied: weightName,
+    weightExcluded,
     header: extHeaderFinal,
     colTypes: extTypesFinal,
     xyzGuess,
@@ -1252,6 +1296,10 @@ async function swathAnalysis(data) {
   if (calcolMeta) { for (const cm of calcolMeta) extHeader.push(cm.name); }
   const varNames = varCols.map(vi => extHeader[vi]);
 
+  // Optional row weight (raw column or calcol, by name)
+  let weightName = null;
+  if (data.weightColName && extHeader.indexOf(data.weightColName) >= 0) weightName = data.weightColName;
+
   // Per-variable bins: Map<binIdx, {vars: {varIdx: {count,sum,sumSq,td}}, center}>
   const bins = new Map();
 
@@ -1261,14 +1309,14 @@ async function swathAnalysis(data) {
     if (!b) {
       b = { center: (idx + 0.5) * binWidth, vars: {} };
       for (const vi of varCols) {
-        b.vars[vi] = { count: 0, sum: 0, sumSq: 0, td: newTDigest() };
+        b.vars[vi] = { count: 0, wsum: 0, sum: 0, sumSq: 0, td: newTDigest() };
       }
       bins.set(idx, b);
     }
     return b;
   }
 
-  function processRow(row) {
+  function processRow(row, w) {
     var coord;
     if (isCustomAzimuth) {
       var xv = row[xName], yv = row[yName];
@@ -1283,15 +1331,17 @@ async function swathAnalysis(data) {
       coord = row[axisName];
       if (coord == null || isNaN(coord)) return;
     }
+    if (w === undefined) w = 1;
     var bin = getBin(coord);
     for (var vi = 0; vi < varCols.length; vi++) {
       var val = row[varNames[vi]];
       if (val == null || typeof val !== 'number' || isNaN(val)) continue;
       var vb = bin.vars[varCols[vi]];
       vb.count++;
-      vb.sum += val;
-      vb.sumSq += val * val;
-      tdAdd(vb.td, val);
+      vb.wsum += w;
+      vb.sum += val * w;
+      vb.sumSq += val * val * w;
+      tdAdd(vb.td, val, w);
     }
   }
 
@@ -1317,7 +1367,13 @@ async function swathAnalysis(data) {
       const row = buildRow(fields);
       if (globalFn && !globalFn(row)) continue;
       if (localFn && !localFn(row)) continue;
-      processRow(row);
+      let rw = 1;
+      if (weightName) {
+        const wv = row[weightName];
+        if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) continue;
+        rw = wv;
+      }
+      processRow(row, rw);
 
       if (totalChars - lastProgress >= 500000) {
         lastProgress = totalChars;
@@ -1331,7 +1387,13 @@ async function swathAnalysis(data) {
       const fields = line.split(delimiter);
       const row = buildRow(fields);
       if ((!globalFn || globalFn(row)) && (!localFn || localFn(row))) {
-        processRow(row);
+        let rwL = 1, rwOk = true;
+        if (weightName) {
+          const wvL = row[weightName];
+          if (typeof wvL !== 'number' || !isFinite(wvL) || wvL <= 0) rwOk = false;
+          else rwL = wvL;
+        }
+        if (rwOk) processRow(row, rwL);
       }
     }
   }
@@ -1344,8 +1406,12 @@ async function swathAnalysis(data) {
       const vb = b.vars[vi];
       if (vb.count === 0) continue;
       tdFlush(vb.td);
-      const mean = vb.sum / vb.count;
-      const variance = vb.count > 1 ? (vb.sumSq - vb.sum * vb.sum / vb.count) / (vb.count - 1) : 0;
+      const mean = vb.sum / vb.wsum;
+      // Weighted runs use population variance; unweighted keeps the original
+      // sample formula (wsum === count there, so sums are unchanged)
+      const variance = weightName
+        ? (vb.wsum > 0 ? Math.max(0, vb.sumSq / vb.wsum - mean * mean) : 0)
+        : (vb.count > 1 ? (vb.sumSq - vb.sum * vb.sum / vb.count) / (vb.count - 1) : 0);
       arr.push({
         center: b.center, count: vb.count, mean,
         std: Math.sqrt(Math.max(0, variance)),
@@ -2023,7 +2089,7 @@ self.onmessage = (e) => {
   } else if (e.data.mode === 'gt') {
     gtAnalysis(e.data);
   } else {
-    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride } = e.data;
-    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride);
+    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName } = e.data;
+    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName);
   }
 };

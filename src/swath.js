@@ -207,6 +207,12 @@ function renderSwathConfig(data) {
         '<option value="p25_50_75">P25 / P50 / P75</option>' +
         '<option value="p10_50_90">P10 / P50 / P90</option>' +
       '</select>' +
+      '<div style="margin-top:0.3rem">' +
+        '<div class="swath-sidebar-title">Weight (model)</div>' +
+        '<select class="swath-select" id="swathWeight"><option value="">\u2014 none</option>' +
+          swathNumCols.map(function(c) { return '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>'; }).join('') +
+        '</select>' +
+      '</div>' +
     '</div>' +
     '<div class="swath-sidebar-section">' +
       '<div class="swath-sidebar-title">Display</div>' +
@@ -576,6 +582,7 @@ function runSwath() {
       binWidth: binWidth,
       azimuth: azimuthDeg,
       plunge: plungeDeg,
+      weightColName: (document.getElementById('swathWeight') || {}).value || null,
       dmEndianness: preflightData && preflightData.dmEndianness || null,
       dmFormat: preflightData && preflightData.dmFormat || null
     });
@@ -621,6 +628,7 @@ function runSwath() {
       azimuth: azimuthDeg,
       plunge: plungeDeg,
       rowVarOverride: AUX_ROW_VAR,
+      weightColName: auxWeightName,
       dmEndianness: auxPreflightData.dmEndianness || null,
       dmFormat: auxPreflightData.dmFormat || null
     });

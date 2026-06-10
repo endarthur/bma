@@ -246,7 +246,8 @@ function analysisFingerprint() {
     calcolCode: currentCalcolCode || '',
     calcolMeta: currentCalcolMeta || [],
     groupBy: currentGroupBy,
-    groupStatsCols: currentGroupBy !== null && statsCatSelectedVars.size > 0 ? Array.from(statsCatSelectedVars).sort() : null
+    groupStatsCols: currentGroupBy !== null && statsCatSelectedVars.size > 0 ? Array.from(statsCatSelectedVars).sort() : null,
+    weight: currentWeightName || null
   });
 }
 
@@ -336,6 +337,7 @@ function serializeProject() {
       prefix: auxPrefix,
       xyz: auxPreflightData ? auxPreflightData.xyz : null,
       filter: auxFilter ? auxFilter.expression : '',
+      weight: auxWeightName,
       calcolCode: auxCalcolCode,
       calcolMeta: auxCalcolMeta
     } : null,
@@ -366,7 +368,8 @@ function serializeProject() {
       auxSelected: (auxCompleteData && statsAuxSelected !== null)
         ? Array.from(statsAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null,
       cdfAuxSelected: (auxCompleteData && statsCdfAuxSelected.size > 0)
-        ? Array.from(statsCdfAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null
+        ? Array.from(statsCdfAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null,
+      weight: currentWeightName
     },
     categories: {
       focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null,
@@ -427,6 +430,7 @@ function serializeProject() {
         localFilter: $filter ? $filter.value : '',
         azimuth: $axis.value === 'custom' ? (parseFloat($azimuth.value) || 0) : null,
         plunge: $axis.value === 'custom' ? (parseFloat($plunge.value) || 0) : null,
+        weight: (document.getElementById('swathWeight') || {}).value || null,
         auxCheckedVars: swathAuxChecked,
         auxUnits: Object.keys(swathAuxUnits).length > 0 ? swathAuxUnits : null,
         units: Object.keys(swathUnits).length > 0 ? swathUnits : null,
@@ -568,6 +572,8 @@ async function applyProject(project) {
   const sc = project.statsCat || {};
   if (sc.groupBy != null) currentGroupBy = sc.groupBy;
   if (sc.selectedVars) statsCatSelectedVars = new Set(sc.selectedVars);
+  // Weight likewise feeds the analysis itself
+  currentWeightName = (project.statsTab && project.statsTab.weight) || null;
 
   // Stash aux config; applied when the aux file is (re)loaded on the Aux tab
   pendingAuxRestore = project.aux || null;
@@ -637,6 +643,7 @@ function clearProject() {
   statsCdfSelected = new Set();
   statsCdfScale = 'linear';
   pendingStatsAuxRestore = null;
+  currentWeightName = null;
   exportColumns = [];
   pendingProjectRestore = null;
   resetExportSettings();
@@ -721,6 +728,7 @@ function handleFile(file, handle) {
   statsCdfSelected = new Set();
   statsCdfScale = 'linear';
   pendingStatsAuxRestore = null;
+  currentWeightName = null;
   exportColumns = [];
   pendingProjectRestore = null;
   resetExportSettings();
@@ -877,6 +885,7 @@ $backToPreflight.addEventListener('click', () => {
   statsCdfSelected = new Set();
   statsCdfScale = 'linear';
   pendingStatsAuxRestore = null;
+  currentWeightName = null;
   exportColumns = [];
   pendingProjectRestore = null;
   if (exportWorker) { exportWorker.terminate(); exportWorker = null; }
@@ -1064,7 +1073,8 @@ function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerpr
     groupBy: currentGroupBy,
     groupStatsCols: currentGroupBy !== null && statsCatSelectedVars.size > 0 ? Array.from(statsCatSelectedVars) : null,
     dmEndianness: preflightData && preflightData.dmEndianness || null,
-    dmFormat: preflightData && preflightData.dmFormat || null
+    dmFormat: preflightData && preflightData.dmFormat || null,
+    weightColName: currentWeightName
   });
 }
 
@@ -1459,6 +1469,8 @@ function displayResults(data) {
     if ($sPlunge && swp.plunge != null) $sPlunge.value = swp.plunge;
     if ($sBinWidth && swp.binWidth) $sBinWidth.value = swp.binWidth;
     if ($sStat && swp.stat) $sStat.value = swp.stat;
+    var $sWeight = document.getElementById('swathWeight');
+    if ($sWeight && swp.weight != null) $sWeight.value = swp.weight;
     if ($sFilter && swp.localFilter) $sFilter.value = swp.localFilter;
     // Restore checked variables by name
     if (swp.checkedVars && swp.checkedVars.length > 0) {

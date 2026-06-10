@@ -3672,6 +3672,15 @@ table.cat-values td.cat-pct-cell {
 .aux-preview-table th { background: var(--bg2); color: var(--fg-bright); position: sticky; top: 0; }
 .aux-preview-table td { color: var(--fg-dim); }
 
+.stats-weight-select {
+  width: 100%; box-sizing: border-box;
+  background: var(--bg2); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 3px; padding: 0.25rem 0.35rem; font: 0.72rem var(--mono);
+}
+.stats-weight-select:focus { outline: none; border-color: var(--amber); }
+.stats-weight-note { color: var(--amber); font-size: 0.62rem; margin-top: 0.25rem; line-height: 1.4; }
+.stats-weight-note:empty { display: none; }
+
 .calcol-mode-toggle { display: flex; gap: 0; margin-left: auto; margin-right: 0.5rem; }
 .calcol-mode-btn {
   background: var(--bg2);
@@ -4019,6 +4028,11 @@ table.stats tr.stats-aux-row td:first-child { padding-left: 1.1rem; }
                 <button class="stats-preset" data-preset="custom">Custom</button>
               </div>
               <input type="text" class="stats-custom-input" id="statsCustomPct" placeholder="e.g. 5,10,25,50,75,90,95" style="display:none" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="stats-sidebar-section">
+              <div class="stats-sidebar-title">Weight</div>
+              <select class="stats-weight-select" id="statsWeightSel"><option value="">— none</option></select>
+              <div class="stats-weight-note" id="statsWeightNote"></div>
             </div>
             <div class="stats-sidebar-section">
               <div class="stats-sidebar-title">Metrics</div>
@@ -4583,21 +4597,25 @@ function newTDigest() {
   return { centroids: [], buffer: [], totalCount: 0 };
 }
 
-function tdAdd(td, value) {
-  td.buffer.push(value);
-  td.totalCount++;
+// Weighted ingest: each buffered point is [value, weight]. Centroid counts
+// are continuous quantities everywhere downstream (compress, quantile, CDF),
+// so fractional weights flow through untouched. Unweighted callers omit w.
+function tdAdd(td, value, w) {
+  if (w === undefined) w = 1;
+  td.buffer.push([value, w]);
+  td.totalCount += w;
   if (td.buffer.length >= TD_BUFFER_SIZE) tdFlush(td);
 }
 
 function tdFlush(td) {
   if (td.buffer.length === 0) return;
-  td.buffer.sort((a, b) => a - b);
+  td.buffer.sort((a, b) => a[0] - b[0]);
   // Merge sorted buffer with sorted centroids
   const merged = [];
   let bi = 0, ci = 0;
   while (bi < td.buffer.length || ci < td.centroids.length) {
-    if (bi < td.buffer.length && (ci >= td.centroids.length || td.buffer[bi] <= td.centroids[ci].mean)) {
-      merged.push({ mean: td.buffer[bi], count: 1 });
+    if (bi < td.buffer.length && (ci >= td.centroids.length || td.buffer[bi][0] <= td.centroids[ci].mean)) {
+      merged.push({ mean: td.buffer[bi][0], count: td.buffer[bi][1] });
       bi++;
     } else {
       merged.push({ mean: td.centroids[ci].mean, count: td.centroids[ci].count });
@@ -4657,8 +4675,10 @@ function tdQuantile(td, q) {
 
 const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi),isnum:(v)=>Number.isFinite(v),ifnum:(v,d)=>Number.isFinite(v)?v:(d!==undefined?d:NaN)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;const isnum=fn.isnum;const ifnum=fn.ifnum;';
 
-async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride) {
+async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName) {
   const startTime = performance.now();
+  let weightName = null;      // resolved weight column (raw or calcol), null = unweighted
+  let weightExcluded = 0;     // rows dropped for missing/non-positive weight
 
   // ZIP / DM extraction
   let csvFile = file;
@@ -4806,9 +4826,16 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     const skip = skipCols ? new Set(skipCols.map(Number)) : new Set();
     numericCols = header.map((_, i) => i).filter(i => colTypes[i] === 'numeric' && !skip.has(i));
     catCols = header.map((_, i) => i).filter(i => colTypes[i] === 'categorical' && !skip.has(i));
+    // Resolve the weight column by name (raw column or calcol)
+    weightName = null;
+    if (weightColName) {
+      const inRaw = header.indexOf(weightColName) >= 0;
+      const inCalc = calcolMeta ? calcolMeta.some(cm => cm.name === weightColName) : false;
+      if (inRaw || inCalc) weightName = weightColName;
+    }
     stats = {};
     for (const i of numericCols) {
-      stats[i] = { count: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, td: newTDigest() };
+      stats[i] = newAcc();
     }
     catCounts = {};
     catOverflow = new Set();
@@ -4829,7 +4856,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         const idx = nCols + ci;
         if (cm.type === 'numeric') {
           calcolNumCols.push(idx);
-          stats[idx] = { count: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, td: newTDigest() };
+          stats[idx] = newAcc();
         } else {
           calcolCatCols.push(idx);
           catCounts[idx] = {};
@@ -4901,25 +4928,31 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     return obj;
   }
 
-  function welfordAdd(s, v) {
+  // Weighted one-pass moments: merge the accumulator with a single point of
+  // weight w (Chan/Pébay pairwise-merge formulas with the point's own
+  // M2..M4 = 0). At w = 1 these reduce algebraically to the classic
+  // unweighted Pébay update this replaces.
+  function welfordAdd(s, v, w) {
+    if (w === undefined) w = 1;
     s.count++;
     if (v === 0) s.zeros++;
     if (v < s.min) s.min = v;
     if (v > s.max) s.max = v;
-    const n = s.count;
+    const wa = s.sumW;        // old weight total
+    const W = wa + w;
     const delta = v - s.m1;
-    const delta_n = delta / n;
-    const delta_n2 = delta_n * delta_n;
-    const term1 = delta * delta_n * (n - 1);
-    s.m4 += term1 * delta_n2 * (n * n - 3 * n + 3) + 6 * delta_n2 * s.m2 - 4 * delta_n * s.m3;
-    s.m3 += term1 * delta_n * (n - 2) - 3 * delta_n * s.m2;
-    s.m2 += term1;
-    s.m1 += delta_n;
-    tdAdd(s.td, v);
+    const r = delta * w / W;  // m1 increment
+    const t = delta * r * wa; // M2 increment
+    s.m4 += t * delta * delta * (wa * wa - wa * w + w * w) / (W * W) + 6 * r * r * s.m2 - 4 * r * s.m3;
+    s.m3 += t * delta * (wa - w) / W - 3 * r * s.m2;
+    s.m2 += t;
+    s.m1 += r;
+    s.sumW = W;
+    tdAdd(s.td, v, w);
   }
 
   function newAcc() {
-    return { count: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, td: newTDigest() };
+    return { count: 0, sumW: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, td: newTDigest() };
   }
 
   function getGroupAcc(map, gv) {
@@ -4933,17 +4966,26 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
 
   function finalizeAcc(s) {
     const n = s.count;
-    const variance = n > 1 ? s.m2 / (n - 1) : null;
-    const std = variance !== null ? Math.sqrt(variance) : null;
-    let skewness = null;
-    if (n > 2 && s.m2 > 0) {
-      skewness = (Math.sqrt(n) * s.m3) / Math.pow(s.m2, 1.5);
-      skewness *= Math.sqrt(n * (n - 1)) / (n - 2);
-    }
-    let kurtosis = null;
-    if (n > 3 && s.m2 > 0) {
-      kurtosis = (n * s.m4) / (s.m2 * s.m2) - 3;
-      kurtosis = ((n - 1) / ((n - 2) * (n - 3))) * ((n + 1) * kurtosis + 6);
+    let variance, std = null, skewness = null, kurtosis = null;
+    if (weightName) {
+      // Weighted run: population-form estimators — count-based small-sample
+      // bias corrections don't apply to arbitrary-scale weights
+      const W = s.sumW;
+      variance = (n > 1 && W > 0) ? s.m2 / W : null;
+      std = variance !== null ? Math.sqrt(Math.max(0, variance)) : null;
+      if (n > 2 && s.m2 > 0 && W > 0) skewness = (Math.sqrt(W) * s.m3) / Math.pow(s.m2, 1.5);
+      if (n > 3 && s.m2 > 0) kurtosis = (W * s.m4) / (s.m2 * s.m2) - 3;
+    } else {
+      variance = n > 1 ? s.m2 / (n - 1) : null;
+      std = variance !== null ? Math.sqrt(variance) : null;
+      if (n > 2 && s.m2 > 0) {
+        skewness = (Math.sqrt(n) * s.m3) / Math.pow(s.m2, 1.5);
+        skewness *= Math.sqrt(n * (n - 1)) / (n - 2);
+      }
+      if (n > 3 && s.m2 > 0) {
+        kurtosis = (n * s.m4) / (s.m2 * s.m2) - 3;
+        kurtosis = ((n - 1) / ((n - 2) * (n - 3))) * ((n + 1) * kurtosis + 6);
+      }
     }
     let quantiles = null;
     let centroids = null;
@@ -4959,13 +5001,13 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       centroids = s.td.centroids.map(c => [c.mean, c.count]);
     }
     return {
-      count: n, nulls: s.nulls, zeros: s.zeros,
+      count: n, sumW: s.sumW, nulls: s.nulls, zeros: s.zeros,
       min: n > 0 ? s.min : null, max: n > 0 ? s.max : null,
       mean: n > 0 ? s.m1 : null, std, skewness, kurtosis, quantiles, centroids
     };
   }
 
-  function processCalcolStats(row) {
+  function processCalcolStats(row, w) {
     const gv = groupByCol !== null ? String(row[groupByColName] ?? '') : null;
     for (const idx of calcolNumCols) {
       const cm = calcolMeta[idx - nCols];
@@ -4979,10 +5021,10 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         if (cf.skipZeros && v === 0) { s.nulls++; if (gv !== null && groupStats[idx]) { const ga = getGroupAcc(groupStats[idx], gv); if (ga) ga.nulls++; } continue; }
         if (cf.skipNeg && v < 0) { s.nulls++; if (gv !== null && groupStats[idx]) { const ga = getGroupAcc(groupStats[idx], gv); if (ga) ga.nulls++; } continue; }
       }
-      welfordAdd(s, v);
+      welfordAdd(s, v, w);
       if (gv !== null && groupStats[idx]) {
         const ga = getGroupAcc(groupStats[idx], gv);
-        if (ga) welfordAdd(ga, v);
+        if (ga) welfordAdd(ga, v, w);
       }
     }
     for (const idx of calcolCatCols) {
@@ -5003,7 +5045,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     }
   }
 
-  function processRowStats(fields, row) {
+  function processRowStats(fields, row, w) {
     const gv = groupByCol !== null ? (groupByCol >= nCols && row ? String(row[groupByColName] ?? '') : (fields[groupByCol] || '').trim().replace(/^["']|["']$/g, '')) : null;
     for (const i of numericCols) {
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
@@ -5017,10 +5059,10 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         if (cf.skipZeros && v === 0) { s.nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
         if (cf.skipNeg && v < 0) { s.nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
       }
-      welfordAdd(s, v);
+      welfordAdd(s, v, w);
       if (gv !== null && groupStats[i]) {
         const ga = getGroupAcc(groupStats[i], gv);
-        if (ga) welfordAdd(ga, v);
+        if (ga) welfordAdd(ga, v, w);
       }
     }
     for (const i of catCols) {
@@ -5131,15 +5173,21 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
 
       // ── Stats phase (filter + accumulate) ──
       const hasCalcols = calcolFn !== null;
-      const needsRow = hasCalcols || filterFn || (groupByCol !== null && groupByCol >= nCols);
+      const needsRow = hasCalcols || filterFn || (groupByCol !== null && groupByCol >= nCols) || weightName !== null;
       let row = null;
       if (needsRow) row = buildRow(fields);
       if (filterFn) {
         if (!filterFn(row)) continue;
       }
+      let rowW = 1;
+      if (weightName) {
+        const wv = row[weightName];
+        if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) { weightExcluded++; continue; }
+        rowW = wv;
+      }
       rowCount++;
-      processRowStats(fields, row);
-      if (hasCalcols) processCalcolStats(row);
+      processRowStats(fields, row, rowW);
+      if (hasCalcols) processCalcolStats(row, rowW);
 
       // Progress
       if (totalRowCount - lastProgress >= 25000) {
@@ -5169,15 +5217,23 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         initStatsPhase();
       } else {
         const hasCalcols2 = calcolFn !== null;
-        const needsRow2 = hasCalcols2 || filterFn || (groupByCol !== null && groupByCol >= nCols);
+        const needsRow2 = hasCalcols2 || filterFn || (groupByCol !== null && groupByCol >= nCols) || weightName !== null;
         let row2 = null;
         if (needsRow2) row2 = buildRow(fields);
         let passFilter = true;
         if (filterFn) passFilter = filterFn(row2);
         if (passFilter) {
-          rowCount++;
-          processRowStats(fields, row2);
-          if (hasCalcols2) processCalcolStats(row2);
+          let w2 = 1, w2ok = true;
+          if (weightName) {
+            const wv2 = row2[weightName];
+            if (typeof wv2 !== 'number' || !isFinite(wv2) || wv2 <= 0) { weightExcluded++; w2ok = false; }
+            else w2 = wv2;
+          }
+          if (w2ok) {
+            rowCount++;
+            processRowStats(fields, row2, w2);
+            if (hasCalcols2) processCalcolStats(row2, w2);
+          }
         }
       }
     }
@@ -5278,6 +5334,8 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     commentCount,
     elapsed,
     rowVarName,
+    weightApplied: weightName,
+    weightExcluded,
     header: extHeaderFinal,
     colTypes: extTypesFinal,
     xyzGuess,
@@ -5532,6 +5590,10 @@ async function swathAnalysis(data) {
   if (calcolMeta) { for (const cm of calcolMeta) extHeader.push(cm.name); }
   const varNames = varCols.map(vi => extHeader[vi]);
 
+  // Optional row weight (raw column or calcol, by name)
+  let weightName = null;
+  if (data.weightColName && extHeader.indexOf(data.weightColName) >= 0) weightName = data.weightColName;
+
   // Per-variable bins: Map<binIdx, {vars: {varIdx: {count,sum,sumSq,td}}, center}>
   const bins = new Map();
 
@@ -5541,14 +5603,14 @@ async function swathAnalysis(data) {
     if (!b) {
       b = { center: (idx + 0.5) * binWidth, vars: {} };
       for (const vi of varCols) {
-        b.vars[vi] = { count: 0, sum: 0, sumSq: 0, td: newTDigest() };
+        b.vars[vi] = { count: 0, wsum: 0, sum: 0, sumSq: 0, td: newTDigest() };
       }
       bins.set(idx, b);
     }
     return b;
   }
 
-  function processRow(row) {
+  function processRow(row, w) {
     var coord;
     if (isCustomAzimuth) {
       var xv = row[xName], yv = row[yName];
@@ -5563,15 +5625,17 @@ async function swathAnalysis(data) {
       coord = row[axisName];
       if (coord == null || isNaN(coord)) return;
     }
+    if (w === undefined) w = 1;
     var bin = getBin(coord);
     for (var vi = 0; vi < varCols.length; vi++) {
       var val = row[varNames[vi]];
       if (val == null || typeof val !== 'number' || isNaN(val)) continue;
       var vb = bin.vars[varCols[vi]];
       vb.count++;
-      vb.sum += val;
-      vb.sumSq += val * val;
-      tdAdd(vb.td, val);
+      vb.wsum += w;
+      vb.sum += val * w;
+      vb.sumSq += val * val * w;
+      tdAdd(vb.td, val, w);
     }
   }
 
@@ -5597,7 +5661,13 @@ async function swathAnalysis(data) {
       const row = buildRow(fields);
       if (globalFn && !globalFn(row)) continue;
       if (localFn && !localFn(row)) continue;
-      processRow(row);
+      let rw = 1;
+      if (weightName) {
+        const wv = row[weightName];
+        if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) continue;
+        rw = wv;
+      }
+      processRow(row, rw);
 
       if (totalChars - lastProgress >= 500000) {
         lastProgress = totalChars;
@@ -5611,7 +5681,13 @@ async function swathAnalysis(data) {
       const fields = line.split(delimiter);
       const row = buildRow(fields);
       if ((!globalFn || globalFn(row)) && (!localFn || localFn(row))) {
-        processRow(row);
+        let rwL = 1, rwOk = true;
+        if (weightName) {
+          const wvL = row[weightName];
+          if (typeof wvL !== 'number' || !isFinite(wvL) || wvL <= 0) rwOk = false;
+          else rwL = wvL;
+        }
+        if (rwOk) processRow(row, rwL);
       }
     }
   }
@@ -5624,8 +5700,12 @@ async function swathAnalysis(data) {
       const vb = b.vars[vi];
       if (vb.count === 0) continue;
       tdFlush(vb.td);
-      const mean = vb.sum / vb.count;
-      const variance = vb.count > 1 ? (vb.sumSq - vb.sum * vb.sum / vb.count) / (vb.count - 1) : 0;
+      const mean = vb.sum / vb.wsum;
+      // Weighted runs use population variance; unweighted keeps the original
+      // sample formula (wsum === count there, so sums are unchanged)
+      const variance = weightName
+        ? (vb.wsum > 0 ? Math.max(0, vb.sumSq / vb.wsum - mean * mean) : 0)
+        : (vb.count > 1 ? (vb.sumSq - vb.sum * vb.sum / vb.count) / (vb.count - 1) : 0);
       arr.push({
         center: b.center, count: vb.count, mean,
         std: Math.sqrt(Math.max(0, variance)),
@@ -6303,8 +6383,8 @@ self.onmessage = (e) => {
   } else if (e.data.mode === 'gt') {
     gtAnalysis(e.data);
   } else {
-    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride } = e.data;
-    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride);
+    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName } = e.data;
+    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName);
   }
 };
 `;
@@ -6338,6 +6418,8 @@ let auxStale = false;              // aux config changed since last aux analysis
 let auxCalcolCode = '';            // calculated-columns code block for the aux dataset (uses aux.)
 let auxCalcolMeta = [];            // [{name, type}] detected from aux calcol simulation
 let calcolMode = 'primary';        // which dataset the Calc editor is editing: 'primary' | 'aux'
+let currentWeightName = null;      // weight column (by name, raw or calcol) for the primary analysis
+let auxWeightName = null;          // weight column (by name) for the aux passes — set on the Aux tab
 let statsAuxSelected = null;       // Set of aux col indices shown in the stats table (null = defaults)
 let statsCdfAuxSelected = new Set(); // aux col indices with CDF curves
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes
@@ -6627,6 +6709,7 @@ var _helpTabs = {
       '<div class="help-row"><span><strong>Display prefix</strong> — cosmetic label for aux variables (e.g. <code>aux:Fe</code>). Does not affect expressions.</span></div>' +
       '<div class="help-row"><span><strong>Coordinates</strong> — assign X/Y/Z. Aux and the block model must share the same coordinate space for swath overlays to align.</span></div>' +
       '<div class="help-row"><span><strong>Aux filter</strong> — pre-filter aux rows. Reference aux columns as <code>aux.</code>… regardless of the display prefix.</span></div>' +
+      '<div class="help-row"><span><strong>Weight</strong> — e.g. declustering weights (a column or an aux calcol). Applied to every aux statistic: Statistics rows, CDF overlay, and the swath series. Rows with missing/≤0 weight are excluded.</span></div>' +
       '<div class="help-row"><span><strong>Analyze</strong> — run the full aux statistics pass. Required for the Statistics-tab comparison and CDF overlay; the Swath overlay runs its own pass and does not need it.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Scope</div>' +
       '<div class="help-row"><span>Comparison is statistical/spatial — aux is a separate set of rows, not extra columns. No geometry, export, or per-row joins.</span></div></div>'
@@ -6683,7 +6766,8 @@ var _helpTabs = {
       '<div class="help-section"><div class="help-section-title">Sidebar</div>' +
       '<div class="help-row"><span><strong>Variables</strong> \u2014 check/uncheck to show/hide columns in the table</span></div>' +
       '<div class="help-row"><span><strong>Metrics</strong> \u2014 toggle which statistics rows to display (mean, std, min, max, percentiles, etc.)</span></div>' +
-      '<div class="help-row"><span><strong>Percentiles</strong> \u2014 customize which percentiles are shown (preset or custom comma-separated)</span></div></div>' +
+      '<div class="help-row"><span><strong>Percentiles</strong> \u2014 customize which percentiles are shown (preset or custom comma-separated)</span></div>' +
+      '<div class="help-row"><span><strong>Weight</strong> \u2014 weight all numeric statistics by a column or calcol (e.g. ore proportion). Re-run analysis to apply. Weighted runs use population-form std/skew/kurt; rows with missing/\u22640 weight are excluded (count shown below the select). Toggle the <strong>\u03a3W</strong> metric to see weight totals.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">CDF</div>' +
       '<div class="help-row"><span>Click the <strong>CDF</strong> link on any variable row to open a cumulative distribution overlay.</span></div>' +
       '<div class="help-row"><span>Toggle multiple variables to compare CDFs. Linear or log scale.</span></div></div>' +
@@ -6767,6 +6851,7 @@ var _helpTabs = {
       '<div class="help-row"><span><strong>Custom axis</strong> \u2014 enter azimuth (0\u00b0=N, clockwise) and optional plunge (\u00b0 below horizontal). Projects XY(Z) onto that direction for binning.</span></div>' +
       '<div class="help-row"><span><strong>Bin width</strong> \u2014 defaults to block size; override for wider bins</span></div>' +
       '<div class="help-row"><span><strong>Statistic</strong> \u2014 Mean\u00b1Std, P25/P50/P75, or P10/P50/P90</span></div>' +
+      '<div class="help-row"><span><strong>Weight (model)</strong> \u2014 weight the model series\u2019 bin statistics by a column or calcol. The aux series uses the weight set on the Aux tab.</span></div>' +
       '<div class="help-row"><span><strong>Variables</strong> \u2014 check one or more. Each gets its own Y-axis + ribbon on the overlay chart.</span></div>' +
       '<div class="help-row"><span><strong>Color swatch</strong> \u2014 click the colored square next to a variable name to customize its chart color</span></div>' +
       '<div class="help-row"><span><strong>Unit selects</strong> \u2014 per-variable units shown on axis labels, table headers, and tooltip. Inherits from global units.</span></div>' +
@@ -7971,6 +8056,11 @@ function renderAuxConfig() {
       '<div class="aux-hint">Reference aux columns as <code>aux.</code>… — independent of the display prefix.</div>' +
     '</div>' +
     '<div class="pf-sidebar-section">' +
+      '<div class="pf-sidebar-section-title">Weight (optional)</div>' +
+      '<select class="aux-select" id="auxWeightSel">' + auxWeightOptions() + '</select>' +
+      '<div class="aux-hint">e.g. declustering weights — applied to all aux statistics (Statistics, CDF, Swath). Rows with missing or ≤0 weight are excluded.</div>' +
+    '</div>' +
+    '<div class="pf-sidebar-section">' +
       '<div class="pf-sidebar-section-title">Analysis</div>' +
       '<button class="swath-generate" id="auxAnalyzeBtn">Analyze</button>' +
       '<div class="aux-hint aux-analyze-status" id="auxAnalyzeStatus">' +
@@ -8022,7 +8112,8 @@ function runAuxAnalysis() {
     dxyzOverride: null,
     dmEndianness: auxPreflightData.dmEndianness || null,
     dmFormat: auxPreflightData.dmFormat || null,
-    rowVarOverride: AUX_ROW_VAR
+    rowVarOverride: AUX_ROW_VAR,
+    weightColName: auxWeightName
   });
 
   auxWorker.onerror = function(e) { fail(e.message || 'unknown error'); };
@@ -8050,6 +8141,30 @@ function runAuxAnalysis() {
   };
 }
 
+// Weight candidates: aux numeric columns + numeric aux calcols, by name
+function auxWeightOptions() {
+  var opts = '<option value="">— none</option>';
+  if (!auxPreflightData) return opts;
+  for (var i = 0; i < auxPreflightData.header.length; i++) {
+    if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
+    var n = auxPreflightData.header[i];
+    opts += '<option value="' + esc(n) + '"' + (n === auxWeightName ? ' selected' : '') + '>' + esc(n) + '</option>';
+  }
+  for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
+    if (auxCalcolMeta[ci].type !== 'numeric') continue;
+    var cn = auxCalcolMeta[ci].name;
+    opts += '<option value="' + esc(cn) + '"' + (cn === auxWeightName ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
+  }
+  return opts;
+}
+
+// Refresh just the weight select (e.g. after aux calcols change) without
+// rebuilding the sidebar — preserves focus elsewhere
+function renderAuxWeightOptions() {
+  var sel = document.getElementById('auxWeightSel');
+  if (sel) sel.innerHTML = auxWeightOptions();
+}
+
 function renderAuxPreview() {
   var d = auxPreflightData;
   var head = '<tr>' + d.header.map(function(h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
@@ -8067,6 +8182,8 @@ function onAuxConfigChange() {
   if (x && y && z) auxPreflightData.xyz = { x: parseInt(x.value), y: parseInt(y.value), z: parseInt(z.value) };
   var f = document.getElementById('auxFilterInput');
   if (f) { var v = f.value.trim(); auxFilter = v ? { expression: v } : null; }
+  var wSel = document.getElementById('auxWeightSel');
+  if (wSel) auxWeightName = wSel.value || null;
   markAuxStale();
   // Live-update the prefix hint without a full re-render (keeps focus/caret)
   var hint = $auxSidebar.querySelector('.pf-sidebar-section .aux-hint code');
@@ -8088,6 +8205,7 @@ function markAuxStale() {
 function applyAuxRestore(saved) {
   auxPrefix = saved.prefix || 'aux';
   auxFilter = saved.filter ? { expression: saved.filter } : null;
+  auxWeightName = saved.weight || null;
   if (saved.xyz && auxPreflightData) auxPreflightData.xyz = saved.xyz;
   auxCalcolCode = saved.calcolCode || '';
   auxCalcolMeta = saved.calcolMeta || [];
@@ -8137,6 +8255,7 @@ function clearAux() {
   statsCdfAuxSelected = new Set();
   auxCalcolCode = '';
   auxCalcolMeta = [];
+  auxWeightName = null;
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
   if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
   $auxConfig.style.display = 'none';
@@ -8450,7 +8569,8 @@ function analysisFingerprint() {
     calcolCode: currentCalcolCode || '',
     calcolMeta: currentCalcolMeta || [],
     groupBy: currentGroupBy,
-    groupStatsCols: currentGroupBy !== null && statsCatSelectedVars.size > 0 ? Array.from(statsCatSelectedVars).sort() : null
+    groupStatsCols: currentGroupBy !== null && statsCatSelectedVars.size > 0 ? Array.from(statsCatSelectedVars).sort() : null,
+    weight: currentWeightName || null
   });
 }
 
@@ -8540,6 +8660,7 @@ function serializeProject() {
       prefix: auxPrefix,
       xyz: auxPreflightData ? auxPreflightData.xyz : null,
       filter: auxFilter ? auxFilter.expression : '',
+      weight: auxWeightName,
       calcolCode: auxCalcolCode,
       calcolMeta: auxCalcolMeta
     } : null,
@@ -8570,7 +8691,8 @@ function serializeProject() {
       auxSelected: (auxCompleteData && statsAuxSelected !== null)
         ? Array.from(statsAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null,
       cdfAuxSelected: (auxCompleteData && statsCdfAuxSelected.size > 0)
-        ? Array.from(statsCdfAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null
+        ? Array.from(statsCdfAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null,
+      weight: currentWeightName
     },
     categories: {
       focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null,
@@ -8631,6 +8753,7 @@ function serializeProject() {
         localFilter: $filter ? $filter.value : '',
         azimuth: $axis.value === 'custom' ? (parseFloat($azimuth.value) || 0) : null,
         plunge: $axis.value === 'custom' ? (parseFloat($plunge.value) || 0) : null,
+        weight: (document.getElementById('swathWeight') || {}).value || null,
         auxCheckedVars: swathAuxChecked,
         auxUnits: Object.keys(swathAuxUnits).length > 0 ? swathAuxUnits : null,
         units: Object.keys(swathUnits).length > 0 ? swathUnits : null,
@@ -8772,6 +8895,8 @@ async function applyProject(project) {
   const sc = project.statsCat || {};
   if (sc.groupBy != null) currentGroupBy = sc.groupBy;
   if (sc.selectedVars) statsCatSelectedVars = new Set(sc.selectedVars);
+  // Weight likewise feeds the analysis itself
+  currentWeightName = (project.statsTab && project.statsTab.weight) || null;
 
   // Stash aux config; applied when the aux file is (re)loaded on the Aux tab
   pendingAuxRestore = project.aux || null;
@@ -8841,6 +8966,7 @@ function clearProject() {
   statsCdfSelected = new Set();
   statsCdfScale = 'linear';
   pendingStatsAuxRestore = null;
+  currentWeightName = null;
   exportColumns = [];
   pendingProjectRestore = null;
   resetExportSettings();
@@ -8925,6 +9051,7 @@ function handleFile(file, handle) {
   statsCdfSelected = new Set();
   statsCdfScale = 'linear';
   pendingStatsAuxRestore = null;
+  currentWeightName = null;
   exportColumns = [];
   pendingProjectRestore = null;
   resetExportSettings();
@@ -9081,6 +9208,7 @@ $backToPreflight.addEventListener('click', () => {
   statsCdfSelected = new Set();
   statsCdfScale = 'linear';
   pendingStatsAuxRestore = null;
+  currentWeightName = null;
   exportColumns = [];
   pendingProjectRestore = null;
   if (exportWorker) { exportWorker.terminate(); exportWorker = null; }
@@ -9268,7 +9396,8 @@ function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerpr
     groupBy: currentGroupBy,
     groupStatsCols: currentGroupBy !== null && statsCatSelectedVars.size > 0 ? Array.from(statsCatSelectedVars) : null,
     dmEndianness: preflightData && preflightData.dmEndianness || null,
-    dmFormat: preflightData && preflightData.dmFormat || null
+    dmFormat: preflightData && preflightData.dmFormat || null,
+    weightColName: currentWeightName
   });
 }
 
@@ -9663,6 +9792,8 @@ function displayResults(data) {
     if ($sPlunge && swp.plunge != null) $sPlunge.value = swp.plunge;
     if ($sBinWidth && swp.binWidth) $sBinWidth.value = swp.binWidth;
     if ($sStat && swp.stat) $sStat.value = swp.stat;
+    var $sWeight = document.getElementById('swathWeight');
+    if ($sWeight && swp.weight != null) $sWeight.value = swp.weight;
     if ($sFilter && swp.localFilter) $sFilter.value = swp.localFilter;
     // Restore checked variables by name
     if (swp.checkedVars && swp.checkedVars.length > 0) {
@@ -10563,6 +10694,7 @@ const STATS_PRESETS = {
 
 const STATS_ALL_METRICS = [
   { key: 'count', label: 'Count' },
+  { key: 'sumw', label: 'ΣW' },
   { key: 'nulls', label: 'Nulls' },
   { key: 'zeros', label: 'Zeros' },
   { key: 'min', label: 'Min' },
@@ -10673,6 +10805,7 @@ function getStatValue(s, metric) {
   }
   switch (metric.key) {
     case 'count': return s.count;
+    case 'sumw': return s.sumW != null ? s.sumW : null;
     case 'nulls': return s.nulls;
     case 'zeros': return s.zeros;
     case 'min': return s.min;
@@ -10762,6 +10895,25 @@ function renderStatsSidebar() {
     customInput.value = statsPercentiles.join(',');
   } else {
     customInput.style.display = 'none';
+  }
+
+  // Weight select — numeric variables (incl. calcols), choice kept by name
+  var $wSel = document.getElementById('statsWeightSel');
+  if ($wSel) {
+    var wOpts = '<option value="">— none</option>';
+    for (var wci of numCols) {
+      var wName = header[wci];
+      wOpts += '<option value="' + esc(wName) + '"' + (wName === currentWeightName ? ' selected' : '') + '>' + esc(wName) + '</option>';
+    }
+    $wSel.innerHTML = wOpts;
+    if (currentWeightName && $wSel.value !== currentWeightName) $wSel.value = '';
+    var $wNote = document.getElementById('statsWeightNote');
+    if ($wNote) {
+      var noteParts = [];
+      if (currentWeightName && lastCompleteData && lastCompleteData.weightApplied !== currentWeightName) noteParts.push('re-run analysis to apply');
+      if (lastCompleteData && lastCompleteData.weightExcluded > 0) noteParts.push(lastCompleteData.weightExcluded.toLocaleString() + ' rows excluded (invalid weight)');
+      $wNote.textContent = noteParts.join(' · ');
+    }
   }
 
   // Variable list
@@ -11187,6 +11339,14 @@ function wireStatsEventsOnce() {
       renderStatsTable();
       autoSaveProject();
     }
+  });
+
+  // --- Weight select (static template element) ---
+  document.getElementById('statsWeightSel').addEventListener('change', function() {
+    currentWeightName = this.value || null;
+    markAnalysisStale();
+    renderStatsSidebar();
+    autoSaveProject();
   });
 
   // --- Metric toggles (delegation on container — innerHTML changes) ---
@@ -12328,6 +12488,12 @@ function renderSwathConfig(data) {
         '<option value="p25_50_75">P25 / P50 / P75</option>' +
         '<option value="p10_50_90">P10 / P50 / P90</option>' +
       '</select>' +
+      '<div style="margin-top:0.3rem">' +
+        '<div class="swath-sidebar-title">Weight (model)</div>' +
+        '<select class="swath-select" id="swathWeight"><option value="">\u2014 none</option>' +
+          swathNumCols.map(function(c) { return '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>'; }).join('') +
+        '</select>' +
+      '</div>' +
     '</div>' +
     '<div class="swath-sidebar-section">' +
       '<div class="swath-sidebar-title">Display</div>' +
@@ -12697,6 +12863,7 @@ function runSwath() {
       binWidth: binWidth,
       azimuth: azimuthDeg,
       plunge: plungeDeg,
+      weightColName: (document.getElementById('swathWeight') || {}).value || null,
       dmEndianness: preflightData && preflightData.dmEndianness || null,
       dmFormat: preflightData && preflightData.dmFormat || null
     });
@@ -12742,6 +12909,7 @@ function runSwath() {
       azimuth: azimuthDeg,
       plunge: plungeDeg,
       rowVarOverride: AUX_ROW_VAR,
+      weightColName: auxWeightName,
       dmEndianness: auxPreflightData.dmEndianness || null,
       dmFormat: auxPreflightData.dmFormat || null
     });
@@ -16033,6 +16201,8 @@ function simulateCalcol() {
 
   calcolStoreMeta(meta);
   updateCalcolBadge();
+  // Aux calcols are weight candidates — keep the Aux tab's select in sync
+  if (calcolIsAux() && typeof renderAuxWeightOptions === 'function') renderAuxWeightOptions();
 
   // Render detected columns
   if (meta.length === 0) {
