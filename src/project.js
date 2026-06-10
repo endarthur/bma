@@ -336,6 +336,7 @@ function serializeProject() {
       fileSize: auxFile.size,
       prefix: auxPrefix,
       xyz: auxPreflightData ? auxPreflightData.xyz : null,
+      zipEntry: auxPreflightData ? (auxPreflightData.selectedZipEntry || null) : null,
       filter: auxFilter ? auxFilter.expression : '',
       weight: auxWeightName,
       calcolCode: auxCalcolCode,
@@ -613,8 +614,9 @@ function saveProjectFile() {
 }
 
 // Pack the project + its data files into one portable zip. Store-mode with
-// Blob-part assembly: data is referenced, not copied — only the CRC pass
-// reads it — so this scales to multi-GB models (up to the 4 GB zip limit).
+// Blob-part assembly: data is referenced, not copied — so this scales to
+// multi-GB models (up to the 4 GB zip limit). The CRC pass — the only full
+// read of the data — runs in a worker so the UI never stalls.
 async function packProjectFile() {
   if (!currentFile || !preflightData) return;
   var $btn = document.getElementById('projectPack');
@@ -625,9 +627,26 @@ async function packProjectFile() {
     if (auxFile && auxFile.name !== currentFile.name) files.push({ name: auxFile.name, blob: auxFile });
     var json = JSON.stringify(serializeProject(), null, 2);
     files.push({ name: stem + '.bma.json', blob: new Blob([json]) });
-    var zipBlob = await buildStoredZip(files, function(pct) {
-      if ($btn) $btn.textContent = 'Packing ' + pct + '%';
+
+    var crcs = await new Promise(function(resolve, reject) {
+      var w = new Worker(workerUrl);
+      w.postMessage({ mode: 'crc32', blobs: files.map(function(f) { return f.blob; }) });
+      w.onerror = function(e) { w.terminate(); reject(new Error(e.message || 'worker error')); };
+      w.onmessage = function(e) {
+        var m = e.data;
+        if (m.type === 'crc-progress') {
+          if ($btn) $btn.textContent = 'Packing ' + m.percent + '%';
+        } else if (m.type === 'crc-complete') {
+          w.terminate();
+          resolve(m.crcs);
+        } else if (m.type === 'error') {
+          w.terminate();
+          reject(new Error(m.message));
+        }
+      };
     });
+
+    var zipBlob = await buildStoredZip(files, null, crcs);
     var a = document.createElement('a');
     a.href = URL.createObjectURL(zipBlob);
     a.download = stem + '.bma.zip';

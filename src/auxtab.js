@@ -34,8 +34,19 @@ function renderAuxConfig() {
   $auxFileInfo.innerHTML = 'Aux: <strong style="color:var(--fg-bright)">' + esc(auxFile.name) + '</strong>' +
     '<span class="zip-size">' + formatBytes(auxFile.size) + ' — ' + meta + '</span>';
 
-  // Sidebar: prefix + coordinates + aux filter
-  $auxSidebar.innerHTML =
+  // Sidebar: zip entry + prefix + coordinates + aux filter
+  var zipSection = '';
+  if (d.zipEntries && d.zipEntries.length > 1) {
+    var zOpts = d.zipEntries.map(function(z) {
+      return '<option value="' + esc(z.name) + '"' + (z.name === d.selectedZipEntry ? ' selected' : '') + '>' + esc(z.name) + '</option>';
+    }).join('');
+    zipSection =
+      '<div class="pf-sidebar-section">' +
+        '<div class="pf-sidebar-section-title">ZIP entry</div>' +
+        '<select class="aux-select" id="auxZipEntry">' + zOpts + '</select>' +
+      '</div>';
+  }
+  $auxSidebar.innerHTML = zipSection +
     '<div class="pf-sidebar-section">' +
       '<div class="pf-sidebar-section-title">Display prefix</div>' +
       '<input type="text" class="aux-input" id="auxPrefixInput" value="' + esc(auxPrefix) + '" placeholder="aux" spellcheck="false">' +
@@ -219,11 +230,15 @@ function loadAuxFile(file, handle) {
   $auxFileInfo.textContent = 'Loading ' + file.name + '…';
   $auxEmpty.style.display = 'none';
   $auxConfig.style.display = '';
-  runPreflight(file).then(function(data) {
+  runPreflight(file).then(async function(data) {
     auxPreflightData = data;
     if (pendingAuxRestore && pendingAuxRestore.fileName === file.name) {
-      applyAuxRestore(pendingAuxRestore);
+      var savedAux = pendingAuxRestore;
       pendingAuxRestore = null;
+      if (savedAux.zipEntry && data.zipEntries && savedAux.zipEntry !== data.selectedZipEntry) {
+        try { await loadZipEntryIntoPreflight(file, data, savedAux.zipEntry); } catch (e) { /* entry gone — keep default */ }
+      }
+      applyAuxRestore(savedAux);
     }
     renderAuxConfig();
     if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
@@ -313,6 +328,19 @@ if ($auxDropzone) {
     $auxSidebar.addEventListener('change', onAuxConfigChange);
     $auxSidebar.addEventListener('click', function(e) {
       if (e.target && e.target.id === 'auxAnalyzeBtn') runAuxAnalysis();
+    });
+    // Zip entry switch — re-read header/types/xyz from the chosen entry
+    $auxSidebar.addEventListener('change', async function(e) {
+      if (!e.target || e.target.id !== 'auxZipEntry' || !auxFile || !auxPreflightData) return;
+      try {
+        await loadZipEntryIntoPreflight(auxFile, auxPreflightData, e.target.value);
+        renderAuxConfig();
+        if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
+        markAuxStale();
+        if (typeof autoSaveProject === 'function') autoSaveProject();
+      } catch (err) {
+        $auxPreview.innerHTML = '<div style="padding:1rem;color:var(--red)">' + esc(err.message) + '</div>';
+      }
     });
   }
   var $auxClearBtn = document.getElementById('auxClear');

@@ -24,8 +24,9 @@ function crc32Update(crc, bytes) {
 }
 
 // files: [{name, blob}] → Blob (zip, stored entries). onProgress(percent)
-// covers the CRC read pass.
-async function buildStoredZip(files, onProgress) {
+// covers the CRC read pass. Pass precomputedCrcs (one per file, e.g. from
+// the worker's crc32 mode) to skip the main-thread read entirely.
+async function buildStoredZip(files, onProgress, precomputedCrcs) {
   var enc = new TextEncoder();
   var dosTime = (12 << 11);                              // 12:00:00
   var dosDate = ((2026 - 1980) << 9) | (6 << 5) | 9;     // 2026-06-09
@@ -39,21 +40,27 @@ async function buildStoredZip(files, onProgress) {
   }
   if (archiveBytes > 0xFFFFFF00) throw new Error('Archive would exceed the 4 GB ZIP limit.');
 
-  // CRC pass — the one full read of the data
+  // CRC pass — the one full read of the data (skipped when precomputed)
   var entries = [];
   var done = 0;
   for (var i = 0; i < files.length; i++) {
     var f = files[i];
-    var crc = -1;
-    var reader = f.blob.stream().getReader();
-    while (true) {
-      var r = await reader.read();
-      if (r.done) break;
-      crc = crc32Update(crc, r.value);
-      done += r.value.length;
-      if (onProgress && totalBytes > 0) onProgress(Math.round((done / totalBytes) * 100));
+    var crcFinal;
+    if (precomputedCrcs) {
+      crcFinal = precomputedCrcs[i];
+    } else {
+      var crc = -1;
+      var reader = f.blob.stream().getReader();
+      while (true) {
+        var r = await reader.read();
+        if (r.done) break;
+        crc = crc32Update(crc, r.value);
+        done += r.value.length;
+        if (onProgress && totalBytes > 0) onProgress(Math.round((done / totalBytes) * 100));
+      }
+      crcFinal = (crc ^ -1) >>> 0;
     }
-    entries.push({ nameBytes: enc.encode(f.name), blob: f.blob, crc: (crc ^ -1) >>> 0, offset: 0 });
+    entries.push({ nameBytes: enc.encode(f.name), blob: f.blob, crc: crcFinal, offset: 0 });
   }
 
   function record(byteLen, write) {

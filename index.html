@@ -6390,9 +6390,49 @@ function extractCSVFromDM(file, endianness, fmt) {
   });
 }
 
+// CRC-32 over a list of blobs (the heavy part of project packing) — streams
+// each blob, posts progress, returns one CRC per blob
+var _packCrcTable = null;
+async function packCrc32(data) {
+  if (!_packCrcTable) {
+    _packCrcTable = new Int32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      _packCrcTable[n] = c;
+    }
+  }
+  var blobs = data.blobs;
+  var totalBytes = 0;
+  for (var bi = 0; bi < blobs.length; bi++) totalBytes += blobs[bi].size;
+  var done = 0, lastPct = -1;
+  var crcs = [];
+  try {
+    for (var i = 0; i < blobs.length; i++) {
+      var crc = -1;
+      var reader = blobs[i].stream().getReader();
+      while (true) {
+        var r = await reader.read();
+        if (r.done) break;
+        var bytes = r.value;
+        for (var j = 0; j < bytes.length; j++) crc = (crc >>> 8) ^ _packCrcTable[(crc ^ bytes[j]) & 0xFF];
+        done += bytes.length;
+        var pct = totalBytes > 0 ? Math.round((done / totalBytes) * 100) : 100;
+        if (pct !== lastPct) { lastPct = pct; self.postMessage({ type: 'crc-progress', percent: pct }); }
+      }
+      crcs.push((crc ^ -1) >>> 0);
+    }
+    self.postMessage({ type: 'crc-complete', crcs: crcs });
+  } catch (err) {
+    self.postMessage({ type: 'error', message: err.message });
+  }
+}
+
 self.onmessage = (e) => {
   if (e.data.mode === 'export') {
     exportCSV(e.data);
+  } else if (e.data.mode === 'crc32') {
+    packCrc32(e.data);
   } else if (e.data.mode === 'swath') {
     swathAnalysis(e.data);
   } else if (e.data.mode === 'section') {
@@ -8091,8 +8131,19 @@ function renderAuxConfig() {
   $auxFileInfo.innerHTML = 'Aux: <strong style="color:var(--fg-bright)">' + esc(auxFile.name) + '</strong>' +
     '<span class="zip-size">' + formatBytes(auxFile.size) + ' — ' + meta + '</span>';
 
-  // Sidebar: prefix + coordinates + aux filter
-  $auxSidebar.innerHTML =
+  // Sidebar: zip entry + prefix + coordinates + aux filter
+  var zipSection = '';
+  if (d.zipEntries && d.zipEntries.length > 1) {
+    var zOpts = d.zipEntries.map(function(z) {
+      return '<option value="' + esc(z.name) + '"' + (z.name === d.selectedZipEntry ? ' selected' : '') + '>' + esc(z.name) + '</option>';
+    }).join('');
+    zipSection =
+      '<div class="pf-sidebar-section">' +
+        '<div class="pf-sidebar-section-title">ZIP entry</div>' +
+        '<select class="aux-select" id="auxZipEntry">' + zOpts + '</select>' +
+      '</div>';
+  }
+  $auxSidebar.innerHTML = zipSection +
     '<div class="pf-sidebar-section">' +
       '<div class="pf-sidebar-section-title">Display prefix</div>' +
       '<input type="text" class="aux-input" id="auxPrefixInput" value="' + esc(auxPrefix) + '" placeholder="aux" spellcheck="false">' +
@@ -8276,11 +8327,15 @@ function loadAuxFile(file, handle) {
   $auxFileInfo.textContent = 'Loading ' + file.name + '…';
   $auxEmpty.style.display = 'none';
   $auxConfig.style.display = '';
-  runPreflight(file).then(function(data) {
+  runPreflight(file).then(async function(data) {
     auxPreflightData = data;
     if (pendingAuxRestore && pendingAuxRestore.fileName === file.name) {
-      applyAuxRestore(pendingAuxRestore);
+      var savedAux = pendingAuxRestore;
       pendingAuxRestore = null;
+      if (savedAux.zipEntry && data.zipEntries && savedAux.zipEntry !== data.selectedZipEntry) {
+        try { await loadZipEntryIntoPreflight(file, data, savedAux.zipEntry); } catch (e) { /* entry gone — keep default */ }
+      }
+      applyAuxRestore(savedAux);
     }
     renderAuxConfig();
     if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
@@ -8370,6 +8425,19 @@ if ($auxDropzone) {
     $auxSidebar.addEventListener('change', onAuxConfigChange);
     $auxSidebar.addEventListener('click', function(e) {
       if (e.target && e.target.id === 'auxAnalyzeBtn') runAuxAnalysis();
+    });
+    // Zip entry switch — re-read header/types/xyz from the chosen entry
+    $auxSidebar.addEventListener('change', async function(e) {
+      if (!e.target || e.target.id !== 'auxZipEntry' || !auxFile || !auxPreflightData) return;
+      try {
+        await loadZipEntryIntoPreflight(auxFile, auxPreflightData, e.target.value);
+        renderAuxConfig();
+        if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
+        markAuxStale();
+        if (typeof autoSaveProject === 'function') autoSaveProject();
+      } catch (err) {
+        $auxPreview.innerHTML = '<div style="padding:1rem;color:var(--red)">' + esc(err.message) + '</div>';
+      }
     });
   }
   var $auxClearBtn = document.getElementById('auxClear');
@@ -8714,6 +8782,7 @@ function serializeProject() {
       fileSize: auxFile.size,
       prefix: auxPrefix,
       xyz: auxPreflightData ? auxPreflightData.xyz : null,
+      zipEntry: auxPreflightData ? (auxPreflightData.selectedZipEntry || null) : null,
       filter: auxFilter ? auxFilter.expression : '',
       weight: auxWeightName,
       calcolCode: auxCalcolCode,
@@ -8991,8 +9060,9 @@ function saveProjectFile() {
 }
 
 // Pack the project + its data files into one portable zip. Store-mode with
-// Blob-part assembly: data is referenced, not copied — only the CRC pass
-// reads it — so this scales to multi-GB models (up to the 4 GB zip limit).
+// Blob-part assembly: data is referenced, not copied — so this scales to
+// multi-GB models (up to the 4 GB zip limit). The CRC pass — the only full
+// read of the data — runs in a worker so the UI never stalls.
 async function packProjectFile() {
   if (!currentFile || !preflightData) return;
   var $btn = document.getElementById('projectPack');
@@ -9003,9 +9073,26 @@ async function packProjectFile() {
     if (auxFile && auxFile.name !== currentFile.name) files.push({ name: auxFile.name, blob: auxFile });
     var json = JSON.stringify(serializeProject(), null, 2);
     files.push({ name: stem + '.bma.json', blob: new Blob([json]) });
-    var zipBlob = await buildStoredZip(files, function(pct) {
-      if ($btn) $btn.textContent = 'Packing ' + pct + '%';
+
+    var crcs = await new Promise(function(resolve, reject) {
+      var w = new Worker(workerUrl);
+      w.postMessage({ mode: 'crc32', blobs: files.map(function(f) { return f.blob; }) });
+      w.onerror = function(e) { w.terminate(); reject(new Error(e.message || 'worker error')); };
+      w.onmessage = function(e) {
+        var m = e.data;
+        if (m.type === 'crc-progress') {
+          if ($btn) $btn.textContent = 'Packing ' + m.percent + '%';
+        } else if (m.type === 'crc-complete') {
+          w.terminate();
+          resolve(m.crcs);
+        } else if (m.type === 'error') {
+          w.terminate();
+          reject(new Error(m.message));
+        }
+      };
     });
+
+    var zipBlob = await buildStoredZip(files, null, crcs);
     var a = document.createElement('a');
     a.href = URL.createObjectURL(zipBlob);
     a.download = stem + '.bma.zip';
@@ -18120,8 +18207,9 @@ function crc32Update(crc, bytes) {
 }
 
 // files: [{name, blob}] → Blob (zip, stored entries). onProgress(percent)
-// covers the CRC read pass.
-async function buildStoredZip(files, onProgress) {
+// covers the CRC read pass. Pass precomputedCrcs (one per file, e.g. from
+// the worker's crc32 mode) to skip the main-thread read entirely.
+async function buildStoredZip(files, onProgress, precomputedCrcs) {
   var enc = new TextEncoder();
   var dosTime = (12 << 11);                              // 12:00:00
   var dosDate = ((2026 - 1980) << 9) | (6 << 5) | 9;     // 2026-06-09
@@ -18135,21 +18223,27 @@ async function buildStoredZip(files, onProgress) {
   }
   if (archiveBytes > 0xFFFFFF00) throw new Error('Archive would exceed the 4 GB ZIP limit.');
 
-  // CRC pass — the one full read of the data
+  // CRC pass — the one full read of the data (skipped when precomputed)
   var entries = [];
   var done = 0;
   for (var i = 0; i < files.length; i++) {
     var f = files[i];
-    var crc = -1;
-    var reader = f.blob.stream().getReader();
-    while (true) {
-      var r = await reader.read();
-      if (r.done) break;
-      crc = crc32Update(crc, r.value);
-      done += r.value.length;
-      if (onProgress && totalBytes > 0) onProgress(Math.round((done / totalBytes) * 100));
+    var crcFinal;
+    if (precomputedCrcs) {
+      crcFinal = precomputedCrcs[i];
+    } else {
+      var crc = -1;
+      var reader = f.blob.stream().getReader();
+      while (true) {
+        var r = await reader.read();
+        if (r.done) break;
+        crc = crc32Update(crc, r.value);
+        done += r.value.length;
+        if (onProgress && totalBytes > 0) onProgress(Math.round((done / totalBytes) * 100));
+      }
+      crcFinal = (crc ^ -1) >>> 0;
     }
-    entries.push({ nameBytes: enc.encode(f.name), blob: f.blob, crc: (crc ^ -1) >>> 0, offset: 0 });
+    entries.push({ nameBytes: enc.encode(f.name), blob: f.blob, crc: crcFinal, offset: 0 });
   }
 
   function record(byteLen, write) {

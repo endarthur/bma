@@ -2079,9 +2079,49 @@ function extractCSVFromDM(file, endianness, fmt) {
   });
 }
 
+// CRC-32 over a list of blobs (the heavy part of project packing) — streams
+// each blob, posts progress, returns one CRC per blob
+var _packCrcTable = null;
+async function packCrc32(data) {
+  if (!_packCrcTable) {
+    _packCrcTable = new Int32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      _packCrcTable[n] = c;
+    }
+  }
+  var blobs = data.blobs;
+  var totalBytes = 0;
+  for (var bi = 0; bi < blobs.length; bi++) totalBytes += blobs[bi].size;
+  var done = 0, lastPct = -1;
+  var crcs = [];
+  try {
+    for (var i = 0; i < blobs.length; i++) {
+      var crc = -1;
+      var reader = blobs[i].stream().getReader();
+      while (true) {
+        var r = await reader.read();
+        if (r.done) break;
+        var bytes = r.value;
+        for (var j = 0; j < bytes.length; j++) crc = (crc >>> 8) ^ _packCrcTable[(crc ^ bytes[j]) & 0xFF];
+        done += bytes.length;
+        var pct = totalBytes > 0 ? Math.round((done / totalBytes) * 100) : 100;
+        if (pct !== lastPct) { lastPct = pct; self.postMessage({ type: 'crc-progress', percent: pct }); }
+      }
+      crcs.push((crc ^ -1) >>> 0);
+    }
+    self.postMessage({ type: 'crc-complete', crcs: crcs });
+  } catch (err) {
+    self.postMessage({ type: 'error', message: err.message });
+  }
+}
+
 self.onmessage = (e) => {
   if (e.data.mode === 'export') {
     exportCSV(e.data);
+  } else if (e.data.mode === 'crc32') {
+    packCrc32(e.data);
   } else if (e.data.mode === 'swath') {
     swathAnalysis(e.data);
   } else if (e.data.mode === 'section') {
