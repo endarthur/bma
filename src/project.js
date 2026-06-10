@@ -691,7 +691,9 @@ async function runPack() {
     var compress = !!document.getElementById('packCompress').checked;
 
     var stem = currentFile.name.replace(/\.[^.]+$/, '');
-    var slug = projectTitle ? projectTitle.replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') : '';
+    // Unicode-aware slug: \w is ASCII-only and would strip accented letters
+    // ("Jatobá" → "Jatob"); keep letters/digits from any script
+    var slug = projectTitle ? projectTitle.replace(/[^\p{L}\p{N}_-]+/gu, '_').replace(/^_+|_+$/g, '') : '';
     var json = JSON.stringify(serializeProject(), null, 2);
 
     // Never re-deflate archives; everything else follows the toggle

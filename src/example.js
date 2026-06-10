@@ -61,7 +61,9 @@ function assembleZip(entriesIn, opts) {
   var entries = entriesIn.map(function(f) {
     return {
       nameBytes: enc.encode(f.name), data: f.data, crc: f.crc,
-      method: f.method || 0, uncompSize: f.uncompSize != null ? f.uncompSize : f.data.size
+      method: f.method || 0, uncompSize: f.uncompSize != null ? f.uncompSize : f.data.size,
+      // Bit 11: name is UTF-8 — without it readers decode non-ASCII as CP437
+      flags: /[^\x00-\x7F]/.test(f.name) ? 0x0800 : 0
     };
   });
   var offset = 0;
@@ -79,7 +81,7 @@ function assembleZip(entriesIn, opts) {
   entries.forEach(function(e) {
     var verNeed = e.sizes64 ? 45 : 20;
     parts.push(record(30 + e.nameBytes.length + (e.sizes64 ? 20 : 0), function(w) {
-      w.u32(0x04034b50); w.u16(verNeed); w.u16(0); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
+      w.u32(0x04034b50); w.u16(verNeed); w.u16(e.flags); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
       w.u32(e.crc);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.data.size);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.uncompSize);
@@ -96,7 +98,7 @@ function assembleZip(entriesIn, opts) {
     var recLen = 46 + e.nameBytes.length + extraLen;
     parts.push(record(recLen, function(w) {
       w.u32(0x02014b50); w.u16(zip64Mode ? 45 : 20); w.u16(e.sizes64 || e.offset64 ? 45 : 20);
-      w.u16(0); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
+      w.u16(e.flags); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
       w.u32(e.crc);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.data.size);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.uncompSize);

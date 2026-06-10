@@ -4439,7 +4439,7 @@ table.stats tr.stats-aux-row td:first-child { padding-left: 1.1rem; }
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 79a7f55 — click to check for updates">79a7f55</div>
+<div class="build-badge" id="buildBadge" title="build a3d47b4 — click to check for updates">a3d47b4</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -9485,7 +9485,9 @@ async function runPack() {
     var compress = !!document.getElementById('packCompress').checked;
 
     var stem = currentFile.name.replace(/\.[^.]+$/, '');
-    var slug = projectTitle ? projectTitle.replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') : '';
+    // Unicode-aware slug: \w is ASCII-only and would strip accented letters
+    // ("Jatobá" → "Jatob"); keep letters/digits from any script
+    var slug = projectTitle ? projectTitle.replace(/[^\p{L}\p{N}_-]+/gu, '_').replace(/^_+|_+$/g, '') : '';
     var json = JSON.stringify(serializeProject(), null, 2);
 
     // Never re-deflate archives; everything else follows the toggle
@@ -15805,7 +15807,7 @@ function downloadGtPng(chartIdx, colName) {
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'gt_' + (colName || 'plot').replace(/[^\w-]+/g, '_') + '.png';
+      a.download = 'gt_' + (colName || 'plot').replace(/[^\p{L}\p{N}_-]+/gu, '_') + '.png';
       a.click();
       URL.revokeObjectURL(url);
     }, 'image/png');
@@ -19164,7 +19166,9 @@ function assembleZip(entriesIn, opts) {
   var entries = entriesIn.map(function(f) {
     return {
       nameBytes: enc.encode(f.name), data: f.data, crc: f.crc,
-      method: f.method || 0, uncompSize: f.uncompSize != null ? f.uncompSize : f.data.size
+      method: f.method || 0, uncompSize: f.uncompSize != null ? f.uncompSize : f.data.size,
+      // Bit 11: name is UTF-8 — without it readers decode non-ASCII as CP437
+      flags: /[^\x00-\x7F]/.test(f.name) ? 0x0800 : 0
     };
   });
   var offset = 0;
@@ -19182,7 +19186,7 @@ function assembleZip(entriesIn, opts) {
   entries.forEach(function(e) {
     var verNeed = e.sizes64 ? 45 : 20;
     parts.push(record(30 + e.nameBytes.length + (e.sizes64 ? 20 : 0), function(w) {
-      w.u32(0x04034b50); w.u16(verNeed); w.u16(0); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
+      w.u32(0x04034b50); w.u16(verNeed); w.u16(e.flags); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
       w.u32(e.crc);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.data.size);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.uncompSize);
@@ -19199,7 +19203,7 @@ function assembleZip(entriesIn, opts) {
     var recLen = 46 + e.nameBytes.length + extraLen;
     parts.push(record(recLen, function(w) {
       w.u32(0x02014b50); w.u16(zip64Mode ? 45 : 20); w.u16(e.sizes64 || e.offset64 ? 45 : 20);
-      w.u16(0); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
+      w.u16(e.flags); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
       w.u32(e.crc);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.data.size);
       w.u32(e.sizes64 ? 0xFFFFFFFF : e.uncompSize);

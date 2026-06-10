@@ -933,7 +933,7 @@ function downloadGtPng(chartIdx, colName) {
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'gt_' + (colName || 'plot').replace(/[^\w-]+/g, '_') + '.png';
+      a.download = 'gt_' + (colName || 'plot').replace(/[^\p{L}\p{N}_-]+/gu, '_') + '.png';
       a.click();
       URL.revokeObjectURL(url);
     }, 'image/png');
