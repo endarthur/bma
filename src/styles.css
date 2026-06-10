@@ -3659,6 +3659,17 @@ table.cat-values td.cat-pct-cell {
 .aux-preview-table th { background: var(--bg2); color: var(--fg-bright); position: sticky; top: 0; }
 .aux-preview-table td { color: var(--fg-dim); }
 
+.example-download {
+  display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+  flex-wrap: wrap; margin: 0.8rem auto 0; max-width: 700px;
+}
+.example-download-btn {
+  background: none; border: 1px dashed var(--border); color: var(--fg-dim);
+  font: 0.7rem var(--mono); padding: 0.3rem 0.8rem; border-radius: 3px; cursor: pointer;
+}
+.example-download-btn:hover { color: var(--amber); border-color: var(--amber); }
+.example-download-hint { color: var(--fg-dim); font-size: 0.62rem; opacity: 0.6; }
+
 .stats-weight-select {
   width: 100%; box-sizing: border-box;
   background: var(--bg2); color: var(--fg); border: 1px solid var(--border);
