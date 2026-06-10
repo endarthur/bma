@@ -3777,7 +3777,7 @@ table.stats tr.stats-aux-row td:first-child { padding-left: 1.1rem; }
   <div class="dropzone" id="dropzone">
     <div class="label">Drop a CSV file here, or <strong>click to browse</strong></div>
     <div class="hint">Supports .csv, .txt, .dat, .zip — streamed, not loaded into memory</div>
-    <input type="file" id="fileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM">
+    <input type="file" id="fileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM,.json,.JSON">
   </div>
 
   <div class="recent-files" id="recentFiles"></div>
@@ -3834,6 +3834,7 @@ table.stats tr.stats-aux-row td:first-child { padding-left: 1.1rem; }
       </div>
       <div class="toolbar-right">
         <button class="toolbar-btn" id="projectSave" title="Save project (.bma.json)">Save</button>
+        <button class="toolbar-btn" id="projectPack" title="Pack project + data files into one portable zip">Pack</button>
         <button class="toolbar-btn" id="projectLoad" title="Load project (.bma.json)">Load</button>
         <button class="toolbar-btn" id="projectClear" title="Clear saved config, revert to defaults">Clear</button>
         <input type="file" id="projectFileInput" accept=".bma.json,.json" style="display:none">
@@ -6743,7 +6744,10 @@ var _helpTabs = {
       '<div class="help-row"><span><strong>DXYZ</strong> \u2014 optional per-block dimension columns for sub-blocked models</span></div>' +
       '<div class="help-row"><span><strong>Column filter</strong> \u2014 per-column expressions to pre-filter rows (e.g. <code>> 0</code>)</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">ZIP files</div>' +
-      '<div class="help-row"><span>Drop a .zip and select which CSV entry to analyze from the dropdown.</span></div></div>'
+      '<div class="help-row"><span>Drop a .zip and select which CSV entry to analyze from the dropdown.</span></div></div>' +
+      '<div class="help-section"><div class="help-section-title">Projects</div>' +
+      '<div class="help-row"><span><strong>Save</strong> (toolbar) — download the workspace config as <code>.bma.json</code>. Drop it on the landing page later, then drop the matching data file to apply it.</span></div>' +
+      '<div class="help-row"><span><strong>Pack</strong> (toolbar) — bundle the data file(s), the aux dataset, and the project into one portable <code>.bma.zip</code>. Dropping a packed zip offers to load everything pre-configured.</span></div></div>'
   },
   summary: {
     title: 'Summary',
@@ -7034,17 +7038,42 @@ async function listZipEntries(file) {
   return entries;
 }
 
-async function readPreviewFromZipEntry(file, entry, maxLines) {
+async function zipEntryCompSlice(file, entry) {
   const lh = new Uint8Array(await file.slice(entry.localOffset, entry.localOffset + 30).arrayBuffer());
   const lhNameLen = readUint16(lh, 26);
   const lhExtraLen = readUint16(lh, 28);
   const dataStart = entry.localOffset + 30 + lhNameLen + lhExtraLen;
-  const compSlice = file.slice(dataStart, dataStart + entry.compSize);
+  return file.slice(dataStart, dataStart + entry.compSize);
+}
+
+async function readPreviewFromZipEntry(file, entry, maxLines) {
+  const compSlice = await zipEntryCompSlice(file, entry);
   let stream;
   if (entry.method === 0) stream = compSlice.stream();
   else if (entry.method === 8) stream = compSlice.stream().pipeThrough(new DecompressionStream('deflate-raw'));
   else throw new Error('Unsupported compression method');
   return readLinesFromStream(stream, maxLines);
+}
+
+// Full text of a (small) zip entry — used for packed .bma.json projects
+async function readZipEntryText(file, entry) {
+  const compSlice = await zipEntryCompSlice(file, entry);
+  if (entry.method === 0) return compSlice.text();
+  if (entry.method === 8) return new Response(compSlice.stream().pipeThrough(new DecompressionStream('deflate-raw'))).text();
+  throw new Error('Unsupported compression method');
+}
+
+// Materialize a zip entry as a standalone File. Stored entries are zero-copy
+// (a lazy slice view into the archive), so even multi-GB packed models cost
+// nothing to "extract"; deflated entries are decompressed into memory.
+async function zipEntryToFile(file, entry) {
+  const compSlice = await zipEntryCompSlice(file, entry);
+  if (entry.method === 0) return new File([compSlice], entry.name);
+  if (entry.method === 8) {
+    const blob = await new Response(compSlice.stream().pipeThrough(new DecompressionStream('deflate-raw'))).blob();
+    return new File([blob], entry.name);
+  }
+  throw new Error('Unsupported compression method');
 }
 
 async function readLinesFromStream(stream, maxLines, captureComments) {
@@ -7458,6 +7487,25 @@ async function runPreflight(file) {
   };
 }
 
+// Re-point a zip preflight at a different entry: recompute header, sample,
+// types, and defaults from that entry (no rendering — callers render)
+async function loadZipEntryIntoPreflight(file, data, entryName) {
+  const entry = data.zipEntries.find(z => z.name === entryName);
+  if (!entry) return;
+  data.selectedZipEntry = entryName;
+  const lines = await readPreviewFromZipEntry(file, entry, 100);
+  const delimiter = detectDelimiterMain(lines.slice(0, 20));
+  data.header = lines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
+  data.sampleRows = lines.slice(1).filter(l => l.trim())
+    .map(l => l.split(delimiter).map(f => f.trim().replace(/^["']|["']$/g, '')));
+  data.delimiter = delimiter;
+  data.autoTypes = autoDetectTypes(data.header, data.sampleRows);
+  data.typeOverrides = {};
+  data.skipCols = new Set();
+  data.xyz = guessXYZMain(data.header, data.autoTypes);
+  data.colFilters = buildDefaultColFilters(data.header, data.autoTypes, data.xyz);
+}
+
 function renderPreflight(data) {
   preflightData = data;
   if (!data.colFilters) data.colFilters = {};
@@ -7471,20 +7519,8 @@ function renderPreflight(data) {
       `<span class="zip-size">${data.zipEntries.length} files</span>`;
     document.getElementById('zipSelect').addEventListener('change', async (e) => {
       const name = e.target.value;
-      data.selectedZipEntry = name;
-      const entry = data.zipEntries.find(z => z.name === name);
       try {
-        const lines = await readPreviewFromZipEntry(currentFile, entry, 100);
-        const delimiter = detectDelimiterMain(lines.slice(0, 20));
-        data.header = lines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
-        data.sampleRows = lines.slice(1).filter(l => l.trim())
-          .map(l => l.split(delimiter).map(f => f.trim().replace(/^["']|["']$/g, '')));
-        data.delimiter = delimiter;
-        data.autoTypes = autoDetectTypes(data.header, data.sampleRows);
-        data.typeOverrides = {};
-        data.skipCols = new Set();
-        data.xyz = guessXYZMain(data.header, data.autoTypes);
-        data.colFilters = buildDefaultColFilters(data.header, data.autoTypes, data.xyz);
+        await loadZipEntryIntoPreflight(currentFile, data, name);
         renderPreflightSidebar(data);
         renderPreflightTable(data);
       } catch(err) {
@@ -8954,6 +8990,36 @@ function saveProjectFile() {
   URL.revokeObjectURL(a.href);
 }
 
+// Pack the project + its data files into one portable zip. Store-mode with
+// Blob-part assembly: data is referenced, not copied — only the CRC pass
+// reads it — so this scales to multi-GB models (up to the 4 GB zip limit).
+async function packProjectFile() {
+  if (!currentFile || !preflightData) return;
+  var $btn = document.getElementById('projectPack');
+  if ($btn) { $btn.disabled = true; $btn.textContent = 'Packing…'; }
+  try {
+    var stem = currentFile.name.replace(/\.[^.]+$/, '');
+    var files = [{ name: currentFile.name, blob: currentFile }];
+    if (auxFile && auxFile.name !== currentFile.name) files.push({ name: auxFile.name, blob: auxFile });
+    var json = JSON.stringify(serializeProject(), null, 2);
+    files.push({ name: stem + '.bma.json', blob: new Blob([json]) });
+    var zipBlob = await buildStoredZip(files, function(pct) {
+      if ($btn) $btn.textContent = 'Packing ' + pct + '%';
+    });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(zipBlob);
+    a.download = stem + '.bma.zip';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) {
+    $errorMsg.textContent = 'Pack failed: ' + e.message;
+    $errorMsg.classList.add('active');
+    setTimeout(function() { $errorMsg.classList.remove('active'); }, 4000);
+  } finally {
+    if ($btn) { $btn.disabled = false; $btn.textContent = 'Pack'; }
+  }
+}
+
 function clearProject() {
   if (!currentFile) return;
   try { localStorage.removeItem(projectKey(currentFile)); } catch (e) {}
@@ -9021,6 +9087,7 @@ $toolbarMenu.addEventListener('click', (e) => {
 
 // Toolbar buttons
 $projectSave.addEventListener('click', saveProjectFile);
+document.getElementById('projectPack').addEventListener('click', packProjectFile);
 $projectLoad.addEventListener('click', () => $projectFileInput.click());
 $projectClear.addEventListener('click', clearProject);
 
@@ -9042,8 +9109,65 @@ $projectFileInput.addEventListener('change', (e) => {
   e.target.value = '';
 });
 
-function handleFile(file, handle) {
+// Project file dropped before its data file (or pulled from a packed zip)
+let pendingDroppedProject = null;
+let pendingDroppedAuxFile = null;
+
+// A "packed project" is a zip containing a .bma.json plus the data files it
+// references. Returns {project, modelFile, auxFile} or null (not packed /
+// user declined). Stored entries extract as zero-copy File views.
+async function tryPackedProject(file) {
+  let entries;
+  try { entries = await listZipEntries(file); } catch (e) { return null; }
+  const pjEntry = entries.find(e => /\.bma\.json$/i.test(e.name));
+  if (!pjEntry) return null;
+  let project;
+  try { project = JSON.parse(await readZipEntryText(file, pjEntry)); } catch (e) { return null; }
+  if (!project || project._bma !== 1 || !project.file || !project.file.name) return null;
+  const modelEntry = entries.find(e => e.name === project.file.name);
+  if (!modelEntry) return null;
+  if (!confirm('This archive contains a BMA project:\n\n  ' + pjEntry.name +
+    '\n\nLoad "' + project.file.name + '" with that setup?\n(Cancel opens the archive normally.)')) return null;
+  const modelFile = await zipEntryToFile(file, modelEntry);
+  let auxF = null;
+  if (project.aux && project.aux.fileName) {
+    const auxEntry = entries.find(e => e.name === project.aux.fileName);
+    if (auxEntry) { try { auxF = await zipEntryToFile(file, auxEntry); } catch (e) {} }
+  }
+  return { project: project, modelFile: modelFile, auxFile: auxF };
+}
+
+async function handleFile(file, handle) {
   if (!file) return;
+
+  // Bare project file: stash it and ask for its data file
+  if (/\.bma\.json$/i.test(file.name)) {
+    try {
+      const pj = JSON.parse(await file.text());
+      if (pj && pj._bma === 1 && pj.file && pj.file.name) {
+        pendingDroppedProject = pj;
+        $dropzone.querySelector('.label').innerHTML =
+          'Project loaded — now drop <strong>' + esc(pj.file.name) + '</strong> to apply it';
+        return;
+      }
+    } catch (e) { /* fall through to error */ }
+    $errorMsg.textContent = 'Not a valid BMA project file.';
+    $errorMsg.classList.add('active');
+    return;
+  }
+
+  // Packed project archive: extract data + config from the zip
+  if (/\.zip$/i.test(file.name) || file.type === 'application/zip') {
+    let packed = null;
+    try { packed = await tryPackedProject(file); } catch (e) { packed = null; }
+    if (packed) {
+      pendingDroppedProject = packed.project;
+      pendingDroppedAuxFile = packed.auxFile;
+      handleFile(packed.modelFile, null);
+      return;
+    }
+  }
+
   currentFile = file;
   saveToRecents(file, handle);
   currentFilter = null;
@@ -9154,12 +9278,22 @@ function handleFile(file, handle) {
   // Run preflight
   runPreflight(file).then(async data => {
     renderPreflight(data);
-    // Auto-restore saved project config
-    const saved = localStorage.getItem(projectKey(file));
-    if (saved) {
+    // Project precedence: an explicitly dropped/packed project for this file
+    // wins over the autosaved one
+    let project = null;
+    if (pendingDroppedProject && pendingDroppedProject.file && pendingDroppedProject.file.name === file.name) {
+      project = pendingDroppedProject;
+    } else {
+      const saved = localStorage.getItem(projectKey(file));
+      if (saved) { try { project = JSON.parse(saved); } catch (e) { /* corrupt — ignore */ } }
+    }
+    const auxToLoad = pendingDroppedAuxFile;
+    pendingDroppedProject = null;
+    pendingDroppedAuxFile = null;
+    if (project) {
       try {
-        const project = JSON.parse(saved);
         await applyProject(project);
+        if (auxToLoad) loadAuxFile(auxToLoad, null);
         executeAnalysis();
       } catch (e) { /* corrupt — ignore */ }
     }
@@ -16600,6 +16734,7 @@ if (HAS_FSAA) {
         types: [
           { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
           { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } },
+          { description: 'BMA projects', accept: { 'application/json': ['.json'] } },
           { description: 'Datamine files', accept: { 'application/octet-stream': ['.dm'] } }
         ],
         multiple: false
@@ -17967,8 +18102,11 @@ renderRecentFiles();
 // an Fe trend along X, so the tutorial's punchlines actually show up.
 
 // ── Minimal store-mode ZIP writer (no compression, no dependencies) ──
+// Assembles the archive from Blob parts: data blobs are referenced, never
+// copied, so packing multi-GB files stays memory-flat — the only full read
+// is the streaming CRC pass.
 var _crcTable = null;
-function crc32(bytes) {
+function crc32Update(crc, bytes) {
   if (!_crcTable) {
     _crcTable = new Int32Array(256);
     for (var n = 0; n < 256; n++) {
@@ -17977,54 +18115,86 @@ function crc32(bytes) {
       _crcTable[n] = c;
     }
   }
-  var crc = -1;
   for (var i = 0; i < bytes.length; i++) crc = (crc >>> 8) ^ _crcTable[(crc ^ bytes[i]) & 0xFF];
-  return (crc ^ -1) >>> 0;
+  return crc;
 }
 
-// files: [{name, text}] → Blob (zip, stored entries)
-function buildStoredZip(files) {
+// files: [{name, blob}] → Blob (zip, stored entries). onProgress(percent)
+// covers the CRC read pass.
+async function buildStoredZip(files, onProgress) {
   var enc = new TextEncoder();
   var dosTime = (12 << 11);                              // 12:00:00
   var dosDate = ((2026 - 1980) << 9) | (6 << 5) | 9;     // 2026-06-09
-  var entries = files.map(function(f) {
-    var nameBytes = enc.encode(f.name);
-    var data = enc.encode(f.text);
-    return { nameBytes: nameBytes, data: data, crc: crc32(data), offset: 0 };
-  });
 
-  var localSize = 0, centralSize = 0;
-  entries.forEach(function(e) {
-    localSize += 30 + e.nameBytes.length + e.data.length;
-    centralSize += 46 + e.nameBytes.length;
-  });
-  var buf = new ArrayBuffer(localSize + centralSize + 22);
-  var dv = new DataView(buf);
-  var u8 = new Uint8Array(buf);
-  var pos = 0;
+  var totalBytes = 0;
+  var archiveBytes = 22;
+  for (var fi = 0; fi < files.length; fi++) {
+    var nb = enc.encode(files[fi].name).length;
+    totalBytes += files[fi].blob.size;
+    archiveBytes += 30 + nb + files[fi].blob.size + 46 + nb;
+  }
+  if (archiveBytes > 0xFFFFFF00) throw new Error('Archive would exceed the 4 GB ZIP limit.');
 
-  function u16(v) { dv.setUint16(pos, v, true); pos += 2; }
-  function u32(v) { dv.setUint32(pos, v, true); pos += 4; }
-  function put(bytes) { u8.set(bytes, pos); pos += bytes.length; }
+  // CRC pass — the one full read of the data
+  var entries = [];
+  var done = 0;
+  for (var i = 0; i < files.length; i++) {
+    var f = files[i];
+    var crc = -1;
+    var reader = f.blob.stream().getReader();
+    while (true) {
+      var r = await reader.read();
+      if (r.done) break;
+      crc = crc32Update(crc, r.value);
+      done += r.value.length;
+      if (onProgress && totalBytes > 0) onProgress(Math.round((done / totalBytes) * 100));
+    }
+    entries.push({ nameBytes: enc.encode(f.name), blob: f.blob, crc: (crc ^ -1) >>> 0, offset: 0 });
+  }
 
+  function record(byteLen, write) {
+    var buf = new ArrayBuffer(byteLen);
+    var dv = new DataView(buf);
+    var u8 = new Uint8Array(buf);
+    var pos = 0;
+    write({
+      u16: function(v) { dv.setUint16(pos, v, true); pos += 2; },
+      u32: function(v) { dv.setUint32(pos, v, true); pos += 4; },
+      put: function(bytes) { u8.set(bytes, pos); pos += bytes.length; }
+    });
+    return buf;
+  }
+
+  var parts = [];
+  var offset = 0;
   entries.forEach(function(e) {
-    e.offset = pos;
-    u32(0x04034b50); u16(20); u16(0); u16(0); u16(dosTime); u16(dosDate);
-    u32(e.crc); u32(e.data.length); u32(e.data.length);
-    u16(e.nameBytes.length); u16(0);
-    put(e.nameBytes); put(e.data);
+    e.offset = offset;
+    var size = e.blob.size;
+    parts.push(record(30 + e.nameBytes.length, function(w) {
+      w.u32(0x04034b50); w.u16(20); w.u16(0); w.u16(0); w.u16(dosTime); w.u16(dosDate);
+      w.u32(e.crc); w.u32(size); w.u32(size);
+      w.u16(e.nameBytes.length); w.u16(0); w.put(e.nameBytes);
+    }));
+    parts.push(e.blob); // referenced, not copied
+    offset += 30 + e.nameBytes.length + size;
   });
-  var cdStart = pos;
+  var cdStart = offset;
+  var cdSize = 0;
   entries.forEach(function(e) {
-    u32(0x02014b50); u16(20); u16(20); u16(0); u16(0); u16(dosTime); u16(dosDate);
-    u32(e.crc); u32(e.data.length); u32(e.data.length);
-    u16(e.nameBytes.length); u16(0); u16(0); u16(0); u16(0); u32(0); u32(e.offset);
-    put(e.nameBytes);
+    var size = e.blob.size;
+    parts.push(record(46 + e.nameBytes.length, function(w) {
+      w.u32(0x02014b50); w.u16(20); w.u16(20); w.u16(0); w.u16(0); w.u16(dosTime); w.u16(dosDate);
+      w.u32(e.crc); w.u32(size); w.u32(size);
+      w.u16(e.nameBytes.length); w.u16(0); w.u16(0); w.u16(0); w.u16(0); w.u32(0); w.u32(e.offset);
+      w.put(e.nameBytes);
+    }));
+    cdSize += 46 + e.nameBytes.length;
   });
-  var cdSize = pos - cdStart;
-  u32(0x06054b50); u16(0); u16(0); u16(entries.length); u16(entries.length);
-  u32(cdSize); u32(cdStart); u16(0);
-  return new Blob([buf], { type: 'application/zip' });
+  parts.push(record(22, function(w) {
+    w.u32(0x06054b50); w.u16(0); w.u16(0); w.u16(entries.length); w.u16(entries.length);
+    w.u32(cdSize); w.u32(cdStart); w.u16(0);
+  }));
+  return new Blob(parts, { type: 'application/zip' });
 }
 
 // ── Deterministic data generation ──
@@ -18084,6 +18254,14 @@ var EXAMPLE_TUTORIAL = [
 'Two things are planted for you to find: the samples carry a +2% Fe bias',
 'relative to the model, and the model (block support) is smoother than the',
 'point-support samples. Both are classic validation findings.',
+'',
+'## 0. The shortcut',
+'',
+'This zip is itself a packed BMA project: drop the whole bma-example.zip',
+'onto BMA and confirm the prompt — both files load with calcols, GT, swath,',
+'and the aux comparison already configured. The steps below build the same',
+'setup by hand, which is the better way to learn the app. (You can pack',
+'your own projects the same way with the Pack button in the toolbar.)',
 '',
 '## 1. Load the model',
 '',
@@ -18155,12 +18333,56 @@ var EXAMPLE_TUTORIAL = [
 ''
 ].join('\n');
 
-function downloadExampleZip() {
+// A ready-made project for the example: dropping the zip back onto BMA
+// offers to load everything pre-configured (calcols, GT, swath, aux).
+// Shapes mirror serializeProject() — all references are by column name.
+function exampleProjectJson(modelSize, samplesSize) {
+  return JSON.stringify({
+    _bma: 1,
+    file: { name: 'bma-example-model.csv', size: modelSize },
+    preflight: {
+      typeOverrides: {}, skipCols: [], colFilters: {},
+      xyz: { x: 0, y: 1, z: 2 }, dxyz: { dx: -1, dy: -1, dz: -1 },
+      selectedZipEntry: null
+    },
+    calcolCode: "r.RATIO = r.Fe / r.SiO2;\nr.ORE = r.Fe > 55 ? 'ore' : 'waste';",
+    calcolMeta: [{ name: 'RATIO', type: 'numeric' }, { name: 'ORE', type: 'categorical' }],
+    filter: null,
+    filterText: '',
+    aux: {
+      fileName: 'bma-example-samples.csv', fileSize: samplesSize,
+      prefix: 'aux', xyz: { x: 0, y: 1, z: 2 }, filter: '',
+      weight: 'SUPPORT',
+      calcolCode: 'aux.RATIO = aux.Fe / aux.SiO2;',
+      calcolMeta: [{ name: 'RATIO', type: 'numeric' }]
+    },
+    statsTab: { cdfSelected: [3] },
+    gt: {
+      gradeCols: ['Fe'], groupByCol: 'LITO', densityCol: 'DENSITY',
+      densityConst: null, weightCol: null, localFilter: '',
+      cutoffMode: 'range', cutoffMin: 44, cutoffMax: 62, cutoffStep: 1, cutoffCustom: ''
+    },
+    swath: {
+      axis: 'x', binWidth: 10, stat: 'mean_std',
+      checkedVars: ['Fe', 'SiO2'], localFilter: '',
+      azimuth: null, plunge: null, weight: null,
+      auxCheckedVars: ['Fe'], auxUnits: null, units: null, colorOverrides: null,
+      display: { showBands: true, showCounts: true, showTable: true, yScale: 'linear', layout: 'overlay' }
+    },
+    activeTab: 'summary'
+  }, null, 2);
+}
+
+async function downloadExampleZip() {
   var data = exampleData();
-  var blob = buildStoredZip([
-    { name: 'bma-example-model.csv', text: data.model },
-    { name: 'bma-example-samples.csv', text: data.samples },
-    { name: 'TUTORIAL.txt', text: EXAMPLE_TUTORIAL }
+  var enc = new TextEncoder();
+  var modelSize = enc.encode(data.model).length;
+  var samplesSize = enc.encode(data.samples).length;
+  var blob = await buildStoredZip([
+    { name: 'bma-example-model.csv', blob: new Blob([data.model]) },
+    { name: 'bma-example-samples.csv', blob: new Blob([data.samples]) },
+    { name: 'bma-example.bma.json', blob: new Blob([exampleProjectJson(modelSize, samplesSize)]) },
+    { name: 'TUTORIAL.txt', blob: new Blob([EXAMPLE_TUTORIAL]) }
   ]);
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');

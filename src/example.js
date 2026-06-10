@@ -6,8 +6,11 @@
 // an Fe trend along X, so the tutorial's punchlines actually show up.
 
 // ── Minimal store-mode ZIP writer (no compression, no dependencies) ──
+// Assembles the archive from Blob parts: data blobs are referenced, never
+// copied, so packing multi-GB files stays memory-flat — the only full read
+// is the streaming CRC pass.
 var _crcTable = null;
-function crc32(bytes) {
+function crc32Update(crc, bytes) {
   if (!_crcTable) {
     _crcTable = new Int32Array(256);
     for (var n = 0; n < 256; n++) {
@@ -16,54 +19,86 @@ function crc32(bytes) {
       _crcTable[n] = c;
     }
   }
-  var crc = -1;
   for (var i = 0; i < bytes.length; i++) crc = (crc >>> 8) ^ _crcTable[(crc ^ bytes[i]) & 0xFF];
-  return (crc ^ -1) >>> 0;
+  return crc;
 }
 
-// files: [{name, text}] → Blob (zip, stored entries)
-function buildStoredZip(files) {
+// files: [{name, blob}] → Blob (zip, stored entries). onProgress(percent)
+// covers the CRC read pass.
+async function buildStoredZip(files, onProgress) {
   var enc = new TextEncoder();
   var dosTime = (12 << 11);                              // 12:00:00
   var dosDate = ((2026 - 1980) << 9) | (6 << 5) | 9;     // 2026-06-09
-  var entries = files.map(function(f) {
-    var nameBytes = enc.encode(f.name);
-    var data = enc.encode(f.text);
-    return { nameBytes: nameBytes, data: data, crc: crc32(data), offset: 0 };
-  });
 
-  var localSize = 0, centralSize = 0;
-  entries.forEach(function(e) {
-    localSize += 30 + e.nameBytes.length + e.data.length;
-    centralSize += 46 + e.nameBytes.length;
-  });
-  var buf = new ArrayBuffer(localSize + centralSize + 22);
-  var dv = new DataView(buf);
-  var u8 = new Uint8Array(buf);
-  var pos = 0;
+  var totalBytes = 0;
+  var archiveBytes = 22;
+  for (var fi = 0; fi < files.length; fi++) {
+    var nb = enc.encode(files[fi].name).length;
+    totalBytes += files[fi].blob.size;
+    archiveBytes += 30 + nb + files[fi].blob.size + 46 + nb;
+  }
+  if (archiveBytes > 0xFFFFFF00) throw new Error('Archive would exceed the 4 GB ZIP limit.');
 
-  function u16(v) { dv.setUint16(pos, v, true); pos += 2; }
-  function u32(v) { dv.setUint32(pos, v, true); pos += 4; }
-  function put(bytes) { u8.set(bytes, pos); pos += bytes.length; }
+  // CRC pass — the one full read of the data
+  var entries = [];
+  var done = 0;
+  for (var i = 0; i < files.length; i++) {
+    var f = files[i];
+    var crc = -1;
+    var reader = f.blob.stream().getReader();
+    while (true) {
+      var r = await reader.read();
+      if (r.done) break;
+      crc = crc32Update(crc, r.value);
+      done += r.value.length;
+      if (onProgress && totalBytes > 0) onProgress(Math.round((done / totalBytes) * 100));
+    }
+    entries.push({ nameBytes: enc.encode(f.name), blob: f.blob, crc: (crc ^ -1) >>> 0, offset: 0 });
+  }
 
+  function record(byteLen, write) {
+    var buf = new ArrayBuffer(byteLen);
+    var dv = new DataView(buf);
+    var u8 = new Uint8Array(buf);
+    var pos = 0;
+    write({
+      u16: function(v) { dv.setUint16(pos, v, true); pos += 2; },
+      u32: function(v) { dv.setUint32(pos, v, true); pos += 4; },
+      put: function(bytes) { u8.set(bytes, pos); pos += bytes.length; }
+    });
+    return buf;
+  }
+
+  var parts = [];
+  var offset = 0;
   entries.forEach(function(e) {
-    e.offset = pos;
-    u32(0x04034b50); u16(20); u16(0); u16(0); u16(dosTime); u16(dosDate);
-    u32(e.crc); u32(e.data.length); u32(e.data.length);
-    u16(e.nameBytes.length); u16(0);
-    put(e.nameBytes); put(e.data);
+    e.offset = offset;
+    var size = e.blob.size;
+    parts.push(record(30 + e.nameBytes.length, function(w) {
+      w.u32(0x04034b50); w.u16(20); w.u16(0); w.u16(0); w.u16(dosTime); w.u16(dosDate);
+      w.u32(e.crc); w.u32(size); w.u32(size);
+      w.u16(e.nameBytes.length); w.u16(0); w.put(e.nameBytes);
+    }));
+    parts.push(e.blob); // referenced, not copied
+    offset += 30 + e.nameBytes.length + size;
   });
-  var cdStart = pos;
+  var cdStart = offset;
+  var cdSize = 0;
   entries.forEach(function(e) {
-    u32(0x02014b50); u16(20); u16(20); u16(0); u16(0); u16(dosTime); u16(dosDate);
-    u32(e.crc); u32(e.data.length); u32(e.data.length);
-    u16(e.nameBytes.length); u16(0); u16(0); u16(0); u16(0); u32(0); u32(e.offset);
-    put(e.nameBytes);
+    var size = e.blob.size;
+    parts.push(record(46 + e.nameBytes.length, function(w) {
+      w.u32(0x02014b50); w.u16(20); w.u16(20); w.u16(0); w.u16(0); w.u16(dosTime); w.u16(dosDate);
+      w.u32(e.crc); w.u32(size); w.u32(size);
+      w.u16(e.nameBytes.length); w.u16(0); w.u16(0); w.u16(0); w.u16(0); w.u32(0); w.u32(e.offset);
+      w.put(e.nameBytes);
+    }));
+    cdSize += 46 + e.nameBytes.length;
   });
-  var cdSize = pos - cdStart;
-  u32(0x06054b50); u16(0); u16(0); u16(entries.length); u16(entries.length);
-  u32(cdSize); u32(cdStart); u16(0);
-  return new Blob([buf], { type: 'application/zip' });
+  parts.push(record(22, function(w) {
+    w.u32(0x06054b50); w.u16(0); w.u16(0); w.u16(entries.length); w.u16(entries.length);
+    w.u32(cdSize); w.u32(cdStart); w.u16(0);
+  }));
+  return new Blob(parts, { type: 'application/zip' });
 }
 
 // ── Deterministic data generation ──
@@ -123,6 +158,14 @@ var EXAMPLE_TUTORIAL = [
 'Two things are planted for you to find: the samples carry a +2% Fe bias',
 'relative to the model, and the model (block support) is smoother than the',
 'point-support samples. Both are classic validation findings.',
+'',
+'## 0. The shortcut',
+'',
+'This zip is itself a packed BMA project: drop the whole bma-example.zip',
+'onto BMA and confirm the prompt — both files load with calcols, GT, swath,',
+'and the aux comparison already configured. The steps below build the same',
+'setup by hand, which is the better way to learn the app. (You can pack',
+'your own projects the same way with the Pack button in the toolbar.)',
 '',
 '## 1. Load the model',
 '',
@@ -194,12 +237,56 @@ var EXAMPLE_TUTORIAL = [
 ''
 ].join('\n');
 
-function downloadExampleZip() {
+// A ready-made project for the example: dropping the zip back onto BMA
+// offers to load everything pre-configured (calcols, GT, swath, aux).
+// Shapes mirror serializeProject() — all references are by column name.
+function exampleProjectJson(modelSize, samplesSize) {
+  return JSON.stringify({
+    _bma: 1,
+    file: { name: 'bma-example-model.csv', size: modelSize },
+    preflight: {
+      typeOverrides: {}, skipCols: [], colFilters: {},
+      xyz: { x: 0, y: 1, z: 2 }, dxyz: { dx: -1, dy: -1, dz: -1 },
+      selectedZipEntry: null
+    },
+    calcolCode: "r.RATIO = r.Fe / r.SiO2;\nr.ORE = r.Fe > 55 ? 'ore' : 'waste';",
+    calcolMeta: [{ name: 'RATIO', type: 'numeric' }, { name: 'ORE', type: 'categorical' }],
+    filter: null,
+    filterText: '',
+    aux: {
+      fileName: 'bma-example-samples.csv', fileSize: samplesSize,
+      prefix: 'aux', xyz: { x: 0, y: 1, z: 2 }, filter: '',
+      weight: 'SUPPORT',
+      calcolCode: 'aux.RATIO = aux.Fe / aux.SiO2;',
+      calcolMeta: [{ name: 'RATIO', type: 'numeric' }]
+    },
+    statsTab: { cdfSelected: [3] },
+    gt: {
+      gradeCols: ['Fe'], groupByCol: 'LITO', densityCol: 'DENSITY',
+      densityConst: null, weightCol: null, localFilter: '',
+      cutoffMode: 'range', cutoffMin: 44, cutoffMax: 62, cutoffStep: 1, cutoffCustom: ''
+    },
+    swath: {
+      axis: 'x', binWidth: 10, stat: 'mean_std',
+      checkedVars: ['Fe', 'SiO2'], localFilter: '',
+      azimuth: null, plunge: null, weight: null,
+      auxCheckedVars: ['Fe'], auxUnits: null, units: null, colorOverrides: null,
+      display: { showBands: true, showCounts: true, showTable: true, yScale: 'linear', layout: 'overlay' }
+    },
+    activeTab: 'summary'
+  }, null, 2);
+}
+
+async function downloadExampleZip() {
   var data = exampleData();
-  var blob = buildStoredZip([
-    { name: 'bma-example-model.csv', text: data.model },
-    { name: 'bma-example-samples.csv', text: data.samples },
-    { name: 'TUTORIAL.txt', text: EXAMPLE_TUTORIAL }
+  var enc = new TextEncoder();
+  var modelSize = enc.encode(data.model).length;
+  var samplesSize = enc.encode(data.samples).length;
+  var blob = await buildStoredZip([
+    { name: 'bma-example-model.csv', blob: new Blob([data.model]) },
+    { name: 'bma-example-samples.csv', blob: new Blob([data.samples]) },
+    { name: 'bma-example.bma.json', blob: new Blob([exampleProjectJson(modelSize, samplesSize)]) },
+    { name: 'TUTORIAL.txt', blob: new Blob([EXAMPLE_TUTORIAL]) }
   ]);
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');

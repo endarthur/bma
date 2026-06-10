@@ -41,7 +41,7 @@
   <div class="dropzone" id="dropzone">
     <div class="label">Drop a CSV file here, or <strong>click to browse</strong></div>
     <div class="hint">Supports .csv, .txt, .dat, .zip — streamed, not loaded into memory</div>
-    <input type="file" id="fileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM">
+    <input type="file" id="fileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM,.json,.JSON">
   </div>
 
   <div class="recent-files" id="recentFiles"></div>
@@ -98,6 +98,7 @@
       </div>
       <div class="toolbar-right">
         <button class="toolbar-btn" id="projectSave" title="Save project (.bma.json)">Save</button>
+        <button class="toolbar-btn" id="projectPack" title="Pack project + data files into one portable zip">Pack</button>
         <button class="toolbar-btn" id="projectLoad" title="Load project (.bma.json)">Load</button>
         <button class="toolbar-btn" id="projectClear" title="Clear saved config, revert to defaults">Clear</button>
         <input type="file" id="projectFileInput" accept=".bma.json,.json" style="display:none">

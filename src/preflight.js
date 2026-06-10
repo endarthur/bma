@@ -70,17 +70,42 @@ async function listZipEntries(file) {
   return entries;
 }
 
-async function readPreviewFromZipEntry(file, entry, maxLines) {
+async function zipEntryCompSlice(file, entry) {
   const lh = new Uint8Array(await file.slice(entry.localOffset, entry.localOffset + 30).arrayBuffer());
   const lhNameLen = readUint16(lh, 26);
   const lhExtraLen = readUint16(lh, 28);
   const dataStart = entry.localOffset + 30 + lhNameLen + lhExtraLen;
-  const compSlice = file.slice(dataStart, dataStart + entry.compSize);
+  return file.slice(dataStart, dataStart + entry.compSize);
+}
+
+async function readPreviewFromZipEntry(file, entry, maxLines) {
+  const compSlice = await zipEntryCompSlice(file, entry);
   let stream;
   if (entry.method === 0) stream = compSlice.stream();
   else if (entry.method === 8) stream = compSlice.stream().pipeThrough(new DecompressionStream('deflate-raw'));
   else throw new Error('Unsupported compression method');
   return readLinesFromStream(stream, maxLines);
+}
+
+// Full text of a (small) zip entry — used for packed .bma.json projects
+async function readZipEntryText(file, entry) {
+  const compSlice = await zipEntryCompSlice(file, entry);
+  if (entry.method === 0) return compSlice.text();
+  if (entry.method === 8) return new Response(compSlice.stream().pipeThrough(new DecompressionStream('deflate-raw'))).text();
+  throw new Error('Unsupported compression method');
+}
+
+// Materialize a zip entry as a standalone File. Stored entries are zero-copy
+// (a lazy slice view into the archive), so even multi-GB packed models cost
+// nothing to "extract"; deflated entries are decompressed into memory.
+async function zipEntryToFile(file, entry) {
+  const compSlice = await zipEntryCompSlice(file, entry);
+  if (entry.method === 0) return new File([compSlice], entry.name);
+  if (entry.method === 8) {
+    const blob = await new Response(compSlice.stream().pipeThrough(new DecompressionStream('deflate-raw'))).blob();
+    return new File([blob], entry.name);
+  }
+  throw new Error('Unsupported compression method');
 }
 
 async function readLinesFromStream(stream, maxLines, captureComments) {
@@ -494,6 +519,25 @@ async function runPreflight(file) {
   };
 }
 
+// Re-point a zip preflight at a different entry: recompute header, sample,
+// types, and defaults from that entry (no rendering — callers render)
+async function loadZipEntryIntoPreflight(file, data, entryName) {
+  const entry = data.zipEntries.find(z => z.name === entryName);
+  if (!entry) return;
+  data.selectedZipEntry = entryName;
+  const lines = await readPreviewFromZipEntry(file, entry, 100);
+  const delimiter = detectDelimiterMain(lines.slice(0, 20));
+  data.header = lines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
+  data.sampleRows = lines.slice(1).filter(l => l.trim())
+    .map(l => l.split(delimiter).map(f => f.trim().replace(/^["']|["']$/g, '')));
+  data.delimiter = delimiter;
+  data.autoTypes = autoDetectTypes(data.header, data.sampleRows);
+  data.typeOverrides = {};
+  data.skipCols = new Set();
+  data.xyz = guessXYZMain(data.header, data.autoTypes);
+  data.colFilters = buildDefaultColFilters(data.header, data.autoTypes, data.xyz);
+}
+
 function renderPreflight(data) {
   preflightData = data;
   if (!data.colFilters) data.colFilters = {};
@@ -507,20 +551,8 @@ function renderPreflight(data) {
       `<span class="zip-size">${data.zipEntries.length} files</span>`;
     document.getElementById('zipSelect').addEventListener('change', async (e) => {
       const name = e.target.value;
-      data.selectedZipEntry = name;
-      const entry = data.zipEntries.find(z => z.name === name);
       try {
-        const lines = await readPreviewFromZipEntry(currentFile, entry, 100);
-        const delimiter = detectDelimiterMain(lines.slice(0, 20));
-        data.header = lines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
-        data.sampleRows = lines.slice(1).filter(l => l.trim())
-          .map(l => l.split(delimiter).map(f => f.trim().replace(/^["']|["']$/g, '')));
-        data.delimiter = delimiter;
-        data.autoTypes = autoDetectTypes(data.header, data.sampleRows);
-        data.typeOverrides = {};
-        data.skipCols = new Set();
-        data.xyz = guessXYZMain(data.header, data.autoTypes);
-        data.colFilters = buildDefaultColFilters(data.header, data.autoTypes, data.xyz);
+        await loadZipEntryIntoPreflight(currentFile, data, name);
         renderPreflightSidebar(data);
         renderPreflightTable(data);
       } catch(err) {

@@ -612,6 +612,36 @@ function saveProjectFile() {
   URL.revokeObjectURL(a.href);
 }
 
+// Pack the project + its data files into one portable zip. Store-mode with
+// Blob-part assembly: data is referenced, not copied — only the CRC pass
+// reads it — so this scales to multi-GB models (up to the 4 GB zip limit).
+async function packProjectFile() {
+  if (!currentFile || !preflightData) return;
+  var $btn = document.getElementById('projectPack');
+  if ($btn) { $btn.disabled = true; $btn.textContent = 'Packing…'; }
+  try {
+    var stem = currentFile.name.replace(/\.[^.]+$/, '');
+    var files = [{ name: currentFile.name, blob: currentFile }];
+    if (auxFile && auxFile.name !== currentFile.name) files.push({ name: auxFile.name, blob: auxFile });
+    var json = JSON.stringify(serializeProject(), null, 2);
+    files.push({ name: stem + '.bma.json', blob: new Blob([json]) });
+    var zipBlob = await buildStoredZip(files, function(pct) {
+      if ($btn) $btn.textContent = 'Packing ' + pct + '%';
+    });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(zipBlob);
+    a.download = stem + '.bma.zip';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) {
+    $errorMsg.textContent = 'Pack failed: ' + e.message;
+    $errorMsg.classList.add('active');
+    setTimeout(function() { $errorMsg.classList.remove('active'); }, 4000);
+  } finally {
+    if ($btn) { $btn.disabled = false; $btn.textContent = 'Pack'; }
+  }
+}
+
 function clearProject() {
   if (!currentFile) return;
   try { localStorage.removeItem(projectKey(currentFile)); } catch (e) {}
@@ -679,6 +709,7 @@ $toolbarMenu.addEventListener('click', (e) => {
 
 // Toolbar buttons
 $projectSave.addEventListener('click', saveProjectFile);
+document.getElementById('projectPack').addEventListener('click', packProjectFile);
 $projectLoad.addEventListener('click', () => $projectFileInput.click());
 $projectClear.addEventListener('click', clearProject);
 
@@ -700,8 +731,65 @@ $projectFileInput.addEventListener('change', (e) => {
   e.target.value = '';
 });
 
-function handleFile(file, handle) {
+// Project file dropped before its data file (or pulled from a packed zip)
+let pendingDroppedProject = null;
+let pendingDroppedAuxFile = null;
+
+// A "packed project" is a zip containing a .bma.json plus the data files it
+// references. Returns {project, modelFile, auxFile} or null (not packed /
+// user declined). Stored entries extract as zero-copy File views.
+async function tryPackedProject(file) {
+  let entries;
+  try { entries = await listZipEntries(file); } catch (e) { return null; }
+  const pjEntry = entries.find(e => /\.bma\.json$/i.test(e.name));
+  if (!pjEntry) return null;
+  let project;
+  try { project = JSON.parse(await readZipEntryText(file, pjEntry)); } catch (e) { return null; }
+  if (!project || project._bma !== 1 || !project.file || !project.file.name) return null;
+  const modelEntry = entries.find(e => e.name === project.file.name);
+  if (!modelEntry) return null;
+  if (!confirm('This archive contains a BMA project:\n\n  ' + pjEntry.name +
+    '\n\nLoad "' + project.file.name + '" with that setup?\n(Cancel opens the archive normally.)')) return null;
+  const modelFile = await zipEntryToFile(file, modelEntry);
+  let auxF = null;
+  if (project.aux && project.aux.fileName) {
+    const auxEntry = entries.find(e => e.name === project.aux.fileName);
+    if (auxEntry) { try { auxF = await zipEntryToFile(file, auxEntry); } catch (e) {} }
+  }
+  return { project: project, modelFile: modelFile, auxFile: auxF };
+}
+
+async function handleFile(file, handle) {
   if (!file) return;
+
+  // Bare project file: stash it and ask for its data file
+  if (/\.bma\.json$/i.test(file.name)) {
+    try {
+      const pj = JSON.parse(await file.text());
+      if (pj && pj._bma === 1 && pj.file && pj.file.name) {
+        pendingDroppedProject = pj;
+        $dropzone.querySelector('.label').innerHTML =
+          'Project loaded — now drop <strong>' + esc(pj.file.name) + '</strong> to apply it';
+        return;
+      }
+    } catch (e) { /* fall through to error */ }
+    $errorMsg.textContent = 'Not a valid BMA project file.';
+    $errorMsg.classList.add('active');
+    return;
+  }
+
+  // Packed project archive: extract data + config from the zip
+  if (/\.zip$/i.test(file.name) || file.type === 'application/zip') {
+    let packed = null;
+    try { packed = await tryPackedProject(file); } catch (e) { packed = null; }
+    if (packed) {
+      pendingDroppedProject = packed.project;
+      pendingDroppedAuxFile = packed.auxFile;
+      handleFile(packed.modelFile, null);
+      return;
+    }
+  }
+
   currentFile = file;
   saveToRecents(file, handle);
   currentFilter = null;
@@ -812,12 +900,22 @@ function handleFile(file, handle) {
   // Run preflight
   runPreflight(file).then(async data => {
     renderPreflight(data);
-    // Auto-restore saved project config
-    const saved = localStorage.getItem(projectKey(file));
-    if (saved) {
+    // Project precedence: an explicitly dropped/packed project for this file
+    // wins over the autosaved one
+    let project = null;
+    if (pendingDroppedProject && pendingDroppedProject.file && pendingDroppedProject.file.name === file.name) {
+      project = pendingDroppedProject;
+    } else {
+      const saved = localStorage.getItem(projectKey(file));
+      if (saved) { try { project = JSON.parse(saved); } catch (e) { /* corrupt — ignore */ } }
+    }
+    const auxToLoad = pendingDroppedAuxFile;
+    pendingDroppedProject = null;
+    pendingDroppedAuxFile = null;
+    if (project) {
       try {
-        const project = JSON.parse(saved);
         await applyProject(project);
+        if (auxToLoad) loadAuxFile(auxToLoad, null);
         executeAnalysis();
       } catch (e) { /* corrupt — ignore */ }
     }
