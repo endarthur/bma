@@ -852,8 +852,19 @@ async function tryPackedProject(file) {
   if (!project || project._bma !== 1 || !project.file || !project.file.name) return null;
   const modelEntry = entries.find(e => e.name === project.file.name);
   if (!modelEntry) return null;
-  if (!confirm('This archive contains a BMA project:\n\n  ' + pjEntry.name +
-    '\n\nLoad "' + project.file.name + '" with that setup?\n(Cancel opens the archive normally.)')) return null;
+  const ok = await bmaConfirm({
+    title: 'Packed project found',
+    html: 'This archive contains a BMA project' +
+      (project.title ? ': <strong>' + esc(project.title) + '</strong>' : '') +
+      '<div class="confirm-detail"><code>' + esc(pjEntry.name) + '</code></div>' +
+      'Load <strong>' + esc(project.file.name) + '</strong>' +
+      (project.aux && project.aux.fileName ? ' and <strong>' + esc(project.aux.fileName) + '</strong>' : '') +
+      ' with that setup?' +
+      '<div class="confirm-hint">“Open as zip” ignores the project and opens the archive normally.</div>',
+    okLabel: 'Load project',
+    cancelLabel: 'Open as zip'
+  });
+  if (!ok) return null;
   const modelFile = await zipEntryToFile(file, modelEntry);
   let auxF = null;
   if (project.aux && project.aux.fileName) {

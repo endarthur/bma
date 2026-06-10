@@ -3693,6 +3693,12 @@ table.cat-values tr.cat-aux-only td { background: rgba(184,115,51,0.05); }
   font-family: var(--mono); opacity: 0.6; margin-left: 0.3rem;
 }
 
+/* Confirmation modal */
+.confirm-body { font-size: 0.8rem; color: var(--fg); line-height: 1.55; }
+.confirm-body .confirm-detail { margin: 0.5rem 0; }
+.confirm-body code { color: var(--amber); font-size: 0.72rem; }
+.confirm-body .confirm-hint { color: var(--fg-dim); font-size: 0.68rem; margin-top: 0.6rem; opacity: 0.8; }
+
 /* Build badge + update banner */
 .build-badge {
   position: fixed; bottom: 6px; right: 8px; z-index: 90;
@@ -4375,12 +4381,28 @@ table.stats tr.stats-aux-row td:first-child { padding-left: 1.1rem; }
   </div>
 </div>
 
+<div class="settings-modal" id="confirmModal">
+  <div class="settings-modal-inner pack-modal-inner">
+    <div class="settings-modal-head">
+      <span id="confirmTitle">Confirm</span>
+      <button class="preflight-back-btn" id="confirmClose" title="Close">✕</button>
+    </div>
+    <div class="settings-modal-body">
+      <div class="confirm-body" id="confirmBody"></div>
+    </div>
+    <div class="pack-modal-foot">
+      <button class="toolbar-btn" id="confirmCancel">Cancel</button>
+      <button class="swath-generate" id="confirmOk">OK</button>
+    </div>
+  </div>
+</div>
+
 <div class="update-banner" id="updateBanner">
   <span>A new version of BMA is available.</span>
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build c1af74d — click to check for updates">c1af74d</div>
+<div class="build-badge" id="buildBadge" title="build c18b3dc — click to check for updates">c18b3dc</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -7125,6 +7147,41 @@ function getActiveTabId() {
   return t ? t.dataset.tab : 'preflight';
 }
 
+// In-app confirmation dialog (replaces native confirm()). Resolves true/false.
+// Enter = OK, Escape / ✕ / Cancel = false.
+function bmaConfirm(opts) {
+  return new Promise(function(resolve) {
+    var $m = document.getElementById('confirmModal');
+    document.getElementById('confirmTitle').textContent = opts.title || 'Confirm';
+    document.getElementById('confirmBody').innerHTML = opts.html || '';
+    var $ok = document.getElementById('confirmOk');
+    var $cancel = document.getElementById('confirmCancel');
+    var $close = document.getElementById('confirmClose');
+    $ok.textContent = opts.okLabel || 'OK';
+    $cancel.textContent = opts.cancelLabel || 'Cancel';
+    function done(v) {
+      $m.classList.remove('active');
+      $ok.removeEventListener('click', onOk);
+      $cancel.removeEventListener('click', onCancel);
+      $close.removeEventListener('click', onCancel);
+      document.removeEventListener('keydown', onKey, true);
+      resolve(v);
+    }
+    function onOk() { done(true); }
+    function onCancel() { done(false); }
+    function onKey(e) {
+      if (e.key === 'Escape') { e.stopPropagation(); done(false); }
+      else if (e.key === 'Enter') { e.stopPropagation(); done(true); }
+    }
+    $ok.addEventListener('click', onOk);
+    $cancel.addEventListener('click', onCancel);
+    $close.addEventListener('click', onCancel);
+    document.addEventListener('keydown', onKey, true);
+    $m.classList.add('active');
+    $ok.focus();
+  });
+}
+
 function renderHelp(tabId) {
   var info = _helpTabs[tabId];
   if (!info) { $helpBody.innerHTML = ''; $helpTitle.textContent = 'Help'; return; }
@@ -9546,8 +9603,19 @@ async function tryPackedProject(file) {
   if (!project || project._bma !== 1 || !project.file || !project.file.name) return null;
   const modelEntry = entries.find(e => e.name === project.file.name);
   if (!modelEntry) return null;
-  if (!confirm('This archive contains a BMA project:\n\n  ' + pjEntry.name +
-    '\n\nLoad "' + project.file.name + '" with that setup?\n(Cancel opens the archive normally.)')) return null;
+  const ok = await bmaConfirm({
+    title: 'Packed project found',
+    html: 'This archive contains a BMA project' +
+      (project.title ? ': <strong>' + esc(project.title) + '</strong>' : '') +
+      '<div class="confirm-detail"><code>' + esc(pjEntry.name) + '</code></div>' +
+      'Load <strong>' + esc(project.file.name) + '</strong>' +
+      (project.aux && project.aux.fileName ? ' and <strong>' + esc(project.aux.fileName) + '</strong>' : '') +
+      ' with that setup?' +
+      '<div class="confirm-hint">“Open as zip” ignores the project and opens the archive normally.</div>',
+    okLabel: 'Load project',
+    cancelLabel: 'Open as zip'
+  });
+  if (!ok) return null;
   const modelFile = await zipEntryToFile(file, modelEntry);
   let auxF = null;
   if (project.aux && project.aux.fileName) {

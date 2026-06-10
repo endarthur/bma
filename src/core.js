@@ -509,6 +509,41 @@ function getActiveTabId() {
   return t ? t.dataset.tab : 'preflight';
 }
 
+// In-app confirmation dialog (replaces native confirm()). Resolves true/false.
+// Enter = OK, Escape / ✕ / Cancel = false.
+function bmaConfirm(opts) {
+  return new Promise(function(resolve) {
+    var $m = document.getElementById('confirmModal');
+    document.getElementById('confirmTitle').textContent = opts.title || 'Confirm';
+    document.getElementById('confirmBody').innerHTML = opts.html || '';
+    var $ok = document.getElementById('confirmOk');
+    var $cancel = document.getElementById('confirmCancel');
+    var $close = document.getElementById('confirmClose');
+    $ok.textContent = opts.okLabel || 'OK';
+    $cancel.textContent = opts.cancelLabel || 'Cancel';
+    function done(v) {
+      $m.classList.remove('active');
+      $ok.removeEventListener('click', onOk);
+      $cancel.removeEventListener('click', onCancel);
+      $close.removeEventListener('click', onCancel);
+      document.removeEventListener('keydown', onKey, true);
+      resolve(v);
+    }
+    function onOk() { done(true); }
+    function onCancel() { done(false); }
+    function onKey(e) {
+      if (e.key === 'Escape') { e.stopPropagation(); done(false); }
+      else if (e.key === 'Enter') { e.stopPropagation(); done(true); }
+    }
+    $ok.addEventListener('click', onOk);
+    $cancel.addEventListener('click', onCancel);
+    $close.addEventListener('click', onCancel);
+    document.addEventListener('keydown', onKey, true);
+    $m.classList.add('active');
+    $ok.focus();
+  });
+}
+
 function renderHelp(tabId) {
   var info = _helpTabs[tabId];
   if (!info) { $helpBody.innerHTML = ''; $helpTitle.textContent = 'Help'; return; }

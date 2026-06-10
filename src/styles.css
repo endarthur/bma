@@ -3680,6 +3680,12 @@ table.cat-values tr.cat-aux-only td { background: rgba(184,115,51,0.05); }
   font-family: var(--mono); opacity: 0.6; margin-left: 0.3rem;
 }
 
+/* Confirmation modal */
+.confirm-body { font-size: 0.8rem; color: var(--fg); line-height: 1.55; }
+.confirm-body .confirm-detail { margin: 0.5rem 0; }
+.confirm-body code { color: var(--amber); font-size: 0.72rem; }
+.confirm-body .confirm-hint { color: var(--fg-dim); font-size: 0.68rem; margin-top: 0.6rem; opacity: 0.8; }
+
 /* Build badge + update banner */
 .build-badge {
   position: fixed; bottom: 6px; right: 8px; z-index: 90;
