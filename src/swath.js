@@ -422,6 +422,11 @@ function renderSwathAuxVars() {
     if (i === axyz.x || i === axyz.y || i === axyz.z) continue;
     auxCols.push({ name: auxPreflightData.header[i], idx: i });
   }
+  // Aux calcols (extended indices past the raw aux header)
+  for (var ci2 = 0; ci2 < auxCalcolMeta.length; ci2++) {
+    if (auxCalcolMeta[ci2].type !== 'numeric') continue;
+    auxCols.push({ name: auxCalcolMeta[ci2].name, idx: auxPreflightData.header.length + ci2, isCalc: true });
+  }
   if (auxCols.length === 0) {
     wrap.innerHTML = divider + '<div class="swath-aux-note">No numeric aux variables.</div>';
     return;
@@ -529,7 +534,7 @@ function runSwath() {
       vars: out.vars, axis: axisVal, axisIdx: axisIdx, binWidth: binWidth,
       varCols: varCols, elapsed: out.elapsed, azimuth: azimuthDeg, plunge: plungeDeg,
       auxVars: out.auxVars, auxVarCols: auxVarCols,
-      auxHeader: auxReady ? auxPreflightData.header.slice() : null,
+      auxHeader: auxReady ? auxPreflightData.header.concat(auxCalcolMeta.map(function(m) { return m.name; })) : null,
       auxError: out.auxError
     };
     renderSwathCharts(lastSwathData, stat);
@@ -605,8 +610,8 @@ function runSwath() {
       zipEntry: auxPreflightData.selectedZipEntry || null,
       globalFilter: auxFilter ? { expression: auxFilter.expression } : null,
       localFilter: null,
-      calcolCode: null,
-      calcolMeta: null,
+      calcolCode: auxCalcolCode || null,
+      calcolMeta: auxCalcolMeta.length > 0 ? auxCalcolMeta : null,
       resolvedTypes: auxPreflightData.autoTypes,
       xyzCols: [auxPreflightData.xyz.x, auxPreflightData.xyz.y, auxPreflightData.xyz.z],
       dxyzCols: [-1, -1, -1],

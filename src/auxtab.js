@@ -98,8 +98,8 @@ function runAuxAnalysis() {
     zipEntry: auxPreflightData.selectedZipEntry || null,
     skipCols: [],
     colFilters: {},
-    calcolCode: null,
-    calcolMeta: null,
+    calcolCode: auxCalcolCode || null,
+    calcolMeta: auxCalcolMeta.length > 0 ? auxCalcolMeta : null,
     groupBy: null,
     groupStatsCols: null,
     dxyzOverride: null,
@@ -150,12 +150,7 @@ function onAuxConfigChange() {
   if (x && y && z) auxPreflightData.xyz = { x: parseInt(x.value), y: parseInt(y.value), z: parseInt(z.value) };
   var f = document.getElementById('auxFilterInput');
   if (f) { var v = f.value.trim(); auxFilter = v ? { expression: v } : null; }
-  // Completed aux analysis no longer reflects the config — flag it
-  if (auxCompleteData && !auxStale) {
-    auxStale = true;
-    var $st = document.getElementById('auxAnalyzeStatus');
-    if ($st) { $st.textContent = 'Config changed — re-run Analyze'; $st.style.color = 'var(--amber)'; }
-  }
+  markAuxStale();
   // Live-update the prefix hint without a full re-render (keeps focus/caret)
   var hint = $auxSidebar.querySelector('.pf-sidebar-section .aux-hint code');
   if (hint && p) hint.textContent = (auxPrefix || 'aux') + ':Fe';
@@ -165,10 +160,24 @@ function onAuxConfigChange() {
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
 
+// Flag a completed aux analysis as no longer reflecting the current config
+function markAuxStale() {
+  if (!auxCompleteData || auxStale) return;
+  auxStale = true;
+  var $st = document.getElementById('auxAnalyzeStatus');
+  if ($st) { $st.textContent = 'Config changed — re-run Analyze'; $st.style.color = 'var(--amber)'; }
+}
+
 function applyAuxRestore(saved) {
   auxPrefix = saved.prefix || 'aux';
   auxFilter = saved.filter ? { expression: saved.filter } : null;
   if (saved.xyz && auxPreflightData) auxPreflightData.xyz = saved.xyz;
+  auxCalcolCode = saved.calcolCode || '';
+  auxCalcolMeta = saved.calcolMeta || [];
+  if (calcolMode === 'aux' && $calcolCodeArea) {
+    $calcolCodeArea.value = auxCalcolCode;
+    syncCodeHighlight();
+  }
 }
 
 function loadAuxFile(file, handle) {
@@ -185,6 +194,7 @@ function loadAuxFile(file, handle) {
     }
     renderAuxConfig();
     if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
+    if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
     if (typeof autoSaveProject === 'function') autoSaveProject();
   }).catch(function(err) {
     auxFile = null;
@@ -208,6 +218,8 @@ function clearAux() {
   auxStale = false;
   statsAuxSelected = null;
   statsCdfAuxSelected = new Set();
+  auxCalcolCode = '';
+  auxCalcolMeta = [];
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
   if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
   $auxConfig.style.display = 'none';
@@ -215,6 +227,8 @@ function clearAux() {
   $auxSidebar.innerHTML = '';
   $auxPreview.innerHTML = '';
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
+  if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
+  if (typeof updateCalcolBadge === 'function') updateCalcolBadge();
   if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
     renderStatsSidebar();
     renderStatsTable();

@@ -150,6 +150,61 @@ function highlightCode(code) {
 // ── Code Editor Controller ────────────────────────────────────────────
 let calcolSimTimer = null;
 
+// ── Primary/Aux editing context ───────────────────────────────────────
+// The editor edits one dataset at a time; these helpers route state and
+// metadata to the right side. Aux code always references the fixed
+// AUX_ROW_VAR handle ('aux'), independent of the display prefix.
+function calcolIsAux() { return calcolMode === 'aux'; }
+function calcolGetCode() { return calcolIsAux() ? auxCalcolCode : currentCalcolCode; }
+function calcolStoreCode(v) { if (calcolIsAux()) auxCalcolCode = v; else currentCalcolCode = v; }
+function calcolGetMeta() { return calcolIsAux() ? auxCalcolMeta : currentCalcolMeta; }
+function calcolStoreMeta(m) { if (calcolIsAux()) auxCalcolMeta = m; else currentCalcolMeta = m; }
+function calcolRowVarName() { return calcolIsAux() ? AUX_ROW_VAR : (currentRowVar || 'r'); }
+function calcolHdrCtx() {
+  if (calcolIsAux()) {
+    return auxPreflightData
+      ? { header: auxPreflightData.header, types: auxPreflightData.autoTypes || [], typeOv: {} }
+      : { header: null, types: [], typeOv: {} };
+  }
+  return preflightData
+    ? { header: preflightData.header, types: preflightData.autoTypes || [], typeOv: preflightData.typeOverrides || {} }
+    : { header: currentHeader, types: currentColTypes, typeOv: {} };
+}
+function calcolStatsCtx() { return calcolIsAux() ? auxCompleteData : lastCompleteData; }
+function calcolMarkStale() {
+  if (calcolIsAux()) {
+    if (typeof markAuxStale === 'function') markAuxStale();
+  } else {
+    markAnalysisStale();
+  }
+}
+
+function setCalcolMode(mode) {
+  if (mode === calcolMode) return;
+  // Stash the editor text into the outgoing context before swapping
+  calcolStoreCode($calcolCodeArea.value);
+  calcolMode = mode;
+  $calcolCodeArea.value = calcolGetCode();
+  $calcolCodeArea.placeholder = calcolIsAux()
+    ? '// Mutate aux to create columns on the aux dataset\naux.au_capped = min(aux.AU, 5);\naux.declust_w = aux.W;'
+    : '// Mutate r to create new columns\nr.grade_cut = min(r.AU, 5);\nr.is_ore = r.AU > 0.5 ? \'ore\' : \'waste\';';
+  syncCodeHighlight();
+  document.querySelectorAll('#calcolModeToggle .calcol-mode-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  renderVariableBrowser();
+  simulateCalcol();
+}
+
+// Show the toggle only when an aux dataset is loaded; bounce the editor back
+// to primary if aux goes away while being edited
+function refreshCalcolModeToggle() {
+  var $t = document.getElementById('calcolModeToggle');
+  if (!$t) return;
+  $t.style.display = auxFile ? '' : 'none';
+  if (!auxFile && calcolMode === 'aux') setCalcolMode('primary');
+}
+
 function syncCodeHighlight() {
   $calcolCodePre.innerHTML = highlightCode($calcolCodeArea.value);
 }
@@ -170,7 +225,7 @@ function getEditorTokenAtCursor() {
   // Only scan current line
   var lineStart = text.lastIndexOf('\n') + 1;
   var lineText = text.substring(lineStart);
-  var rv = currentRowVar || 'r';
+  var rv = calcolRowVarName();
   var pat = new RegExp('(?:' + rv.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\.)?([a-zA-Z_][a-zA-Z0-9_]*)$');
   var match = lineText.match(pat);
   if (!match) return { token: '', start: pos, hasPrefix: false, fullLen: 0 };
@@ -266,11 +321,11 @@ function calcolAcAccept(idx) {
   $calcolCodeArea.selectionEnd = tok.start + tok.fullLen;
   document.execCommand('insertText', false, item.insert);
   calcolAcHide();
-  currentCalcolCode = $calcolCodeArea.value;
+  calcolStoreCode($calcolCodeArea.value);
   syncCodeHighlight();
   clearTimeout(calcolSimTimer);
   calcolSimTimer = setTimeout(simulateCalcol, 600);
-  markAnalysisStale();
+  calcolMarkStale();
 }
 
 function calcolAcIsOpen() {
@@ -281,11 +336,11 @@ function initCalcolEditor() {
   // Sync highlight on input
   $calcolCodeArea.addEventListener('input', function() {
     syncCodeHighlight();
-    currentCalcolCode = $calcolCodeArea.value;
+    calcolStoreCode($calcolCodeArea.value);
     $calcolError.textContent = '';
     clearTimeout(calcolSimTimer);
     calcolSimTimer = setTimeout(simulateCalcol, 600);
-    markAnalysisStale();
+    calcolMarkStale();
     autoSaveProject();
     calcolAcShow();
   });
@@ -310,7 +365,7 @@ function initCalcolEditor() {
       e.preventDefault();
       document.execCommand('insertText', false, '  ');
       syncCodeHighlight();
-      currentCalcolCode = this.value;
+      calcolStoreCode(this.value);
     }
     // Ctrl+Space triggers autocomplete
     if (e.key === ' ' && (e.ctrlKey || e.metaKey)) {
@@ -336,17 +391,20 @@ function initCalcolEditor() {
 
 // ── Variable Browser ──────────────────────────────────────────────────
 function renderVariableBrowser() {
-  var hdr = preflightData ? preflightData.header : currentHeader;
-  var types = preflightData ? (preflightData.autoTypes || []) : currentColTypes;
-  var typeOv = preflightData ? (preflightData.typeOverrides || {}) : {};
+  var ctx = calcolHdrCtx();
+  var hdr = ctx.header;
+  var types = ctx.types;
+  var typeOv = ctx.typeOv;
   if (!hdr || hdr.length === 0) {
-    $calcolVarList.innerHTML = '<div class="calcol-empty-hint">No file loaded.</div>';
+    $calcolVarList.innerHTML = '<div class="calcol-empty-hint">' +
+      (calcolIsAux() ? 'No aux dataset loaded.' : 'No file loaded.') + '</div>';
     return;
   }
   var search = $calcolVarSearch.value.toLowerCase();
-  var stats = lastCompleteData ? lastCompleteData.stats : null;
-  var cats = lastCompleteData ? lastCompleteData.categories : null;
-  var rv = currentRowVar || 'r';
+  var statsSrc = calcolStatsCtx();
+  var stats = statsSrc ? statsSrc.stats : null;
+  var cats = statsSrc ? statsSrc.categories : null;
+  var rv = calcolRowVarName();
   var html = '';
   for (var i = 0; i < hdr.length; i++) {
     var name = hdr[i];
@@ -431,11 +489,11 @@ function renderFunctionList() {
 function insertAtCursor(text) {
   $calcolCodeArea.focus();
   document.execCommand('insertText', false, text);
-  currentCalcolCode = $calcolCodeArea.value;
+  calcolStoreCode($calcolCodeArea.value);
   syncCodeHighlight();
   clearTimeout(calcolSimTimer);
   calcolSimTimer = setTimeout(simulateCalcol, 600);
-  markAnalysisStale();
+  calcolMarkStale();
 }
 
 // Variable search
@@ -444,8 +502,31 @@ if ($calcolVarSearch) {
   wireSearchShortcuts($calcolVarSearch, null, null);
 }
 
+// Model | Aux mode toggle
+var $calcolModeToggleEl = document.getElementById('calcolModeToggle');
+if ($calcolModeToggleEl) {
+  $calcolModeToggleEl.addEventListener('click', function(e) {
+    var btn = e.target.closest('.calcol-mode-btn');
+    if (btn) setCalcolMode(btn.dataset.mode);
+  });
+}
+
 // ── Simulate / Preview ────────────────────────────────────────────────
 function getSampleRows() {
+  if (calcolIsAux()) {
+    // Aux preview always uses the aux preflight sample
+    if (!auxPreflightData || !auxPreflightData.sampleRows) return [];
+    var aHdr = auxPreflightData.header;
+    var aTypes = auxPreflightData.autoTypes || [];
+    return auxPreflightData.sampleRows.slice(0, 10).map(function(fields) {
+      var obj = {};
+      for (var i = 0; i < aHdr.length; i++) {
+        var raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
+        obj[aHdr[i]] = aTypes[i] === 'numeric' ? (raw === '' ? null : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+      }
+      return obj;
+    });
+  }
   var src = $calcolDataSrc ? $calcolDataSrc.value : 'preflight';
   if (src === 'simulated' && lastCompleteData) {
     return generateSyntheticRows();
@@ -519,9 +600,9 @@ function generateSyntheticRows() {
 }
 
 function simulateCalcol() {
-  var code = currentCalcolCode.trim();
+  var code = calcolGetCode().trim();
   if (!code) {
-    currentCalcolMeta = [];
+    calcolStoreMeta([]);
     $calcolDetected.innerHTML = '<div class="calcol-empty-hint">Write code and click Simulate to detect new columns.</div>';
     $calcolPreviewTable.innerHTML = '<div class="calcol-empty-hint">No preview yet.</div>';
     $calcolError.textContent = '';
@@ -529,10 +610,10 @@ function simulateCalcol() {
     return;
   }
 
-  var rv = currentRowVar || 'r';
-  var hdr = preflightData ? preflightData.header : currentHeader;
+  var rv = calcolRowVarName();
+  var hdr = calcolHdrCtx().header;
   if (!hdr || hdr.length === 0) {
-    $calcolError.textContent = 'No file loaded — load a CSV first.';
+    $calcolError.textContent = calcolIsAux() ? 'No aux dataset loaded.' : 'No file loaded — load a CSV first.';
     return;
   }
   var origKeys = new Set(hdr);
@@ -609,7 +690,7 @@ function simulateCalcol() {
     meta.push({ name: name, type: autoType });
   }
 
-  currentCalcolMeta = meta;
+  calcolStoreMeta(meta);
   updateCalcolBadge();
 
   // Render detected columns
@@ -672,14 +753,16 @@ function enableSimulatedDataSource() {
 // ── Badge / Integration ───────────────────────────────────────────────
 function updateCalcolBadge() {
   if (!$calcolBadge) return;
-  $calcolBadge.textContent = currentCalcolMeta.length;
+  $calcolBadge.textContent = calcolGetMeta().length;
+  var total = currentCalcolMeta.length + auxCalcolMeta.length;
   var calcolTab = $resultsTabs.querySelector('[data-tab="calcols"]');
-  if (calcolTab) calcolTab.innerHTML = 'Calc <span class="tab-badge">' + currentCalcolMeta.length + '</span>';
+  if (calcolTab) calcolTab.innerHTML = 'Calc <span class="tab-badge">' + total + '</span>';
 }
 
 function setCalcolCode(code) {
   currentCalcolCode = code;
-  if ($calcolCodeArea) {
+  // Don't clobber the visible editor if it's currently pointed at aux
+  if ($calcolCodeArea && !calcolIsAux()) {
     $calcolCodeArea.value = code;
     syncCodeHighlight();
   }
@@ -702,15 +785,21 @@ function getTokenAtCursor(el) {
 function buildExprAcItems(opts) {
   if (!opts) opts = {};
   var items = [];
-  var hdr = preflightData ? preflightData.header : currentHeader;
+  // Editor context: aux mode completes aux columns/calcols with the aux. handle.
+  // Filter inputs etc. (separate createExprInput instances) stay primary.
+  var forAux = !opts.forceMode && calcolIsAux();
+  var hdr = forAux ? (auxPreflightData ? auxPreflightData.header : null)
+    : (preflightData ? preflightData.header : currentHeader);
+  var rvp = forAux ? AUX_ROW_VAR : (currentRowVar || 'r');
   if (hdr) {
     for (var i = 0; i < hdr.length; i++) {
-      items.push({ label: hdr[i], insert: 'r.' + hdr[i], kind: 'col' });
+      items.push({ label: hdr[i], insert: rvp + '.' + hdr[i], kind: 'col' });
     }
   }
-  for (var ci = 0; ci < currentCalcolMeta.length; ci++) {
-    var cc = currentCalcolMeta[ci];
-    items.push({ label: cc.name, insert: 'r.' + cc.name, kind: 'calc' });
+  var metaSrc = forAux ? auxCalcolMeta : currentCalcolMeta;
+  for (var ci = 0; ci < metaSrc.length; ci++) {
+    var cc = metaSrc[ci];
+    items.push({ label: cc.name, insert: rvp + '.' + cc.name, kind: 'calc' });
   }
   for (var mi = 0; mi < MATH_COMPLETIONS.length; mi++) {
     var m = MATH_COMPLETIONS[mi];
@@ -798,7 +887,9 @@ function createExprInput(element, options) {
     var tok = getTokenAtCursor(element);
     if (!tok.token || tok.token.length < 1) { hideAc(); return; }
     var lc = tok.token.toLowerCase();
-    items = buildExprAcItems().filter(function(it) {
+    // Filter/expression inputs are always primary-context, regardless of
+    // which dataset the Calc editor is currently pointed at
+    items = buildExprAcItems({ forceMode: 'primary' }).filter(function(it) {
       var target = it.kind === 'col' || it.kind === 'calc' ? it.label : it.insert;
       return fuzzyMatch(lc, target.toLowerCase()) || fuzzyMatch(lc, it.label.toLowerCase());
     }).slice(0, 10);

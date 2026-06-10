@@ -1245,8 +1245,12 @@ async function swathAnalysis(data) {
     axisName = header[xyzCols[axis]];
   }
 
-  // Resolve variable column names
-  const varNames = varCols.map(vi => header[vi]);
+  // Resolve variable column names against the extended header — calcol
+  // indices live past the raw columns, and calcolFn sets them on the row
+  // by name inside buildRow
+  const extHeader = [...header];
+  if (calcolMeta) { for (const cm of calcolMeta) extHeader.push(cm.name); }
+  const varNames = varCols.map(vi => extHeader[vi]);
 
   // Per-variable bins: Map<binIdx, {vars: {varIdx: {count,sum,sumSq,td}}, center}>
   const bins = new Map();

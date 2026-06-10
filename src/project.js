@@ -335,7 +335,9 @@ function serializeProject() {
       fileSize: auxFile.size,
       prefix: auxPrefix,
       xyz: auxPreflightData ? auxPreflightData.xyz : null,
-      filter: auxFilter ? auxFilter.expression : ''
+      filter: auxFilter ? auxFilter.expression : '',
+      calcolCode: auxCalcolCode,
+      calcolMeta: auxCalcolMeta
     } : null,
     calcolCode: currentCalcolCode,
     calcolMeta: currentCalcolMeta,

@@ -24,6 +24,9 @@ let auxWorker = null;          // worker handle for the aux analysis pass
 let pendingAuxRestore = null;  // aux config from a loaded project, applied once the aux file is (re)loaded
 const AUX_ROW_VAR = 'aux';     // fixed code handle for aux filter/calc expressions (NOT the display prefix)
 let auxStale = false;              // aux config changed since last aux analysis
+let auxCalcolCode = '';            // calculated-columns code block for the aux dataset (uses aux.)
+let auxCalcolMeta = [];            // [{name, type}] detected from aux calcol simulation
+let calcolMode = 'primary';        // which dataset the Calc editor is editing: 'primary' | 'aux'
 let statsAuxSelected = null;       // Set of aux col indices shown in the stats table (null = defaults)
 let statsCdfAuxSelected = new Set(); // aux col indices with CDF curves
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes
@@ -349,7 +352,8 @@ var _helpTabs = {
     title: 'Calculated Columns',
     html:
       '<div class="help-section"><div class="help-section-title">Overview</div>' +
-      '<div class="help-row"><span>Define new variables using JavaScript expressions. Calcols are computed during analysis and available in all tabs including filters.</span></div></div>' +
+      '<div class="help-row"><span>Define new variables using JavaScript expressions. Calcols are computed during analysis and available in all tabs including filters.</span></div>' +
+      '<div class="help-row"><span><strong>Model | Aux toggle</strong> — with an aux dataset loaded, switch the editor to define calcols on the aux rows instead. Aux code references columns as <code>aux.</code>… and its results feed the aux Statistics/CDF/Swath comparisons (and the aux filter).</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Syntax</div>' +
       '<div class="help-row"><span>Write assignments to <code>r</code>: e.g. <code>r.ratio = r.Au / r.Ag</code></span></div>' +
       '<div class="help-row"><span>Access any column as <code>r.column_name</code>. Spaces in names use bracket notation.</span></div>' +
