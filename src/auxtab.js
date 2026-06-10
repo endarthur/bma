@@ -77,6 +77,9 @@ function onAuxConfigChange() {
   // Live-update the prefix hint without a full re-render (keeps focus/caret)
   var hint = $auxSidebar.querySelector('.pf-sidebar-section .aux-hint code');
   if (hint && p) hint.textContent = (auxPrefix || 'aux') + ':Fe';
+  // Keep the swath sidebar's aux rows in sync (prefix labels, xyz exclusions);
+  // check/unit state is preserved by name across the rebuild
+  if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
 
@@ -99,6 +102,7 @@ function loadAuxFile(file, handle) {
       pendingAuxRestore = null;
     }
     renderAuxConfig();
+    if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
     if (typeof autoSaveProject === 'function') autoSaveProject();
   }).catch(function(err) {
     auxFile = null;
@@ -120,10 +124,12 @@ function clearAux() {
   auxFilter = null;
   auxPrefix = 'aux';
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
+  if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
   $auxConfig.style.display = 'none';
   $auxEmpty.style.display = '';
   $auxSidebar.innerHTML = '';
   $auxPreview.innerHTML = '';
+  if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
 

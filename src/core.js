@@ -447,7 +447,8 @@ var _helpTabs = {
       '<div class="help-row"><span><strong>Variables</strong> \u2014 check one or more. Each gets its own Y-axis + ribbon on the overlay chart.</span></div>' +
       '<div class="help-row"><span><strong>Color swatch</strong> \u2014 click the colored square next to a variable name to customize its chart color</span></div>' +
       '<div class="help-row"><span><strong>Unit selects</strong> \u2014 per-variable units shown on axis labels, table headers, and tooltip. Inherits from global units.</span></div>' +
-      '<div class="help-row"><span><strong>Sync units</strong> \u2014 pull unit assignments from Column Overview</span></div></div>' +
+      '<div class="help-row"><span><strong>Sync units</strong> \u2014 pull unit assignments from Column Overview</span></div>' +
+      '<div class="help-row"><span><strong>Aux overlay</strong> \u2014 with an aux dataset loaded (Aux tab), its variables appear at the bottom of the list and plot as dashed series. A same-named aux variable shares the model variable\u2019s color and Y scale, so model-vs-data bias reads directly off the chart. The aux pass applies the Aux tab filter (not the local filter below).</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Display</div>' +
       '<div class="help-row"><span><strong>Show bands</strong> \u2014 toggle the \u00b1 ribbons (std/percentile range). Disable to see center lines only.</span></div>' +
       '<div class="help-row"><span><strong>Show count bars</strong> \u2014 toggle the count histogram below the chart</span></div>' +

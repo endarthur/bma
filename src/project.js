@@ -402,6 +402,17 @@ function serializeProject() {
       });
       var $azimuth = document.getElementById('swathAzimuth');
       var $plunge = document.getElementById('swathPlunge');
+      var swathAuxChecked = null;
+      var swathAuxUnits = {};
+      if (auxFile) {
+        swathAuxChecked = [];
+        document.querySelectorAll('#swathVarList input[data-aux="1"]:checked').forEach(function(cb) {
+          if (cb.dataset.name) swathAuxChecked.push(cb.dataset.name);
+        });
+        document.querySelectorAll('#swathVarList .swath-var-unit[data-aux-col]').forEach(function(sel) {
+          if (sel.dataset.auxName && parseInt(sel.value) !== 0) swathAuxUnits[sel.dataset.auxName] = parseInt(sel.value);
+        });
+      }
       return {
         axis: $axis.value,
         binWidth: parseFloat($binWidth.value) || 0,
@@ -410,6 +421,8 @@ function serializeProject() {
         localFilter: $filter ? $filter.value : '',
         azimuth: $axis.value === 'custom' ? (parseFloat($azimuth.value) || 0) : null,
         plunge: $axis.value === 'custom' ? (parseFloat($plunge.value) || 0) : null,
+        auxCheckedVars: swathAuxChecked,
+        auxUnits: Object.keys(swathAuxUnits).length > 0 ? swathAuxUnits : null,
         units: Object.keys(swathUnits).length > 0 ? swathUnits : null,
         colorOverrides: Object.keys(swathColorOverrides).length > 0 ? swathColorOverrides : null,
         display: {
@@ -1452,6 +1465,12 @@ function displayResults(data) {
         if (colName && swathColorOverrides[colName]) sw.style.background = swathColorOverrides[colName];
       });
     }
+    // Restore aux swath selection — stashed and applied when the aux rows
+    // render (the aux file may not be reloaded yet in a fresh session)
+    if (swp.auxCheckedVars || swp.auxUnits) {
+      pendingSwathAuxRestore = { checked: swp.auxCheckedVars || null, units: swp.auxUnits || null };
+    }
+    renderSwathAuxVars();
     // Restore swath display options
     if (swp.display) {
       if (document.getElementById('swathShowBands')) document.getElementById('swathShowBands').checked = swp.display.showBands !== false;

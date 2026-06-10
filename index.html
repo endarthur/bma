@@ -3671,6 +3671,23 @@ table.cat-values td.cat-pct-cell {
 }
 .aux-preview-table th { background: var(--bg2); color: var(--fg-bright); position: sticky; top: 0; }
 .aux-preview-table td { color: var(--fg-dim); }
+
+/* Aux rows in the swath variable list */
+.swath-aux-divider {
+  font: 0.6rem var(--mono); color: var(--fg-dim); letter-spacing: 0.06em;
+  padding: 0.4rem 0.2rem 0.15rem; margin-top: 0.3rem;
+  border-top: 1px dashed var(--border);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.swath-aux-note {
+  font-size: 0.65rem; color: var(--fg-dim); opacity: 0.7;
+  padding: 0.2rem; line-height: 1.4;
+}
+.swath-aux-warn {
+  color: var(--red); font-size: 0.72rem;
+  padding: 0.3rem 0.5rem; margin-bottom: 0.5rem;
+  border: 1px solid var(--red); border-radius: 3px; opacity: 0.85;
+}
 </style>
 <script>try{var t=JSON.parse(localStorage.getItem('bma:settings')||'{}').theme;if(t&&t!=='default')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 </head>
@@ -5398,8 +5415,12 @@ async function swathAnalysis(data) {
   const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
   const nCols = header.length;
   let rowVarName = 'r';
-  const colSet = new Set(header);
-  for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
+  if (data.rowVarOverride) {
+    rowVarName = data.rowVarOverride;
+  } else {
+    const colSet = new Set(header);
+    for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
+  }
 
   const colTypes = resolvedTypes;
 
@@ -5577,8 +5598,12 @@ async function sectionAnalysis(data) {
   const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
   const nCols = header.length;
   let rowVarName = 'r';
-  const colSet = new Set(header);
-  for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
+  if (data.rowVarOverride) {
+    rowVarName = data.rowVarOverride;
+  } else {
+    const colSet = new Set(header);
+    for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
+  }
 
   const colTypes = resolvedTypes;
 
@@ -6664,7 +6689,8 @@ var _helpTabs = {
       '<div class="help-row"><span><strong>Variables</strong> \u2014 check one or more. Each gets its own Y-axis + ribbon on the overlay chart.</span></div>' +
       '<div class="help-row"><span><strong>Color swatch</strong> \u2014 click the colored square next to a variable name to customize its chart color</span></div>' +
       '<div class="help-row"><span><strong>Unit selects</strong> \u2014 per-variable units shown on axis labels, table headers, and tooltip. Inherits from global units.</span></div>' +
-      '<div class="help-row"><span><strong>Sync units</strong> \u2014 pull unit assignments from Column Overview</span></div></div>' +
+      '<div class="help-row"><span><strong>Sync units</strong> \u2014 pull unit assignments from Column Overview</span></div>' +
+      '<div class="help-row"><span><strong>Aux overlay</strong> \u2014 with an aux dataset loaded (Aux tab), its variables appear at the bottom of the list and plot as dashed series. A same-named aux variable shares the model variable\u2019s color and Y scale, so model-vs-data bias reads directly off the chart. The aux pass applies the Aux tab filter (not the local filter below).</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Display</div>' +
       '<div class="help-row"><span><strong>Show bands</strong> \u2014 toggle the \u00b1 ribbons (std/percentile range). Disable to see center lines only.</span></div>' +
       '<div class="help-row"><span><strong>Show count bars</strong> \u2014 toggle the count histogram below the chart</span></div>' +
@@ -7887,6 +7913,9 @@ function onAuxConfigChange() {
   // Live-update the prefix hint without a full re-render (keeps focus/caret)
   var hint = $auxSidebar.querySelector('.pf-sidebar-section .aux-hint code');
   if (hint && p) hint.textContent = (auxPrefix || 'aux') + ':Fe';
+  // Keep the swath sidebar's aux rows in sync (prefix labels, xyz exclusions);
+  // check/unit state is preserved by name across the rebuild
+  if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
 
@@ -7909,6 +7938,7 @@ function loadAuxFile(file, handle) {
       pendingAuxRestore = null;
     }
     renderAuxConfig();
+    if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
     if (typeof autoSaveProject === 'function') autoSaveProject();
   }).catch(function(err) {
     auxFile = null;
@@ -7930,10 +7960,12 @@ function clearAux() {
   auxFilter = null;
   auxPrefix = 'aux';
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
+  if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
   $auxConfig.style.display = 'none';
   $auxEmpty.style.display = '';
   $auxSidebar.innerHTML = '';
   $auxPreview.innerHTML = '';
+  if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
 
@@ -8386,6 +8418,17 @@ function serializeProject() {
       });
       var $azimuth = document.getElementById('swathAzimuth');
       var $plunge = document.getElementById('swathPlunge');
+      var swathAuxChecked = null;
+      var swathAuxUnits = {};
+      if (auxFile) {
+        swathAuxChecked = [];
+        document.querySelectorAll('#swathVarList input[data-aux="1"]:checked').forEach(function(cb) {
+          if (cb.dataset.name) swathAuxChecked.push(cb.dataset.name);
+        });
+        document.querySelectorAll('#swathVarList .swath-var-unit[data-aux-col]').forEach(function(sel) {
+          if (sel.dataset.auxName && parseInt(sel.value) !== 0) swathAuxUnits[sel.dataset.auxName] = parseInt(sel.value);
+        });
+      }
       return {
         axis: $axis.value,
         binWidth: parseFloat($binWidth.value) || 0,
@@ -8394,6 +8437,8 @@ function serializeProject() {
         localFilter: $filter ? $filter.value : '',
         azimuth: $axis.value === 'custom' ? (parseFloat($azimuth.value) || 0) : null,
         plunge: $axis.value === 'custom' ? (parseFloat($plunge.value) || 0) : null,
+        auxCheckedVars: swathAuxChecked,
+        auxUnits: Object.keys(swathAuxUnits).length > 0 ? swathAuxUnits : null,
         units: Object.keys(swathUnits).length > 0 ? swathUnits : null,
         colorOverrides: Object.keys(swathColorOverrides).length > 0 ? swathColorOverrides : null,
         display: {
@@ -9436,6 +9481,12 @@ function displayResults(data) {
         if (colName && swathColorOverrides[colName]) sw.style.background = swathColorOverrides[colName];
       });
     }
+    // Restore aux swath selection — stashed and applied when the aux rows
+    // render (the aux file may not be reloaded yet in a fresh session)
+    if (swp.auxCheckedVars || swp.auxUnits) {
+      pendingSwathAuxRestore = { checked: swp.auxCheckedVars || null, units: swp.auxUnits || null };
+    }
+    renderSwathAuxVars();
     // Restore swath display options
     if (swp.display) {
       if (document.getElementById('swathShowBands')) document.getElementById('swathShowBands').checked = swp.display.showBands !== false;
@@ -11730,22 +11781,27 @@ function restoreExportSettings(es) {
 
 let swathNumCols = [];
 var _swathChartParams = null; // stored for crosshair
+var swathAuxWorker = null;          // second worker for the aux dataset pass
+var pendingSwathAuxRestore = null;  // { checked: [names], units: {name: unitIdx} } from project restore
 
 function resetSwathState() {
   _swathChartParams = null;
   swathColorOverrides = {};
 }
 
-function showSwathColorPicker(colName, colIdx, anchorEl) {
+function showSwathColorPicker(colName, colIdx, anchorEl, presetColor) {
   var $picker = document.getElementById('swathColorPicker');
   if (!$picker) return;
-  // Find palette index for this variable based on its position in the checked list
-  var vi = 0;
-  var items = document.querySelectorAll('#swathVarList .swath-var-item');
-  items.forEach(function(item, idx) {
-    if (parseInt(item.querySelector('input').value) === colIdx) vi = idx;
-  });
-  var currentColor = getSwathVarColor(colName, vi);
+  var currentColor = presetColor;
+  if (!currentColor) {
+    // Find palette index for this variable based on its position in the checked list
+    var vi = 0;
+    var items = document.querySelectorAll('#swathVarList .swath-var-item');
+    items.forEach(function(item, idx) {
+      if (parseInt(item.querySelector('input').value) === colIdx) vi = idx;
+    });
+    currentColor = getSwathVarColor(colName, vi);
+  }
 
   var html = '<div class="cat-color-grid">';
   for (var i = 0; i < STATSCAT_PALETTE.length; i++) {
@@ -11776,8 +11832,12 @@ function hideSwathColorPicker() {
 
 function applySwathColor(colName, color) {
   swathColorOverrides[colName] = color;
-  // Update the swatch in the sidebar
+  // Update the swatch in the sidebar (aux swatches carry data-color-key, primary carry data-col)
   document.querySelectorAll('#swathVarList .swath-color-swatch').forEach(function(sw) {
+    if (sw.dataset.colorKey != null) {
+      if (sw.dataset.colorKey === colName) sw.style.background = color;
+      return;
+    }
     var ci = parseInt(sw.dataset.col);
     if (currentHeader[ci] === colName) sw.style.background = color;
   });
@@ -11794,6 +11854,27 @@ function getSwathUnit(colIdx) {
   var idx = sel ? parseInt(sel.value) : 0;
   if (idx === 0 && currentHeader[colIdx] && globalUnits[currentHeader[colIdx]])
     idx = globalUnits[currentHeader[colIdx]];
+  var u = GRADE_UNITS[idx] || GRADE_UNITS[0];
+  return { unitIdx: idx, symbol: u.symbol };
+}
+
+// Aux series color: explicit override ('aux:NAME' key) → matching primary
+// variable's color (same hue + dashed reads as "same variable, other dataset")
+// → palette fallback.
+function getAuxSwathVarColor(baseName, fallbackIdx) {
+  var key = 'aux:' + baseName;
+  if (swathColorOverrides[key]) return swathColorOverrides[key];
+  var lower = (baseName || '').toLowerCase();
+  for (var i = 0; i < swathNumCols.length; i++) {
+    if (swathNumCols[i].name.toLowerCase() === lower) return getSwathVarColor(swathNumCols[i].name, i);
+  }
+  return STATSCAT_PALETTE[fallbackIdx % STATSCAT_PALETTE.length];
+}
+
+function getAuxSwathUnit(auxColIdx, baseName) {
+  var sel = document.querySelector('.swath-var-unit[data-aux-col="' + auxColIdx + '"]');
+  var idx = sel ? parseInt(sel.value) : 0;
+  if (idx === 0 && baseName && globalUnits[baseName]) idx = globalUnits[baseName];
   var u = GRADE_UNITS[idx] || GRADE_UNITS[0];
   return { unitIdx: idx, symbol: u.symbol };
 }
@@ -11928,7 +12009,7 @@ function renderSwathConfig(data) {
         '<button id="swathVarNone">None</button>' +
         '<button id="swathUnitSync" class="swath-unit-sync" title="Sync units from Column Overview">Sync units</button>' +
       '</div>' +
-      '<div class="swath-var-list" id="swathVarList">' + varItems + '</div>' +
+      '<div class="swath-var-list" id="swathVarList">' + varItems + '<div id="swathAuxVars"></div></div>' +
     '</div>' +
     '<div class="swath-sidebar-section">' +
       '<div class="swath-sidebar-title">Local Filter</div>' +
@@ -11988,11 +12069,11 @@ function renderSwathConfig(data) {
     });
   });
 
-  // Sync units from global
+  // Sync units from global (aux selects sync by their own column name — shared
+  // names inherit the same unit as the model variable)
   document.getElementById('swathUnitSync').addEventListener('click', function() {
     document.querySelectorAll('.swath-var-unit').forEach(function(sel) {
-      var colIdx = parseInt(sel.dataset.col);
-      var colName = currentHeader[colIdx];
+      var colName = sel.dataset.auxCol != null ? sel.dataset.auxName : currentHeader[parseInt(sel.dataset.col)];
       sel.value = (colName && globalUnits[colName]) ? globalUnits[colName] : 0;
     });
     if (lastSwathData) renderSwathCharts(lastSwathData, document.getElementById('swathStat').value);
@@ -12032,6 +12113,12 @@ function renderSwathConfig(data) {
     if (swatch) {
       e.preventDefault();
       e.stopPropagation();
+      if (swatch.dataset.colorKey) {
+        // Aux swatch — override key is 'aux:NAME' (stable across display-prefix changes)
+        var curColor = getAuxSwathVarColor(swatch.dataset.auxName, swathNumCols.length + parseInt(swatch.dataset.auxIdx || 0));
+        showSwathColorPicker(swatch.dataset.colorKey, null, swatch, curColor);
+        return;
+      }
       var colIdx = parseInt(swatch.dataset.col);
       showSwathColorPicker(currentHeader[colIdx], colIdx, swatch);
     }
@@ -12076,6 +12163,74 @@ function renderSwathConfig(data) {
   $sidebar.addEventListener('input', function(e) {
     if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') autoSaveProject();
   });
+
+  renderSwathAuxVars();
+}
+
+// Build/refresh the aux variable rows inside the swath sidebar. Safe to call
+// anytime (no-op when the sidebar isn't built). Checkbox/unit state is keyed
+// by variable name and preserved across rebuilds; a pending project restore
+// takes precedence and is only consumed once rows actually render.
+function renderSwathAuxVars() {
+  var wrap = document.getElementById('swathAuxVars');
+  if (!wrap) return;
+
+  // Capture current DOM state before wiping
+  var prevChecked = null;
+  var prevUnits = {};
+  wrap.querySelectorAll('input[data-aux="1"]').forEach(function(cb) {
+    if (prevChecked === null) prevChecked = [];
+    if (cb.checked && cb.dataset.name) prevChecked.push(cb.dataset.name);
+  });
+  wrap.querySelectorAll('.swath-var-unit[data-aux-col]').forEach(function(sel) {
+    if (sel.dataset.auxName && parseInt(sel.value) !== 0) prevUnits[sel.dataset.auxName] = parseInt(sel.value);
+  });
+
+  if (!auxFile || !auxPreflightData) { wrap.innerHTML = ''; return; }
+
+  var label = auxPrefix || 'aux';
+  var divider = '<div class="swath-aux-divider">' + esc(label) + ': ' + esc(auxFile.name) + '</div>';
+  var axyz = auxPreflightData.xyz || { x: -1, y: -1, z: -1 };
+  if (axyz.x < 0 || axyz.y < 0 || axyz.z < 0) {
+    wrap.innerHTML = divider + '<div class="swath-aux-note">Assign aux X/Y/Z in the Aux tab to overlay aux variables.</div>';
+    return;
+  }
+  var auxCols = [];
+  for (var i = 0; i < auxPreflightData.header.length; i++) {
+    if (auxPreflightData.autoTypes[i] !== 'numeric') continue;
+    if (i === axyz.x || i === axyz.y || i === axyz.z) continue;
+    auxCols.push({ name: auxPreflightData.header[i], idx: i });
+  }
+  if (auxCols.length === 0) {
+    wrap.innerHTML = divider + '<div class="swath-aux-note">No numeric aux variables.</div>';
+    return;
+  }
+
+  var restore = pendingSwathAuxRestore;
+  pendingSwathAuxRestore = null;
+  var checkedNames = restore && restore.checked ? restore.checked : prevChecked;
+  var unitsByName = restore && restore.units ? restore.units : prevUnits;
+
+  var primaryLower = {};
+  for (var p = 0; p < swathNumCols.length; p++) primaryLower[swathNumCols[p].name.toLowerCase()] = true;
+
+  var html = divider;
+  for (var ai = 0; ai < auxCols.length; ai++) {
+    var c = auxCols[ai];
+    // Default: checked when the model has a same-named variable (the comparison case)
+    var checked = checkedNames !== null ? checkedNames.indexOf(c.name) >= 0 : !!primaryLower[c.name.toLowerCase()];
+    var unitIdx = unitsByName[c.name] || globalUnits[c.name] || 0;
+    var unitOpts = GRADE_UNITS.map(function(u, ui) {
+      return '<option value="' + ui + '"' + (ui === unitIdx ? ' selected' : '') + '>' + esc(u.label) + '</option>';
+    }).join('');
+    var color = getAuxSwathVarColor(c.name, swathNumCols.length + ai);
+    html += '<label class="swath-var-item swath-var-item--aux">' +
+      '<input type="checkbox" value="' + c.idx + '" data-aux="1" data-name="' + esc(c.name) + '"' + (checked ? ' checked' : '') + '>' +
+      '<div class="swath-color-swatch" data-color-key="aux:' + esc(c.name) + '" data-aux-name="' + esc(c.name) + '" data-aux-idx="' + ai + '" style="background:' + color + '"></div>' +
+      '<span>' + esc(label) + ':' + esc(c.name) + '</span>' +
+      '<select class="swath-var-unit" data-aux-col="' + c.idx + '" data-aux-name="' + esc(c.name) + '">' + unitOpts + '</select></label>';
+  }
+  wrap.innerHTML = html;
 }
 
 function runSwath() {
@@ -12093,15 +12248,40 @@ function runSwath() {
     return;
   }
 
-  // Gather selected variable column indices
+  // Gather selected variable column indices (primary and aux are separate
+  // index spaces — aux indices point into the aux file's header)
   var varCols = [];
-  document.querySelectorAll('#swathVarList input[type="checkbox"]:checked').forEach(function(cb) {
+  document.querySelectorAll('#swathVarList input[type="checkbox"]:not([data-aux]):checked').forEach(function(cb) {
     varCols.push(parseInt(cb.value));
   });
-  if (varCols.length === 0) return;
+  var auxReady = !!(auxFile && auxPreflightData && auxPreflightData.xyz &&
+    auxPreflightData.xyz.x >= 0 && auxPreflightData.xyz.y >= 0 && auxPreflightData.xyz.z >= 0);
+  var auxVarCols = [];
+  if (auxReady) {
+    document.querySelectorAll('#swathVarList input[type="checkbox"][data-aux]:checked').forEach(function(cb) {
+      auxVarCols.push(parseInt(cb.value));
+    });
+  }
+  if (varCols.length === 0 && auxVarCols.length === 0) return;
 
-  if (swathWorker) swathWorker.terminate();
-  swathWorker = new Worker(workerUrl);
+  var isCustom = axisVal === 'custom';
+  var axisIdx = isCustom ? null : (axisVal === 'x' ? 0 : (axisVal === 'y' ? 1 : 2));
+
+  // Validate azimuth before any worker spawns or UI state changes
+  var azimuthDeg = null, plungeDeg = null;
+  if (isCustom) {
+    azimuthDeg = parseFloat(document.getElementById('swathAzimuth').value);
+    if (isNaN(azimuthDeg)) {
+      $binLabel.textContent = 'Invalid azimuth';
+      $binLabel.style.color = 'var(--red)';
+      setTimeout(function() { $binLabel.style.color = ''; $binLabel.textContent = '?m bins'; }, 2000);
+      return;
+    }
+    plungeDeg = parseFloat(document.getElementById('swathPlunge').value) || 0;
+  }
+
+  if (swathWorker) { swathWorker.terminate(); swathWorker = null; }
+  if (swathAuxWorker) { swathAuxWorker.terminate(); swathAuxWorker = null; }
 
   var $progress = document.getElementById('swathProgress');
   var $fill = document.getElementById('swathProgressFill');
@@ -12115,84 +12295,138 @@ function runSwath() {
   var $btn = document.getElementById('swathGenerate');
   if ($btn) $btn.disabled = true;
 
-  var resolvedTypes = currentColTypes.slice(0, currentOrigColCount);
-  var filterPayload = currentFilter ? { expression: currentFilter.expression } : null;
-  var zipEntry = preflightData ? (preflightData.selectedZipEntry || null) : null;
+  var pending = 0;
+  var out = { vars: {}, auxVars: null, auxError: null, elapsed: 0 };
 
-  var isCustom = axisVal === 'custom';
-  var axisIdx = isCustom ? null : (axisVal === 'x' ? 0 : (axisVal === 'y' ? 1 : 2));
-  var xyzCols = [currentXYZ.x, currentXYZ.y, currentXYZ.z];
-  var dxyzCols = [currentDXYZ.dx, currentDXYZ.dy, currentDXYZ.dz];
-
-  var azimuthDeg = null, plungeDeg = null;
-  if (isCustom) {
-    azimuthDeg = parseFloat(document.getElementById('swathAzimuth').value);
-    if (isNaN(azimuthDeg)) {
-      $binLabel.textContent = 'Invalid azimuth';
-      $binLabel.style.color = 'var(--red)';
-      setTimeout(function() { $binLabel.style.color = ''; $binLabel.textContent = '?m bins'; }, 2000);
-      return;
-    }
-    plungeDeg = parseFloat(document.getElementById('swathPlunge').value) || 0;
+  function finalize() {
+    if (pending > 0) return;
+    $fill.style.width = '100%';
+    $label.textContent = 'Done';
+    setTimeout(function() { $progress.classList.remove('active'); }, 800);
+    if ($btn) $btn.disabled = false;
+    lastSwathData = {
+      vars: out.vars, axis: axisVal, axisIdx: axisIdx, binWidth: binWidth,
+      varCols: varCols, elapsed: out.elapsed, azimuth: azimuthDeg, plunge: plungeDeg,
+      auxVars: out.auxVars, auxVarCols: auxVarCols,
+      auxHeader: auxReady ? auxPreflightData.header.slice() : null,
+      auxError: out.auxError
+    };
+    renderSwathCharts(lastSwathData, stat);
+    // Update tab badge
+    var totalBins = 0;
+    Object.values(out.vars).forEach(function(arr) { totalBins = Math.max(totalBins, arr.length); });
+    if (out.auxVars) Object.values(out.auxVars).forEach(function(arr) { totalBins = Math.max(totalBins, arr.length); });
+    var swathTab = document.querySelector('.results-tab[data-tab="swath"]');
+    if (swathTab) swathTab.innerHTML = 'Swath <span class="tab-badge">' + totalBins + ' bins</span>';
+    autoSaveProject();
   }
 
-  swathWorker.postMessage({
-    mode: 'swath',
-    file: currentFile,
-    zipEntry: zipEntry,
-    globalFilter: filterPayload,
-    localFilter: localFilter || null,
-    calcolCode: currentCalcolCode || null,
-    calcolMeta: currentCalcolMeta.length > 0 ? currentCalcolMeta : null,
-    resolvedTypes: resolvedTypes,
-    xyzCols: xyzCols,
-    dxyzCols: dxyzCols,
-    axis: axisIdx,
-    varCols: varCols,
-    binWidth: binWidth,
-    azimuth: azimuthDeg,
-    plunge: plungeDeg,
-    dmEndianness: preflightData && preflightData.dmEndianness || null,
-    dmFormat: preflightData && preflightData.dmFormat || null
-  });
-
-  swathWorker.onerror = function(e) {
-    $label.textContent = 'Worker error: ' + (e.message || 'unknown error');
+  // Primary failure aborts everything; aux failure is soft (primary still renders)
+  function abortAll(msg) {
+    $label.textContent = msg;
     $label.style.color = 'var(--red)';
     setTimeout(function() { $progress.classList.remove('active'); $label.style.color = ''; }, 3000);
     if ($btn) $btn.disabled = false;
-    swathWorker.terminate();
-    swathWorker = null;
-  };
+    if (swathWorker) { swathWorker.terminate(); swathWorker = null; }
+    if (swathAuxWorker) { swathAuxWorker.terminate(); swathAuxWorker = null; }
+  }
 
-  swathWorker.onmessage = function(e) {
-    var m = e.data;
-    if (m.type === 'swath-progress') {
-      var pct = Math.min(99, m.percent);
-      $fill.style.width = pct.toFixed(1) + '%';
-      $label.textContent = pct.toFixed(0) + '%';
-    } else if (m.type === 'swath-complete') {
-      $fill.style.width = '100%';
-      $label.textContent = 'Done';
-      setTimeout(function() { $progress.classList.remove('active'); }, 800);
-      if ($btn) $btn.disabled = false;
-      lastSwathData = { vars: m.vars, axis: axisVal, axisIdx: axisIdx, binWidth: binWidth, varCols: varCols, elapsed: m.elapsed, azimuth: azimuthDeg, plunge: plungeDeg };
-      renderSwathCharts(lastSwathData, stat);
-      // Update tab badge
-      var totalBins = Object.values(m.vars).reduce(function(s, arr) { return Math.max(s, arr.length); }, 0);
-      var swathTab = document.querySelector('.results-tab[data-tab="swath"]');
-      if (swathTab) swathTab.innerHTML = 'Swath <span class="tab-badge">' + totalBins + ' bins</span>';
-      swathWorker.terminate();
-      swathWorker = null;
-      autoSaveProject();
-    } else if (m.type === 'error') {
-      $label.textContent = 'Error: ' + m.message;
-      setTimeout(function() { $progress.classList.remove('active'); }, 2000);
-      if ($btn) $btn.disabled = false;
-      swathWorker.terminate();
-      swathWorker = null;
-    }
-  };
+  if (varCols.length > 0) {
+    pending++;
+    swathWorker = new Worker(workerUrl);
+    swathWorker.postMessage({
+      mode: 'swath',
+      file: currentFile,
+      zipEntry: preflightData ? (preflightData.selectedZipEntry || null) : null,
+      globalFilter: currentFilter ? { expression: currentFilter.expression } : null,
+      localFilter: localFilter || null,
+      calcolCode: currentCalcolCode || null,
+      calcolMeta: currentCalcolMeta.length > 0 ? currentCalcolMeta : null,
+      resolvedTypes: currentColTypes.slice(0, currentOrigColCount),
+      xyzCols: [currentXYZ.x, currentXYZ.y, currentXYZ.z],
+      dxyzCols: [currentDXYZ.dx, currentDXYZ.dy, currentDXYZ.dz],
+      axis: axisIdx,
+      varCols: varCols,
+      binWidth: binWidth,
+      azimuth: azimuthDeg,
+      plunge: plungeDeg,
+      dmEndianness: preflightData && preflightData.dmEndianness || null,
+      dmFormat: preflightData && preflightData.dmFormat || null
+    });
+    swathWorker.onerror = function(e) {
+      abortAll('Worker error: ' + (e.message || 'unknown error'));
+    };
+    swathWorker.onmessage = function(e) {
+      var m = e.data;
+      if (m.type === 'swath-progress') {
+        var pct = Math.min(99, m.percent);
+        $fill.style.width = pct.toFixed(1) + '%';
+        $label.textContent = pct.toFixed(0) + '%';
+      } else if (m.type === 'swath-complete') {
+        out.vars = m.vars;
+        out.elapsed = m.elapsed;
+        swathWorker.terminate();
+        swathWorker = null;
+        pending--;
+        finalize();
+      } else if (m.type === 'error') {
+        abortAll('Error: ' + m.message);
+      }
+    };
+  }
+
+  if (auxVarCols.length > 0) {
+    pending++;
+    swathAuxWorker = new Worker(workerUrl);
+    swathAuxWorker.postMessage({
+      mode: 'swath',
+      file: auxFile,
+      zipEntry: auxPreflightData.selectedZipEntry || null,
+      globalFilter: auxFilter ? { expression: auxFilter.expression } : null,
+      localFilter: null,
+      calcolCode: null,
+      calcolMeta: null,
+      resolvedTypes: auxPreflightData.autoTypes,
+      xyzCols: [auxPreflightData.xyz.x, auxPreflightData.xyz.y, auxPreflightData.xyz.z],
+      dxyzCols: [-1, -1, -1],
+      axis: axisIdx,
+      varCols: auxVarCols,
+      binWidth: binWidth,
+      azimuth: azimuthDeg,
+      plunge: plungeDeg,
+      rowVarOverride: AUX_ROW_VAR,
+      dmEndianness: auxPreflightData.dmEndianness || null,
+      dmFormat: auxPreflightData.dmFormat || null
+    });
+    swathAuxWorker.onerror = function(e) {
+      out.auxError = e.message || 'unknown error';
+      if (swathAuxWorker) { swathAuxWorker.terminate(); swathAuxWorker = null; }
+      pending--;
+      finalize();
+    };
+    swathAuxWorker.onmessage = function(e) {
+      var m = e.data;
+      if (m.type === 'swath-progress') {
+        if (varCols.length === 0) {
+          var pct = Math.min(99, m.percent);
+          $fill.style.width = pct.toFixed(1) + '%';
+          $label.textContent = pct.toFixed(0) + '%';
+        }
+      } else if (m.type === 'swath-complete') {
+        out.auxVars = m.vars;
+        swathAuxWorker.terminate();
+        swathAuxWorker = null;
+        pending--;
+        finalize();
+      } else if (m.type === 'error') {
+        out.auxError = m.message;
+        swathAuxWorker.terminate();
+        swathAuxWorker = null;
+        pending--;
+        finalize();
+      }
+    };
+  }
 }
 
 function queryTDigestPercentile(centroids, p) {
@@ -12209,6 +12443,50 @@ function queryTDigestPercentile(centroids, p) {
   return centroids[centroids.length - 1][0];
 }
 
+function buildSwathStatLines(bins, stat) {
+  var centerLine = [], upperLine = [], lowerLine = [];
+  for (var bi = 0; bi < bins.length; bi++) {
+    var bin = bins[bi];
+    var x = bin.center;
+    if (stat === 'mean_std') {
+      centerLine.push({ x: x, y: bin.mean });
+      upperLine.push({ x: x, y: bin.mean + bin.std });
+      lowerLine.push({ x: x, y: bin.mean - bin.std });
+    } else if (stat === 'p25_50_75') {
+      centerLine.push({ x: x, y: queryTDigestPercentile(bin.centroids, 0.50) });
+      upperLine.push({ x: x, y: queryTDigestPercentile(bin.centroids, 0.75) });
+      lowerLine.push({ x: x, y: queryTDigestPercentile(bin.centroids, 0.25) });
+    } else {
+      centerLine.push({ x: x, y: queryTDigestPercentile(bin.centroids, 0.50) });
+      upperLine.push({ x: x, y: queryTDigestPercentile(bin.centroids, 0.90) });
+      lowerLine.push({ x: x, y: queryTDigestPercentile(bin.centroids, 0.10) });
+    }
+  }
+  return { centerLine: centerLine, upperLine: upperLine, lowerLine: lowerLine };
+}
+
+// Group entries that share a Y scale: an aux series with the same variable
+// name as a primary series joins the primary's group. Sharing the scale is
+// what makes model-vs-samples bias visible — separate autoscaled axes would
+// stretch both series to fill the plot and hide exactly the offset the
+// validation plot exists to show.
+function buildSwathScaleGroups(varEntries) {
+  var groups = [];
+  var byKey = {};
+  for (var i = 0; i < varEntries.length; i++) {
+    var en = varEntries[i];
+    var gi = byKey[en.scaleKey];
+    if (gi === undefined) {
+      gi = groups.length;
+      byKey[en.scaleKey] = gi;
+      groups.push({ key: en.scaleKey, entries: [], color: en.color, name: en.name, unit: en.unit });
+    }
+    en.groupIdx = gi;
+    groups[gi].entries.push(en);
+  }
+  return groups;
+}
+
 function renderSwathCharts(swathData, stat) {
   var $content = document.getElementById('swathContent');
   if (!$content || !swathData || !swathData.vars) {
@@ -12216,47 +12494,60 @@ function renderSwathCharts(swathData, stat) {
     return;
   }
   var varCols = swathData.varCols || [];
-  var hasData = varCols.some(function(vi) { return swathData.vars[vi] && swathData.vars[vi].length > 0; });
+  var auxVarCols = swathData.auxVarCols || [];
+  var hasData = varCols.some(function(vi) { return swathData.vars[vi] && swathData.vars[vi].length > 0; }) ||
+    auxVarCols.some(function(vi) { return swathData.auxVars && swathData.auxVars[vi] && swathData.auxVars[vi].length > 0; });
   if (!hasData) {
     $content.innerHTML = '<div class="swath-hint">No data in selected bins.</div>';
     return;
   }
 
-  // Build per-variable entries
+  // Build per-variable entries — primary first, then aux
   var varEntries = [];
   for (var vi = 0; vi < varCols.length; vi++) {
     var colIdx = varCols[vi];
     var bins = (swathData.vars[colIdx] || []).filter(function(b) { return b.count > 0; }).sort(function(a, b) { return a.center - b.center; });
     if (bins.length === 0) continue;
-    var centerLine = [], upperLine = [], lowerLine = [];
-    for (var bi = 0; bi < bins.length; bi++) {
-      var bin = bins[bi];
-      var x = bin.center;
-      if (stat === 'mean_std') {
-        centerLine.push({ x: x, y: bin.mean });
-        upperLine.push({ x: x, y: bin.mean + bin.std });
-        lowerLine.push({ x: x, y: bin.mean - bin.std });
-      } else if (stat === 'p25_50_75') {
-        centerLine.push({ x: x, y: queryTDigestPercentile(bin.centroids, 0.50) });
-        upperLine.push({ x: x, y: queryTDigestPercentile(bin.centroids, 0.75) });
-        lowerLine.push({ x: x, y: queryTDigestPercentile(bin.centroids, 0.25) });
-      } else {
-        centerLine.push({ x: x, y: queryTDigestPercentile(bin.centroids, 0.50) });
-        upperLine.push({ x: x, y: queryTDigestPercentile(bin.centroids, 0.90) });
-        lowerLine.push({ x: x, y: queryTDigestPercentile(bin.centroids, 0.10) });
-      }
-    }
-    var unit = getSwathUnit(colIdx);
+    var lines = buildSwathStatLines(bins, stat);
+    var name = currentHeader[colIdx] || 'Variable';
     varEntries.push({
       colIdx: colIdx,
-      name: currentHeader[colIdx] || 'Variable',
-      color: getSwathVarColor(currentHeader[colIdx] || 'Variable', vi),
+      isAux: false,
+      name: name,
+      color: getSwathVarColor(name, vi),
       bins: bins,
-      centerLine: centerLine,
-      upperLine: upperLine,
-      lowerLine: lowerLine,
-      unit: unit
+      centerLine: lines.centerLine,
+      upperLine: lines.upperLine,
+      lowerLine: lines.lowerLine,
+      unit: getSwathUnit(colIdx),
+      scaleKey: name.toLowerCase()
     });
+  }
+  if (swathData.auxVars) {
+    var primaryKeys = {};
+    varEntries.forEach(function(en) { primaryKeys[en.scaleKey] = true; });
+    var prefixLabel = auxPrefix || 'aux';
+    for (var ai = 0; ai < auxVarCols.length; ai++) {
+      var aIdx = auxVarCols[ai];
+      var aBins = (swathData.auxVars[aIdx] || []).filter(function(b) { return b.count > 0; }).sort(function(a, b) { return a.center - b.center; });
+      if (aBins.length === 0) continue;
+      var aLines = buildSwathStatLines(aBins, stat);
+      var baseName = (swathData.auxHeader && swathData.auxHeader[aIdx]) || 'Variable';
+      var aKey = baseName.toLowerCase();
+      varEntries.push({
+        colIdx: aIdx,
+        isAux: true,
+        baseName: baseName,
+        name: prefixLabel + ':' + baseName,
+        color: getAuxSwathVarColor(baseName, varEntries.length),
+        bins: aBins,
+        centerLine: aLines.centerLine,
+        upperLine: aLines.upperLine,
+        lowerLine: aLines.lowerLine,
+        unit: getAuxSwathUnit(aIdx, baseName),
+        scaleKey: primaryKeys[aKey] ? aKey : 'aux:' + aKey
+      });
+    }
   }
 
   if (varEntries.length === 0) {
@@ -12268,7 +12559,11 @@ function renderSwathCharts(swathData, stat) {
   var chartSvg = display.layout === 'split'
     ? renderSwathSplitSvg(varEntries, swathData, stat, display)
     : renderSwathOverlaySvg(varEntries, swathData, stat, display);
-  var html = '<div class="swath-chart-card">' +
+  var html = '';
+  if (swathData.auxError) {
+    html += '<div class="swath-aux-warn">Aux swath failed: ' + esc(swathData.auxError) + ' — showing primary only.</div>';
+  }
+  html += '<div class="swath-chart-card">' +
     '<div class="swath-chart-toolbar">' +
       '<button class="swath-chart-btn" id="swathCopySvg">Copy SVG</button>' +
       '<button class="swath-chart-btn" id="swathDownloadPng">Download PNG</button>' +
@@ -12286,11 +12581,19 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
   var numVars = varEntries.length;
   var bw = swathData.binWidth;
 
-  // Use first entry's bins for shared X axis + counts (all share same spatial bins)
-  var refBins = varEntries[0].bins;
+  // Y-scale groups: same-named model/aux series share an axis
+  var groups = buildSwathScaleGroups(varEntries);
+  var numGroups = groups.length;
 
-  // Dimensions — extra right axes for 3+ variables
-  var extraAxes = Math.max(0, numVars - 2);
+  // Reference bins for counts/crosshair: first primary entry, else first entry
+  var refEntry = varEntries[0];
+  for (var ri = 0; ri < varEntries.length; ri++) {
+    if (!varEntries[ri].isAux) { refEntry = varEntries[ri]; break; }
+  }
+  var refBins = refEntry.bins;
+
+  // Dimensions — extra right axes for 3+ scale groups
+  var extraAxes = Math.max(0, numGroups - 2);
   var W = 720 + extraAxes * 55;
   var padRight = 55 + extraAxes * 55;
   var pad = { top: 30, right: padRight, bottom: 70, left: 65 };
@@ -12304,20 +12607,26 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
   var countGap = display.showCounts ? 30 : 10;
   var H = pad.top + plotH + countGap + countBarH + 10 + legendH + pad.bottom;
 
-  // Shared X scale
-  var xMin = refBins[0].center - bw / 2;
-  var xMax = refBins[refBins.length - 1].center + bw / 2;
+  // Shared X scale over the union of all entries' extents
+  var xMin = Infinity, xMax = -Infinity;
+  for (var xi = 0; xi < varEntries.length; xi++) {
+    var xb = varEntries[xi].bins;
+    if (xb[0].center - bw / 2 < xMin) xMin = xb[0].center - bw / 2;
+    if (xb[xb.length - 1].center + bw / 2 > xMax) xMax = xb[xb.length - 1].center + bw / 2;
+  }
   var xRange = xMax - xMin || 1;
   var sx = function(v) { return pad.left + ((v - xMin) / xRange) * plotW; };
 
-  // Per-variable Y scales
+  // Per-group Y scales (union of member entries' extents)
   var yMins = [], yMaxs = [];
-  for (var vi = 0; vi < varEntries.length; vi++) {
-    var entry = varEntries[vi];
+  for (var gi = 0; gi < numGroups; gi++) {
     var allY = [];
-    for (var j = 0; j < entry.centerLine.length; j++) { if (entry.centerLine[j].y != null) allY.push(entry.centerLine[j].y); }
-    for (var j = 0; j < entry.upperLine.length; j++) { if (entry.upperLine[j].y != null) allY.push(entry.upperLine[j].y); }
-    for (var j = 0; j < entry.lowerLine.length; j++) { if (entry.lowerLine[j].y != null) allY.push(entry.lowerLine[j].y); }
+    for (var gei = 0; gei < groups[gi].entries.length; gei++) {
+      var entry = groups[gi].entries[gei];
+      for (var j = 0; j < entry.centerLine.length; j++) { if (entry.centerLine[j].y != null) allY.push(entry.centerLine[j].y); }
+      for (var j = 0; j < entry.upperLine.length; j++) { if (entry.upperLine[j].y != null) allY.push(entry.upperLine[j].y); }
+      for (var j = 0; j < entry.lowerLine.length; j++) { if (entry.lowerLine[j].y != null) allY.push(entry.lowerLine[j].y); }
+    }
     var yMin = allY.length > 0 ? Math.min.apply(null, allY) : 0;
     var yMax = allY.length > 0 ? Math.max.apply(null, allY) : 1;
     var yPad = (yMax - yMin) * 0.1 || 1;
@@ -12330,25 +12639,25 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
   // For log scale, compute log-space min/max
   var logYMins = [], logYMaxs = [];
   if (useLog) {
-    for (var vi = 0; vi < varEntries.length; vi++) {
-      var logMin = yMins[vi] > 0 ? Math.log10(yMins[vi]) : -1;
-      var logMax = yMaxs[vi] > 0 ? Math.log10(yMaxs[vi]) : 1;
+    for (var gi = 0; gi < numGroups; gi++) {
+      var logMin = yMins[gi] > 0 ? Math.log10(yMins[gi]) : -1;
+      var logMax = yMaxs[gi] > 0 ? Math.log10(yMaxs[gi]) : 1;
       if (logMax <= logMin) logMax = logMin + 1;
       logYMins.push(logMin);
       logYMaxs.push(logMax);
     }
   }
 
-  function syFn(vi) {
+  function syFn(gi) {
     if (useLog) {
-      var lmn = logYMins[vi], lmx = logYMaxs[vi];
+      var lmn = logYMins[gi], lmx = logYMaxs[gi];
       var lr = lmx - lmn || 1;
       return function(v) {
         var lv = v > 0 ? Math.log10(v) : lmn;
         return pad.top + ((lmx - lv) / lr) * plotH;
       };
     }
-    var ymn = yMins[vi], ymx = yMaxs[vi];
+    var ymn = yMins[gi], ymx = yMaxs[gi];
     var yr = ymx - ymn || 1;
     return function(v) { return pad.top + ((ymx - v) / yr) * plotH; };
   }
@@ -12398,10 +12707,10 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
     svg += '<line x1="' + pad.left + '" y1="' + y.toFixed(1) + '" x2="' + (pad.left + plotW) + '" y2="' + y.toFixed(1) + '" stroke="#1e2228" stroke-width="1"/>';
   }
 
-  // Per-variable ribbons and lines
+  // Per-variable ribbons and lines (aux series dashed, lighter ribbon)
   for (var vi = 0; vi < varEntries.length; vi++) {
     var entry = varEntries[vi];
-    var sy = syFn(vi);
+    var sy = syFn(entry.groupIdx);
     var color = entry.color;
 
     // Ribbon (bands)
@@ -12414,7 +12723,7 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
         ribbonPath += 'L' + sx(entry.lowerLine[i].x).toFixed(1) + ',' + sy(entry.lowerLine[i].y != null ? entry.lowerLine[i].y : 0).toFixed(1);
       }
       ribbonPath += 'Z';
-      svg += '<path d="' + ribbonPath + '" fill="' + color + '" opacity="0.15"/>';
+      svg += '<path d="' + ribbonPath + '" fill="' + color + '" opacity="' + (entry.isAux ? '0.08' : '0.15') + '"/>';
     }
 
     // Center line
@@ -12422,44 +12731,44 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
     for (var i = 0; i < entry.bins.length; i++) {
       centerPath += (i === 0 ? 'M' : 'L') + sx(entry.centerLine[i].x).toFixed(1) + ',' + sy(entry.centerLine[i].y != null ? entry.centerLine[i].y : 0).toFixed(1);
     }
-    svg += '<path d="' + centerPath + '" fill="none" stroke="' + color + '" stroke-width="1.5"/>';
+    svg += '<path d="' + centerPath + '" fill="none" stroke="' + color + '" stroke-width="1.5"' + (entry.isAux ? ' stroke-dasharray="6,4"' : '') + '/>';
   }
 
-  // Per-variable Y axes
-  for (var vi = 0; vi < varEntries.length; vi++) {
-    var entry = varEntries[vi];
-    var sy = syFn(vi);
-    var color = entry.color;
-    var yr = yMaxs[vi] - yMins[vi] || 1;
+  // Per-group Y axes (a shared model/aux group draws one axis)
+  for (var gi = 0; gi < numGroups; gi++) {
+    var group = groups[gi];
+    var sy = syFn(gi);
+    var color = group.color;
+    var yr = yMaxs[gi] - yMins[gi] || 1;
 
-    // Generate tick values for this variable's axis
+    // Generate tick values for this group's axis
     var tickVals = [];
     if (useLog) {
-      var lFloorV = Math.floor(logYMins[vi]), lCeilV = Math.ceil(logYMaxs[vi]);
+      var lFloorV = Math.floor(logYMins[gi]), lCeilV = Math.ceil(logYMaxs[gi]);
       for (var p = lFloorV; p <= lCeilV; p++) tickVals.push(Math.pow(10, p));
       if (tickVals.length < 3) {
         tickVals = [];
         for (var ti = 0; ti <= nyTicks; ti++) {
-          var lv = logYMins[vi] + ((logYMaxs[vi] - logYMins[vi]) * ti / nyTicks);
+          var lv = logYMins[gi] + ((logYMaxs[gi] - logYMins[gi]) * ti / nyTicks);
           tickVals.push(Math.pow(10, lv));
         }
       }
     } else {
-      for (var ti = 0; ti <= nyTicks; ti++) tickVals.push(yMins[vi] + (yr * ti / nyTicks));
+      for (var ti = 0; ti <= nyTicks; ti++) tickVals.push(yMins[gi] + (yr * ti / nyTicks));
     }
 
-    if (vi === 0) {
+    if (gi === 0) {
       // Left Y-axis
       for (var ti = 0; ti < tickVals.length; ti++) {
         var v = tickVals[ti];
         var y = sy(v);
         svg += '<text x="' + (pad.left - 6) + '" y="' + (y + 3) + '" text-anchor="end" fill="' + color + '" font-size="9">' + formatNum(v) + '</text>';
       }
-      var axisLabel = esc(entry.name) + (entry.unit && entry.unit.symbol ? ' (' + esc(entry.unit.symbol) + ')' : '');
+      var axisLabel = esc(group.name) + (group.unit && group.unit.symbol ? ' (' + esc(group.unit.symbol) + ')' : '');
       svg += '<text x="12" y="' + (pad.top + plotH / 2) + '" text-anchor="middle" fill="' + color + '" font-size="10" transform="rotate(-90, 12, ' + (pad.top + plotH / 2) + ')">' + axisLabel + '</text>';
     } else {
-      // Right Y-axis — offset by (vi - 1) * 55
-      var axisX = pad.left + plotW + (vi - 1) * 55 + 10;
+      // Right Y-axis — offset by (gi - 1) * 55
+      var axisX = pad.left + plotW + (gi - 1) * 55 + 10;
       for (var ti = 0; ti < tickVals.length; ti++) {
         var v = tickVals[ti];
         var y = sy(v);
@@ -12469,7 +12778,9 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
     }
   }
 
-  // Count bars below plot
+  // Count bars below plot — primary filled; aux overlaid hollow, each
+  // normalized to its own max (block and sample counts differ by orders
+  // of magnitude)
   var barTop = pad.top + plotH + countGap - 4;
   if (display.showCounts) {
     var maxCount = 0;
@@ -12480,6 +12791,21 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
       var bwPx = sx(bin.center + bw / 2) - bx;
       var bh = maxCount > 0 ? (bin.count / maxCount) * countBarH : 0;
       svg += '<rect x="' + bx.toFixed(1) + '" y="' + (barTop + countBarH - bh).toFixed(1) + '" width="' + Math.max(1, bwPx - 1).toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="rgba(240,178,50,0.3)"/>';
+    }
+    var auxCountRef = null;
+    for (var i = 0; i < varEntries.length; i++) {
+      if (varEntries[i].isAux) { auxCountRef = varEntries[i]; break; }
+    }
+    if (auxCountRef && auxCountRef !== refEntry) {
+      var auxMax = 0;
+      for (var i = 0; i < auxCountRef.bins.length; i++) { if (auxCountRef.bins[i].count > auxMax) auxMax = auxCountRef.bins[i].count; }
+      for (var i = 0; i < auxCountRef.bins.length; i++) {
+        var abin = auxCountRef.bins[i];
+        var abx = sx(abin.center - bw / 2);
+        var abwPx = sx(abin.center + bw / 2) - abx;
+        var abh = auxMax > 0 ? (abin.count / auxMax) * countBarH : 0;
+        svg += '<rect x="' + abx.toFixed(1) + '" y="' + (barTop + countBarH - abh).toFixed(1) + '" width="' + Math.max(1, abwPx - 1).toFixed(1) + '" height="' + Math.max(0.5, abh).toFixed(1) + '" fill="none" stroke="' + auxCountRef.color + '" stroke-width="0.75" opacity="0.6"/>';
+      }
     }
   }
 
@@ -12492,7 +12818,7 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
   var statLabels = { mean_std: 'Mean \u00b1 Std', p25_50_75: 'P25/P50/P75', p10_50_90: 'P10/P50/P90' };
   svg += '<text x="' + (pad.left + plotW / 2) + '" y="' + (barTop + countBarH + 14) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + getSwathXAxisLabel(swathData) + ' (' + (statLabels[stat] || stat) + ')</text>';
 
-  // Legend — 3 columns
+  // Legend — 3 columns; aux entries get a dashed line marker
   var legendTop = barTop + countBarH + 24;
   var colW = plotW / legendCols;
   for (var vi = 0; vi < varEntries.length; vi++) {
@@ -12501,7 +12827,11 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
     var lx = pad.left + col * colW;
     var ly = legendTop + row * 16;
     var legLabel = esc(varEntries[vi].name) + (varEntries[vi].unit && varEntries[vi].unit.symbol ? ' (' + esc(varEntries[vi].unit.symbol) + ')' : '');
-    svg += '<rect x="' + lx + '" y="' + ly + '" width="12" height="3" fill="' + varEntries[vi].color + '" rx="1"/>';
+    if (varEntries[vi].isAux) {
+      svg += '<line x1="' + lx + '" y1="' + (ly + 1.5) + '" x2="' + (lx + 12) + '" y2="' + (ly + 1.5) + '" stroke="' + varEntries[vi].color + '" stroke-width="2.5" stroke-dasharray="3,2"/>';
+    } else {
+      svg += '<rect x="' + lx + '" y="' + ly + '" width="12" height="3" fill="' + varEntries[vi].color + '" rx="1"/>';
+    }
     svg += '<text x="' + (lx + 16) + '" y="' + (ly + 4) + '" fill="' + varEntries[vi].color + '" font-size="9">' + legLabel + '</text>';
   }
 
@@ -12520,9 +12850,19 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
 }
 
 function renderSwathSplitSvg(varEntries, swathData, stat, display) {
-  var numVars = varEntries.length;
   var bw = swathData.binWidth;
-  var refBins = varEntries[0].bins;
+
+  // One sub-chart per scale group: a same-named aux series shares its
+  // primary's panel and Y scale
+  var groups = buildSwathScaleGroups(varEntries);
+  var numGroups = groups.length;
+
+  // Reference bins for counts/crosshair: first primary entry, else first entry
+  var refEntry = varEntries[0];
+  for (var ri = 0; ri < varEntries.length; ri++) {
+    if (!varEntries[ri].isAux) { refEntry = varEntries[ri]; break; }
+  }
+  var refBins = refEntry.bins;
 
   // Dimensions
   var W = 720;
@@ -12532,24 +12872,30 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
   var subGap = 24; // gap between sub-charts
   var countBarH = display.showCounts ? 20 : 0;
   var countGap = display.showCounts ? 10 : 0;
-  var totalH = pad.top + numVars * subH + (numVars - 1) * subGap + countGap + countBarH + pad.bottom;
+  var totalH = pad.top + numGroups * subH + (numGroups - 1) * subGap + countGap + countBarH + pad.bottom;
 
-  // Shared X scale
-  var xMin = refBins[0].center - bw / 2;
-  var xMax = refBins[refBins.length - 1].center + bw / 2;
+  // Shared X scale over the union of all entries' extents
+  var xMin = Infinity, xMax = -Infinity;
+  for (var xi = 0; xi < varEntries.length; xi++) {
+    var xb = varEntries[xi].bins;
+    if (xb[0].center - bw / 2 < xMin) xMin = xb[0].center - bw / 2;
+    if (xb[xb.length - 1].center + bw / 2 > xMax) xMax = xb[xb.length - 1].center + bw / 2;
+  }
   var xRange = xMax - xMin || 1;
   var sx = function(v) { return pad.left + ((v - xMin) / xRange) * plotW; };
 
   var useLog = display.yScale === 'log';
 
-  // Per-variable Y ranges
+  // Per-group Y ranges (union of member entries' extents)
   var yMins = [], yMaxs = [], logYMinsSplit = [], logYMaxsSplit = [];
-  for (var vi = 0; vi < varEntries.length; vi++) {
-    var entry = varEntries[vi];
+  for (var gi = 0; gi < numGroups; gi++) {
     var allY = [];
-    for (var j = 0; j < entry.centerLine.length; j++) { if (entry.centerLine[j].y != null) allY.push(entry.centerLine[j].y); }
-    for (var j = 0; j < entry.upperLine.length; j++) { if (entry.upperLine[j].y != null) allY.push(entry.upperLine[j].y); }
-    for (var j = 0; j < entry.lowerLine.length; j++) { if (entry.lowerLine[j].y != null) allY.push(entry.lowerLine[j].y); }
+    for (var gei = 0; gei < groups[gi].entries.length; gei++) {
+      var entry = groups[gi].entries[gei];
+      for (var j = 0; j < entry.centerLine.length; j++) { if (entry.centerLine[j].y != null) allY.push(entry.centerLine[j].y); }
+      for (var j = 0; j < entry.upperLine.length; j++) { if (entry.upperLine[j].y != null) allY.push(entry.upperLine[j].y); }
+      for (var j = 0; j < entry.lowerLine.length; j++) { if (entry.lowerLine[j].y != null) allY.push(entry.lowerLine[j].y); }
+    }
     var yMin = allY.length > 0 ? Math.min.apply(null, allY) : 0;
     var yMax = allY.length > 0 ? Math.max.apply(null, allY) : 1;
     var yPad = (yMax - yMin) * 0.1 || 1;
@@ -12563,19 +12909,19 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
     }
   }
 
-  function subTop(vi) { return pad.top + vi * (subH + subGap); }
+  function subTop(gi) { return pad.top + gi * (subH + subGap); }
 
-  function syFn(vi) {
-    var st = subTop(vi);
+  function syFn(gi) {
+    var st = subTop(gi);
     if (useLog) {
-      var lmn = logYMinsSplit[vi], lmx = logYMaxsSplit[vi];
+      var lmn = logYMinsSplit[gi], lmx = logYMaxsSplit[gi];
       var lr = lmx - lmn || 1;
       return function(v) {
         var lv = v > 0 ? Math.log10(v) : lmn;
         return st + ((lmx - lv) / lr) * subH;
       };
     }
-    var ymn = yMins[vi], ymx = yMaxs[vi], yr = ymx - ymn || 1;
+    var ymn = yMins[gi], ymx = yMaxs[gi], yr = ymx - ymn || 1;
     return function(v) { return st + ((ymx - v) / yr) * subH; };
   }
 
@@ -12587,7 +12933,7 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
     yMins: yMins, yMaxs: yMaxs,
     pad: pad, plotW: plotW, subH: subH, subGap: subGap,
     W: W, H: totalH, bw: bw,
-    stat: stat, refBins: refBins, numVars: numVars,
+    stat: stat, refBins: refBins, numVars: numGroups,
     subTop: subTop
   };
 
@@ -12599,12 +12945,12 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
   svg += '<text x="' + (pad.left + 4) + '" y="' + (pad.top - 6) + '" fill="#6a737d" font-size="10">' + dirLabels.left + ' (' + formatNum(xMin) + ')</text>';
   svg += '<text x="' + (pad.left + plotW - 4) + '" y="' + (pad.top - 6) + '" text-anchor="end" fill="#6a737d" font-size="10">' + dirLabels.right + ' (' + formatNum(xMax) + ')</text>';
 
-  // Render each sub-chart
-  for (var vi = 0; vi < numVars; vi++) {
-    var entry = varEntries[vi];
-    var sy = syFn(vi);
-    var st = subTop(vi);
-    var color = entry.color;
+  // Render each sub-chart (one per scale group; member series overlay in it)
+  for (var gi = 0; gi < numGroups; gi++) {
+    var group = groups[gi];
+    var sy = syFn(gi);
+    var st = subTop(gi);
+    var color = group.color;
 
     // Background for sub-chart
     svg += '<rect x="' + pad.left + '" y="' + st + '" width="' + plotW + '" height="' + subH + '" fill="var(--bg)" stroke="var(--border)" stroke-width="0.5"/>';
@@ -12619,9 +12965,9 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
 
     // Y grid lines
     var nyTicks = 4;
-    var yr = yMaxs[vi] - yMins[vi] || 1;
+    var yr = yMaxs[gi] - yMins[gi] || 1;
     if (useLog) {
-      var lFloor = Math.floor(logYMinsSplit[vi]), lCeil = Math.ceil(logYMaxsSplit[vi]);
+      var lFloor = Math.floor(logYMinsSplit[gi]), lCeil = Math.ceil(logYMaxsSplit[gi]);
       for (var p = lFloor; p <= lCeil; p++) {
         var gv = Math.pow(10, p);
         var gy = sy(gv);
@@ -12629,60 +12975,70 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
       }
     } else {
       for (var i = 0; i <= nyTicks; i++) {
-        var v = yMins[vi] + (yr * i / nyTicks);
+        var v = yMins[gi] + (yr * i / nyTicks);
         var gy = sy(v);
         svg += '<line x1="' + pad.left + '" y1="' + gy.toFixed(1) + '" x2="' + (pad.left + plotW) + '" y2="' + gy.toFixed(1) + '" stroke="#1e2228" stroke-width="1"/>';
       }
     }
 
-    // Ribbon (bands)
-    if (display.showBands) {
-      var ribbonPath = '';
+    // Member series: ribbon + center line (aux dashed, lighter ribbon)
+    for (var mi = 0; mi < group.entries.length; mi++) {
+      var entry = group.entries[mi];
+      var ecolor = entry.color;
+
+      if (display.showBands) {
+        var ribbonPath = '';
+        for (var i = 0; i < entry.bins.length; i++) {
+          ribbonPath += (i === 0 ? 'M' : 'L') + sx(entry.upperLine[i].x).toFixed(1) + ',' + sy(entry.upperLine[i].y != null ? entry.upperLine[i].y : 0).toFixed(1);
+        }
+        for (var i = entry.bins.length - 1; i >= 0; i--) {
+          ribbonPath += 'L' + sx(entry.lowerLine[i].x).toFixed(1) + ',' + sy(entry.lowerLine[i].y != null ? entry.lowerLine[i].y : 0).toFixed(1);
+        }
+        ribbonPath += 'Z';
+        svg += '<path d="' + ribbonPath + '" fill="' + ecolor + '" opacity="' + (entry.isAux ? '0.08' : '0.15') + '"/>';
+      }
+
+      var centerPath = '';
       for (var i = 0; i < entry.bins.length; i++) {
-        ribbonPath += (i === 0 ? 'M' : 'L') + sx(entry.upperLine[i].x).toFixed(1) + ',' + sy(entry.upperLine[i].y != null ? entry.upperLine[i].y : 0).toFixed(1);
+        centerPath += (i === 0 ? 'M' : 'L') + sx(entry.centerLine[i].x).toFixed(1) + ',' + sy(entry.centerLine[i].y != null ? entry.centerLine[i].y : 0).toFixed(1);
       }
-      for (var i = entry.bins.length - 1; i >= 0; i--) {
-        ribbonPath += 'L' + sx(entry.lowerLine[i].x).toFixed(1) + ',' + sy(entry.lowerLine[i].y != null ? entry.lowerLine[i].y : 0).toFixed(1);
-      }
-      ribbonPath += 'Z';
-      svg += '<path d="' + ribbonPath + '" fill="' + color + '" opacity="0.15"/>';
+      svg += '<path d="' + centerPath + '" fill="none" stroke="' + ecolor + '" stroke-width="1.5"' + (entry.isAux ? ' stroke-dasharray="6,4"' : '') + '/>';
     }
 
-    // Center line
-    var centerPath = '';
-    for (var i = 0; i < entry.bins.length; i++) {
-      centerPath += (i === 0 ? 'M' : 'L') + sx(entry.centerLine[i].x).toFixed(1) + ',' + sy(entry.centerLine[i].y != null ? entry.centerLine[i].y : 0).toFixed(1);
-    }
-    svg += '<path d="' + centerPath + '" fill="none" stroke="' + color + '" stroke-width="1.5"/>';
-
-    // Left Y-axis ticks
+    // Left Y-axis ticks (group scale, group color)
     var tickVals = [];
     if (useLog) {
-      var lFloorV = Math.floor(logYMinsSplit[vi]), lCeilV = Math.ceil(logYMaxsSplit[vi]);
+      var lFloorV = Math.floor(logYMinsSplit[gi]), lCeilV = Math.ceil(logYMaxsSplit[gi]);
       for (var p = lFloorV; p <= lCeilV; p++) tickVals.push(Math.pow(10, p));
       if (tickVals.length < 3) {
         tickVals = [];
         for (var ti = 0; ti <= nyTicks; ti++) {
-          var lv = logYMinsSplit[vi] + ((logYMaxsSplit[vi] - logYMinsSplit[vi]) * ti / nyTicks);
+          var lv = logYMinsSplit[gi] + ((logYMaxsSplit[gi] - logYMinsSplit[gi]) * ti / nyTicks);
           tickVals.push(Math.pow(10, lv));
         }
       }
     } else {
-      for (var ti = 0; ti <= nyTicks; ti++) tickVals.push(yMins[vi] + (yr * ti / nyTicks));
+      for (var ti = 0; ti <= nyTicks; ti++) tickVals.push(yMins[gi] + (yr * ti / nyTicks));
     }
     for (var ti = 0; ti < tickVals.length; ti++) {
       var y = sy(tickVals[ti]);
       svg += '<text x="' + (pad.left - 6) + '" y="' + (y + 3) + '" text-anchor="end" fill="' + color + '" font-size="9">' + formatNum(tickVals[ti]) + '</text>';
     }
 
-    // Variable name label
-    var uSym = entry.unit && entry.unit.symbol ? ' (' + esc(entry.unit.symbol) + ')' : '';
-    svg += '<text x="' + (pad.left + 4) + '" y="' + (st + 12) + '" fill="' + color + '" font-size="10" font-weight="600">' + esc(entry.name) + uSym + '</text>';
+    // Member name labels, stacked top-left
+    var labelY = st + 12;
+    for (var mi = 0; mi < group.entries.length; mi++) {
+      var entry = group.entries[mi];
+      var uSym = entry.unit && entry.unit.symbol ? ' (' + esc(entry.unit.symbol) + ')' : '';
+      svg += '<text x="' + (pad.left + 4) + '" y="' + labelY + '" fill="' + entry.color + '" font-size="10" font-weight="600">' + esc(entry.name) + uSym + (entry.isAux ? ' (dashed)' : '') + '</text>';
+      labelY += 12;
+    }
   }
 
-  // Count bars at the bottom (only once, below last sub-chart)
+  // Count bars at the bottom (only once, below last sub-chart) — primary
+  // filled; aux overlaid hollow, each normalized to its own max
   if (display.showCounts) {
-    var cbTop = subTop(numVars - 1) + subH + countGap;
+    var cbTop = subTop(numGroups - 1) + subH + countGap;
     var maxCount = 0;
     for (var i = 0; i < refBins.length; i++) { if (refBins[i].count > maxCount) maxCount = refBins[i].count; }
     for (var i = 0; i < refBins.length; i++) {
@@ -12691,6 +13047,21 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
       var bwPx = sx(bin.center + bw / 2) - bx;
       var bh = maxCount > 0 ? (bin.count / maxCount) * countBarH : 0;
       svg += '<rect x="' + bx.toFixed(1) + '" y="' + (cbTop + countBarH - bh).toFixed(1) + '" width="' + Math.max(1, bwPx - 1).toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="rgba(240,178,50,0.3)"/>';
+    }
+    var auxCountRef = null;
+    for (var i = 0; i < varEntries.length; i++) {
+      if (varEntries[i].isAux) { auxCountRef = varEntries[i]; break; }
+    }
+    if (auxCountRef && auxCountRef !== refEntry) {
+      var auxMax = 0;
+      for (var i = 0; i < auxCountRef.bins.length; i++) { if (auxCountRef.bins[i].count > auxMax) auxMax = auxCountRef.bins[i].count; }
+      for (var i = 0; i < auxCountRef.bins.length; i++) {
+        var abin = auxCountRef.bins[i];
+        var abx = sx(abin.center - bw / 2);
+        var abwPx = sx(abin.center + bw / 2) - abx;
+        var abh = auxMax > 0 ? (abin.count / auxMax) * countBarH : 0;
+        svg += '<rect x="' + abx.toFixed(1) + '" y="' + (cbTop + countBarH - abh).toFixed(1) + '" width="' + Math.max(1, abwPx - 1).toFixed(1) + '" height="' + Math.max(0.5, abh).toFixed(1) + '" fill="none" stroke="' + auxCountRef.color + '" stroke-width="0.75" opacity="0.6"/>';
+      }
     }
   }
 
@@ -12707,7 +13078,7 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
 
   // Crosshair overlay — spans all sub-charts
   var crosshairTop = pad.top;
-  var crosshairBottom = subTop(numVars - 1) + subH;
+  var crosshairBottom = subTop(numGroups - 1) + subH;
   svg += '<rect class="swath-crosshair-area" x="' + pad.left + '" y="' + crosshairTop + '" width="' + plotW + '" height="' + (crosshairBottom - crosshairTop) + '" fill="transparent" cursor="crosshair"/>';
   svg += '<line class="swath-crosshair-line" x1="0" y1="' + crosshairTop + '" x2="0" y2="' + crosshairBottom + '" opacity="0" stroke="var(--fg-dim)" stroke-width="1" stroke-dasharray="3,3" pointer-events="none"/>';
   svg += '<g class="swath-crosshair-tooltip" opacity="0" pointer-events="none">';
@@ -12773,12 +13144,14 @@ function wireSwathCrosshair() {
         var lower = entry.lowerLine[vBin].y;
         var uSym = entry.unit && entry.unit.symbol ? ' ' + entry.unit.symbol : '';
         var txt = esc(entry.name) + ': ' + formatNum(center) + uSym + ' [' + formatNum(lower) + ' - ' + formatNum(upper) + ']';
+        if (entry.isAux) txt += ' n=' + entry.bins[vBin].count;
         lines.push({ text: txt, color: entry.color });
       }
     }
 
+    var hasAuxEntries = p.varEntries.some(function(en) { return en.isAux; });
     var lineH = 13;
-    var ttW = 180;
+    var ttW = hasAuxEntries ? 215 : 180;
     var ttH = lines.length * lineH + 8;
     var tx = snapX + 12;
     var ty = p.layout === 'split' ? Math.max(p.pad.top, svgPt.y - ttH / 2) : p.pad.top + 10;
@@ -12820,7 +13193,11 @@ function swathData_axisLabel() {
 }
 
 function renderSwathTable(varEntries, swathData, stat) {
-  var refBins = varEntries[0].bins;
+  var refEntry = varEntries[0];
+  for (var ri = 0; ri < varEntries.length; ri++) {
+    if (!varEntries[ri].isAux) { refEntry = varEntries[ri]; break; }
+  }
+  var refBins = refEntry.bins;
   var statLabels = { mean_std: 'Mean \u00b1 Std', p25_50_75: 'P25/P50/P75', p10_50_90: 'P10/P50/P90' };
   var tableTitle = 'Swath Data (' + (statLabels[stat] || stat) + ')';
 
@@ -12841,6 +13218,7 @@ function renderSwathTable(varEntries, swathData, stat) {
       thHtml += '<th style="border-bottom-color:' + entry.color + '">' + esc(entry.name) + uSuffix + ' P50</th>';
       thHtml += '<th style="border-bottom-color:' + entry.color + '">' + esc(entry.name) + uSuffix + ' P90</th>';
     }
+    if (entry.isAux) thHtml += '<th style="border-bottom-color:' + entry.color + '">' + esc(entry.name) + ' n</th>';
   }
 
   // Build rows
@@ -12864,8 +13242,9 @@ function renderSwathTable(varEntries, swathData, stat) {
           tbody += '<td>' + formatNum(entry.centerLine[vIdx].y) + '</td>';
           tbody += '<td>' + formatNum(entry.upperLine[vIdx].y) + '</td>';
         }
+        if (entry.isAux) tbody += '<td>' + entry.bins[vIdx].count + '</td>';
       } else {
-        var emptyCols = stat === 'mean_std' ? 2 : 3;
+        var emptyCols = (stat === 'mean_std' ? 2 : 3) + (entry.isAux ? 1 : 0);
         for (var ec = 0; ec < emptyCols; ec++) tbody += '<td></td>';
       }
     }

@@ -1179,8 +1179,12 @@ async function swathAnalysis(data) {
   const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
   const nCols = header.length;
   let rowVarName = 'r';
-  const colSet = new Set(header);
-  for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
+  if (data.rowVarOverride) {
+    rowVarName = data.rowVarOverride;
+  } else {
+    const colSet = new Set(header);
+    for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
+  }
 
   const colTypes = resolvedTypes;
 
@@ -1358,8 +1362,12 @@ async function sectionAnalysis(data) {
   const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
   const nCols = header.length;
   let rowVarName = 'r';
-  const colSet = new Set(header);
-  for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
+  if (data.rowVarOverride) {
+    rowVarName = data.rowVarOverride;
+  } else {
+    const colSet = new Set(header);
+    for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
+  }
 
   const colTypes = resolvedTypes;
 

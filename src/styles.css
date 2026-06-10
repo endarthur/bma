@@ -3658,3 +3658,20 @@ table.cat-values td.cat-pct-cell {
 }
 .aux-preview-table th { background: var(--bg2); color: var(--fg-bright); position: sticky; top: 0; }
 .aux-preview-table td { color: var(--fg-dim); }
+
+/* Aux rows in the swath variable list */
+.swath-aux-divider {
+  font: 0.6rem var(--mono); color: var(--fg-dim); letter-spacing: 0.06em;
+  padding: 0.4rem 0.2rem 0.15rem; margin-top: 0.3rem;
+  border-top: 1px dashed var(--border);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.swath-aux-note {
+  font-size: 0.65rem; color: var(--fg-dim); opacity: 0.7;
+  padding: 0.2rem; line-height: 1.4;
+}
+.swath-aux-warn {
+  color: var(--red); font-size: 0.72rem;
+  padding: 0.3rem 0.5rem; margin-bottom: 0.5rem;
+  border: 1px solid var(--red); border-radius: 3px; opacity: 0.85;
+}
