@@ -3638,6 +3638,18 @@ table.cat-values td.cat-pct-cell {
 .aux-empty-hint {
   max-width: 520px; color: var(--fg-dim); font-size: 0.8rem; line-height: 1.5; opacity: 0.8;
 }
+.aux-from-main { max-width: 520px; width: 100%; }
+.aux-from-main:empty { display: none; }
+.aux-from-main-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  color: var(--fg-dim); font-size: 0.72rem; margin-top: 0.4rem;
+}
+.aux-from-main-btn {
+  background: none; border: 1px solid var(--border); color: var(--fg-dim);
+  font: 0.68rem var(--mono); padding: 0.3rem 0.7rem; border-radius: 3px;
+  cursor: pointer; white-space: nowrap;
+}
+.aux-from-main-btn:hover { color: var(--amber); border-color: var(--amber); }
 .aux-config { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 .aux-config .preflight-body { flex: 1; min-height: 0; }
 .aux-input, .aux-select {
@@ -3658,6 +3670,25 @@ table.cat-values td.cat-pct-cell {
 }
 .aux-preview-table th { background: var(--bg2); color: var(--fg-bright); position: sticky; top: 0; }
 .aux-preview-table td { color: var(--fg-dim); }
+
+/* Pack-project modal */
+.pack-modal-inner { max-width: 420px; }
+.pack-field { margin-bottom: 0.9rem; }
+.pack-field-label {
+  font: 0.62rem var(--mono); color: var(--amber);
+  letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.35rem;
+}
+.pack-check {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.75rem; color: var(--fg); padding: 0.15rem 0; cursor: pointer;
+}
+.pack-check input { accent-color: var(--amber); }
+.pack-check input:disabled + span { opacity: 0.7; }
+.pack-note { color: var(--fg-dim); font-size: 0.65rem; line-height: 1.45; margin-top: 0.35rem; }
+.pack-modal-foot {
+  display: flex; justify-content: flex-end; gap: 0.5rem;
+  padding: 0.7rem 1rem; border-top: 1px solid var(--border);
+}
 
 .example-download {
   display: flex; align-items: center; justify-content: center; gap: 0.6rem;

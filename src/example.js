@@ -23,24 +23,122 @@ function crc32Update(crc, bytes) {
   return crc;
 }
 
-// files: [{name, blob}] → Blob (zip, stored entries). onProgress(percent)
-// covers the CRC read pass. Pass precomputedCrcs (one per file, e.g. from
-// the worker's crc32 mode) to skip the main-thread read entirely.
-async function buildStoredZip(files, onProgress, precomputedCrcs) {
+// Assemble a zip from prepared entries:
+//   [{name, crc, method (0|8), data (Blob written to the archive),
+//     uncompSize (raw bytes; equals data.size for stored entries)}]
+// Data blobs are referenced, never copied. Writes Zip64 records (extended
+// info extras + zip64 EOCD + locator) automatically whenever any size,
+// offset, or count exceeds the zip32 fields — BMA's whole point is huge
+// files, so the container can't be the ceiling. opts.forceZip64 exists so
+// tests can exercise the zip64 records without multi-GB fixtures.
+function assembleZip(entriesIn, opts) {
+  opts = opts || {};
   var enc = new TextEncoder();
   var dosTime = (12 << 11);                              // 12:00:00
   var dosDate = ((2026 - 1980) << 9) | (6 << 5) | 9;     // 2026-06-09
+  var MAX32 = 0xFFFFFFFE;
 
-  var totalBytes = 0;
-  var archiveBytes = 22;
-  for (var fi = 0; fi < files.length; fi++) {
-    var nb = enc.encode(files[fi].name).length;
-    totalBytes += files[fi].blob.size;
-    archiveBytes += 30 + nb + files[fi].blob.size + 46 + nb;
+  function record(byteLen, write) {
+    var buf = new ArrayBuffer(byteLen);
+    var dv = new DataView(buf);
+    var u8 = new Uint8Array(buf);
+    var pos = 0;
+    write({
+      u16: function(v) { dv.setUint16(pos, v, true); pos += 2; },
+      u32: function(v) { dv.setUint32(pos, v, true); pos += 4; },
+      u64: function(v) {
+        dv.setUint32(pos, v % 4294967296, true);
+        dv.setUint32(pos + 4, Math.floor(v / 4294967296), true);
+        pos += 8;
+      },
+      put: function(bytes) { u8.set(bytes, pos); pos += bytes.length; }
+    });
+    return buf;
   }
-  if (archiveBytes > 0xFFFFFF00) throw new Error('Archive would exceed the 4 GB ZIP limit.');
 
-  // CRC pass — the one full read of the data (skipped when precomputed)
+  // Layout pass: offsets depend on whether each local header carries a
+  // zip64 extra (sizes overflow only — offsets don't live in local headers)
+  var entries = entriesIn.map(function(f) {
+    return {
+      nameBytes: enc.encode(f.name), data: f.data, crc: f.crc,
+      method: f.method || 0, uncompSize: f.uncompSize != null ? f.uncompSize : f.data.size
+    };
+  });
+  var offset = 0;
+  entries.forEach(function(e) {
+    e.sizes64 = opts.forceZip64 || e.uncompSize > MAX32 || e.data.size > MAX32;
+    e.offset = offset;
+    e.offset64 = opts.forceZip64 || e.offset > MAX32;
+    offset += 30 + e.nameBytes.length + (e.sizes64 ? 20 : 0) + e.data.size;
+  });
+  var cdStart = offset;
+  var zip64Mode = opts.forceZip64 || cdStart > MAX32 || entries.length > 0xFFFE ||
+    entries.some(function(e) { return e.sizes64 || e.offset64; });
+
+  var parts = [];
+  entries.forEach(function(e) {
+    var verNeed = e.sizes64 ? 45 : 20;
+    parts.push(record(30 + e.nameBytes.length + (e.sizes64 ? 20 : 0), function(w) {
+      w.u32(0x04034b50); w.u16(verNeed); w.u16(0); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
+      w.u32(e.crc);
+      w.u32(e.sizes64 ? 0xFFFFFFFF : e.data.size);
+      w.u32(e.sizes64 ? 0xFFFFFFFF : e.uncompSize);
+      w.u16(e.nameBytes.length); w.u16(e.sizes64 ? 20 : 0); w.put(e.nameBytes);
+      if (e.sizes64) { w.u16(0x0001); w.u16(16); w.u64(e.uncompSize); w.u64(e.data.size); }
+    }));
+    parts.push(e.data); // referenced, not copied
+  });
+
+  var cdSize = 0;
+  entries.forEach(function(e) {
+    var extraLen = (e.sizes64 ? 16 : 0) + (e.offset64 ? 8 : 0);
+    if (extraLen > 0) extraLen += 4;
+    var recLen = 46 + e.nameBytes.length + extraLen;
+    parts.push(record(recLen, function(w) {
+      w.u32(0x02014b50); w.u16(zip64Mode ? 45 : 20); w.u16(e.sizes64 || e.offset64 ? 45 : 20);
+      w.u16(0); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
+      w.u32(e.crc);
+      w.u32(e.sizes64 ? 0xFFFFFFFF : e.data.size);
+      w.u32(e.sizes64 ? 0xFFFFFFFF : e.uncompSize);
+      w.u16(e.nameBytes.length); w.u16(extraLen); w.u16(0); w.u16(0); w.u16(0); w.u32(0);
+      w.u32(e.offset64 ? 0xFFFFFFFF : e.offset);
+      w.put(e.nameBytes);
+      if (extraLen > 0) {
+        w.u16(0x0001); w.u16(extraLen - 4);
+        if (e.sizes64) { w.u64(e.uncompSize); w.u64(e.data.size); }
+        if (e.offset64) w.u64(e.offset);
+      }
+    }));
+    cdSize += recLen;
+  });
+
+  if (zip64Mode) {
+    var z64EocdOffset = cdStart + cdSize;
+    parts.push(record(56, function(w) {
+      w.u32(0x06064b50); w.u64(44); w.u16(45); w.u16(45); w.u32(0); w.u32(0);
+      w.u64(entries.length); w.u64(entries.length); w.u64(cdSize); w.u64(cdStart);
+    }));
+    parts.push(record(20, function(w) {
+      w.u32(0x07064b50); w.u32(0); w.u64(z64EocdOffset); w.u32(1);
+    }));
+    parts.push(record(22, function(w) {
+      w.u32(0x06054b50); w.u16(0); w.u16(0); w.u16(0xFFFF); w.u16(0xFFFF);
+      w.u32(0xFFFFFFFF); w.u32(0xFFFFFFFF); w.u16(0);
+    }));
+  } else {
+    parts.push(record(22, function(w) {
+      w.u32(0x06054b50); w.u16(0); w.u16(0); w.u16(entries.length); w.u16(entries.length);
+      w.u32(cdSize); w.u32(cdStart); w.u16(0);
+    }));
+  }
+  return new Blob(parts, { type: 'application/zip' });
+}
+
+// Convenience for small text payloads (the example download): store-mode
+// with the CRC computed inline.
+async function buildStoredZip(files, onProgress, precomputedCrcs) {
+  var totalBytes = 0;
+  for (var fi = 0; fi < files.length; fi++) totalBytes += files[fi].blob.size;
   var entries = [];
   var done = 0;
   for (var i = 0; i < files.length; i++) {
@@ -60,52 +158,9 @@ async function buildStoredZip(files, onProgress, precomputedCrcs) {
       }
       crcFinal = (crc ^ -1) >>> 0;
     }
-    entries.push({ nameBytes: enc.encode(f.name), blob: f.blob, crc: crcFinal, offset: 0 });
+    entries.push({ name: f.name, crc: crcFinal, method: 0, data: f.blob, uncompSize: f.blob.size });
   }
-
-  function record(byteLen, write) {
-    var buf = new ArrayBuffer(byteLen);
-    var dv = new DataView(buf);
-    var u8 = new Uint8Array(buf);
-    var pos = 0;
-    write({
-      u16: function(v) { dv.setUint16(pos, v, true); pos += 2; },
-      u32: function(v) { dv.setUint32(pos, v, true); pos += 4; },
-      put: function(bytes) { u8.set(bytes, pos); pos += bytes.length; }
-    });
-    return buf;
-  }
-
-  var parts = [];
-  var offset = 0;
-  entries.forEach(function(e) {
-    e.offset = offset;
-    var size = e.blob.size;
-    parts.push(record(30 + e.nameBytes.length, function(w) {
-      w.u32(0x04034b50); w.u16(20); w.u16(0); w.u16(0); w.u16(dosTime); w.u16(dosDate);
-      w.u32(e.crc); w.u32(size); w.u32(size);
-      w.u16(e.nameBytes.length); w.u16(0); w.put(e.nameBytes);
-    }));
-    parts.push(e.blob); // referenced, not copied
-    offset += 30 + e.nameBytes.length + size;
-  });
-  var cdStart = offset;
-  var cdSize = 0;
-  entries.forEach(function(e) {
-    var size = e.blob.size;
-    parts.push(record(46 + e.nameBytes.length, function(w) {
-      w.u32(0x02014b50); w.u16(20); w.u16(20); w.u16(0); w.u16(0); w.u16(dosTime); w.u16(dosDate);
-      w.u32(e.crc); w.u32(size); w.u32(size);
-      w.u16(e.nameBytes.length); w.u16(0); w.u16(0); w.u16(0); w.u16(0); w.u32(0); w.u32(e.offset);
-      w.put(e.nameBytes);
-    }));
-    cdSize += 46 + e.nameBytes.length;
-  });
-  parts.push(record(22, function(w) {
-    w.u32(0x06054b50); w.u16(0); w.u16(0); w.u16(entries.length); w.u16(entries.length);
-    w.u32(cdSize); w.u32(cdStart); w.u16(0);
-  }));
-  return new Blob(parts, { type: 'application/zip' });
+  return assembleZip(entries);
 }
 
 // ── Deterministic data generation ──

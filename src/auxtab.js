@@ -224,7 +224,35 @@ function applyAuxRestore(saved) {
   }
 }
 
-function loadAuxFile(file, handle) {
+// When the primary file is a multi-entry archive, offer its other entries
+// as aux candidates (e.g. a zip holding both the model and its composites)
+function renderAuxFromMain() {
+  var $wrap = document.getElementById('auxFromMain');
+  if (!$wrap) return;
+  if (auxFile || !currentFile || !preflightData || !preflightData.zipEntries || preflightData.zipEntries.length < 2) {
+    $wrap.innerHTML = '';
+    return;
+  }
+  var opts = preflightData.zipEntries.map(function(z) {
+    var isCurrent = z.name === preflightData.selectedZipEntry;
+    return '<option value="' + esc(z.name) + '"' + (isCurrent ? ' disabled' : '') + '>' +
+      esc(z.name) + (isCurrent ? ' (main data)' : '') + '</option>';
+  }).join('');
+  $wrap.innerHTML =
+    '<div class="aux-from-main-row">or use an entry from <strong>' + esc(currentFile.name) + '</strong>:</div>' +
+    '<div class="aux-from-main-row">' +
+      '<select class="aux-select" id="auxFromMainSel" style="flex:1">' + opts + '</select>' +
+      '<button class="aux-from-main-btn" id="auxFromMainBtn">Use entry</button>' +
+    '</div>';
+  var sel = document.getElementById('auxFromMainSel');
+  var firstFree = preflightData.zipEntries.find(function(z) { return z.name !== preflightData.selectedZipEntry; });
+  if (firstFree) sel.value = firstFree.name;
+  document.getElementById('auxFromMainBtn').addEventListener('click', function() {
+    loadAuxFile(currentFile, null, sel.value);
+  });
+}
+
+function loadAuxFile(file, handle, zipEntryName) {
   auxFile = file;
   auxHandle = handle || null;
   $auxFileInfo.textContent = 'Loading ' + file.name + '…';
@@ -232,6 +260,9 @@ function loadAuxFile(file, handle) {
   $auxConfig.style.display = '';
   runPreflight(file).then(async function(data) {
     auxPreflightData = data;
+    if (zipEntryName && data.zipEntries && zipEntryName !== data.selectedZipEntry) {
+      try { await loadZipEntryIntoPreflight(file, data, zipEntryName); } catch (e) { /* keep default entry */ }
+    }
     if (pendingAuxRestore && pendingAuxRestore.fileName === file.name) {
       var savedAux = pendingAuxRestore;
       pendingAuxRestore = null;
@@ -275,6 +306,7 @@ function clearAux() {
   $auxEmpty.style.display = '';
   $auxSidebar.innerHTML = '';
   $auxPreview.innerHTML = '';
+  renderAuxFromMain();
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
   if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
   if (typeof updateCalcolBadge === 'function') updateCalcolBadge();

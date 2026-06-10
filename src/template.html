@@ -183,6 +183,7 @@
             <div class="hint">A second CSV/.dm with X, Y, Z columns — e.g. the composites/samples behind this block model</div>
             <input type="file" id="auxFileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM">
           </div>
+          <div class="aux-from-main" id="auxFromMain"></div>
           <div class="aux-empty-hint">Aux variables appear across Statistics, CDF, and Swath with a <strong>prefix</strong> so you can compare them against the block model. No geometry, export, or per-row joins — comparison is statistical/spatial only.</div>
         </div>
         <div class="aux-config" id="auxConfig" style="display:none">
@@ -567,6 +568,35 @@
       <button class="preflight-back-btn" id="settingsClose" title="Close">✕</button>
     </div>
     <div class="settings-modal-body" id="settingsBody"></div>
+  </div>
+</div>
+
+<div class="settings-modal" id="packModal">
+  <div class="settings-modal-inner pack-modal-inner">
+    <div class="settings-modal-head">
+      <span>Pack Project</span>
+      <button class="preflight-back-btn" id="packClose" title="Close">✕</button>
+    </div>
+    <div class="settings-modal-body">
+      <div class="pack-field">
+        <div class="pack-field-label">Title</div>
+        <input type="text" class="aux-input" id="packTitle" spellcheck="false" placeholder="optional — shown in the toolbar, names the archive">
+      </div>
+      <div class="pack-field">
+        <div class="pack-field-label">Contents</div>
+        <label class="pack-check"><input type="checkbox" checked disabled> <span id="packModelName">model</span></label>
+        <label class="pack-check" id="packAuxRow" style="display:none"><input type="checkbox" id="packIncAux" checked> <span id="packAuxName">aux</span></label>
+        <label class="pack-check"><input type="checkbox" checked disabled> project config (.bma.json)</label>
+      </div>
+      <div class="pack-field">
+        <label class="pack-check"><input type="checkbox" id="packCompress"> Compress data (deflate)</label>
+        <div class="pack-note" id="packNote"></div>
+      </div>
+    </div>
+    <div class="pack-modal-foot">
+      <button class="toolbar-btn" id="packCancel">Cancel</button>
+      <button class="swath-generate" id="packGo">Pack</button>
+    </div>
   </div>
 </div>
 

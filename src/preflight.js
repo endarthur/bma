@@ -38,6 +38,29 @@ function autoDetectTypes(header, rows) {
 function readUint16(buf, off) { return buf[off] | (buf[off+1] << 8); }
 function readUint32(buf, off) { return (buf[off] | (buf[off+1] << 8) | (buf[off+2] << 16) | (buf[off+3] << 24)) >>> 0; }
 
+function readUint64Main(buf, off) { return readUint32(buf, off) + readUint32(buf, off + 4) * 4294967296; }
+
+// Zip64 extra field (tag 0x0001): 8-byte values present only for fields at
+// the 32-bit sentinel, in the order uncompSize, compSize, localOffset
+function zip64ResolveMain(cd, pos, nameLen, extraLen, sizes) {
+  if (sizes.compSize !== 0xFFFFFFFF && sizes.uncompSize !== 0xFFFFFFFF && sizes.localOffset !== 0xFFFFFFFF) return sizes;
+  let ep = pos + 46 + nameLen;
+  const eEnd = ep + extraLen;
+  while (ep + 4 <= eEnd) {
+    const tag = readUint16(cd, ep);
+    const tsize = readUint16(cd, ep + 2);
+    if (tag === 0x0001) {
+      let fp = ep + 4;
+      if (sizes.uncompSize === 0xFFFFFFFF) { sizes.uncompSize = readUint64Main(cd, fp); fp += 8; }
+      if (sizes.compSize === 0xFFFFFFFF) { sizes.compSize = readUint64Main(cd, fp); fp += 8; }
+      if (sizes.localOffset === 0xFFFFFFFF) { sizes.localOffset = readUint64Main(cd, fp); fp += 8; }
+      break;
+    }
+    ep += 4 + tsize;
+  }
+  return sizes;
+}
+
 async function listZipEntries(file) {
   const tailSize = Math.min(65557, file.size);
   const tail = new Uint8Array(await file.slice(file.size - tailSize).arrayBuffer());
@@ -46,24 +69,42 @@ async function listZipEntries(file) {
     if (readUint32(tail, i) === 0x06054b50) { eocdPos = i; break; }
   }
   if (eocdPos < 0) throw new Error('Not a valid ZIP file');
-  const cdEntries = readUint16(tail, eocdPos + 8);
-  const cdSize = readUint32(tail, eocdPos + 12);
-  const cdOffset = readUint32(tail, eocdPos + 16);
+  let cdEntries = readUint16(tail, eocdPos + 8);
+  let cdSize = readUint32(tail, eocdPos + 12);
+  let cdOffset = readUint32(tail, eocdPos + 16);
+
+  // Zip64: sentinel values point to the zip64 EOCD record via the locator
+  if (cdEntries === 0xFFFF || cdSize === 0xFFFFFFFF || cdOffset === 0xFFFFFFFF) {
+    let locPos = -1;
+    for (let i = eocdPos - 20; i >= 0; i--) {
+      if (readUint32(tail, i) === 0x07064b50) { locPos = i; break; }
+    }
+    if (locPos < 0) throw new Error('Zip64 archive missing EOCD locator');
+    const z64Offset = readUint64Main(tail, locPos + 8);
+    const z64 = new Uint8Array(await file.slice(z64Offset, z64Offset + 56).arrayBuffer());
+    if (readUint32(z64, 0) !== 0x06064b50) throw new Error('Invalid zip64 EOCD record');
+    cdEntries = readUint64Main(z64, 32);
+    cdSize = readUint64Main(z64, 40);
+    cdOffset = readUint64Main(z64, 48);
+  }
+
   const cd = new Uint8Array(await file.slice(cdOffset, cdOffset + cdSize).arrayBuffer());
   const entries = [];
   let pos = 0;
   for (let i = 0; i < cdEntries && pos < cd.length; i++) {
     if (readUint32(cd, pos) !== 0x02014b50) break;
     const method = readUint16(cd, pos + 10);
-    const compSize = readUint32(cd, pos + 20);
-    const uncompSize = readUint32(cd, pos + 24);
     const nameLen = readUint16(cd, pos + 28);
     const extraLen = readUint16(cd, pos + 30);
     const commentLen = readUint16(cd, pos + 32);
-    const localOffset = readUint32(cd, pos + 42);
+    const sizes = zip64ResolveMain(cd, pos, nameLen, extraLen, {
+      compSize: readUint32(cd, pos + 20),
+      uncompSize: readUint32(cd, pos + 24),
+      localOffset: readUint32(cd, pos + 42)
+    });
     const name = new TextDecoder().decode(cd.slice(pos + 46, pos + 46 + nameLen));
     if (!name.endsWith('/') && !name.startsWith('__MACOSX') && !name.startsWith('.')) {
-      entries.push({ name, method, compSize, uncompSize, localOffset });
+      entries.push({ name, method, compSize: sizes.compSize, uncompSize: sizes.uncompSize, localOffset: sizes.localOffset });
     }
     pos += 46 + nameLen + extraLen + commentLen;
   }

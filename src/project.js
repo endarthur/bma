@@ -321,6 +321,7 @@ function serializeProject() {
   return {
     _bma: 1,
     _ts: Date.now(),
+    title: projectTitle,
     activeTab: document.querySelector('.results-tab.active')?.dataset.tab || null,
     file: { name: currentFile.name, size: currentFile.size },
     preflight: {
@@ -509,6 +510,9 @@ function autoSaveProject() {
 async function applyProject(project) {
   if (!project || !project._bma) return;
 
+  projectTitle = project.title || null;
+  updateProjectTitleDisplay();
+
   // Restore preflight config
   if (preflightData) {
     const pf = project.preflight || {};
@@ -613,32 +617,89 @@ function saveProjectFile() {
   URL.revokeObjectURL(a.href);
 }
 
-// Pack the project + its data files into one portable zip. Store-mode with
-// Blob-part assembly: data is referenced, not copied — so this scales to
-// multi-GB models (up to the 4 GB zip limit). The CRC pass — the only full
-// read of the data — runs in a worker so the UI never stalls.
-async function packProjectFile() {
-  if (!currentFile || !preflightData) return;
-  var $btn = document.getElementById('projectPack');
-  if ($btn) { $btn.disabled = true; $btn.textContent = 'Packing…'; }
-  try {
-    var stem = currentFile.name.replace(/\.[^.]+$/, '');
-    var files = [{ name: currentFile.name, blob: currentFile }];
-    if (auxFile && auxFile.name !== currentFile.name) files.push({ name: auxFile.name, blob: auxFile });
-    var json = JSON.stringify(serializeProject(), null, 2);
-    files.push({ name: stem + '.bma.json', blob: new Blob([json]) });
+// ── Pack project (dialog + pipeline) ──────────────────────────────────
+// Bundles the data file(s) + project json into one portable zip. Data blobs
+// are referenced, never copied; the read pass (CRC + optional deflate via
+// CompressionStream) runs in a worker so the UI never stalls. The writer
+// emits Zip64 records automatically, so archive size is not a ceiling.
 
-    var crcs = await new Promise(function(resolve, reject) {
+function updateProjectTitleDisplay() {
+  if (!currentFile) return;
+  $resultsFilename.textContent = (projectTitle ? projectTitle + ' — ' : '') + currentFile.name;
+}
+
+function openPackModal() {
+  if (!currentFile || !preflightData) return;
+  var $m = document.getElementById('packModal');
+  document.getElementById('packTitle').value = projectTitle || '';
+  document.getElementById('packModelName').textContent = currentFile.name + ' (' + formatBytes(currentFile.size) + ')';
+  var $auxRow = document.getElementById('packAuxRow');
+  if (auxFile && auxFile.name !== currentFile.name) {
+    $auxRow.style.display = '';
+    document.getElementById('packAuxName').textContent = auxFile.name + ' (' + formatBytes(auxFile.size) + ')';
+    document.getElementById('packIncAux').checked = true;
+  } else {
+    $auxRow.style.display = 'none';
+  }
+  var $compress = document.getElementById('packCompress');
+  var $note = document.getElementById('packNote');
+  var totalData = currentFile.size + (auxFile ? auxFile.size : 0);
+  if (typeof CompressionStream === 'undefined') {
+    $compress.checked = false;
+    $compress.disabled = true;
+    $note.textContent = 'Compression unavailable in this browser — packing as stored zip.';
+  } else {
+    $compress.disabled = false;
+    // Default on for moderate sizes; off for huge data where the compressed
+    // copy must be materialized (stored entries stay zero-copy)
+    $compress.checked = totalData <= 512 * 1024 * 1024;
+    $note.textContent = $compress.checked
+      ? 'CSV typically shrinks 4–6×. Compressed packs decompress once on load.'
+      : 'Off by default for large data: stored entries pack and re-open with no memory cost. Tick to compress anyway.';
+  }
+  document.getElementById('packGo').disabled = false;
+  document.getElementById('packGo').textContent = 'Pack';
+  $m.classList.add('active');
+}
+
+function closePackModal() {
+  document.getElementById('packModal').classList.remove('active');
+}
+
+async function runPack() {
+  var $go = document.getElementById('packGo');
+  var $note = document.getElementById('packNote');
+  $go.disabled = true;
+  $go.textContent = 'Packing…';
+  try {
+    projectTitle = document.getElementById('packTitle').value.trim() || null;
+    updateProjectTitleDisplay();
+    var includeAux = !!(auxFile && auxFile.name !== currentFile.name &&
+      document.getElementById('packAuxRow').style.display !== 'none' &&
+      document.getElementById('packIncAux').checked);
+    var compress = !!document.getElementById('packCompress').checked;
+
+    var stem = currentFile.name.replace(/\.[^.]+$/, '');
+    var slug = projectTitle ? projectTitle.replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') : '';
+    var json = JSON.stringify(serializeProject(), null, 2);
+
+    // Never re-deflate archives; everything else follows the toggle
+    function wantsDeflate(name) { return compress && !/\.zip$/i.test(name); }
+    var files = [{ name: currentFile.name, blob: currentFile, deflate: wantsDeflate(currentFile.name) }];
+    if (includeAux) files.push({ name: auxFile.name, blob: auxFile, deflate: wantsDeflate(auxFile.name) });
+    files.push({ name: stem + '.bma.json', blob: new Blob([json]), deflate: compress });
+
+    var prepared = await new Promise(function(resolve, reject) {
       var w = new Worker(workerUrl);
-      w.postMessage({ mode: 'crc32', blobs: files.map(function(f) { return f.blob; }) });
+      w.postMessage({ mode: 'prepare-pack', files: files.map(function(f) { return { blob: f.blob, deflate: f.deflate }; }) });
       w.onerror = function(e) { w.terminate(); reject(new Error(e.message || 'worker error')); };
       w.onmessage = function(e) {
         var m = e.data;
-        if (m.type === 'crc-progress') {
-          if ($btn) $btn.textContent = 'Packing ' + m.percent + '%';
-        } else if (m.type === 'crc-complete') {
+        if (m.type === 'pack-progress') {
+          $go.textContent = 'Packing ' + m.percent + '%';
+        } else if (m.type === 'pack-prepared') {
           w.terminate();
-          resolve(m.crcs);
+          resolve(m.results);
         } else if (m.type === 'error') {
           w.terminate();
           reject(new Error(m.message));
@@ -646,18 +707,29 @@ async function packProjectFile() {
       };
     });
 
-    var zipBlob = await buildStoredZip(files, null, crcs);
+    var entries = files.map(function(f, i) {
+      var comp = prepared[i].comp;
+      return {
+        name: f.name,
+        crc: prepared[i].crc,
+        method: comp ? 8 : 0,
+        data: comp || f.blob,
+        uncompSize: f.blob.size
+      };
+    });
+    var zipBlob = assembleZip(entries);
     var a = document.createElement('a');
     a.href = URL.createObjectURL(zipBlob);
-    a.download = stem + '.bma.zip';
+    a.download = (slug || stem) + '.bma.zip';
     a.click();
     URL.revokeObjectURL(a.href);
+    autoSaveProject();
+    closePackModal();
   } catch (e) {
-    $errorMsg.textContent = 'Pack failed: ' + e.message;
-    $errorMsg.classList.add('active');
-    setTimeout(function() { $errorMsg.classList.remove('active'); }, 4000);
+    $note.textContent = 'Pack failed: ' + e.message;
   } finally {
-    if ($btn) { $btn.disabled = false; $btn.textContent = 'Pack'; }
+    $go.disabled = false;
+    $go.textContent = 'Pack';
   }
 }
 
@@ -693,6 +765,7 @@ function clearProject() {
   statsCdfScale = 'linear';
   pendingStatsAuxRestore = null;
   currentWeightName = null;
+  projectTitle = null;
   exportColumns = [];
   pendingProjectRestore = null;
   resetExportSettings();
@@ -728,7 +801,17 @@ $toolbarMenu.addEventListener('click', (e) => {
 
 // Toolbar buttons
 $projectSave.addEventListener('click', saveProjectFile);
-document.getElementById('projectPack').addEventListener('click', packProjectFile);
+document.getElementById('projectPack').addEventListener('click', openPackModal);
+document.getElementById('packClose').addEventListener('click', closePackModal);
+document.getElementById('packCancel').addEventListener('click', closePackModal);
+document.getElementById('packGo').addEventListener('click', runPack);
+document.getElementById('packCompress').addEventListener('change', function() {
+  var $note = document.getElementById('packNote');
+  if (this.disabled) return;
+  $note.textContent = this.checked
+    ? 'CSV typically shrinks 4–6×. Compressed packs decompress once on load.'
+    : 'Stored entries pack and re-open with no memory cost; the archive is the size of its files.';
+});
 $projectLoad.addEventListener('click', () => $projectFileInput.click());
 $projectClear.addEventListener('click', clearProject);
 
@@ -836,6 +919,7 @@ async function handleFile(file, handle) {
   statsCdfScale = 'linear';
   pendingStatsAuxRestore = null;
   currentWeightName = null;
+  projectTitle = null;
   exportColumns = [];
   pendingProjectRestore = null;
   resetExportSettings();
@@ -919,6 +1003,7 @@ async function handleFile(file, handle) {
   // Run preflight
   runPreflight(file).then(async data => {
     renderPreflight(data);
+    if (typeof renderAuxFromMain === 'function') renderAuxFromMain();
     // Project precedence: an explicitly dropped/packed project for this file
     // wins over the autosaved one
     let project = null;
@@ -1003,6 +1088,7 @@ $backToPreflight.addEventListener('click', () => {
   statsCdfScale = 'linear';
   pendingStatsAuxRestore = null;
   currentWeightName = null;
+  projectTitle = null;
   exportColumns = [];
   pendingProjectRestore = null;
   if (exportWorker) { exportWorker.terminate(); exportWorker = null; }

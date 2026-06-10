@@ -3651,6 +3651,18 @@ table.cat-values td.cat-pct-cell {
 .aux-empty-hint {
   max-width: 520px; color: var(--fg-dim); font-size: 0.8rem; line-height: 1.5; opacity: 0.8;
 }
+.aux-from-main { max-width: 520px; width: 100%; }
+.aux-from-main:empty { display: none; }
+.aux-from-main-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  color: var(--fg-dim); font-size: 0.72rem; margin-top: 0.4rem;
+}
+.aux-from-main-btn {
+  background: none; border: 1px solid var(--border); color: var(--fg-dim);
+  font: 0.68rem var(--mono); padding: 0.3rem 0.7rem; border-radius: 3px;
+  cursor: pointer; white-space: nowrap;
+}
+.aux-from-main-btn:hover { color: var(--amber); border-color: var(--amber); }
 .aux-config { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 .aux-config .preflight-body { flex: 1; min-height: 0; }
 .aux-input, .aux-select {
@@ -3671,6 +3683,25 @@ table.cat-values td.cat-pct-cell {
 }
 .aux-preview-table th { background: var(--bg2); color: var(--fg-bright); position: sticky; top: 0; }
 .aux-preview-table td { color: var(--fg-dim); }
+
+/* Pack-project modal */
+.pack-modal-inner { max-width: 420px; }
+.pack-field { margin-bottom: 0.9rem; }
+.pack-field-label {
+  font: 0.62rem var(--mono); color: var(--amber);
+  letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.35rem;
+}
+.pack-check {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.75rem; color: var(--fg); padding: 0.15rem 0; cursor: pointer;
+}
+.pack-check input { accent-color: var(--amber); }
+.pack-check input:disabled + span { opacity: 0.7; }
+.pack-note { color: var(--fg-dim); font-size: 0.65rem; line-height: 1.45; margin-top: 0.35rem; }
+.pack-modal-foot {
+  display: flex; justify-content: flex-end; gap: 0.5rem;
+  padding: 0.7rem 1rem; border-top: 1px solid var(--border);
+}
 
 .example-download {
   display: flex; align-items: center; justify-content: center; gap: 0.6rem;
@@ -3919,6 +3950,7 @@ table.stats tr.stats-aux-row td:first-child { padding-left: 1.1rem; }
             <div class="hint">A second CSV/.dm with X, Y, Z columns — e.g. the composites/samples behind this block model</div>
             <input type="file" id="auxFileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM">
           </div>
+          <div class="aux-from-main" id="auxFromMain"></div>
           <div class="aux-empty-hint">Aux variables appear across Statistics, CDF, and Swath with a <strong>prefix</strong> so you can compare them against the block model. No geometry, export, or per-row joins — comparison is statistical/spatial only.</div>
         </div>
         <div class="aux-config" id="auxConfig" style="display:none">
@@ -4306,6 +4338,35 @@ table.stats tr.stats-aux-row td:first-child { padding-left: 1.1rem; }
   </div>
 </div>
 
+<div class="settings-modal" id="packModal">
+  <div class="settings-modal-inner pack-modal-inner">
+    <div class="settings-modal-head">
+      <span>Pack Project</span>
+      <button class="preflight-back-btn" id="packClose" title="Close">✕</button>
+    </div>
+    <div class="settings-modal-body">
+      <div class="pack-field">
+        <div class="pack-field-label">Title</div>
+        <input type="text" class="aux-input" id="packTitle" spellcheck="false" placeholder="optional — shown in the toolbar, names the archive">
+      </div>
+      <div class="pack-field">
+        <div class="pack-field-label">Contents</div>
+        <label class="pack-check"><input type="checkbox" checked disabled> <span id="packModelName">model</span></label>
+        <label class="pack-check" id="packAuxRow" style="display:none"><input type="checkbox" id="packIncAux" checked> <span id="packAuxName">aux</span></label>
+        <label class="pack-check"><input type="checkbox" checked disabled> project config (.bma.json)</label>
+      </div>
+      <div class="pack-field">
+        <label class="pack-check"><input type="checkbox" id="packCompress"> Compress data (deflate)</label>
+        <div class="pack-note" id="packNote"></div>
+      </div>
+    </div>
+    <div class="pack-modal-foot">
+      <button class="toolbar-btn" id="packCancel">Cancel</button>
+      <button class="swath-generate" id="packGo">Pack</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ─── Worker Code (inlined as Blob) ────────────────────────────────────
 const WORKER_CODE = `
@@ -4496,13 +4557,37 @@ async function readBytes(file, offset, length) {
 
 function readUint16(buf, off) { return buf[off] | (buf[off+1] << 8); }
 function readUint32(buf, off) { return (buf[off] | (buf[off+1] << 8) | (buf[off+2] << 16) | (buf[off+3] << 24)) >>> 0; }
+function readUint64(buf, off) { return readUint32(buf, off) + readUint32(buf, off + 4) * 4294967296; }
+
+// Resolve a central-directory entry's zip64 extra field (tag 0x0001):
+// 8-byte values present only for fields that hit the 32-bit sentinel,
+// in the order uncompSize, compSize, localOffset
+function zip64Resolve(cd, pos, nameLen, extraLen, sizes) {
+  if (sizes.compSize !== 0xFFFFFFFF && sizes.uncompSize !== 0xFFFFFFFF && sizes.localOffset !== 0xFFFFFFFF) return sizes;
+  let ep = pos + 46 + nameLen;
+  const eEnd = ep + extraLen;
+  while (ep + 4 <= eEnd) {
+    const tag = readUint16(cd, ep);
+    const tsize = readUint16(cd, ep + 2);
+    if (tag === 0x0001) {
+      let fp = ep + 4;
+      if (sizes.uncompSize === 0xFFFFFFFF) { sizes.uncompSize = readUint64(cd, fp); fp += 8; }
+      if (sizes.compSize === 0xFFFFFFFF) { sizes.compSize = readUint64(cd, fp); fp += 8; }
+      if (sizes.localOffset === 0xFFFFFFFF) { sizes.localOffset = readUint64(cd, fp); fp += 8; }
+      break;
+    }
+    ep += 4 + tsize;
+  }
+  return sizes;
+}
 
 async function extractCSVFromZip(file, targetEntry) {
   self.postMessage({ type: 'progress', percent: 0, rowCount: 0, note: 'Reading ZIP headers...' });
 
   // Read last 64KB to find End of Central Directory
   const tailSize = Math.min(65557, file.size);
-  const tail = await readBytes(file, file.size - tailSize, tailSize);
+  const tailStart = file.size - tailSize;
+  const tail = await readBytes(file, tailStart, tailSize);
 
   let eocdPos = -1;
   for (let i = tail.length - 22; i >= 0; i--) {
@@ -4510,9 +4595,24 @@ async function extractCSVFromZip(file, targetEntry) {
   }
   if (eocdPos < 0) throw new Error('Not a valid ZIP file (EOCD not found)');
 
-  const cdEntries = readUint16(tail, eocdPos + 8);
-  const cdSize = readUint32(tail, eocdPos + 12);
-  const cdOffset = readUint32(tail, eocdPos + 16);
+  let cdEntries = readUint16(tail, eocdPos + 8);
+  let cdSize = readUint32(tail, eocdPos + 12);
+  let cdOffset = readUint32(tail, eocdPos + 16);
+
+  // Zip64: sentinel values point to the zip64 EOCD record via the locator
+  if (cdEntries === 0xFFFF || cdSize === 0xFFFFFFFF || cdOffset === 0xFFFFFFFF) {
+    let locPos = -1;
+    for (let i = eocdPos - 20; i >= 0; i--) {
+      if (readUint32(tail, i) === 0x07064b50) { locPos = i; break; }
+    }
+    if (locPos < 0) throw new Error('Zip64 archive missing EOCD locator');
+    const z64Offset = readUint64(tail, locPos + 8);
+    const z64 = await readBytes(file, z64Offset, 56);
+    if (readUint32(z64, 0) !== 0x06064b50) throw new Error('Invalid zip64 EOCD record');
+    cdEntries = readUint64(z64, 32);
+    cdSize = readUint64(z64, 40);
+    cdOffset = readUint64(z64, 48);
+  }
 
   // Read central directory
   const cd = await readBytes(file, cdOffset, cdSize);
@@ -4521,14 +4621,16 @@ async function extractCSVFromZip(file, targetEntry) {
   for (let i = 0; i < cdEntries && pos < cd.length; i++) {
     if (readUint32(cd, pos) !== 0x02014b50) break;
     const method = readUint16(cd, pos + 10);
-    const compSize = readUint32(cd, pos + 20);
-    const uncompSize = readUint32(cd, pos + 24);
     const nameLen = readUint16(cd, pos + 28);
     const extraLen = readUint16(cd, pos + 30);
     const commentLen = readUint16(cd, pos + 32);
-    const localOffset = readUint32(cd, pos + 42);
+    const sizes = zip64Resolve(cd, pos, nameLen, extraLen, {
+      compSize: readUint32(cd, pos + 20),
+      uncompSize: readUint32(cd, pos + 24),
+      localOffset: readUint32(cd, pos + 42)
+    });
     const name = new TextDecoder().decode(cd.slice(pos + 46, pos + 46 + nameLen));
-    entries.push({ name, method, compSize, uncompSize, localOffset });
+    entries.push({ name, method, compSize: sizes.compSize, uncompSize: sizes.uncompSize, localOffset: sizes.localOffset });
     pos += 46 + nameLen + extraLen + commentLen;
   }
 
@@ -6390,10 +6492,11 @@ function extractCSVFromDM(file, endianness, fmt) {
   });
 }
 
-// CRC-32 over a list of blobs (the heavy part of project packing) — streams
-// each blob, posts progress, returns one CRC per blob
+// Pack preparation: per file, stream once computing the CRC-32 of the raw
+// bytes and (optionally) a deflated copy via CompressionStream on a tee'd
+// branch. Posts progress; returns [{crc, comp|null}] — comp is a Blob.
 var _packCrcTable = null;
-async function packCrc32(data) {
+function packCrcUpdate(crc, bytes) {
   if (!_packCrcTable) {
     _packCrcTable = new Int32Array(256);
     for (var n = 0; n < 256; n++) {
@@ -6402,27 +6505,48 @@ async function packCrc32(data) {
       _packCrcTable[n] = c;
     }
   }
-  var blobs = data.blobs;
+  for (var i = 0; i < bytes.length; i++) crc = (crc >>> 8) ^ _packCrcTable[(crc ^ bytes[i]) & 0xFF];
+  return crc;
+}
+
+async function preparePack(data) {
+  var files = data.files; // [{blob, deflate}]
   var totalBytes = 0;
-  for (var bi = 0; bi < blobs.length; bi++) totalBytes += blobs[bi].size;
+  for (var bi = 0; bi < files.length; bi++) totalBytes += files[bi].blob.size;
   var done = 0, lastPct = -1;
-  var crcs = [];
-  try {
-    for (var i = 0; i < blobs.length; i++) {
-      var crc = -1;
-      var reader = blobs[i].stream().getReader();
-      while (true) {
-        var r = await reader.read();
-        if (r.done) break;
-        var bytes = r.value;
-        for (var j = 0; j < bytes.length; j++) crc = (crc >>> 8) ^ _packCrcTable[(crc ^ bytes[j]) & 0xFF];
-        done += bytes.length;
-        var pct = totalBytes > 0 ? Math.round((done / totalBytes) * 100) : 100;
-        if (pct !== lastPct) { lastPct = pct; self.postMessage({ type: 'crc-progress', percent: pct }); }
-      }
-      crcs.push((crc ^ -1) >>> 0);
+
+  function progressTick(n) {
+    done += n;
+    var pct = totalBytes > 0 ? Math.round((done / totalBytes) * 100) : 100;
+    if (pct !== lastPct) { lastPct = pct; self.postMessage({ type: 'pack-progress', percent: pct }); }
+  }
+
+  async function crcOfStream(rs) {
+    var crc = -1;
+    var reader = rs.getReader();
+    while (true) {
+      var r = await reader.read();
+      if (r.done) break;
+      crc = packCrcUpdate(crc, r.value);
+      progressTick(r.value.length);
     }
-    self.postMessage({ type: 'crc-complete', crcs: crcs });
+    return (crc ^ -1) >>> 0;
+  }
+
+  try {
+    var results = [];
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      if (f.deflate && typeof CompressionStream !== 'undefined') {
+        var tees = f.blob.stream().tee();
+        var crcPromise = crcOfStream(tees[0]);
+        var compPromise = new Response(tees[1].pipeThrough(new CompressionStream('deflate-raw'))).blob();
+        results.push({ crc: await crcPromise, comp: await compPromise });
+      } else {
+        results.push({ crc: await crcOfStream(f.blob.stream()), comp: null });
+      }
+    }
+    self.postMessage({ type: 'pack-prepared', results: results });
   } catch (err) {
     self.postMessage({ type: 'error', message: err.message });
   }
@@ -6431,8 +6555,8 @@ async function packCrc32(data) {
 self.onmessage = (e) => {
   if (e.data.mode === 'export') {
     exportCSV(e.data);
-  } else if (e.data.mode === 'crc32') {
-    packCrc32(e.data);
+  } else if (e.data.mode === 'prepare-pack') {
+    preparePack(e.data);
   } else if (e.data.mode === 'swath') {
     swathAnalysis(e.data);
   } else if (e.data.mode === 'section') {
@@ -6475,6 +6599,7 @@ let auxStale = false;              // aux config changed since last aux analysis
 let auxCalcolCode = '';            // calculated-columns code block for the aux dataset (uses aux.)
 let auxCalcolMeta = [];            // [{name, type}] detected from aux calcol simulation
 let calcolMode = 'primary';        // which dataset the Calc editor is editing: 'primary' | 'aux'
+let projectTitle = null;           // optional project title (pack dialog) — display + archive naming
 let currentWeightName = null;      // weight column (by name, raw or calcol) for the primary analysis
 let auxWeightName = null;          // weight column (by name) for the aux passes — set on the Aux tab
 let statsAuxSelected = null;       // Set of aux col indices shown in the stats table (null = defaults)
@@ -6761,7 +6886,8 @@ var _helpTabs = {
     title: 'Aux',
     html:
       '<div class="help-section"><div class="help-section-title">Overview</div>' +
-      '<div class="help-row"><span>Load a second dataset — e.g. the composites/samples behind this block model — to compare against it. Aux runs as its own analysis pass; its variables appear across Statistics, CDF, and Swath with a label prefix.</span></div></div>' +
+      '<div class="help-row"><span>Load a second dataset — e.g. the composites/samples behind this block model — to compare against it. Aux runs as its own analysis pass; its variables appear across Statistics, CDF, and Swath with a label prefix.</span></div>' +
+      '<div class="help-row"><span>Drop a file, or — when the main data came from a multi-entry archive — pick another entry from it (<em>use an entry from…</em>). Dropping a zip on this tab offers a <strong>ZIP entry</strong> selector in the sidebar.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Configuration</div>' +
       '<div class="help-row"><span><strong>Display prefix</strong> — cosmetic label for aux variables (e.g. <code>aux:Fe</code>). Does not affect expressions.</span></div>' +
       '<div class="help-row"><span><strong>Coordinates</strong> — assign X/Y/Z. Aux and the block model must share the same coordinate space for swath overlays to align.</span></div>' +
@@ -6787,7 +6913,7 @@ var _helpTabs = {
       '<div class="help-row"><span>Drop a .zip and select which CSV entry to analyze from the dropdown.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Projects</div>' +
       '<div class="help-row"><span><strong>Save</strong> (toolbar) — download the workspace config as <code>.bma.json</code>. Drop it on the landing page later, then drop the matching data file to apply it.</span></div>' +
-      '<div class="help-row"><span><strong>Pack</strong> (toolbar) — bundle the data file(s), the aux dataset, and the project into one portable <code>.bma.zip</code>. Dropping a packed zip offers to load everything pre-configured.</span></div></div>'
+      '<div class="help-row"><span><strong>Pack</strong> (toolbar) — bundle the data file(s), the aux dataset, and the project into one portable <code>.bma.zip</code>. The dialog sets a project title, picks contents, and toggles deflate compression; archives use Zip64 automatically, so size is not a limit. Dropping a packed zip offers to load everything pre-configured.</span></div></div>'
   },
   summary: {
     title: 'Summary',
@@ -7046,6 +7172,29 @@ function autoDetectTypes(header, rows) {
 function readUint16(buf, off) { return buf[off] | (buf[off+1] << 8); }
 function readUint32(buf, off) { return (buf[off] | (buf[off+1] << 8) | (buf[off+2] << 16) | (buf[off+3] << 24)) >>> 0; }
 
+function readUint64Main(buf, off) { return readUint32(buf, off) + readUint32(buf, off + 4) * 4294967296; }
+
+// Zip64 extra field (tag 0x0001): 8-byte values present only for fields at
+// the 32-bit sentinel, in the order uncompSize, compSize, localOffset
+function zip64ResolveMain(cd, pos, nameLen, extraLen, sizes) {
+  if (sizes.compSize !== 0xFFFFFFFF && sizes.uncompSize !== 0xFFFFFFFF && sizes.localOffset !== 0xFFFFFFFF) return sizes;
+  let ep = pos + 46 + nameLen;
+  const eEnd = ep + extraLen;
+  while (ep + 4 <= eEnd) {
+    const tag = readUint16(cd, ep);
+    const tsize = readUint16(cd, ep + 2);
+    if (tag === 0x0001) {
+      let fp = ep + 4;
+      if (sizes.uncompSize === 0xFFFFFFFF) { sizes.uncompSize = readUint64Main(cd, fp); fp += 8; }
+      if (sizes.compSize === 0xFFFFFFFF) { sizes.compSize = readUint64Main(cd, fp); fp += 8; }
+      if (sizes.localOffset === 0xFFFFFFFF) { sizes.localOffset = readUint64Main(cd, fp); fp += 8; }
+      break;
+    }
+    ep += 4 + tsize;
+  }
+  return sizes;
+}
+
 async function listZipEntries(file) {
   const tailSize = Math.min(65557, file.size);
   const tail = new Uint8Array(await file.slice(file.size - tailSize).arrayBuffer());
@@ -7054,24 +7203,42 @@ async function listZipEntries(file) {
     if (readUint32(tail, i) === 0x06054b50) { eocdPos = i; break; }
   }
   if (eocdPos < 0) throw new Error('Not a valid ZIP file');
-  const cdEntries = readUint16(tail, eocdPos + 8);
-  const cdSize = readUint32(tail, eocdPos + 12);
-  const cdOffset = readUint32(tail, eocdPos + 16);
+  let cdEntries = readUint16(tail, eocdPos + 8);
+  let cdSize = readUint32(tail, eocdPos + 12);
+  let cdOffset = readUint32(tail, eocdPos + 16);
+
+  // Zip64: sentinel values point to the zip64 EOCD record via the locator
+  if (cdEntries === 0xFFFF || cdSize === 0xFFFFFFFF || cdOffset === 0xFFFFFFFF) {
+    let locPos = -1;
+    for (let i = eocdPos - 20; i >= 0; i--) {
+      if (readUint32(tail, i) === 0x07064b50) { locPos = i; break; }
+    }
+    if (locPos < 0) throw new Error('Zip64 archive missing EOCD locator');
+    const z64Offset = readUint64Main(tail, locPos + 8);
+    const z64 = new Uint8Array(await file.slice(z64Offset, z64Offset + 56).arrayBuffer());
+    if (readUint32(z64, 0) !== 0x06064b50) throw new Error('Invalid zip64 EOCD record');
+    cdEntries = readUint64Main(z64, 32);
+    cdSize = readUint64Main(z64, 40);
+    cdOffset = readUint64Main(z64, 48);
+  }
+
   const cd = new Uint8Array(await file.slice(cdOffset, cdOffset + cdSize).arrayBuffer());
   const entries = [];
   let pos = 0;
   for (let i = 0; i < cdEntries && pos < cd.length; i++) {
     if (readUint32(cd, pos) !== 0x02014b50) break;
     const method = readUint16(cd, pos + 10);
-    const compSize = readUint32(cd, pos + 20);
-    const uncompSize = readUint32(cd, pos + 24);
     const nameLen = readUint16(cd, pos + 28);
     const extraLen = readUint16(cd, pos + 30);
     const commentLen = readUint16(cd, pos + 32);
-    const localOffset = readUint32(cd, pos + 42);
+    const sizes = zip64ResolveMain(cd, pos, nameLen, extraLen, {
+      compSize: readUint32(cd, pos + 20),
+      uncompSize: readUint32(cd, pos + 24),
+      localOffset: readUint32(cd, pos + 42)
+    });
     const name = new TextDecoder().decode(cd.slice(pos + 46, pos + 46 + nameLen));
     if (!name.endsWith('/') && !name.startsWith('__MACOSX') && !name.startsWith('.')) {
-      entries.push({ name, method, compSize, uncompSize, localOffset });
+      entries.push({ name, method, compSize: sizes.compSize, uncompSize: sizes.uncompSize, localOffset: sizes.localOffset });
     }
     pos += 46 + nameLen + extraLen + commentLen;
   }
@@ -8321,7 +8488,35 @@ function applyAuxRestore(saved) {
   }
 }
 
-function loadAuxFile(file, handle) {
+// When the primary file is a multi-entry archive, offer its other entries
+// as aux candidates (e.g. a zip holding both the model and its composites)
+function renderAuxFromMain() {
+  var $wrap = document.getElementById('auxFromMain');
+  if (!$wrap) return;
+  if (auxFile || !currentFile || !preflightData || !preflightData.zipEntries || preflightData.zipEntries.length < 2) {
+    $wrap.innerHTML = '';
+    return;
+  }
+  var opts = preflightData.zipEntries.map(function(z) {
+    var isCurrent = z.name === preflightData.selectedZipEntry;
+    return '<option value="' + esc(z.name) + '"' + (isCurrent ? ' disabled' : '') + '>' +
+      esc(z.name) + (isCurrent ? ' (main data)' : '') + '</option>';
+  }).join('');
+  $wrap.innerHTML =
+    '<div class="aux-from-main-row">or use an entry from <strong>' + esc(currentFile.name) + '</strong>:</div>' +
+    '<div class="aux-from-main-row">' +
+      '<select class="aux-select" id="auxFromMainSel" style="flex:1">' + opts + '</select>' +
+      '<button class="aux-from-main-btn" id="auxFromMainBtn">Use entry</button>' +
+    '</div>';
+  var sel = document.getElementById('auxFromMainSel');
+  var firstFree = preflightData.zipEntries.find(function(z) { return z.name !== preflightData.selectedZipEntry; });
+  if (firstFree) sel.value = firstFree.name;
+  document.getElementById('auxFromMainBtn').addEventListener('click', function() {
+    loadAuxFile(currentFile, null, sel.value);
+  });
+}
+
+function loadAuxFile(file, handle, zipEntryName) {
   auxFile = file;
   auxHandle = handle || null;
   $auxFileInfo.textContent = 'Loading ' + file.name + '…';
@@ -8329,6 +8524,9 @@ function loadAuxFile(file, handle) {
   $auxConfig.style.display = '';
   runPreflight(file).then(async function(data) {
     auxPreflightData = data;
+    if (zipEntryName && data.zipEntries && zipEntryName !== data.selectedZipEntry) {
+      try { await loadZipEntryIntoPreflight(file, data, zipEntryName); } catch (e) { /* keep default entry */ }
+    }
     if (pendingAuxRestore && pendingAuxRestore.fileName === file.name) {
       var savedAux = pendingAuxRestore;
       pendingAuxRestore = null;
@@ -8372,6 +8570,7 @@ function clearAux() {
   $auxEmpty.style.display = '';
   $auxSidebar.innerHTML = '';
   $auxPreview.innerHTML = '';
+  renderAuxFromMain();
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
   if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
   if (typeof updateCalcolBadge === 'function') updateCalcolBadge();
@@ -8767,6 +8966,7 @@ function serializeProject() {
   return {
     _bma: 1,
     _ts: Date.now(),
+    title: projectTitle,
     activeTab: document.querySelector('.results-tab.active')?.dataset.tab || null,
     file: { name: currentFile.name, size: currentFile.size },
     preflight: {
@@ -8955,6 +9155,9 @@ function autoSaveProject() {
 async function applyProject(project) {
   if (!project || !project._bma) return;
 
+  projectTitle = project.title || null;
+  updateProjectTitleDisplay();
+
   // Restore preflight config
   if (preflightData) {
     const pf = project.preflight || {};
@@ -9059,32 +9262,89 @@ function saveProjectFile() {
   URL.revokeObjectURL(a.href);
 }
 
-// Pack the project + its data files into one portable zip. Store-mode with
-// Blob-part assembly: data is referenced, not copied — so this scales to
-// multi-GB models (up to the 4 GB zip limit). The CRC pass — the only full
-// read of the data — runs in a worker so the UI never stalls.
-async function packProjectFile() {
-  if (!currentFile || !preflightData) return;
-  var $btn = document.getElementById('projectPack');
-  if ($btn) { $btn.disabled = true; $btn.textContent = 'Packing…'; }
-  try {
-    var stem = currentFile.name.replace(/\.[^.]+$/, '');
-    var files = [{ name: currentFile.name, blob: currentFile }];
-    if (auxFile && auxFile.name !== currentFile.name) files.push({ name: auxFile.name, blob: auxFile });
-    var json = JSON.stringify(serializeProject(), null, 2);
-    files.push({ name: stem + '.bma.json', blob: new Blob([json]) });
+// ── Pack project (dialog + pipeline) ──────────────────────────────────
+// Bundles the data file(s) + project json into one portable zip. Data blobs
+// are referenced, never copied; the read pass (CRC + optional deflate via
+// CompressionStream) runs in a worker so the UI never stalls. The writer
+// emits Zip64 records automatically, so archive size is not a ceiling.
 
-    var crcs = await new Promise(function(resolve, reject) {
+function updateProjectTitleDisplay() {
+  if (!currentFile) return;
+  $resultsFilename.textContent = (projectTitle ? projectTitle + ' — ' : '') + currentFile.name;
+}
+
+function openPackModal() {
+  if (!currentFile || !preflightData) return;
+  var $m = document.getElementById('packModal');
+  document.getElementById('packTitle').value = projectTitle || '';
+  document.getElementById('packModelName').textContent = currentFile.name + ' (' + formatBytes(currentFile.size) + ')';
+  var $auxRow = document.getElementById('packAuxRow');
+  if (auxFile && auxFile.name !== currentFile.name) {
+    $auxRow.style.display = '';
+    document.getElementById('packAuxName').textContent = auxFile.name + ' (' + formatBytes(auxFile.size) + ')';
+    document.getElementById('packIncAux').checked = true;
+  } else {
+    $auxRow.style.display = 'none';
+  }
+  var $compress = document.getElementById('packCompress');
+  var $note = document.getElementById('packNote');
+  var totalData = currentFile.size + (auxFile ? auxFile.size : 0);
+  if (typeof CompressionStream === 'undefined') {
+    $compress.checked = false;
+    $compress.disabled = true;
+    $note.textContent = 'Compression unavailable in this browser — packing as stored zip.';
+  } else {
+    $compress.disabled = false;
+    // Default on for moderate sizes; off for huge data where the compressed
+    // copy must be materialized (stored entries stay zero-copy)
+    $compress.checked = totalData <= 512 * 1024 * 1024;
+    $note.textContent = $compress.checked
+      ? 'CSV typically shrinks 4–6×. Compressed packs decompress once on load.'
+      : 'Off by default for large data: stored entries pack and re-open with no memory cost. Tick to compress anyway.';
+  }
+  document.getElementById('packGo').disabled = false;
+  document.getElementById('packGo').textContent = 'Pack';
+  $m.classList.add('active');
+}
+
+function closePackModal() {
+  document.getElementById('packModal').classList.remove('active');
+}
+
+async function runPack() {
+  var $go = document.getElementById('packGo');
+  var $note = document.getElementById('packNote');
+  $go.disabled = true;
+  $go.textContent = 'Packing…';
+  try {
+    projectTitle = document.getElementById('packTitle').value.trim() || null;
+    updateProjectTitleDisplay();
+    var includeAux = !!(auxFile && auxFile.name !== currentFile.name &&
+      document.getElementById('packAuxRow').style.display !== 'none' &&
+      document.getElementById('packIncAux').checked);
+    var compress = !!document.getElementById('packCompress').checked;
+
+    var stem = currentFile.name.replace(/\.[^.]+$/, '');
+    var slug = projectTitle ? projectTitle.replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') : '';
+    var json = JSON.stringify(serializeProject(), null, 2);
+
+    // Never re-deflate archives; everything else follows the toggle
+    function wantsDeflate(name) { return compress && !/\.zip$/i.test(name); }
+    var files = [{ name: currentFile.name, blob: currentFile, deflate: wantsDeflate(currentFile.name) }];
+    if (includeAux) files.push({ name: auxFile.name, blob: auxFile, deflate: wantsDeflate(auxFile.name) });
+    files.push({ name: stem + '.bma.json', blob: new Blob([json]), deflate: compress });
+
+    var prepared = await new Promise(function(resolve, reject) {
       var w = new Worker(workerUrl);
-      w.postMessage({ mode: 'crc32', blobs: files.map(function(f) { return f.blob; }) });
+      w.postMessage({ mode: 'prepare-pack', files: files.map(function(f) { return { blob: f.blob, deflate: f.deflate }; }) });
       w.onerror = function(e) { w.terminate(); reject(new Error(e.message || 'worker error')); };
       w.onmessage = function(e) {
         var m = e.data;
-        if (m.type === 'crc-progress') {
-          if ($btn) $btn.textContent = 'Packing ' + m.percent + '%';
-        } else if (m.type === 'crc-complete') {
+        if (m.type === 'pack-progress') {
+          $go.textContent = 'Packing ' + m.percent + '%';
+        } else if (m.type === 'pack-prepared') {
           w.terminate();
-          resolve(m.crcs);
+          resolve(m.results);
         } else if (m.type === 'error') {
           w.terminate();
           reject(new Error(m.message));
@@ -9092,18 +9352,29 @@ async function packProjectFile() {
       };
     });
 
-    var zipBlob = await buildStoredZip(files, null, crcs);
+    var entries = files.map(function(f, i) {
+      var comp = prepared[i].comp;
+      return {
+        name: f.name,
+        crc: prepared[i].crc,
+        method: comp ? 8 : 0,
+        data: comp || f.blob,
+        uncompSize: f.blob.size
+      };
+    });
+    var zipBlob = assembleZip(entries);
     var a = document.createElement('a');
     a.href = URL.createObjectURL(zipBlob);
-    a.download = stem + '.bma.zip';
+    a.download = (slug || stem) + '.bma.zip';
     a.click();
     URL.revokeObjectURL(a.href);
+    autoSaveProject();
+    closePackModal();
   } catch (e) {
-    $errorMsg.textContent = 'Pack failed: ' + e.message;
-    $errorMsg.classList.add('active');
-    setTimeout(function() { $errorMsg.classList.remove('active'); }, 4000);
+    $note.textContent = 'Pack failed: ' + e.message;
   } finally {
-    if ($btn) { $btn.disabled = false; $btn.textContent = 'Pack'; }
+    $go.disabled = false;
+    $go.textContent = 'Pack';
   }
 }
 
@@ -9139,6 +9410,7 @@ function clearProject() {
   statsCdfScale = 'linear';
   pendingStatsAuxRestore = null;
   currentWeightName = null;
+  projectTitle = null;
   exportColumns = [];
   pendingProjectRestore = null;
   resetExportSettings();
@@ -9174,7 +9446,17 @@ $toolbarMenu.addEventListener('click', (e) => {
 
 // Toolbar buttons
 $projectSave.addEventListener('click', saveProjectFile);
-document.getElementById('projectPack').addEventListener('click', packProjectFile);
+document.getElementById('projectPack').addEventListener('click', openPackModal);
+document.getElementById('packClose').addEventListener('click', closePackModal);
+document.getElementById('packCancel').addEventListener('click', closePackModal);
+document.getElementById('packGo').addEventListener('click', runPack);
+document.getElementById('packCompress').addEventListener('change', function() {
+  var $note = document.getElementById('packNote');
+  if (this.disabled) return;
+  $note.textContent = this.checked
+    ? 'CSV typically shrinks 4–6×. Compressed packs decompress once on load.'
+    : 'Stored entries pack and re-open with no memory cost; the archive is the size of its files.';
+});
 $projectLoad.addEventListener('click', () => $projectFileInput.click());
 $projectClear.addEventListener('click', clearProject);
 
@@ -9282,6 +9564,7 @@ async function handleFile(file, handle) {
   statsCdfScale = 'linear';
   pendingStatsAuxRestore = null;
   currentWeightName = null;
+  projectTitle = null;
   exportColumns = [];
   pendingProjectRestore = null;
   resetExportSettings();
@@ -9365,6 +9648,7 @@ async function handleFile(file, handle) {
   // Run preflight
   runPreflight(file).then(async data => {
     renderPreflight(data);
+    if (typeof renderAuxFromMain === 'function') renderAuxFromMain();
     // Project precedence: an explicitly dropped/packed project for this file
     // wins over the autosaved one
     let project = null;
@@ -9449,6 +9733,7 @@ $backToPreflight.addEventListener('click', () => {
   statsCdfScale = 'linear';
   pendingStatsAuxRestore = null;
   currentWeightName = null;
+  projectTitle = null;
   exportColumns = [];
   pendingProjectRestore = null;
   if (exportWorker) { exportWorker.terminate(); exportWorker = null; }
@@ -18206,24 +18491,122 @@ function crc32Update(crc, bytes) {
   return crc;
 }
 
-// files: [{name, blob}] → Blob (zip, stored entries). onProgress(percent)
-// covers the CRC read pass. Pass precomputedCrcs (one per file, e.g. from
-// the worker's crc32 mode) to skip the main-thread read entirely.
-async function buildStoredZip(files, onProgress, precomputedCrcs) {
+// Assemble a zip from prepared entries:
+//   [{name, crc, method (0|8), data (Blob written to the archive),
+//     uncompSize (raw bytes; equals data.size for stored entries)}]
+// Data blobs are referenced, never copied. Writes Zip64 records (extended
+// info extras + zip64 EOCD + locator) automatically whenever any size,
+// offset, or count exceeds the zip32 fields — BMA's whole point is huge
+// files, so the container can't be the ceiling. opts.forceZip64 exists so
+// tests can exercise the zip64 records without multi-GB fixtures.
+function assembleZip(entriesIn, opts) {
+  opts = opts || {};
   var enc = new TextEncoder();
   var dosTime = (12 << 11);                              // 12:00:00
   var dosDate = ((2026 - 1980) << 9) | (6 << 5) | 9;     // 2026-06-09
+  var MAX32 = 0xFFFFFFFE;
 
-  var totalBytes = 0;
-  var archiveBytes = 22;
-  for (var fi = 0; fi < files.length; fi++) {
-    var nb = enc.encode(files[fi].name).length;
-    totalBytes += files[fi].blob.size;
-    archiveBytes += 30 + nb + files[fi].blob.size + 46 + nb;
+  function record(byteLen, write) {
+    var buf = new ArrayBuffer(byteLen);
+    var dv = new DataView(buf);
+    var u8 = new Uint8Array(buf);
+    var pos = 0;
+    write({
+      u16: function(v) { dv.setUint16(pos, v, true); pos += 2; },
+      u32: function(v) { dv.setUint32(pos, v, true); pos += 4; },
+      u64: function(v) {
+        dv.setUint32(pos, v % 4294967296, true);
+        dv.setUint32(pos + 4, Math.floor(v / 4294967296), true);
+        pos += 8;
+      },
+      put: function(bytes) { u8.set(bytes, pos); pos += bytes.length; }
+    });
+    return buf;
   }
-  if (archiveBytes > 0xFFFFFF00) throw new Error('Archive would exceed the 4 GB ZIP limit.');
 
-  // CRC pass — the one full read of the data (skipped when precomputed)
+  // Layout pass: offsets depend on whether each local header carries a
+  // zip64 extra (sizes overflow only — offsets don't live in local headers)
+  var entries = entriesIn.map(function(f) {
+    return {
+      nameBytes: enc.encode(f.name), data: f.data, crc: f.crc,
+      method: f.method || 0, uncompSize: f.uncompSize != null ? f.uncompSize : f.data.size
+    };
+  });
+  var offset = 0;
+  entries.forEach(function(e) {
+    e.sizes64 = opts.forceZip64 || e.uncompSize > MAX32 || e.data.size > MAX32;
+    e.offset = offset;
+    e.offset64 = opts.forceZip64 || e.offset > MAX32;
+    offset += 30 + e.nameBytes.length + (e.sizes64 ? 20 : 0) + e.data.size;
+  });
+  var cdStart = offset;
+  var zip64Mode = opts.forceZip64 || cdStart > MAX32 || entries.length > 0xFFFE ||
+    entries.some(function(e) { return e.sizes64 || e.offset64; });
+
+  var parts = [];
+  entries.forEach(function(e) {
+    var verNeed = e.sizes64 ? 45 : 20;
+    parts.push(record(30 + e.nameBytes.length + (e.sizes64 ? 20 : 0), function(w) {
+      w.u32(0x04034b50); w.u16(verNeed); w.u16(0); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
+      w.u32(e.crc);
+      w.u32(e.sizes64 ? 0xFFFFFFFF : e.data.size);
+      w.u32(e.sizes64 ? 0xFFFFFFFF : e.uncompSize);
+      w.u16(e.nameBytes.length); w.u16(e.sizes64 ? 20 : 0); w.put(e.nameBytes);
+      if (e.sizes64) { w.u16(0x0001); w.u16(16); w.u64(e.uncompSize); w.u64(e.data.size); }
+    }));
+    parts.push(e.data); // referenced, not copied
+  });
+
+  var cdSize = 0;
+  entries.forEach(function(e) {
+    var extraLen = (e.sizes64 ? 16 : 0) + (e.offset64 ? 8 : 0);
+    if (extraLen > 0) extraLen += 4;
+    var recLen = 46 + e.nameBytes.length + extraLen;
+    parts.push(record(recLen, function(w) {
+      w.u32(0x02014b50); w.u16(zip64Mode ? 45 : 20); w.u16(e.sizes64 || e.offset64 ? 45 : 20);
+      w.u16(0); w.u16(e.method); w.u16(dosTime); w.u16(dosDate);
+      w.u32(e.crc);
+      w.u32(e.sizes64 ? 0xFFFFFFFF : e.data.size);
+      w.u32(e.sizes64 ? 0xFFFFFFFF : e.uncompSize);
+      w.u16(e.nameBytes.length); w.u16(extraLen); w.u16(0); w.u16(0); w.u16(0); w.u32(0);
+      w.u32(e.offset64 ? 0xFFFFFFFF : e.offset);
+      w.put(e.nameBytes);
+      if (extraLen > 0) {
+        w.u16(0x0001); w.u16(extraLen - 4);
+        if (e.sizes64) { w.u64(e.uncompSize); w.u64(e.data.size); }
+        if (e.offset64) w.u64(e.offset);
+      }
+    }));
+    cdSize += recLen;
+  });
+
+  if (zip64Mode) {
+    var z64EocdOffset = cdStart + cdSize;
+    parts.push(record(56, function(w) {
+      w.u32(0x06064b50); w.u64(44); w.u16(45); w.u16(45); w.u32(0); w.u32(0);
+      w.u64(entries.length); w.u64(entries.length); w.u64(cdSize); w.u64(cdStart);
+    }));
+    parts.push(record(20, function(w) {
+      w.u32(0x07064b50); w.u32(0); w.u64(z64EocdOffset); w.u32(1);
+    }));
+    parts.push(record(22, function(w) {
+      w.u32(0x06054b50); w.u16(0); w.u16(0); w.u16(0xFFFF); w.u16(0xFFFF);
+      w.u32(0xFFFFFFFF); w.u32(0xFFFFFFFF); w.u16(0);
+    }));
+  } else {
+    parts.push(record(22, function(w) {
+      w.u32(0x06054b50); w.u16(0); w.u16(0); w.u16(entries.length); w.u16(entries.length);
+      w.u32(cdSize); w.u32(cdStart); w.u16(0);
+    }));
+  }
+  return new Blob(parts, { type: 'application/zip' });
+}
+
+// Convenience for small text payloads (the example download): store-mode
+// with the CRC computed inline.
+async function buildStoredZip(files, onProgress, precomputedCrcs) {
+  var totalBytes = 0;
+  for (var fi = 0; fi < files.length; fi++) totalBytes += files[fi].blob.size;
   var entries = [];
   var done = 0;
   for (var i = 0; i < files.length; i++) {
@@ -18243,52 +18626,9 @@ async function buildStoredZip(files, onProgress, precomputedCrcs) {
       }
       crcFinal = (crc ^ -1) >>> 0;
     }
-    entries.push({ nameBytes: enc.encode(f.name), blob: f.blob, crc: crcFinal, offset: 0 });
+    entries.push({ name: f.name, crc: crcFinal, method: 0, data: f.blob, uncompSize: f.blob.size });
   }
-
-  function record(byteLen, write) {
-    var buf = new ArrayBuffer(byteLen);
-    var dv = new DataView(buf);
-    var u8 = new Uint8Array(buf);
-    var pos = 0;
-    write({
-      u16: function(v) { dv.setUint16(pos, v, true); pos += 2; },
-      u32: function(v) { dv.setUint32(pos, v, true); pos += 4; },
-      put: function(bytes) { u8.set(bytes, pos); pos += bytes.length; }
-    });
-    return buf;
-  }
-
-  var parts = [];
-  var offset = 0;
-  entries.forEach(function(e) {
-    e.offset = offset;
-    var size = e.blob.size;
-    parts.push(record(30 + e.nameBytes.length, function(w) {
-      w.u32(0x04034b50); w.u16(20); w.u16(0); w.u16(0); w.u16(dosTime); w.u16(dosDate);
-      w.u32(e.crc); w.u32(size); w.u32(size);
-      w.u16(e.nameBytes.length); w.u16(0); w.put(e.nameBytes);
-    }));
-    parts.push(e.blob); // referenced, not copied
-    offset += 30 + e.nameBytes.length + size;
-  });
-  var cdStart = offset;
-  var cdSize = 0;
-  entries.forEach(function(e) {
-    var size = e.blob.size;
-    parts.push(record(46 + e.nameBytes.length, function(w) {
-      w.u32(0x02014b50); w.u16(20); w.u16(20); w.u16(0); w.u16(0); w.u16(dosTime); w.u16(dosDate);
-      w.u32(e.crc); w.u32(size); w.u32(size);
-      w.u16(e.nameBytes.length); w.u16(0); w.u16(0); w.u16(0); w.u16(0); w.u32(0); w.u32(e.offset);
-      w.put(e.nameBytes);
-    }));
-    cdSize += 46 + e.nameBytes.length;
-  });
-  parts.push(record(22, function(w) {
-    w.u32(0x06054b50); w.u16(0); w.u16(0); w.u16(entries.length); w.u16(entries.length);
-    w.u32(cdSize); w.u32(cdStart); w.u16(0);
-  }));
-  return new Blob(parts, { type: 'application/zip' });
+  return assembleZip(entries);
 }
 
 // ── Deterministic data generation ──

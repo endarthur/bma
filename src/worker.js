@@ -185,13 +185,37 @@ async function readBytes(file, offset, length) {
 
 function readUint16(buf, off) { return buf[off] | (buf[off+1] << 8); }
 function readUint32(buf, off) { return (buf[off] | (buf[off+1] << 8) | (buf[off+2] << 16) | (buf[off+3] << 24)) >>> 0; }
+function readUint64(buf, off) { return readUint32(buf, off) + readUint32(buf, off + 4) * 4294967296; }
+
+// Resolve a central-directory entry's zip64 extra field (tag 0x0001):
+// 8-byte values present only for fields that hit the 32-bit sentinel,
+// in the order uncompSize, compSize, localOffset
+function zip64Resolve(cd, pos, nameLen, extraLen, sizes) {
+  if (sizes.compSize !== 0xFFFFFFFF && sizes.uncompSize !== 0xFFFFFFFF && sizes.localOffset !== 0xFFFFFFFF) return sizes;
+  let ep = pos + 46 + nameLen;
+  const eEnd = ep + extraLen;
+  while (ep + 4 <= eEnd) {
+    const tag = readUint16(cd, ep);
+    const tsize = readUint16(cd, ep + 2);
+    if (tag === 0x0001) {
+      let fp = ep + 4;
+      if (sizes.uncompSize === 0xFFFFFFFF) { sizes.uncompSize = readUint64(cd, fp); fp += 8; }
+      if (sizes.compSize === 0xFFFFFFFF) { sizes.compSize = readUint64(cd, fp); fp += 8; }
+      if (sizes.localOffset === 0xFFFFFFFF) { sizes.localOffset = readUint64(cd, fp); fp += 8; }
+      break;
+    }
+    ep += 4 + tsize;
+  }
+  return sizes;
+}
 
 async function extractCSVFromZip(file, targetEntry) {
   self.postMessage({ type: 'progress', percent: 0, rowCount: 0, note: 'Reading ZIP headers...' });
 
   // Read last 64KB to find End of Central Directory
   const tailSize = Math.min(65557, file.size);
-  const tail = await readBytes(file, file.size - tailSize, tailSize);
+  const tailStart = file.size - tailSize;
+  const tail = await readBytes(file, tailStart, tailSize);
 
   let eocdPos = -1;
   for (let i = tail.length - 22; i >= 0; i--) {
@@ -199,9 +223,24 @@ async function extractCSVFromZip(file, targetEntry) {
   }
   if (eocdPos < 0) throw new Error('Not a valid ZIP file (EOCD not found)');
 
-  const cdEntries = readUint16(tail, eocdPos + 8);
-  const cdSize = readUint32(tail, eocdPos + 12);
-  const cdOffset = readUint32(tail, eocdPos + 16);
+  let cdEntries = readUint16(tail, eocdPos + 8);
+  let cdSize = readUint32(tail, eocdPos + 12);
+  let cdOffset = readUint32(tail, eocdPos + 16);
+
+  // Zip64: sentinel values point to the zip64 EOCD record via the locator
+  if (cdEntries === 0xFFFF || cdSize === 0xFFFFFFFF || cdOffset === 0xFFFFFFFF) {
+    let locPos = -1;
+    for (let i = eocdPos - 20; i >= 0; i--) {
+      if (readUint32(tail, i) === 0x07064b50) { locPos = i; break; }
+    }
+    if (locPos < 0) throw new Error('Zip64 archive missing EOCD locator');
+    const z64Offset = readUint64(tail, locPos + 8);
+    const z64 = await readBytes(file, z64Offset, 56);
+    if (readUint32(z64, 0) !== 0x06064b50) throw new Error('Invalid zip64 EOCD record');
+    cdEntries = readUint64(z64, 32);
+    cdSize = readUint64(z64, 40);
+    cdOffset = readUint64(z64, 48);
+  }
 
   // Read central directory
   const cd = await readBytes(file, cdOffset, cdSize);
@@ -210,14 +249,16 @@ async function extractCSVFromZip(file, targetEntry) {
   for (let i = 0; i < cdEntries && pos < cd.length; i++) {
     if (readUint32(cd, pos) !== 0x02014b50) break;
     const method = readUint16(cd, pos + 10);
-    const compSize = readUint32(cd, pos + 20);
-    const uncompSize = readUint32(cd, pos + 24);
     const nameLen = readUint16(cd, pos + 28);
     const extraLen = readUint16(cd, pos + 30);
     const commentLen = readUint16(cd, pos + 32);
-    const localOffset = readUint32(cd, pos + 42);
+    const sizes = zip64Resolve(cd, pos, nameLen, extraLen, {
+      compSize: readUint32(cd, pos + 20),
+      uncompSize: readUint32(cd, pos + 24),
+      localOffset: readUint32(cd, pos + 42)
+    });
     const name = new TextDecoder().decode(cd.slice(pos + 46, pos + 46 + nameLen));
-    entries.push({ name, method, compSize, uncompSize, localOffset });
+    entries.push({ name, method, compSize: sizes.compSize, uncompSize: sizes.uncompSize, localOffset: sizes.localOffset });
     pos += 46 + nameLen + extraLen + commentLen;
   }
 
@@ -2079,10 +2120,11 @@ function extractCSVFromDM(file, endianness, fmt) {
   });
 }
 
-// CRC-32 over a list of blobs (the heavy part of project packing) — streams
-// each blob, posts progress, returns one CRC per blob
+// Pack preparation: per file, stream once computing the CRC-32 of the raw
+// bytes and (optionally) a deflated copy via CompressionStream on a tee'd
+// branch. Posts progress; returns [{crc, comp|null}] — comp is a Blob.
 var _packCrcTable = null;
-async function packCrc32(data) {
+function packCrcUpdate(crc, bytes) {
   if (!_packCrcTable) {
     _packCrcTable = new Int32Array(256);
     for (var n = 0; n < 256; n++) {
@@ -2091,27 +2133,48 @@ async function packCrc32(data) {
       _packCrcTable[n] = c;
     }
   }
-  var blobs = data.blobs;
+  for (var i = 0; i < bytes.length; i++) crc = (crc >>> 8) ^ _packCrcTable[(crc ^ bytes[i]) & 0xFF];
+  return crc;
+}
+
+async function preparePack(data) {
+  var files = data.files; // [{blob, deflate}]
   var totalBytes = 0;
-  for (var bi = 0; bi < blobs.length; bi++) totalBytes += blobs[bi].size;
+  for (var bi = 0; bi < files.length; bi++) totalBytes += files[bi].blob.size;
   var done = 0, lastPct = -1;
-  var crcs = [];
-  try {
-    for (var i = 0; i < blobs.length; i++) {
-      var crc = -1;
-      var reader = blobs[i].stream().getReader();
-      while (true) {
-        var r = await reader.read();
-        if (r.done) break;
-        var bytes = r.value;
-        for (var j = 0; j < bytes.length; j++) crc = (crc >>> 8) ^ _packCrcTable[(crc ^ bytes[j]) & 0xFF];
-        done += bytes.length;
-        var pct = totalBytes > 0 ? Math.round((done / totalBytes) * 100) : 100;
-        if (pct !== lastPct) { lastPct = pct; self.postMessage({ type: 'crc-progress', percent: pct }); }
-      }
-      crcs.push((crc ^ -1) >>> 0);
+
+  function progressTick(n) {
+    done += n;
+    var pct = totalBytes > 0 ? Math.round((done / totalBytes) * 100) : 100;
+    if (pct !== lastPct) { lastPct = pct; self.postMessage({ type: 'pack-progress', percent: pct }); }
+  }
+
+  async function crcOfStream(rs) {
+    var crc = -1;
+    var reader = rs.getReader();
+    while (true) {
+      var r = await reader.read();
+      if (r.done) break;
+      crc = packCrcUpdate(crc, r.value);
+      progressTick(r.value.length);
     }
-    self.postMessage({ type: 'crc-complete', crcs: crcs });
+    return (crc ^ -1) >>> 0;
+  }
+
+  try {
+    var results = [];
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      if (f.deflate && typeof CompressionStream !== 'undefined') {
+        var tees = f.blob.stream().tee();
+        var crcPromise = crcOfStream(tees[0]);
+        var compPromise = new Response(tees[1].pipeThrough(new CompressionStream('deflate-raw'))).blob();
+        results.push({ crc: await crcPromise, comp: await compPromise });
+      } else {
+        results.push({ crc: await crcOfStream(f.blob.stream()), comp: null });
+      }
+    }
+    self.postMessage({ type: 'pack-prepared', results: results });
   } catch (err) {
     self.postMessage({ type: 'error', message: err.message });
   }
@@ -2120,8 +2183,8 @@ async function packCrc32(data) {
 self.onmessage = (e) => {
   if (e.data.mode === 'export') {
     exportCSV(e.data);
-  } else if (e.data.mode === 'crc32') {
-    packCrc32(e.data);
+  } else if (e.data.mode === 'prepare-pack') {
+    preparePack(e.data);
   } else if (e.data.mode === 'swath') {
     swathAnalysis(e.data);
   } else if (e.data.mode === 'section') {

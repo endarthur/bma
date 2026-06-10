@@ -27,6 +27,7 @@ let auxStale = false;              // aux config changed since last aux analysis
 let auxCalcolCode = '';            // calculated-columns code block for the aux dataset (uses aux.)
 let auxCalcolMeta = [];            // [{name, type}] detected from aux calcol simulation
 let calcolMode = 'primary';        // which dataset the Calc editor is editing: 'primary' | 'aux'
+let projectTitle = null;           // optional project title (pack dialog) — display + archive naming
 let currentWeightName = null;      // weight column (by name, raw or calcol) for the primary analysis
 let auxWeightName = null;          // weight column (by name) for the aux passes — set on the Aux tab
 let statsAuxSelected = null;       // Set of aux col indices shown in the stats table (null = defaults)
@@ -313,7 +314,8 @@ var _helpTabs = {
     title: 'Aux',
     html:
       '<div class="help-section"><div class="help-section-title">Overview</div>' +
-      '<div class="help-row"><span>Load a second dataset — e.g. the composites/samples behind this block model — to compare against it. Aux runs as its own analysis pass; its variables appear across Statistics, CDF, and Swath with a label prefix.</span></div></div>' +
+      '<div class="help-row"><span>Load a second dataset — e.g. the composites/samples behind this block model — to compare against it. Aux runs as its own analysis pass; its variables appear across Statistics, CDF, and Swath with a label prefix.</span></div>' +
+      '<div class="help-row"><span>Drop a file, or — when the main data came from a multi-entry archive — pick another entry from it (<em>use an entry from…</em>). Dropping a zip on this tab offers a <strong>ZIP entry</strong> selector in the sidebar.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Configuration</div>' +
       '<div class="help-row"><span><strong>Display prefix</strong> — cosmetic label for aux variables (e.g. <code>aux:Fe</code>). Does not affect expressions.</span></div>' +
       '<div class="help-row"><span><strong>Coordinates</strong> — assign X/Y/Z. Aux and the block model must share the same coordinate space for swath overlays to align.</span></div>' +
@@ -339,7 +341,7 @@ var _helpTabs = {
       '<div class="help-row"><span>Drop a .zip and select which CSV entry to analyze from the dropdown.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Projects</div>' +
       '<div class="help-row"><span><strong>Save</strong> (toolbar) — download the workspace config as <code>.bma.json</code>. Drop it on the landing page later, then drop the matching data file to apply it.</span></div>' +
-      '<div class="help-row"><span><strong>Pack</strong> (toolbar) — bundle the data file(s), the aux dataset, and the project into one portable <code>.bma.zip</code>. Dropping a packed zip offers to load everything pre-configured.</span></div></div>'
+      '<div class="help-row"><span><strong>Pack</strong> (toolbar) — bundle the data file(s), the aux dataset, and the project into one portable <code>.bma.zip</code>. The dialog sets a project title, picks contents, and toggles deflate compression; archives use Zip64 automatically, so size is not a limit. Dropping a packed zip offers to load everything pre-configured.</span></div></div>'
   },
   summary: {
     title: 'Summary',
