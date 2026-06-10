@@ -395,11 +395,10 @@ function serializeProject() {
       decimalSep: exportDecimalSep
     },
     swath: (function() {
-      var $axis = document.getElementById('swathAxis');
-      var $binWidth = document.getElementById('swathBinWidth');
+      var $dirMode = document.getElementById('swathDirMode');
       var $stat = document.getElementById('swathStat');
       var $filter = document.getElementById('swathLocalFilter');
-      if (!$axis) return null;
+      if (!$dirMode) return null;
       var checkedVars = [];
       document.querySelectorAll('#swathVarList input[type="checkbox"]:checked').forEach(function(cb) {
         var colIdx = parseInt(cb.value);
@@ -412,8 +411,6 @@ function serializeProject() {
         var colName = currentHeader[colIdx];
         if (colName && parseInt(sel.value) !== 0) swathUnits[colName] = parseInt(sel.value);
       });
-      var $azimuth = document.getElementById('swathAzimuth');
-      var $plunge = document.getElementById('swathPlunge');
       var swathAuxChecked = null;
       var swathAuxUnits = {};
       if (auxFile) {
@@ -425,14 +422,21 @@ function serializeProject() {
           if (sel.dataset.auxName && parseInt(sel.value) !== 0) swathAuxUnits[sel.dataset.auxName] = parseInt(sel.value);
         });
       }
+      var swathDirs = {};
+      document.querySelectorAll('#swathSidebar .swath-dir-on').forEach(function(cb) {
+        var k = cb.dataset.dir;
+        var bin = parseFloat((document.getElementById('swathBin_' + k) || {}).value);
+        swathDirs[k] = { on: cb.checked, bin: isFinite(bin) ? bin : null };
+      });
       return {
-        axis: $axis.value,
-        binWidth: parseFloat($binWidth.value) || 0,
+        dirMode: $dirMode.value,
+        directions: swathDirs,
+        dipDir: parseFloat((document.getElementById('swathDipDir') || {}).value) || 0,
+        dip: parseFloat((document.getElementById('swathDip') || {}).value) || 0,
+        rake: (function() { var v = parseFloat((document.getElementById('swathRake') || {}).value); return isFinite(v) ? v : 90; })(),
         stat: $stat ? $stat.value : 'mean_std',
         checkedVars: checkedVars,
         localFilter: $filter ? $filter.value : '',
-        azimuth: $axis.value === 'custom' ? (parseFloat($azimuth.value) || 0) : null,
-        plunge: $axis.value === 'custom' ? (parseFloat($plunge.value) || 0) : null,
         weight: (document.getElementById('swathWeight') || {}).value || null,
         auxCheckedVars: swathAuxChecked,
         auxUnits: Object.keys(swathAuxUnits).length > 0 ? swathAuxUnits : null,
@@ -1570,7 +1574,7 @@ function displayResults(data) {
   var gtSnapshot = null;
   var swathSnapshot = null;
   if (!restoredProject) {
-    var snapSer = (document.getElementById('gtVarList') || document.getElementById('swathAxis')) ? serializeProject() : null;
+    var snapSer = (document.getElementById('gtVarList') || document.getElementById('swathDirMode')) ? serializeProject() : null;
     if (snapSer) {
       gtSnapshot = snapSer.gt;
       swathSnapshot = snapSer.swath;
@@ -1699,18 +1703,45 @@ function displayResults(data) {
   // Restore Swath sidebar from project or snapshot
   var swp = (restoredProject && restoredProject.swath) ? restoredProject.swath : swathSnapshot;
   if (swp) {
-    var $sAxis = document.getElementById('swathAxis');
-    var $sBinWidth = document.getElementById('swathBinWidth');
     var $sStat = document.getElementById('swathStat');
     var $sFilter = document.getElementById('swathLocalFilter');
-    if ($sAxis && swp.axis) $sAxis.value = swp.axis;
-    var $sAzRow = document.getElementById('swathAzimuthRow');
-    var $sAzimuth = document.getElementById('swathAzimuth');
-    var $sPlunge = document.getElementById('swathPlunge');
-    if ($sAzRow) $sAzRow.style.display = swp.axis === 'custom' ? '' : 'none';
-    if ($sAzimuth && swp.azimuth != null) $sAzimuth.value = swp.azimuth;
-    if ($sPlunge && swp.plunge != null) $sPlunge.value = swp.plunge;
-    if ($sBinWidth && swp.binWidth) $sBinWidth.value = swp.binWidth;
+    var $sDirMode = document.getElementById('swathDirMode');
+    // Back-compat: map old single-axis projects (axis/binWidth/azimuth/plunge)
+    // onto the directions model — the old azimuth/plunge line is exactly
+    // dipdir=azimuth, dip=plunge, rake=90, swathed along U only
+    var swpDirMode = swp.dirMode, swpDirs = swp.directions;
+    var swpDipDir = swp.dipDir, swpDip = swp.dip, swpRake = swp.rake;
+    if (!swpDirs && swp.axis) {
+      if (swp.axis === 'custom') {
+        swpDirMode = 'custom';
+        swpDipDir = swp.azimuth || 0;
+        swpDip = swp.plunge || 0;
+        swpRake = 90;
+        swpDirs = { u: { on: true, bin: swp.binWidth || null }, v: { on: false }, w: { on: false } };
+      } else {
+        swpDirMode = 'ortho';
+        swpDirs = { x: { on: false }, y: { on: false }, z: { on: false } };
+        swpDirs[swp.axis] = { on: true, bin: swp.binWidth || null };
+      }
+    }
+    if ($sDirMode && swpDirMode) {
+      $sDirMode.value = swpDirMode;
+      $sDirMode.dispatchEvent(new Event('change'));
+    }
+    if (swpDirs) {
+      document.querySelectorAll('#swathSidebar .swath-dir-on').forEach(function(cb) {
+        var conf = swpDirs[cb.dataset.dir];
+        if (!conf) return;
+        cb.checked = conf.on !== false;
+        if (conf.bin) {
+          var bi = document.getElementById('swathBin_' + cb.dataset.dir);
+          if (bi) bi.value = conf.bin;
+        }
+      });
+    }
+    if (swpDipDir != null && document.getElementById('swathDipDir')) document.getElementById('swathDipDir').value = swpDipDir;
+    if (swpDip != null && document.getElementById('swathDip')) document.getElementById('swathDip').value = swpDip;
+    if (swpRake != null && document.getElementById('swathRake')) document.getElementById('swathRake').value = swpRake;
     if ($sStat && swp.stat) $sStat.value = swp.stat;
     var $sWeight = document.getElementById('swathWeight');
     if ($sWeight && swp.weight != null) $sWeight.value = swp.weight;

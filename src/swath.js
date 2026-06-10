@@ -63,10 +63,7 @@ function applySwathColor(colName, color) {
     if (currentHeader[ci] === colName) sw.style.background = color;
   });
   // Re-render chart from cache
-  if (lastSwathData) {
-    var stat = document.getElementById('swathStat');
-    renderSwathCharts(lastSwathData, stat ? stat.value : 'mean_std');
-  }
+  if (lastSwathData) renderSwathOutput();
   autoSaveProject();
 }
 
@@ -124,11 +121,14 @@ function formatAzimuthLabel(deg) {
 
 function getSwathDirectionLabels(swathData) {
   if (swathData.azimuth != null) {
+    var pl = swathData.plunge || 0;
+    // Near-vertical vectors: compass labels are meaningless
+    if (pl > 80) return { left: 'Up', right: 'Down' };
+    if (pl < -80) return { left: 'Down', right: 'Up' };
     var fwd = formatAzimuthLabel(swathData.azimuth);
     var back = formatAzimuthLabel((swathData.azimuth + 180) % 360);
-    if (swathData.plunge && swathData.plunge !== 0) {
-      return { left: back + ' (up)', right: fwd + ' (down)' };
-    }
+    if (pl > 0.5) return { left: back + ' (up)', right: fwd + ' (down)' };
+    if (pl < -0.5) return { left: back + ' (down)', right: fwd + ' (up)' };
     return { left: back, right: fwd };
   }
   var axisKey = swathData.axis;
@@ -139,11 +139,68 @@ function getSwathDirectionLabels(swathData) {
 
 function getSwathXAxisLabel(swathData) {
   if (swathData.azimuth != null) {
-    var label = 'Az ' + Math.round(swathData.azimuth) + '\u00b0';
-    if (swathData.plunge && swathData.plunge !== 0) label += '/Pl ' + Math.round(swathData.plunge) + '\u00b0';
+    var label = swathData.key ? swathData.key.toUpperCase() + ' \u2014 ' : '';
+    label += 'Az ' + Math.round(swathData.azimuth) + '\u00b0';
+    if (swathData.plunge && Math.round(swathData.plunge) !== 0) label += '/Pl ' + Math.round(swathData.plunge) + '\u00b0';
     return label + ' Projected';
   }
   return swathData.axis.toUpperCase() + ' Coordinate';
+}
+
+// Single-direction view over the multi-direction result cache \u2014 the shape
+// renderSwathCharts and friends consume (vars/auxVars/binWidth/axis/az/pl)
+function swathDirView(sd, key) {
+  var d = sd.directions[0];
+  for (var i = 0; i < sd.directions.length; i++) {
+    if (sd.directions[i].key === key) { d = sd.directions[i]; break; }
+  }
+  return {
+    key: d.key,
+    axis: d.axis != null ? 'xyz'[d.axis] : null,
+    azimuth: d.dir ? d.azimuth : null,
+    plunge: d.dir ? d.plunge : null,
+    binWidth: d.binWidth,
+    vars: (sd.results && sd.results[d.key]) || {},
+    auxVars: sd.auxResults ? (sd.auxResults[d.key] || null) : null,
+    varCols: sd.varCols,
+    auxVarCols: sd.auxVarCols,
+    auxHeader: sd.auxHeader,
+    auxError: sd.auxError
+  };
+}
+
+// Render the swath output area: a tab per computed direction (when more
+// than one), with the active direction's chart + table below.
+function renderSwathOutput(stat) {
+  var $content = document.getElementById('swathContent');
+  if (!$content) return;
+  if (!lastSwathData || !lastSwathData.directions) {
+    $content.innerHTML = '<div class="swath-hint">Configure settings and click Generate to create swath plots.</div>';
+    return;
+  }
+  if (!stat) stat = (document.getElementById('swathStat') || {}).value || 'mean_std';
+  var sd = lastSwathData;
+  var keys = sd.directions.map(function(d) { return d.key; });
+  if (!sd.activeKey || keys.indexOf(sd.activeKey) < 0) sd.activeKey = keys[0];
+
+  var html = '';
+  if (sd.directions.length > 1) {
+    html += '<div class="swath-dir-tabs">' + sd.directions.map(function(d) {
+      var title = d.dir ? 'Az ' + Math.round(d.azimuth) + '\u00b0 / Pl ' + Math.round(d.plunge) + '\u00b0' : d.key.toUpperCase() + ' axis';
+      return '<button class="swath-dir-tab' + (d.key === sd.activeKey ? ' active' : '') + '" data-dir-key="' + d.key + '" title="' + esc(title) + '">' + d.key.toUpperCase() + '</button>';
+    }).join('') + '</div>';
+  }
+  html += '<div id="swathDirPanel"></div>';
+  $content.innerHTML = html;
+
+  $content.querySelectorAll('.swath-dir-tab').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      sd.activeKey = btn.dataset.dirKey;
+      renderSwathOutput();
+    });
+  });
+
+  renderSwathCharts(swathDirView(sd, sd.activeKey), stat, document.getElementById('swathDirPanel'));
 }
 
 function renderSwathConfig(data) {
@@ -165,13 +222,14 @@ function renderSwathConfig(data) {
     $content.innerHTML = '<div class="swath-hint">No numeric variable columns available for swath analysis.</div>';
     return;
   }
-  const axes = [
-    { key: 'x', label: 'X', bs: geometry.x.blockSize },
-    { key: 'y', label: 'Y', bs: geometry.y.blockSize },
-    { key: 'z', label: 'Z', bs: geometry.z.blockSize },
-    { key: 'custom', label: 'Custom', bs: Math.min(geometry.x.blockSize, geometry.y.blockSize) }
-  ];
-  const defaultBs = axes[0].bs;
+  const bsx = geometry.x.blockSize, bsy = geometry.y.blockSize, bsz = geometry.z.blockSize;
+  const inPlaneBs = Math.min(bsx, bsy);
+  function dirRow(key, label, bs, checked, title) {
+    return '<div class="swath-dir-row">' +
+      '<label' + (title ? ' title="' + esc(title) + '"' : '') + '><input type="checkbox" class="swath-dir-on" data-dir="' + key + '"' + (checked ? ' checked' : '') + '> ' + label + '</label>' +
+      '<input type="number" class="swath-input swath-dir-bin" id="swathBin_' + key + '" value="' + bs + '" min="0.001" step="any" title="Bin width (m)">' +
+    '</div>';
+  }
   const varItems = swathNumCols.map(function(c, vi) {
     var defUnit = globalUnits[c.name] || 0;
     var unitOpts = GRADE_UNITS.map(function(u, ui) {
@@ -186,18 +244,27 @@ function renderSwathConfig(data) {
 
   $sidebar.innerHTML =
     '<div class="swath-sidebar-section">' +
-      '<div class="swath-sidebar-title">Axis</div>' +
-      '<select class="swath-select" id="swathAxis">' + axes.map(a => '<option value="' + a.key + '">' + a.label + '</option>').join('') + '</select>' +
-      '<div id="swathAzimuthRow" style="display:none; margin-top:0.4rem">' +
-        '<div class="swath-sidebar-title">Azimuth (\u00b0 from N, clockwise)</div>' +
-        '<input type="number" class="swath-input" id="swathAzimuth" value="0" min="0" max="360" step="1">' +
-        '<div class="swath-sidebar-title" style="margin-top:0.3rem">Plunge (\u00b0 below horizontal)</div>' +
-        '<input type="number" class="swath-input" id="swathPlunge" value="0" min="0" max="90" step="1">' +
+      '<div class="swath-sidebar-title">Directions</div>' +
+      '<select class="swath-select" id="swathDirMode">' +
+        '<option value="ortho">Orthogonal X/Y/Z</option>' +
+        '<option value="custom">Custom (rotated U/V/W)</option>' +
+      '</select>' +
+      '<div class="swath-dir-hint">check directions to swath \u00b7 bin width (m) per direction</div>' +
+      '<div id="swathOrthoDirs">' +
+        dirRow('x', 'X', bsx, true) +
+        dirRow('y', 'Y', bsy, false) +
+        dirRow('z', 'Z', bsz, false) +
       '</div>' +
-      '<div style="margin-top:0.4rem">' +
-        '<div class="swath-sidebar-title">Bin Width</div>' +
-        '<input type="number" class="swath-input" id="swathBinWidth" value="' + defaultBs + '" min="0.001" step="any">' +
-        '<div class="swath-bin-label" id="swathBinLabel">' + defaultBs + 'm blocks</div>' +
+      '<div id="swathCustomDirs" style="display:none">' +
+        '<div class="swath-angle-row">' +
+          '<label title="Dip direction (\u00b0 from N, clockwise)">Dipdir<input type="number" class="swath-input" id="swathDipDir" value="0" min="0" max="360" step="1"></label>' +
+          '<label title="Dip (\u00b0 below horizontal)">Dip<input type="number" class="swath-input" id="swathDip" value="0" min="0" max="90" step="1"></label>' +
+          '<label title="Rake of U in the plane (\u00b0 from strike, 90 = down-dip)">Rake<input type="number" class="swath-input" id="swathRake" value="90" min="-180" max="180" step="1"></label>' +
+        '</div>' +
+        dirRow('u', 'U', inPlaneBs, true, 'In-plane, along the rake direction') +
+        dirRow('v', 'V', inPlaneBs, false, 'In-plane, perpendicular to U') +
+        dirRow('w', 'W', bsz, false, 'Pole to the plane (normal)') +
+        '<div class="swath-dir-hint">U: rake direction in the dipdir/dip plane \u00b7 V: in-plane \u22a5 U \u00b7 W: pole</div>' +
       '</div>' +
     '</div>' +
     '<div class="swath-sidebar-section">' +
@@ -253,24 +320,11 @@ function renderSwathConfig(data) {
 
   $content.innerHTML = '<div class="swath-hint">Select variables and click Generate to create swath plots.</div>';
 
-  // Update bin width + label when axis changes
-  var $axis = document.getElementById('swathAxis');
-  var $binWidth = document.getElementById('swathBinWidth');
-  var $binLabel = document.getElementById('swathBinLabel');
-  var $azRow = document.getElementById('swathAzimuthRow');
-  $axis.addEventListener('change', function() {
-    var a = axes.find(function(ax) { return ax.key === $axis.value; });
-    if (a) {
-      $binWidth.value = a.bs;
-      $binLabel.textContent = a.bs + 'm blocks';
-    }
-    $azRow.style.display = $axis.value === 'custom' ? '' : 'none';
-  });
-  // Fix: show the typed value, not blockSize
-  $binWidth.addEventListener('input', function() {
-    var v = $binWidth.value;
-    $binLabel.textContent = (v || '?') + 'm bins';
-    $binLabel.style.color = '';
+  // Direction mode toggle — show the matching direction rows
+  var $dirMode = document.getElementById('swathDirMode');
+  $dirMode.addEventListener('change', function() {
+    document.getElementById('swathOrthoDirs').style.display = $dirMode.value === 'ortho' ? '' : 'none';
+    document.getElementById('swathCustomDirs').style.display = $dirMode.value === 'custom' ? '' : 'none';
   });
 
   // Variable search filter (fuzzy)
@@ -303,7 +357,7 @@ function renderSwathConfig(data) {
       var colName = sel.dataset.auxCol != null ? sel.dataset.auxName : currentHeader[parseInt(sel.dataset.col)];
       sel.value = (colName && globalUnits[colName]) ? globalUnits[colName] : 0;
     });
-    if (lastSwathData) renderSwathCharts(lastSwathData, document.getElementById('swathStat').value);
+    if (lastSwathData) renderSwathOutput();
     autoSaveProject();
   });
 
@@ -312,13 +366,13 @@ function renderSwathConfig(data) {
 
   // Stat change re-renders from cache
   document.getElementById('swathStat').addEventListener('change', function() {
-    if (lastSwathData) renderSwathCharts(lastSwathData, document.getElementById('swathStat').value);
+    if (lastSwathData) renderSwathOutput();
   });
 
   // Display option changes re-render from cache
   ['swathShowBands','swathShowCounts','swathShowTable','swathYScale','swathLayout'].forEach(function(id) {
     document.getElementById(id).addEventListener('change', function() {
-      if (lastSwathData) renderSwathCharts(lastSwathData, document.getElementById('swathStat').value);
+      if (lastSwathData) renderSwathOutput();
       autoSaveProject();
     });
   });
@@ -326,7 +380,7 @@ function renderSwathConfig(data) {
   // Swath per-variable unit change — re-render from cache
   document.getElementById('swathVarList').addEventListener('change', function(e) {
     if (e.target.classList.contains('swath-var-unit') && lastSwathData) {
-      renderSwathCharts(lastSwathData, document.getElementById('swathStat').value);
+      renderSwathOutput();
     }
   });
 
@@ -465,19 +519,89 @@ function renderSwathAuxVars() {
   wrap.innerHTML = html;
 }
 
+// Orthonormal frame from dip direction / dip / rake (E=x, N=y, Up=z):
+// U = lineation in the plane at the given rake (measured from strike,
+// dip to the right of strike, 90° = down-dip), W = pole to the plane,
+// V = W × U (in-plane, perpendicular to U).
+function computeSwathUVW(dipDirDeg, dipDeg, rakeDeg) {
+  var a = dipDirDeg * Math.PI / 180, d = dipDeg * Math.PI / 180, r = rakeDeg * Math.PI / 180;
+  var s = [-Math.cos(a), Math.sin(a), 0];                                  // strike
+  var dd = [Math.sin(a) * Math.cos(d), Math.cos(a) * Math.cos(d), -Math.sin(d)]; // down-dip
+  var w = [Math.sin(a) * Math.sin(d), Math.cos(a) * Math.sin(d), Math.cos(d)];   // pole (up)
+  var u = [
+    s[0] * Math.cos(r) + dd[0] * Math.sin(r),
+    s[1] * Math.cos(r) + dd[1] * Math.sin(r),
+    s[2] * Math.cos(r) + dd[2] * Math.sin(r)
+  ];
+  var v = [
+    w[1] * u[2] - w[2] * u[1],
+    w[2] * u[0] - w[0] * u[2],
+    w[0] * u[1] - w[1] * u[0]
+  ];
+  return { u: u, v: v, w: w };
+}
+
+// Read the checked directions (+ per-direction bin widths) from the sidebar.
+// Vector directions carry display azimuth/plunge derived from the vector.
+function getSwathDirections() {
+  var mode = (document.getElementById('swathDirMode') || {}).value || 'ortho';
+  var dirs = [];
+  function pushDir(key, axis, vec) {
+    var cb = document.querySelector('#swathSidebar .swath-dir-on[data-dir="' + key + '"]');
+    if (!cb || !cb.checked) return;
+    var bw = parseFloat((document.getElementById('swathBin_' + key) || {}).value);
+    var d = { key: key, axis: axis, dir: vec, binWidth: bw };
+    if (vec) {
+      d.azimuth = (Math.atan2(vec[0], vec[1]) * 180 / Math.PI + 360) % 360;
+      d.plunge = -Math.asin(Math.max(-1, Math.min(1, vec[2]))) * 180 / Math.PI;
+    }
+    dirs.push(d);
+  }
+  var angles = null;
+  if (mode === 'ortho') {
+    pushDir('x', 0, null);
+    pushDir('y', 1, null);
+    pushDir('z', 2, null);
+  } else {
+    var dipDir = parseFloat((document.getElementById('swathDipDir') || {}).value) || 0;
+    var dip = parseFloat((document.getElementById('swathDip') || {}).value) || 0;
+    var rake = parseFloat((document.getElementById('swathRake') || {}).value);
+    if (isNaN(rake)) rake = 90;
+    angles = { dipDir: dipDir, dip: dip, rake: rake };
+    var f = computeSwathUVW(dipDir, dip, rake);
+    pushDir('u', null, f.u);
+    pushDir('v', null, f.v);
+    pushDir('w', null, f.w);
+  }
+  return { mode: mode, dirs: dirs, angles: angles };
+}
+
+function swathConfigError(msg) {
+  var $progress = document.getElementById('swathProgress');
+  var $label = document.getElementById('swathProgressLabel');
+  if (!$progress || !$label) return;
+  $progress.classList.add('active');
+  $label.textContent = msg;
+  $label.style.color = 'var(--red)';
+  setTimeout(function() { $progress.classList.remove('active'); $label.style.color = ''; $label.textContent = ''; }, 2500);
+}
+
 function runSwath() {
   if (swathExprController) { var r = swathExprController.validate(); if (!r.valid) return; }
-  var axisVal = document.getElementById('swathAxis').value;
-  var binWidth = parseFloat(document.getElementById('swathBinWidth').value);
   var stat = document.getElementById('swathStat').value;
   var localFilter = document.getElementById('swathLocalFilter').value.trim();
-  var $binLabel = document.getElementById('swathBinLabel');
 
-  if (!binWidth || binWidth <= 0 || isNaN(binWidth)) {
-    $binLabel.textContent = 'Invalid bin width';
-    $binLabel.style.color = 'var(--red)';
-    setTimeout(function() { $binLabel.style.color = ''; $binLabel.textContent = '?m bins'; }, 2000);
+  var dcfg = getSwathDirections();
+  if (dcfg.dirs.length === 0) {
+    swathConfigError('Check at least one direction');
     return;
+  }
+  for (var di = 0; di < dcfg.dirs.length; di++) {
+    var dbw = dcfg.dirs[di].binWidth;
+    if (!dbw || dbw <= 0 || isNaN(dbw)) {
+      swathConfigError('Invalid bin width for ' + dcfg.dirs[di].key.toUpperCase());
+      return;
+    }
   }
 
   // Gather selected variable column indices (primary and aux are separate
@@ -496,21 +620,10 @@ function runSwath() {
   }
   if (varCols.length === 0 && auxVarCols.length === 0) return;
 
-  var isCustom = axisVal === 'custom';
-  var axisIdx = isCustom ? null : (axisVal === 'x' ? 0 : (axisVal === 'y' ? 1 : 2));
-
-  // Validate azimuth before any worker spawns or UI state changes
-  var azimuthDeg = null, plungeDeg = null;
-  if (isCustom) {
-    azimuthDeg = parseFloat(document.getElementById('swathAzimuth').value);
-    if (isNaN(azimuthDeg)) {
-      $binLabel.textContent = 'Invalid azimuth';
-      $binLabel.style.color = 'var(--red)';
-      setTimeout(function() { $binLabel.style.color = ''; $binLabel.textContent = '?m bins'; }, 2000);
-      return;
-    }
-    plungeDeg = parseFloat(document.getElementById('swathPlunge').value) || 0;
-  }
+  // Worker payload: direction geometry only (no display fields)
+  var workerDirs = dcfg.dirs.map(function(d) {
+    return { key: d.key, axis: d.axis, dir: d.dir, binWidth: d.binWidth };
+  });
 
   if (swathWorker) { swathWorker.terminate(); swathWorker = null; }
   if (swathAuxWorker) { swathAuxWorker.terminate(); swathAuxWorker = null; }
@@ -528,7 +641,7 @@ function runSwath() {
   if ($btn) $btn.disabled = true;
 
   var pending = 0;
-  var out = { vars: {}, auxVars: null, auxError: null, elapsed: 0 };
+  var out = { results: {}, auxResults: null, auxError: null, elapsed: 0 };
 
   function finalize() {
     if (pending > 0) return;
@@ -536,18 +649,27 @@ function runSwath() {
     $label.textContent = 'Done';
     setTimeout(function() { $progress.classList.remove('active'); }, 800);
     if ($btn) $btn.disabled = false;
+    // Keep the active output tab when the new run still has that direction
+    var prevKey = lastSwathData && lastSwathData.activeKey;
     lastSwathData = {
-      vars: out.vars, axis: axisVal, axisIdx: axisIdx, binWidth: binWidth,
-      varCols: varCols, elapsed: out.elapsed, azimuth: azimuthDeg, plunge: plungeDeg,
-      auxVars: out.auxVars, auxVarCols: auxVarCols,
+      directions: dcfg.dirs, mode: dcfg.mode, angles: dcfg.angles,
+      results: out.results, auxResults: out.auxResults,
+      varCols: varCols, auxVarCols: auxVarCols, elapsed: out.elapsed,
       auxHeader: auxReady ? auxPreflightData.header.concat(auxCalcolMeta.map(function(m) { return m.name; })) : null,
-      auxError: out.auxError
+      auxError: out.auxError,
+      activeKey: dcfg.dirs.some(function(d) { return d.key === prevKey; }) ? prevKey : dcfg.dirs[0].key
     };
-    renderSwathCharts(lastSwathData, stat);
-    // Update tab badge
+    renderSwathOutput(stat);
+    // Update tab badge: max bin count across directions and variables
     var totalBins = 0;
-    Object.values(out.vars).forEach(function(arr) { totalBins = Math.max(totalBins, arr.length); });
-    if (out.auxVars) Object.values(out.auxVars).forEach(function(arr) { totalBins = Math.max(totalBins, arr.length); });
+    function scanBins(res) {
+      if (!res) return;
+      Object.values(res).forEach(function(varsObj) {
+        Object.values(varsObj || {}).forEach(function(arr) { totalBins = Math.max(totalBins, arr.length); });
+      });
+    }
+    scanBins(out.results);
+    scanBins(out.auxResults);
     var swathTab = document.querySelector('.results-tab[data-tab="swath"]');
     if (swathTab) swathTab.innerHTML = 'Swath <span class="tab-badge">' + totalBins + ' bins</span>';
     autoSaveProject();
@@ -577,11 +699,8 @@ function runSwath() {
       resolvedTypes: currentColTypes.slice(0, currentOrigColCount),
       xyzCols: [currentXYZ.x, currentXYZ.y, currentXYZ.z],
       dxyzCols: [currentDXYZ.dx, currentDXYZ.dy, currentDXYZ.dz],
-      axis: axisIdx,
+      directions: workerDirs,
       varCols: varCols,
-      binWidth: binWidth,
-      azimuth: azimuthDeg,
-      plunge: plungeDeg,
       weightColName: (document.getElementById('swathWeight') || {}).value || null,
       dmEndianness: preflightData && preflightData.dmEndianness || null,
       dmFormat: preflightData && preflightData.dmFormat || null
@@ -596,7 +715,7 @@ function runSwath() {
         $fill.style.width = pct.toFixed(1) + '%';
         $label.textContent = pct.toFixed(0) + '%';
       } else if (m.type === 'swath-complete') {
-        out.vars = m.vars;
+        out.results = m.results;
         out.elapsed = m.elapsed;
         swathWorker.terminate();
         swathWorker = null;
@@ -622,11 +741,8 @@ function runSwath() {
       resolvedTypes: auxPreflightData.autoTypes,
       xyzCols: [auxPreflightData.xyz.x, auxPreflightData.xyz.y, auxPreflightData.xyz.z],
       dxyzCols: [-1, -1, -1],
-      axis: axisIdx,
+      directions: workerDirs,
       varCols: auxVarCols,
-      binWidth: binWidth,
-      azimuth: azimuthDeg,
-      plunge: plungeDeg,
       rowVarOverride: AUX_ROW_VAR,
       weightColName: auxWeightName,
       dmEndianness: auxPreflightData.dmEndianness || null,
@@ -647,7 +763,7 @@ function runSwath() {
           $label.textContent = pct.toFixed(0) + '%';
         }
       } else if (m.type === 'swath-complete') {
-        out.auxVars = m.vars;
+        out.auxResults = m.results;
         swathAuxWorker.terminate();
         swathAuxWorker = null;
         pending--;
@@ -721,8 +837,8 @@ function buildSwathScaleGroups(varEntries) {
   return groups;
 }
 
-function renderSwathCharts(swathData, stat) {
-  var $content = document.getElementById('swathContent');
+function renderSwathCharts(swathData, stat, $target) {
+  var $content = $target || document.getElementById('swathContent');
   if (!$content || !swathData || !swathData.vars) {
     if ($content) $content.innerHTML = '<div class="swath-hint">No data.</div>';
     return;
@@ -899,6 +1015,8 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
   // Store params for crosshair
   _swathChartParams = {
     layout: 'overlay',
+    shortLabel: swathData.azimuth != null ? (swathData.key || 'u').toUpperCase() : (swathData.axis || 'coord').toUpperCase(),
+    dirKey: swathData.key || swathData.axis || 'plot',
     varEntries: varEntries,
     xMin: xMin, xMax: xMax,
     yMins: yMins, yMaxs: yMaxs,
@@ -1162,6 +1280,8 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
   // Store params for crosshair
   _swathChartParams = {
     layout: 'split',
+    shortLabel: swathData.azimuth != null ? (swathData.key || 'u').toUpperCase() : (swathData.axis || 'coord').toUpperCase(),
+    dirKey: swathData.key || swathData.axis || 'plot',
     varEntries: varEntries,
     xMin: xMin, xMax: xMax,
     yMins: yMins, yMaxs: yMaxs,
@@ -1363,7 +1483,7 @@ function wireSwathCrosshair() {
 
     // Build tooltip lines
     var lines = [];
-    lines.push({ text: p.varEntries[0].bins[0] ? swathData_axisLabel() + ': ' + formatNum(nearBin.center) : formatNum(nearBin.center), color: 'var(--fg)' });
+    lines.push({ text: p.shortLabel + ': ' + formatNum(nearBin.center), color: 'var(--fg)' });
     lines.push({ text: 'Count: ' + nearBin.count, color: 'var(--fg-dim)' });
     for (var vi = 0; vi < p.varEntries.length; vi++) {
       var entry = p.varEntries[vi];
@@ -1414,16 +1534,6 @@ function wireSwathCrosshair() {
 
   area.addEventListener('mousemove', onMove);
   area.addEventListener('mouseleave', onLeave);
-}
-
-function swathData_axisLabel() {
-  if (!lastSwathData) return 'Coord';
-  if (lastSwathData.azimuth != null) {
-    var label = 'Az' + Math.round(lastSwathData.azimuth) + '\u00b0';
-    if (lastSwathData.plunge && lastSwathData.plunge !== 0) label += '/Pl' + Math.round(lastSwathData.plunge) + '\u00b0';
-    return label;
-  }
-  return lastSwathData.axis.toUpperCase();
 }
 
 function renderSwathTable(varEntries, swathData, stat) {
@@ -1548,7 +1658,7 @@ function wireSwathChartActions() {
           var url = URL.createObjectURL(blob);
           var a = document.createElement('a');
           a.href = url;
-          a.download = 'swath_plot.png';
+          a.download = 'swath_' + ((_swathChartParams && _swathChartParams.dirKey) || 'plot') + '.png';
           a.click();
           URL.revokeObjectURL(url);
         }, 'image/png');
