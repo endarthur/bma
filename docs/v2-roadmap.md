@@ -62,27 +62,38 @@ A7 provides.
 | # | Item | Size | Notes |
 |---|------|------|-------|
 | C1a | **Data tree, step 1: property catalog** | M | ✅ **DONE 2026-06-11** (1d39088 catalog+migration, 00b8e5d read-only tree, c936048 editing incl. the pairing editor; smoke `experiments/tree-smoke.js`). **Design + step log: [`docs/c1a-property-catalog.md`](c1a-property-catalog.md)**. Original scope: Left tree panel: datasets → variables grouped by kind (coordinates / grades / categories / calculated), per-variable color chip, unit, role badges (weight/density/class), dataset metadata. Becomes the single source of truth for the currently-scattered systems (`catColorOverrides`, swath `'aux:NAME'` color keys, GT units, weight selections) — existing per-tab pickers stay and *read* from it. Independently useful for `bma:roles` (B3). **Explicit model↔aux pairing**: the case-insensitive name match (used identically in Statistics/Swath/Categories) becomes the *default seed*, not the mechanism — pairings visible in the tree, manually overridable (pair `FE_PCT`↔`Fe` without a rename calcol), orphans evident at a glance, persisted in the project. Principle: infer defaults, never hide state — magic-only conventions are bad UI |
-| C1b | **Rails dockable layout + tree as left rail** | M–L | **Design: [`docs/c1b-rails-docking.md`](c1b-rails-docking.md) (2026-06-11)** — @gcu/rails (at `../auditable/ext/rails`) verdict vendor-as-is; panels as singletons over two shells; chart container-width phase (C1b-0) lands first and independently. Original scope: | Vendor @gcu/rails; panels coexist (ResizeObserver re-render for SVG charts — the bulk of the work); per-panel sidebars slim to view-local config (percentiles/directions/cutoffs), membership fed from the tree; layout state in `serializeProject()`; `--au-*` → BMA token map. Best landed before B5/B7 so Table/3D arrive as dockable panels. Deletes the `.results-panel.active` CSS-scoping bug class. Export keeps its full column selector (export *is* a selection task) |
+| C1b | **Rails dockable layout + tree as left rail** | M–L | ✅ **DONE 2026-06-11** (phases C1b-0…C1b-3, each landed green: 253560c container-width charts, 2024106 vendor+shell, 5a5b91f persistence+floats, e619f20 tab-bar retirement + @gcu/menu; full phase log in the design doc; smoke `experiments/rails-smoke.js`; manuals updated both languages). **Design: [`docs/c1b-rails-docking.md`](c1b-rails-docking.md) (2026-06-11)** — @gcu/rails (at `../auditable/ext/rails`) verdict vendor-as-is; panels as singletons over two shells; chart container-width phase (C1b-0) lands first and independently. Original scope: | Vendor @gcu/rails; panels coexist (ResizeObserver re-render for SVG charts — the bulk of the work); per-panel sidebars slim to view-local config (percentiles/directions/cutoffs), membership fed from the tree; layout state in `serializeProject()`; `--au-*` → BMA token map. Best landed before B5/B7 so Table/3D arrive as dockable panels. Deletes the `.results-panel.active` CSS-scoping bug class. Export keeps its full column selector (export *is* a selection task) |
 | C1c | **Mobile shell** (decided 2026-06-11: one app, two shells — NOT a separate mobile UI) | S–M | Below the existing ~700px breakpoint, the same container-agnostic panels render in a single-panel pager (scrollable tab strip or bottom bar); sidebars and the C1a tree become slide-over sheets; desktop keeps C1b docking. **Groundwork already in place**: viewport meta + manifest (installable PWA on Android), ≤700px sidebar-stacking on every tab, viewBox-scaled SVG charts (shrink legibly). **Pre-C1b quick wins, can land anytime (S)**: pointer-events migration — 7 files use mouse-only handlers (topcut cap drag, categories drag-reorder, declus curve hover/pin, swath/CDF/GT crosshairs); `pointerdown/move/up` + `touch-action: none` on drag surfaces serves mouse and touch with one API. Plus horizontal-scroll wrappers on wide tables (stats metrics) and ≥44px tap targets on chips/toggles. **Framing: review-first** — author on desktop, open a packed `.bma.zip` on the phone (file input works on Android; FSAA absent → recents already degrade via `HAS_FSAA`); phone-sized files only, no multi-GB promises. **Constraint on C1b**: panel lifecycle must not require the dock — the mobile pager reuses the same panels. **Context menus on touch**: the desktop right-click menu (`src/ctxmenu.js`) routes every action through shared functions (`openTreeEditor`, `treeToggleRole`, provider items) — C1c binds long-press to the same `showCtxMenu(items, x, y)`; a pointerdown timer (~500 ms, cancelled by move/up) is the whole job, no redesign |
 | C2 | works surface wrapper | S (later) | Thin `package.json` + `works.js` around index.html, additive, after the .gcupkg registry settles. Verify VFS/mount-delegation perf on multi-GB before promising |
+| C4 | **Menu unification** (was provisionally "C1b-4") | S | Swap `ctxmenu.js`'s hand-rolled `#bmaCtxMenu` rendering for the vendored @gcu/menu's `Menu.show`, keeping the provider architecture (providers keep producing items; gains: keyboard nav + typeahead, `checked` states for the CDF/weight toggles, real submenus — "Pair with…" inline instead of bouncing to the popover, `danger` styling). Native `<select>`s stay native; `MenuBar` stays unused. Scope sketch in [`docs/c1b-rails-docking.md`](c1b-rails-docking.md) phase 5 |
 | C3 | (door marked, not walked through) Tree as live lineage graph | L (later) | BMA already has implicit dependency semantics (`auxStale`, stats stale marks, `analysisFingerprint()`); promoting the tree to Leapfrog-style propagate-downstream is a separate decision — engine candidate exists (`@gcu/flowsheet`: lazy, content-addressed, hash = params + upstream hashes). Likely where BMA and the works workbench eventually meet |
 
 ## Suggested order
 
-*(A1–A5, A6a, B0, B1 done.)*
+*(A1–A5, A6a, B0, B1, C1a, C1b done.)*
 
-**B1 ✅ → C1a → C1b → A7 → A6b → B2 → B3 → B4 → B5 → B6 → B7.**
+**B1 ✅ → C1a ✅ → C1b ✅ → A7 → A6b → B2 → B3 → B4 → B5 → B6 → B7.**
 
 B1 went first (landed 2026-06-11): invisible to
 testers, the worker harness suite was at peak coverage for its bit-identical
 discipline, and A7's new readers will be born on row sources rather than
-migrated to them. **Next: C1a.** Then the workspace generation (C1a property
-catalog → C1b rails), with A7 and A6b landing in the new home; the platform
-phases follow, with B5/B7 arriving as dockable panels because C1b came first.
+migrated to them. The workspace generation (C1a property catalog → C1b rails)
+landed 2026-06-11. **Next: A7**, with A6b after; the platform phases follow,
+with B5/B7 arriving as dockable panels because C1b came first. C4 (menu
+unification) and C1c (mobile pager) are small and slot in anywhere.
 
 ## Housekeeping (standing)
 
+- **Roadmap naming convention (2026-06-11)**: new rows get *track letter +
+  next integer*, nothing deeper. Variants and implementation phases live
+  inside the feature's design doc ("Phase 0…N"); the roadmap row just points
+  at the doc. Codes already minted (A6a/A6b, C1a/C1b/C1c, C1b-0…-3) are
+  grandfathered — they're stable keys into commits/docs/memory, not names;
+  renaming history is churn. (Context: the lowercase suffix had come to mean
+  two different things — engine *variants* in A6 vs separate *sub-projects*
+  in C1 — and only C1b ever needed dash-phases.)
 - `worker-protocol.md` / `code-map.md` refresh (stale since aux/weights/directions)
-- pt-BR manual regen after UI changes (`experiments/manual-shots.js` → `manual-pdf.js`)
+- Manual regen after UI changes, **both languages** (`experiments/manual-shots.js`
+  → `manual-pdf.js` + `manual-pdf-en.js`; keep the two HTML sources in sync)
 - ~~`experiments/bma-swath-test.js` update for the directions-based swath protocol~~ done 2026-06-11 (39 assertions incl. multi-direction single-pass)
 - Tag a release at next push

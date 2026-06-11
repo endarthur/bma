@@ -266,7 +266,8 @@ layout: {
    helper; rails-smoke reworked to 35 asserts (hidden bar, strip clicks,
    Panels reopen incl. checkmark states, tab/strip ctx menus, overflow
    menu at 820px). Full suite green (9/9 incl. sidebar-scroll).
-5. **C1b-4 (optional follow-up) — menu unification**: swap `ctxmenu.js`'s
+5. **C4 — menu unification** (roadmapped as its own Track C row; was
+   provisionally "C1b-4" before the naming convention settled): swap `ctxmenu.js`'s
    hand-rolled `#bmaCtxMenu` rendering for `Menu.show` while keeping the
    provider architecture (providers keep producing `{label, action}`
    items; gains: keyboard nav + typeahead, `checked` states for the
