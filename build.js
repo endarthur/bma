@@ -19,6 +19,7 @@ const APP_MODULES = [
   'vendor-drillhole.js', // @gcu/drillhole REVERSE-vendored (A7 D9) — born here, upstreams to auditable/ext later
   'preflight.js',
   'auxtab.js',
+  'drillhole.js',      // A7 drillhole ingestion UI (uses vendor-drillhole.js + auxtab's loadAuxFile)
   'topcut.js',
   'project.js',
   'statistics.js',

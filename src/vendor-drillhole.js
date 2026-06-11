@@ -300,7 +300,7 @@ function dhValidate(tables, opts) {
 // always user-editable).
 function dhDefaultLength(intervals) {
   var counts = {};
-  var n = intervals.bhid.length;
+  var n = intervals.from.length; // only FROM/TO matter — callers may omit bhid
   for (var i = 0; i < n; i++) {
     var len = intervals.to[i] - intervals.from[i];
     if (!isFinite(len) || len <= 0) continue;

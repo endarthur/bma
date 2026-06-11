@@ -82,6 +82,8 @@ function renderAuxConfig() {
 
   renderAuxPreview();
   if (typeof renderAuxView === 'function') renderAuxView();
+  // drillhole-derived aux: provenance banner + report/re-composite links (A7)
+  if (typeof renderDhProvenance === 'function') renderDhProvenance();
 }
 
 function runAuxAnalysis() {

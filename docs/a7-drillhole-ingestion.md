@@ -206,6 +206,25 @@ sidebar, filters, calcols, declus, top-cut — nothing new to learn.
   detection + mapping panel + report + Composite-&-load → `loadAuxFile`.
   Playwright smoke `experiments/drillhole-smoke.js` (synthetic trio →
   composites → aux analyze → Δ% row appears).
+  ✅ **DONE 2026-06-11** — `src/drillhole.js` (APP_MODULES after
+  auxtab.js): card on the Aux empty state with three role slots (header
+  signature first, filename tiebreaker; zip entries auto-extracted via
+  `zipEntryToFile`); mapping panel with per-table selects, the prominent
+  amber-glow dip-convention row (auto-detected, two-button override), the
+  three-method desurvey select, length (placeholder = lib default),
+  domain + min-coverage; consistency report inline + reopenable modal;
+  Composite & load builds tables on the main thread (150 MB confirm
+  guard), emits CSV → `new File` → `loadAuxFile` unchanged. SUPPORT role
+  assigned *before* the load so the weight select renders with it;
+  `auxPrefix` defaults to `dh`. Provenance banner in the aux header
+  (Report / Edit & re-composite — the latter `clearAux()`s while the card
+  state survives). Option inputs survive mapping re-renders. Aux F1 help
+  updated. Smoke: 24 asserts incl. neg-down detection on a
+  negative-dip trio, dip-flip geometry (first centroid at z−1), report
+  contents (orphan BHID, FROM>TO), Δ% rows on dh:Fe, tree W badge on
+  SUPPORT, and the edit-set round trip. Lib fix surfaced by the UI:
+  `defaultLength` iterated `bhid.length` — now `from.length` (bhid-free
+  contract pinned in the harness). Full suite green (10/10).
 - **Phase 2 — persistence + pack**: project key, pack the raw trio,
   restore re-derivation. Smoke extends to reload/pack round-trip.
 - **Phase 3 — example + docs**: the example generator emits a drillhole
