@@ -36,7 +36,7 @@ Explicit non-goals:
 | GT `weightCol` | name | gt.weightCol | **Role `tonnageFactor`** — semantically distinct from support weight (it multiplies tonnage, e.g. ore%) |
 | GT `densityCol` / `densityConst` | name / number | gt.densityCol | **Role `density`** (const stays GT-local) |
 | XYZ / DXYZ assignment | `{x,y,z}` / `{dx,dy,dz}` raw indices | preflight.xyz/dxyz | **Displayed** in tree (coordinates group + badges); storage stays in preflight (it predates analysis and feeds the worker by index) |
-| Model↔aux name matching ×4 | inline `.toLowerCase()` maps | statistics.js:61-70, swath.js:500-507+909 (check, scaleKey, color inherit), gt.js:761 (`gtTheoMatchedVars`), categories.js:74 (`getCatAuxCounts` — **case-SENSITIVE, inconsistent**) | **Replaced** → `catalog.pairs`, seeded case-insensitively; all four sites read `catPair()` (fixes the Categories inconsistency) |
+| Model↔aux name matching ×4 | inline `.toLowerCase()` maps | statistics.js (matchCi), swath.js (default-check, scaleKey, color inherit), gt.js (`gtTheoMatchedVars`), categories.js (`getCatAuxCounts`) — all four case-insensitive (an earlier inventory claim that categories was case-sensitive was wrong) | **Replaced** → `catalog.pairs`, seeded case-insensitively; all four sites read `catPair()`/`catPairsRev()` |
 | `auxPrefix` | string | aux.prefix | **Becomes** the aux dataset's `label` (same persistence, surfaced in tree) |
 | declus/topcut/section var picks | name | aux.topcut.varName etc. | **Not catalog** — view-local analysis parameters, like membership |
 
@@ -198,6 +198,9 @@ Categories tab affordances or just deep-linking to that tab — see D5).
    switch to read-through (`getCategoryColor` internals, swath color
    resolution, the four pairing sites, unit reads). Behavior identical by
    construction — full smoke suite must stay green untouched.
+   ✅ **DONE 2026-06-11 (1d39088)** — full suite green; the example pack's
+   legacy-format project json exercised `migrateLegacyCatalog` end-to-end.
+   The redundant "Sync units" buttons (swath, GT) were removed with D2.
 2. **Tree panel, read-only** — datasets, groups, chips, badges, pairing
    indicators, orphans, stale entries.
 3. **Editing affordances** (color/unit/role/pairing) + stale-mark
@@ -212,13 +215,12 @@ Step 1 is the bulk and is testable without any visible change; the tree
 
 ## Known hazards (from the inventory)
 
-- categories.js `getCatAuxCounts` is case-sensitive today — switching it to
-  `catPair()` *changes behavior* for case-mismatched names (it starts
-  matching). That's the intended fix, but it belongs in step 1's notes, not
-  as a surprise.
-- swath scaleKey (`buildSwathScaleGroups`) keys shared Y-axes by lowercased
-  name — must derive from `catPair()` too, or a custom pairing would color
-  together but scale apart.
+- ~~categories.js `getCatAuxCounts` is case-sensitive~~ — wrong (subagent
+  misread); all four matching sites were already case-insensitive. No
+  behavior change from the pairing switch beyond honoring custom pairs.
+- swath scaleKey (`buildSwathScaleGroups`) keyed shared Y-axes by lowercased
+  name — now derives from `catPair()` (done in step 1), so a custom pairing
+  colors AND scales together.
 - Three `pending*Restore` globals already serialize aux-dependent state by
   name; catalog restore must slot into the same ordering (catalog before
   tabs render, pairs before stats/swath aux defaults compute).
