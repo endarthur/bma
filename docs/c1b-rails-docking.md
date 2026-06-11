@@ -219,8 +219,38 @@ layout: {
    (above floats, below the drag scrim). rails-smoke extended: tear-off via
    the new-float zone, float ✕ → re-home → legacy-bar re-add, autosaved
    layout JSON, breakpoint retention, reload-restores-layout, reset action.
-4. **C1b-3 — cleanup**: retire desktop tab bar; keep legacy shell <700px;
-   update help texts; manual section + screenshots (both languages).
+4. **C1b-3 — retire the desktop tab bar** (+ vendor @gcu/menu, D7): the
+   rails strip becomes the only tab bar ≥701px; the legacy bar stays for
+   the <700px shell. Retiring it creates three menu-shaped holes — two of
+   which exist today — all served by `Menu.show` from @gcu/menu:
+   - **Reopen affordance**: closed panels lose their legacy-bar buttons.
+     A "Panels" menu (toolbar ⋮ submenu and/or strip context menu) listing
+     every registered panel with `checked` per open tab; selecting a
+     closed one routes through `showPanel` (activate-or-add already
+     handles it). Factory items evaluate on open — always live.
+   - **`strip:overflow` is currently dead**: rails shows a ⋯ button when a
+     strip's tabs overflow and emits the clipped tabs + anchor coords, but
+     C1b-1 never wired a consumer (upstream ships no menu UI by design).
+     `Menu.show(overflowTabs, { x, y })` → activateTab.
+   - **Tab/strip/float-titlebar context menus**: rails emits
+     `tab:contextmenu` / `strip:contextmenu` / `float:titlebar:contextmenu`;
+     nothing consumes them. Float / Close / Close others / Move to new
+     rail is standard docking UX.
+   Also: smokes' `.results-tab` click sites → `showPanel()` (mechanical,
+   ~15 sites incl. manual-shots' `tab()` helper); `#treeToggle` needs a new
+   home (rail's own ◀/▶ buttons may suffice — decide then); badge mirror
+   keeps writing the hidden legacy buttons (they remain the <700px shell
+   and the state store) — `wsTabBadge` unchanged; update help texts;
+   manual section + screenshots (both languages).
+5. **C1b-4 (optional follow-up) — menu unification**: swap `ctxmenu.js`'s
+   hand-rolled `#bmaCtxMenu` rendering for `Menu.show` while keeping the
+   provider architecture (providers keep producing `{label, action}`
+   items; gains: keyboard nav + typeahead, `checked` states for the
+   CDF/weight toggles, real submenus — "Pair with…" can list targets
+   inline instead of bouncing to the popover, `danger` styling). Replace
+   the hand-rolled toolbar `.toolbar-menu` with `Menu.dropdown`. Keep
+   native `<select>`s for forms; `MenuBar` stays unused (BMA's toolbar is
+   buttons, not a File/Edit bar).
 
 ## Decisions
 
@@ -232,6 +262,7 @@ layout: {
 | D4 | Floats on from the start? | **DECIDED (Arthur, 2026-06-11): yes — with `dropZones: { 'tab-append-body': false }`.** Full-body drop targets make floats unusable: any move snaps them into a stack. Docking happens on tab strips/titlebars/edges only. (Rails supports this natively; its own demo ships the same config with the same rationale.) Available zone toggles in drag.js: `new-float`, `new-rail`, `new-stack`, `tab-append-strip`, `tab-insert`, `tab-append-body`, `float-titlebar` |
 | D5 | Legacy tab shell survives <700px until C1c | **Made** (C1c constraint) |
 | D6 | C1b-0 (chart widths) lands independently first | **Made** — lowest risk, immediate payoff |
+| D7 | Vendor @gcu/menu for the C1b-3 menu surfaces | **Proposed (Arthur raised it, 2026-06-11)** — `../auditable/ext/menu`, same upstream repo/commit as rails (`5a6c7ab`), same vendoring shape (bundled index.js, strip the `export` line, `gcu-menu-*` CSS prefix). Verified: zero top-level name collisions with BMA modules (but its names are generic — `show`, `dismiss`, `isOpen` at script scope; always call via `Menu.*`, re-check collisions on re-vendor). Token map `--ui-*`→BMA: bg-raised→`--bg2`, bg-hover→`--bg3`, fg→`--fg`, fg-muted→`--fg-dim`, fg-error→`--red`, border→`--border`, font→`--mono`, z-dropdown above the workspace stacking context (menus mount at document level). Drag-aware hook reads a `rails-dragging`/`gcu-dragging` class on `body` — rails puts it on panels, not body; only matters for hover-open submenus during drags, skip unless it bites. |
 
 ## Known hazards
 
