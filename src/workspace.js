@@ -183,7 +183,26 @@ function wsSyncBadgesFromLegacy() {
 function wsEnterRails() {
   if (wsRails) return;
   var host = document.getElementById('resultsMain');
-  if (host && typeof createRails === 'function') buildRailsShell(host);
+  if (host && typeof createRails === 'function') {
+    buildRailsShell(host);
+    // Only once rails is actually up: hides the legacy tab bar (C1b-3) —
+    // keyed on the class, not the viewport, so a rails failure leaves
+    // the legacy shell usable
+    document.getElementById('results').classList.add('rails-shell');
+  }
+}
+
+// "Panels" menu — every registered panel, checked when open in the layout;
+// selecting routes through showPanel (activate-or-add). Used by the
+// toolbar ⋮ dropdown and the strip context menu.
+function wsPanelsMenuItems() {
+  return WS_PANELS.map(function(p) {
+    return {
+      label: p.title,
+      checked: !!(wsRails && findTab(wsRails.state, p.id)),
+      action: { panel: p.id }
+    };
+  });
 }
 
 function buildRailsShell(host) {
@@ -232,6 +251,84 @@ function buildRailsShell(host) {
   wsRails.on('rail:expand', function(ev) {
     if (ev && ev.rail && ev.rail.id === WS_TREE_RAIL) wsOnTreeRailToggled(false);
   });
+
+  // ── Menu surfaces (C1b-3, D7 — @gcu/menu) ──
+  // Clipped tabs behind the strip's ⋯ button
+  wsRails.on('strip:overflow', function(ev) {
+    Menu.show(ev.overflowTabs.map(function(t) {
+      return { label: t.title, action: { panel: t.id } };
+    }), { x: ev.x, y: ev.y }).then(function(a) {
+      if (!a || !wsRails) return;
+      wsRails.activateTab(a.panel);
+      var tabEl = document.querySelector(
+        '.rails-strip[data-stack-id="' + ev.stack.id + '"] .rails-tab[data-tab-id="' + a.panel + '"]');
+      if (tabEl && tabEl.scrollIntoView) tabEl.scrollIntoView({ block: 'nearest', inline: 'center' });
+    });
+  });
+
+  // Tab context menu: float/dock, move out, close
+  wsRails.on('tab:contextmenu', function(ev) {
+    if (!ev || !ev.tab || ev.tab.id === 'data') return;
+    var hit = findTab(wsRails.state, ev.tab.id);
+    var inFloat = hit && hit.container === 'float';
+    var items = [
+      inFloat ? { label: 'Dock', action: 'dock' } : { label: 'Float', action: 'float' },
+      { label: 'Move to new rail', action: 'rail' },
+      '---',
+      { label: 'Close', action: 'close' },
+    ];
+    if (ev.stack.tabs.length > 1) items.push({ label: 'Close others in stack', action: 'close-others' });
+    Menu.show(items, { x: ev.x, y: ev.y }).then(function(a) {
+      if (!a || !wsRails) return;
+      if (a === 'float') {
+        var hostRect = document.getElementById('resultsMain').getBoundingClientRect();
+        wsRails.floatTab(ev.tab.id, {
+          x: Math.max(20, ev.x - hostRect.left - 80),
+          y: Math.max(20, ev.y - hostRect.top + 10),
+          w: 560, h: 420
+        });
+      } else if (a === 'dock') {
+        wsRails.moveTab(ev.tab.id, wsMainTarget());
+      } else if (a === 'rail') {
+        wsRails.moveTab(ev.tab.id, { to: 'new-rail', at: wsRails.state.rails.length });
+      } else if (a === 'close') {
+        wsRails.closeTab(ev.tab.id);
+      } else if (a === 'close-others') {
+        var keep = ev.tab.id;
+        wsRails.batch(function() {
+          ev.stack.tabs.slice().forEach(function(t) {
+            if (t.id !== keep && t.id !== 'data') wsRails.closeTab(t.id);
+          });
+        });
+      }
+    });
+  });
+
+  // Strip background context menu → the Panels reopen list
+  wsRails.on('strip:contextmenu', function(ev) {
+    Menu.show(wsPanelsMenuItems(), { x: ev.x, y: ev.y }).then(function(a) {
+      if (a && a.panel) showPanel(a.panel);
+    });
+  });
+
+  // Float titlebar context menu
+  wsRails.on('float:titlebar:contextmenu', function(ev) {
+    Menu.show([
+      { label: 'Dock', action: 'dock' },
+      '---',
+      { label: 'Close', action: 'close', danger: true },
+    ], { x: ev.x, y: ev.y }).then(function(a) {
+      if (!a || !wsRails) return;
+      if (a === 'dock') {
+        var tabs = (ev.float.stack && ev.float.stack.tabs || []).slice();
+        wsRails.batch(function() {
+          tabs.forEach(function(t) { wsRails.moveTab(t.id, wsMainTarget()); });
+        });
+      } else if (a === 'close') {
+        wsRails.closeFloat(ev.float.id);
+      }
+    });
+  });
   // Every structural change (drag/split/float/close/resize-drag) → remember
   // + persist through the project autosave (debounced there)
   wsRails.on('layout:change', function() {
@@ -261,6 +358,7 @@ function wsExitRails() {
   var inst = wsRails;
   wsLastLayout = inst.serialize(); // arrangement survives the legacy interlude
   wsRails = null;        // legacy arm live before destroy() re-homes panels
+  document.getElementById('results').classList.remove('rails-shell');
   inst.destroy();        // onPanelDestroy → wsRehomePanel for every mounted panel
   WS_PANELS.forEach(function(p) {
     var el = document.getElementById(p.el);

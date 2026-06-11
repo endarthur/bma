@@ -830,29 +830,34 @@ function clearProject() {
   });
 }
 
-// Toolbar overflow menu
-$toolbarOverflow.addEventListener('click', (e) => {
-  e.stopPropagation();
-  // Reset layout only applies to the rails shell (C1b-2)
-  const $reset = document.getElementById('menuResetLayout');
-  if ($reset) $reset.style.display = wsRails ? '' : 'none';
-  $toolbarMenu.classList.toggle('open');
-});
-document.addEventListener('click', () => $toolbarMenu.classList.remove('open'));
-
-// Toolbar menu items
-$toolbarMenu.addEventListener('click', (e) => {
-  const item = e.target.closest('.toolbar-menu-item');
-  if (!item) return;
-  $toolbarMenu.classList.remove('open');
-  const action = item.dataset.action;
-  if (action === 'save') saveProjectFile();
+// Toolbar overflow menu (@gcu/menu dropdown, C1b-3) — factory items so the
+// rails-only section and the Panels checkmarks are live on every open
+Menu.dropdown($toolbarOverflow, function() {
+  const items = [
+    { label: 'Save project', action: 'save' },
+    { label: 'Pack project', action: 'pack' },
+    { label: 'Load project', action: 'load' },
+    { label: 'Clear project', action: 'clear' },
+  ];
+  if (wsRails) {
+    items.push('---');
+    items.push({ label: 'Panels', children: wsPanelsMenuItems });
+    items.push({ label: 'Reset layout', action: 'resetLayout' });
+  }
+  items.push('---');
+  items.push({ label: 'Settings', action: 'settings' });
+  items.push({ label: 'Help', shortcut: 'F1', action: 'help' });
+  return items;
+}, { onAction: (action) => {
+  if (action && action.panel) showPanel(action.panel);
+  else if (action === 'save') saveProjectFile();
+  else if (action === 'pack') openPackModal();
   else if (action === 'load') $projectFileInput.click();
   else if (action === 'clear') clearProject();
   else if (action === 'resetLayout') wsResetLayout();
   else if (action === 'settings') openSettings();
   else if (action === 'help') toggleHelp();
-});
+}});
 
 // Toolbar buttons
 $projectSave.addEventListener('click', saveProjectFile);

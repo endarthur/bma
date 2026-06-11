@@ -242,6 +242,25 @@ layout: {
    keeps writing the hidden legacy buttons (they remain the <700px shell
    and the state store) — `wsTabBadge` unchanged; update help texts;
    manual section + screenshots (both languages).
+   ✅ **DONE 2026-06-11 (code + help; manuals tracked separately)** —
+   @gcu/menu vendored per D7 (`src/vendor-menu.js` + menu.css + `--ui-*`
+   token map; toolbar ⋮ is now a `Menu.dropdown` with factory items, the
+   old `.toolbar-menu` HTML/CSS/JS removed). Legacy bar hidden via
+   `#results.rails-shell .results-tabs` — class set only after
+   `createRails` succeeds, so a rails failure leaves the legacy shell
+   usable; the bar stays in the DOM as state/badge store and the <700px
+   shell. Menu surfaces wired in `buildRailsShell`: Panels (⋮ submenu +
+   strip-background right-click, checkmarks per open tab → `showPanel`),
+   `strip:overflow` ⋯ (was dead since C1b-1), tab right-click
+   (Float/Dock, Move to new rail, Close, Close others), float titlebar
+   right-click (Dock/Close). `#treeToggle` decision: rail ◀/▶ buttons
+   suffice on desktop; the button still works on the mobile bar and
+   `toggleCatalogTree()` remains the programmatic path. F1 help gains a
+   Workspace section on the rails shell. Smokes: 14 click sites converted
+   to `showPanel()` evaluates across 8 files + manual-shots' `tab()`
+   helper; rails-smoke reworked to 35 asserts (hidden bar, strip clicks,
+   Panels reopen incl. checkmark states, tab/strip ctx menus, overflow
+   menu at 820px). Full suite green (9/9 incl. sidebar-scroll).
 5. **C1b-4 (optional follow-up) — menu unification**: swap `ctxmenu.js`'s
    hand-rolled `#bmaCtxMenu` rendering for `Menu.show` while keeping the
    provider architecture (providers keep producing `{label, action}`

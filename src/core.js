@@ -127,7 +127,6 @@ const $projectLoad = document.getElementById('projectLoad');
 const $projectClear = document.getElementById('projectClear');
 const $projectFileInput = document.getElementById('projectFileInput');
 const $toolbarOverflow = document.getElementById('toolbarOverflow');
-const $toolbarMenu = document.getElementById('toolbarMenu');
 const $cdfModal = document.getElementById('cdfModal');
 const $cdfTitle = document.getElementById('cdfTitle');
 const $cdfBody = document.getElementById('cdfBody');
@@ -505,6 +504,14 @@ var _helpShortcuts =
   '<div class="help-row"><kbd>Alt+A</kbd> <span>Select all visible</span></div>' +
   '<div class="help-row"><kbd>Alt+Shift+A</kbd> <span>Deselect all visible</span></div></div>';
 
+// Shown on the rails shell (C1b) — docking workspace primer, same for every tab
+var _helpWorkspace =
+  '<div class="help-section"><div class="help-section-title">Workspace</div>' +
+  '<div class="help-row"><span><strong>Drag a tab</strong> to rearrange: drop in the gaps between panels to split, onto a panel body to tear off a <strong>floating window</strong>, or on a tab strip to re-dock.</span></div>' +
+  '<div class="help-row"><span><strong>Right-click a tab</strong> for Float / Move / Close; right-click a float’s titlebar to dock or close it.</span></div>' +
+  '<div class="help-row"><span><strong>⋮ → Panels</strong> reopens closed panels; <strong>⋮ → Reset layout</strong> restores the default. The layout is saved with the project.</span></div>' +
+  '<div class="help-row"><span>The <strong>Data</strong> rail (catalog tree) collapses and restores with its ◀ / ▶ buttons.</span></div></div>';
+
 var _helpTabs = {
   aux: {
     title: 'Aux',
@@ -751,7 +758,7 @@ function renderHelp(tabId) {
   var info = _helpTabs[tabId];
   if (!info) { $helpBody.innerHTML = ''; $helpTitle.textContent = 'Help'; return; }
   $helpTitle.textContent = info.title;
-  $helpBody.innerHTML = _helpShortcuts + info.html;
+  $helpBody.innerHTML = _helpShortcuts + (wsRails ? _helpWorkspace : '') + info.html;
 }
 
 function toggleHelp() {

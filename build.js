@@ -15,6 +15,7 @@ const workerRaw = read(src('worker.js')).trimEnd();
 const APP_MODULES = [
   'core.js',
   'vendor-rails.js',   // vendored @gcu/rails (C1b) — pinned, see file header
+  'vendor-menu.js',    // vendored @gcu/menu (C1b-3, D7) — pinned, call via Menu.*
   'preflight.js',
   'auxtab.js',
   'topcut.js',
