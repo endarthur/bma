@@ -757,8 +757,7 @@ function updateCalcolBadge() {
   if (!$calcolBadge) return;
   $calcolBadge.textContent = calcolGetMeta().length;
   var total = currentCalcolMeta.length + auxCalcolMeta.length;
-  var calcolTab = $resultsTabs.querySelector('[data-tab="calcols"]');
-  if (calcolTab) calcolTab.innerHTML = 'Calc <span class="tab-badge">' + total + '</span>';
+  wsTabBadge('calcols', 'Calc', total);
 }
 
 function setCalcolCode(code) {

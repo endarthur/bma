@@ -146,7 +146,7 @@ CTX_PROVIDERS.push(function variableProvider(e) {
   if (v.kind === 'cat' && v.ds === 'model' && v.idx !== null) {
     items.push({ label: 'Focus in Categories', action: function() {
       catFocusedCol = v.idx;
-      switchTab('categories');
+      showPanel('categories');
       if (typeof renderCatSidebar === 'function') { renderCatSidebar(); renderCatMain(); }
       autoSaveProject();
     } });

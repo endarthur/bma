@@ -178,6 +178,26 @@ layout: {
    breakpoint shell switch. Smokes updated where they click
    `.results-tab` (drive `showPanel` or the rails strip instead — keep a
    compatibility shim so existing smokes pass unchanged if possible).
+   ✅ **DONE 2026-06-11** — vendored at upstream `5a6c7ab` (as-is, zero local
+   changes; `export` line stripped, header records the hash); theme maps
+   `--rails-*` onto BMA vars so every built-in theme restyles the chrome.
+   Shim = the legacy tab bar stays visible and two-way-synced on the rails
+   shell (clicks route through `showPanel`; `tab:activate` mirrors
+   `.results-tab.active`), so all six smokes pass unchanged; it retires in
+   C1b-3. Floats stay off until C1b-2 (`canCreateFloat` false + `new-float`
+   zone disabled); tabs are `closeable:false` for now. `tree.open` ↔
+   tree-rail collapsed state synced both ways (rail buttons, `#treeToggle`,
+   project restore). Panels under rails carry `.active` permanently — the
+   wrapper controls visibility, the class keeps per-panel display rules.
+   `wsTabBadge()` is the one badge setter for both shells. New
+   `experiments/rails-smoke.js` covers shell boot, default layout, legacy-bar
+   sync, split-by-drag (no overlap after the 140ms panel transition), badge
+   mirroring, tree-rail collapse sync, and the breakpoint teardown/re-home.
+   Found + fixed: `.gt-sidebar-section--grow` had no `overflow` and painted
+   over the sections below it at short panel heights (now `overflow:hidden`,
+   matching stats/statscat/swath). Known quirk for C1b-2: the tree rail's
+   fixed `width: 250` wins over flex on every chrome rebuild, so dragging
+   the rail splitter next to it doesn't stick.
 3. **C1b-2 — layout persistence** + reset-layout action + floats enabled.
 4. **C1b-3 — cleanup**: retire desktop tab bar; keep legacy shell <700px;
    update help texts; manual section + screenshots (both languages).

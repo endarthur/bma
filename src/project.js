@@ -579,8 +579,10 @@ async function applyProject(project) {
     migrateLegacyCatalog(project);
   }
 
-  // Restore tree panel state (null = viewport default)
+  // Restore tree panel state (null = viewport default); on the rails shell
+  // the coalesced re-render also re-aligns the tree rail's collapsed state
   catalogTreeOpen = (project.tree && project.tree.open !== undefined) ? project.tree.open : null;
+  refreshCatalogTree();
 
   // Restore filter
   currentFilter = project.filter || null;
@@ -818,7 +820,7 @@ function clearProject() {
     setCalcolCode('');
     simulateCalcol();
     markAnalysisStale();
-    switchTab('preflight');
+    showPanel('preflight');
   });
 }
 
@@ -1016,7 +1018,7 @@ async function handleFile(file, handle) {
   $resultsRowInfo.textContent = '';
   $resultsTimeInfo.textContent = '';
   $resultsMemInfo.textContent = '';
-  switchTab('preflight');
+  showPanel('preflight');
 
   // Show action bar with execute button and filter
   $appFooter.classList.add('active');
@@ -1366,7 +1368,7 @@ function displayResults(data) {
 
   // Jump to summary only if still on preflight tab
   var activeTab = $resultsTabs.querySelector('.results-tab.active');
-  if (isFirstAnalysis || (activeTab && activeTab.dataset.tab === 'preflight')) switchTab('summary');
+  if (isFirstAnalysis || (activeTab && activeTab.dataset.tab === 'preflight')) showPanel('summary');
 
   // Mark analysis as clean
   analysisStale = false;
@@ -1787,39 +1789,32 @@ function displayResults(data) {
 
   // Restore active tab
   if (restoredProject && restoredProject.activeTab) {
-    switchTab(restoredProject.activeTab);
+    showPanel(restoredProject.activeTab);
   }
 
   // Auto-save project
   autoSaveProject();
 
-  // Update tab badges
-  const statsTab = $resultsTabs.querySelector('[data-tab="statistics"]');
-  const catTab = $resultsTabs.querySelector('[data-tab="categories"]');
-  const calcolTab = $resultsTabs.querySelector('[data-tab="calcols"]');
-  const statsCatTab = $resultsTabs.querySelector('[data-tab="statscat"]');
-  const exportTab = $resultsTabs.querySelector('[data-tab="export"]');
-  statsTab.innerHTML = `Statistics <span class="tab-badge">${numCols.length}</span>`;
-  catTab.innerHTML = `Categories <span class="tab-badge">${catCols.length}</span>`;
-  calcolTab.innerHTML = `Calc <span class="tab-badge">${currentCalcolMeta.length}</span>`;
-  exportTab.innerHTML = `Export <span class="tab-badge">${currentHeader.length}</span>`;
+  // Update tab badges (wsTabBadge mirrors onto the rails tabs, C1b)
+  wsTabBadge('statistics', 'Statistics', numCols.length);
+  wsTabBadge('categories', 'Categories', catCols.length);
+  wsTabBadge('calcols', 'Calc', currentCalcolMeta.length);
+  wsTabBadge('export', 'Export', currentHeader.length);
   if (currentGroupBy !== null && (data.groupStats || data.groupCategories)) {
     const gbName = header[currentGroupBy] || '?';
     const firstGS = data.groupStats && Object.keys(data.groupStats)[0] ? data.groupStats[Object.keys(data.groupStats)[0]] : null;
     const firstGC = data.groupCategories && Object.keys(data.groupCategories)[0] ? data.groupCategories[Object.keys(data.groupCategories)[0]] : null;
     const groupCount = firstGS ? Object.keys(firstGS).length : (firstGC ? Object.keys(firstGC).length : 0);
-    statsCatTab.innerHTML = `StatsCat <span class="tab-badge">${groupCount}</span>`;
+    wsTabBadge('statscat', 'StatsCat', groupCount);
     $statsCatBadge.textContent = gbName + ' \u00B7 ' + groupCount + ' groups';
   } else {
-    statsCatTab.innerHTML = 'StatsCat';
+    wsTabBadge('statscat', 'StatsCat', null);
     $statsCatBadge.textContent = '';
   }
 
   // Swath/Section tab labels (no badge until generated)
-  const swathTab = $resultsTabs.querySelector('[data-tab="swath"]');
-  const sectionTab = $resultsTabs.querySelector('[data-tab="section"]');
-  if (swathTab) swathTab.textContent = 'Swath';
-  if (sectionTab) sectionTab.textContent = 'Section';
+  wsTabBadge('swath', 'Swath', null);
+  wsTabBadge('section', 'Section', null);
 
   // Render calcol editor
   renderVariableBrowser();

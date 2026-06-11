@@ -14,6 +14,7 @@ const workerRaw = read(src('worker.js')).trimEnd();
 // App modules — concatenated in order (core must be first, cdf/events last)
 const APP_MODULES = [
   'core.js',
+  'vendor-rails.js',   // vendored @gcu/rails (C1b) — pinned, see file header
   'preflight.js',
   'auxtab.js',
   'topcut.js',
@@ -32,6 +33,7 @@ const APP_MODULES = [
   'ctxmenu.js',
   'cdf.js',
   'example.js',
+  'workspace.js',      // C1b shells — top-level init must run after tree.js
   'pwa.js',
 ];
 const app = APP_MODULES.map(f => read(src(f)).trimEnd()).join('\n\n');

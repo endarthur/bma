@@ -670,8 +670,7 @@ function runSwath() {
     }
     scanBins(out.results);
     scanBins(out.auxResults);
-    var swathTab = document.querySelector('.results-tab[data-tab="swath"]');
-    if (swathTab) swathTab.innerHTML = 'Swath <span class="tab-badge">' + totalBins + ' bins</span>';
+    wsTabBadge('swath', 'Swath', totalBins + ' bins');
     autoSaveProject();
   }
 

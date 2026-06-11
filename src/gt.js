@@ -568,10 +568,7 @@ function runGt() {
       lastGtData = m;
       renderGtOutput();
       // Update tab badge with number of selected grade variables
-      var gtTab = document.querySelector('.results-tab[data-tab="gt"]');
-      if (gtTab && m.gradeResults) {
-        gtTab.innerHTML = 'GT <span class="tab-badge">' + m.gradeResults.length + '</span>';
-      }
+      if (m.gradeResults) wsTabBadge('gt', 'GT', m.gradeResults.length);
       gtWorker.terminate();
       gtWorker = null;
     } else if (m.type === 'error') {

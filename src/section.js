@@ -182,9 +182,8 @@ function runSection() {
       renderSection();
       const $info = document.getElementById('sectionInfo');
       if ($info) $info.textContent = m.blockCount.toLocaleString() + ' blocks \u00B7 ' + (m.elapsed / 1000).toFixed(1) + 's';
-      // Update tab badge
-      const sectionTab = document.querySelector('.results-tab[data-tab="section"]');
-      if (sectionTab) sectionTab.innerHTML = 'Section <span class="tab-badge">' + m.blockCount + '</span>';
+      // Update tab badge (legacy bar only — section isn't a rails panel)
+      wsTabBadge('section', 'Section', m.blockCount);
       updateSectionSwathToggle();
       sectionWorker.terminate();
       sectionWorker = null;

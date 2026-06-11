@@ -474,15 +474,18 @@ const $calcolPreviewTable = document.getElementById('calcolPreviewTable');
 const $calcolDataSrc = document.getElementById('calcolDataSrc');
 const $calcolAc = document.getElementById('calcolAc');
 
-// Tab switching
+// Tab switching — legacy-shell arm of showPanel (workspace.js). On the
+// rails shell (C1b) panels are positioned, not class-toggled; delegate so
+// any straggler caller stays correct.
 function switchTab(tabId) {
+  if (wsRails) { wsActivateInRails(tabId); return; }
   $resultsTabs.querySelectorAll('.results-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
   document.querySelectorAll('.results-panel').forEach(p => p.classList.toggle('active', p.dataset.tab === tabId));
 }
 $resultsTabs.addEventListener('click', (e) => {
   const tab = e.target.closest('.results-tab');
   if (tab) {
-    switchTab(tab.dataset.tab);
+    showPanel(tab.dataset.tab);
     if ($helpOverlay && $helpOverlay.classList.contains('active')) renderHelp(tab.dataset.tab);
     if (typeof autoSaveProject === 'function') autoSaveProject();
   }

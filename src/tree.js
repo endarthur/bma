@@ -15,6 +15,7 @@ function catalogTreeIsOpen() {
 
 function toggleCatalogTree() {
   catalogTreeOpen = !catalogTreeIsOpen();
+  if (wsRails) wsSyncTreeRail(); // rails shell: collapse/expand the tree rail
   renderCatalogTree();
   autoSaveProject();
 }
@@ -38,7 +39,13 @@ function renderCatalogTree(container) {
   if ($results) $results.classList.toggle('tree-open', open);
   var $btn = document.getElementById('treeToggle');
   if ($btn) $btn.classList.toggle('active', open);
-  if (!open) return;
+  if (wsRails) {
+    // rails shell: the tree rail's collapsed state owns visibility — keep
+    // it aligned and always render content (cheap; current when expanded)
+    wsSyncTreeRail();
+  } else if (!open) {
+    return;
+  }
 
   catEnsureSeeded();
 
@@ -438,7 +445,7 @@ function treeToggleRole(t, role) {
       if (e.target.id === 'treePopCatTab') {
         if (t.idx !== null) { catFocusedCol = t.idx; }
         hideTreePopover();
-        switchTab('categories');
+        showPanel('categories');
         if (typeof renderCatSidebar === 'function') { renderCatSidebar(); renderCatMain(); }
         return;
       }
