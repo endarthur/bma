@@ -53,20 +53,22 @@ function tdQuantileFromCentroids(centroids, totalCount, q) {
   return centroids[centroids.length - 1][0];
 }
 
-// Aux numeric columns available for comparison, each with its same-named
-// primary column (case-insensitive) when one exists. Selection defaults to
-// "matched only" until the user materializes a choice.
+// Aux numeric columns available for comparison, each with its paired
+// primary column (catalog pairing, seeded by name) when one exists.
+// Selection defaults to "paired only" until the user materializes a choice.
 function getStatsAuxCols() {
   if (!auxCompleteData || !auxCompleteData.stats) return [];
-  var primaryByLower = {};
+  catEnsureSeeded();
+  var primaryByName = {};
   for (var i = 0; i < _statsNumCols.length; i++) {
     var ci = _statsNumCols[i];
-    primaryByLower[(_statsHeader[ci] || '').toLowerCase()] = ci;
+    primaryByName[_statsHeader[ci]] = ci;
   }
   var out = [];
   Object.keys(auxCompleteData.stats).map(Number).sort(function(a, b) { return a - b; }).forEach(function(ai) {
     var name = auxCompleteData.header[ai];
-    var m = primaryByLower[(name || '').toLowerCase()];
+    var p = catPair(name);
+    var m = p !== null ? primaryByName[p] : undefined;
     out.push({ idx: ai, name: name, matchCi: m !== undefined ? m : null });
   });
   return out;
@@ -223,20 +225,22 @@ function renderStatsSidebar() {
     customInput.style.display = 'none';
   }
 
-  // Weight select — numeric variables (incl. calcols), choice kept by name
+  // Weight select — numeric variables (incl. calcols); one support weight
+  // per dataset, shared with the Swath tab (catalog role, D3)
   var $wSel = document.getElementById('statsWeightSel');
   if ($wSel) {
+    var curWeight = catRole('model', 'weight');
     var wOpts = '<option value="">— none</option>';
     for (var wci of numCols) {
       var wName = header[wci];
-      wOpts += '<option value="' + esc(wName) + '"' + (wName === currentWeightName ? ' selected' : '') + '>' + esc(wName) + '</option>';
+      wOpts += '<option value="' + esc(wName) + '"' + (wName === curWeight ? ' selected' : '') + '>' + esc(wName) + '</option>';
     }
     $wSel.innerHTML = wOpts;
-    if (currentWeightName && $wSel.value !== currentWeightName) $wSel.value = '';
+    if (curWeight && $wSel.value !== curWeight) $wSel.value = '';
     var $wNote = document.getElementById('statsWeightNote');
     if ($wNote) {
       var noteParts = [];
-      if (currentWeightName && lastCompleteData && lastCompleteData.weightApplied !== currentWeightName) noteParts.push('re-run analysis to apply');
+      if (curWeight && lastCompleteData && lastCompleteData.weightApplied !== curWeight) noteParts.push('re-run analysis to apply');
       if (lastCompleteData && lastCompleteData.weightExcluded > 0) noteParts.push(lastCompleteData.weightExcluded.toLocaleString() + ' rows excluded (invalid weight)');
       $wNote.textContent = noteParts.join(' · ');
     }
@@ -851,8 +855,12 @@ function wireStatsEventsOnce() {
   });
 
   // --- Weight select (static template element) ---
+  // Shared support weight (D3): writing here also re-points the Swath
+  // tab's weight select — one role, two views
   document.getElementById('statsWeightSel').addEventListener('change', function() {
-    currentWeightName = this.value || null;
+    catSetRole('model', 'weight', this.value || null);
+    var $sw = document.getElementById('swathWeight');
+    if ($sw) $sw.value = this.value || '';
     markAnalysisStale();
     renderStatsSidebar();
     autoSaveProject();

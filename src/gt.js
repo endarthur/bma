@@ -72,7 +72,7 @@ function renderGtConfig(data) {
 
   // Grade variable checkbox list with per-variable unit selects
   var varItems = gtNumCols.map(function(c, i) {
-    var defUnit = globalUnits[c.name] || 0;
+    var defUnit = catUnit('model', c.name);
     var opts = GT_GRADE_UNITS.slice(0, -1).map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
@@ -115,7 +115,7 @@ function renderGtConfig(data) {
     '<div class="gt-sidebar-section--grow">' +
       '<div class="gt-sidebar-title">Grade Variables</div>' +
       '<input type="text" class="gt-input gt-var-search" id="gtVarSearch" placeholder="search\u2026" spellcheck="false">' +
-      '<div class="gt-var-btns"><button id="gtVarAll">All</button><button id="gtVarNone">None</button><button id="gtUnitSync" class="gt-unit-sync" title="Sync units from Column Overview">Sync units</button></div>' +
+      '<div class="gt-var-btns"><button id="gtVarAll">All</button><button id="gtVarNone">None</button></div>' +
       '<div class="gt-var-list" id="gtVarList">' + varItems + '</div>' +
     '</div>' +
     '<div class="gt-sidebar-section">' +
@@ -243,17 +243,6 @@ function renderGtConfig(data) {
     });
   });
 
-  // Sync units from global
-  document.getElementById('gtUnitSync').addEventListener('click', function() {
-    document.querySelectorAll('.gt-var-unit').forEach(function(sel) {
-      var colIdx = parseInt(sel.dataset.col);
-      var colName = currentHeader[colIdx];
-      sel.value = (colName && globalUnits[colName]) ? globalUnits[colName] : 0;
-    });
-    if (lastGtData) renderGtOutput();
-    autoSaveProject();
-  });
-
   // Theoretical overlay controls — slider re-renders through a small
   // debounce so dragging f stays smooth
   var $theoCb = document.getElementById('gtTheoEnabled');
@@ -325,9 +314,16 @@ function renderGtConfig(data) {
   document.getElementById('gtDensityCol').addEventListener('change', function() {
     document.getElementById('gtDensityConstWrap').style.display = this.value === 'const' ? 'flex' : 'none';
   });
-  // Per-variable grade unit change — re-render if results exist
+  // Per-variable grade unit change — write-through to the catalog (one unit
+  // per variable, D2), mirror the other unit selects, re-render if results
   document.getElementById('gtVarList').addEventListener('change', function(e) {
-    if (e.target.classList.contains('gt-var-unit') && lastGtData) renderGtOutput();
+    if (e.target.classList.contains('gt-var-unit')) {
+      var un = currentHeader[parseInt(e.target.dataset.col)];
+      if (un) catSetUnit('model', un, parseInt(e.target.value));
+      catRefreshUnitSelects();
+      if (lastGtData) renderGtOutput();
+      autoSaveProject();
+    }
   });
 
   // Group-by dropdown change — populate group value checkboxes
@@ -373,9 +369,10 @@ function updateGroupByValues() {
   var colName = currentHeader[colIdx] || '';
   var values = Object.keys(cats);
   // Use custom order if available
-  if (catCustomOrders[colName]) {
-    var orderedSet = new Set(catCustomOrders[colName]);
-    var ordered = catCustomOrders[colName].filter(function(v) { return cats[v] != null; });
+  var gtGrpOrder = (catVarPeek('model', colName) || {}).valueOrder;
+  if (gtGrpOrder) {
+    var orderedSet = new Set(gtGrpOrder);
+    var ordered = gtGrpOrder.filter(function(v) { return cats[v] != null; });
     var rest = values.filter(function(v) { return !orderedSet.has(v); }).sort();
     values = ordered.concat(rest);
   } else {
@@ -424,11 +421,7 @@ function gtFmt(v, dp) {
 }
 
 function getGtGradeUnit(colIdx) {
-  var sel = document.querySelector('.gt-var-unit[data-col="' + colIdx + '"]');
-  var idx = sel ? parseInt(sel.value) : 0;
-  // Fall back to global unit if GT select is raw (0)
-  if (idx === 0 && currentHeader[colIdx] && globalUnits[currentHeader[colIdx]])
-    idx = globalUnits[currentHeader[colIdx]];
+  var idx = currentHeader[colIdx] ? catUnit('model', currentHeader[colIdx]) : 0;
   var gu = GT_GRADE_UNITS[idx] || GT_GRADE_UNITS[0];
   return { gradeFactor: gu.factor, gradeSymbol: gu.symbol };
 }
@@ -750,31 +743,31 @@ function gtTheoFingerprintNow(auxNames) {
     z: auxPreflightData.selectedZipEntry || null,
     flt: auxFilter ? auxFilter.expression : '',
     cc: auxCalcolCode || '',
-    w: auxWeightName || '',
-    dw: auxWeightName === AUX_DECLUS_WEIGHT && auxDeclus ? auxDeclus.fingerprint : null,
+    w: catRole('aux', 'weight') || '',
+    dw: catRole('aux', 'weight') === AUX_DECLUS_WEIGHT && auxDeclus ? auxDeclus.fingerprint : null,
     vars: auxNames.slice().sort()
   });
 }
 
-// Checked GT grade variables matched (case-insensitively) to aux numeric
-// columns/calcols — the same pairing rule as Statistics/Swath/Categories
+// Checked GT grade variables matched to aux numeric columns/calcols through
+// the catalog pairing — the same pairing as Statistics/Swath/Categories
 function gtTheoMatchedVars() {
   if (!auxPreflightData) return [];
-  var auxLower = {};
+  catEnsureSeeded();
+  var auxNumeric = {};
   for (var i = 0; i < auxPreflightData.header.length; i++) {
-    if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
-    auxLower[auxPreflightData.header[i].toLowerCase()] = auxPreflightData.header[i];
+    if ((auxPreflightData.autoTypes || [])[i] === 'numeric') auxNumeric[auxPreflightData.header[i]] = true;
   }
   for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
-    if (auxCalcolMeta[ci].type === 'numeric') auxLower[auxCalcolMeta[ci].name.toLowerCase()] = auxCalcolMeta[ci].name;
+    if (auxCalcolMeta[ci].type === 'numeric') auxNumeric[auxCalcolMeta[ci].name] = true;
   }
   var out = [];
   document.querySelectorAll('#gtVarList input[type="checkbox"]:checked').forEach(function(cb) {
     var colIdx = parseInt(cb.value);
     var colName = currentHeader[colIdx];
-    if (colName && auxLower[colName.toLowerCase()]) {
-      out.push({ colIdx: colIdx, colName: colName, auxName: auxLower[colName.toLowerCase()] });
-    }
+    if (!colName) return;
+    var auxName = catPairsRev(colName).filter(function(n) { return auxNumeric[n]; })[0];
+    if (auxName) out.push({ colIdx: colIdx, colName: colName, auxName: auxName });
   });
   return out;
 }
@@ -795,11 +788,12 @@ function runGtTheoLoad() {
   }
   // Weight resolution mirrors the aux analyze pass
   var weightArray = null, weightCol = null;
-  if (auxWeightName === AUX_DECLUS_WEIGHT) {
+  var theoAuxWeight = catRole('aux', 'weight');
+  if (theoAuxWeight === AUX_DECLUS_WEIGHT) {
     if (typeof auxDeclusFresh === 'function' && auxDeclusFresh()) weightArray = auxDeclus.weights;
     else { gtTheoSetStatus('declustered weights missing or stale — re-run Declustering on the Aux tab', true); return; }
-  } else if (auxWeightName) {
-    weightCol = auxWeightName;
+  } else if (theoAuxWeight) {
+    weightCol = theoAuxWeight;
   }
 
   gtTheoLoading = true;

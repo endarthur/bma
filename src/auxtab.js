@@ -111,7 +111,8 @@ function runAuxAnalysis() {
   // Declustered weights: computed array, gated on a fresh fingerprint so the
   // row ordinals are guaranteed to align with this pass's filter
   var declusWeights = null;
-  if (auxWeightName === AUX_DECLUS_WEIGHT) {
+  var auxWeight = catRole('aux', 'weight');
+  if (auxWeight === AUX_DECLUS_WEIGHT) {
     if (!auxDeclus || !auxDeclus.weights) { fail('Run Declustering first — no weights computed.'); return; }
     if (auxDeclus.fingerprint !== auxDeclusFingerprintNow()) { fail('Aux config changed since declustering — re-run Declustering.'); return; }
     declusWeights = auxDeclus.weights;
@@ -132,7 +133,7 @@ function runAuxAnalysis() {
     dmEndianness: auxPreflightData.dmEndianness || null,
     dmFormat: auxPreflightData.dmFormat || null,
     rowVarOverride: AUX_ROW_VAR,
-    weightColName: declusWeights ? null : auxWeightName,
+    weightColName: declusWeights ? null : auxWeight,
     weightArray: declusWeights,
     weightArrayLabel: declusWeights ? 'declustered (cell ' + formatNum(auxDeclus.optCellSize) + ')' : null
   });
@@ -171,16 +172,17 @@ function runAuxAnalysis() {
 function auxWeightOptions() {
   var opts = '<option value="">— none</option>';
   if (!auxPreflightData) return opts;
-  opts += '<option value="' + AUX_DECLUS_WEIGHT + '"' + (auxWeightName === AUX_DECLUS_WEIGHT ? ' selected' : '') + '>(declustered weights)</option>';
+  var auxWeight = catRole('aux', 'weight');
+  opts += '<option value="' + AUX_DECLUS_WEIGHT + '"' + (auxWeight === AUX_DECLUS_WEIGHT ? ' selected' : '') + '>(declustered weights)</option>';
   for (var i = 0; i < auxPreflightData.header.length; i++) {
     if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
     var n = auxPreflightData.header[i];
-    opts += '<option value="' + esc(n) + '"' + (n === auxWeightName ? ' selected' : '') + '>' + esc(n) + '</option>';
+    opts += '<option value="' + esc(n) + '"' + (n === auxWeight ? ' selected' : '') + '>' + esc(n) + '</option>';
   }
   for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
     if (auxCalcolMeta[ci].type !== 'numeric') continue;
     var cn = auxCalcolMeta[ci].name;
-    opts += '<option value="' + esc(cn) + '"' + (cn === auxWeightName ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
+    opts += '<option value="' + esc(cn) + '"' + (cn === auxWeight ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
   }
   return opts;
 }
@@ -218,7 +220,7 @@ function onAuxConfigChange(e) {
   var f = document.getElementById('auxFilterInput');
   if (f) { var v = f.value.trim(); auxFilter = v ? { expression: v } : null; }
   var wSel = document.getElementById('auxWeightSel');
-  if (wSel) auxWeightName = wSel.value || null;
+  if (wSel) catSetRole('aux', 'weight', wSel.value || null);
   markAuxStale();
   // Live-update the prefix hint without a full re-render (keeps focus/caret)
   var hint = $auxSidebar.querySelector('.pf-sidebar-section .aux-hint code');
@@ -345,7 +347,7 @@ function renderAuxDeclusResults() {
     }
     html += auxDeclusCurveSvg(d);
   }
-  if (auxWeightName === AUX_DECLUS_WEIGHT) html += '<div class="aux-hint">In use as the aux weight.</div>';
+  if (catRole('aux', 'weight') === AUX_DECLUS_WEIGHT) html += '<div class="aux-hint">In use as the aux weight.</div>';
   else if (fresh) html += '<button class="aux-from-main-btn" id="auxDeclusUseBtn" style="margin-top:0.3rem">Use as aux weight</button>';
   return html + '</div>';
 }
@@ -502,7 +504,7 @@ function runAuxDeclus() {
         fingerprint: auxDeclusFingerprintNow()
       };
       // Fresh weights change the analysis result if they're the active weight
-      if (auxWeightName === AUX_DECLUS_WEIGHT) markAuxStale();
+      if (catRole('aux', 'weight') === AUX_DECLUS_WEIGHT) markAuxStale();
       renderAuxConfig();
       if (typeof autoSaveProject === 'function') autoSaveProject();
     }
@@ -512,7 +514,9 @@ function runAuxDeclus() {
 function applyAuxRestore(saved) {
   auxPrefix = saved.prefix || 'aux';
   auxFilter = saved.filter ? { expression: saved.filter } : null;
-  auxWeightName = saved.weight || null;
+  // Legacy projects carried the aux weight here; the catalog is canonical
+  // now (a project.catalog, when present, was applied before this runs)
+  if (saved.weight !== undefined && catRole('aux', 'weight') === null) catSetRole('aux', 'weight', saved.weight || null);
   // Declus params restore; weights are never persisted — re-run to compute
   auxDeclus = (saved.declus && saved.declus.params) ? { params: saved.declus.params, weights: null } : null;
   // Top-cut: variable + cap + scale restore; the distribution is re-loaded on demand
@@ -602,7 +606,7 @@ function clearAux() {
   statsCdfAuxSelected = new Set();
   auxCalcolCode = '';
   auxCalcolMeta = [];
-  auxWeightName = null;
+  catSetRole('aux', 'weight', null);
   auxDeclus = null;
   if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
   auxTopcut = null;
@@ -677,7 +681,7 @@ if ($auxDropzone) {
         if (auxDeclus && auxDeclus.params) auxDeclus.params.pinned = null;
         runAuxDeclus();
       } else if (e.target.id === 'auxDeclusUseBtn') {
-        auxWeightName = AUX_DECLUS_WEIGHT;
+        catSetRole('aux', 'weight', AUX_DECLUS_WEIGHT);
         markAuxStale();
         renderAuxConfig();
         if (typeof autoSaveProject === 'function') autoSaveProject();

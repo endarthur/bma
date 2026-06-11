@@ -7,7 +7,6 @@ var pendingSwathAuxRestore = null;  // { checked: [names], units: {name: unitIdx
 
 function resetSwathState() {
   _swathChartParams = null;
-  swathColorOverrides = {};
 }
 
 function showSwathColorPicker(colName, colIdx, anchorEl, presetColor) {
@@ -52,7 +51,9 @@ function hideSwathColorPicker() {
 }
 
 function applySwathColor(colName, color) {
-  swathColorOverrides[colName] = color;
+  // colName is a primary variable name or an 'aux:NAME' color key
+  if (colName.indexOf('aux:') === 0) catVar('aux', colName.slice(4)).color = color;
+  else catVar('model', colName).color = color;
   // Update the swatch in the sidebar (aux swatches carry data-color-key, primary carry data-col)
   document.querySelectorAll('#swathVarList .swath-color-swatch').forEach(function(sw) {
     if (sw.dataset.colorKey != null) {
@@ -68,31 +69,28 @@ function applySwathColor(colName, color) {
 }
 
 function getSwathUnit(colIdx) {
-  var sel = document.querySelector('.swath-var-unit[data-col="' + colIdx + '"]');
-  var idx = sel ? parseInt(sel.value) : 0;
-  if (idx === 0 && currentHeader[colIdx] && globalUnits[currentHeader[colIdx]])
-    idx = globalUnits[currentHeader[colIdx]];
+  var idx = currentHeader[colIdx] ? catUnit('model', currentHeader[colIdx]) : 0;
   var u = GRADE_UNITS[idx] || GRADE_UNITS[0];
   return { unitIdx: idx, symbol: u.symbol };
 }
 
-// Aux series color: explicit override ('aux:NAME' key) → matching primary
-// variable's color (same hue + dashed reads as "same variable, other dataset")
-// → palette fallback.
+// Aux series color: explicit override → paired primary variable's EFFECTIVE
+// color, including its palette-by-position fallback (same hue + dashed reads
+// as "same variable, other dataset") → palette fallback.
 function getAuxSwathVarColor(baseName, fallbackIdx) {
-  var key = 'aux:' + baseName;
-  if (swathColorOverrides[key]) return swathColorOverrides[key];
-  var lower = (baseName || '').toLowerCase();
-  for (var i = 0; i < swathNumCols.length; i++) {
-    if (swathNumCols[i].name.toLowerCase() === lower) return getSwathVarColor(swathNumCols[i].name, i);
+  var rec = catVarPeek('aux', baseName);
+  if (rec && rec.color) return rec.color;
+  var p = catPair(baseName);
+  if (p) {
+    for (var i = 0; i < swathNumCols.length; i++) {
+      if (swathNumCols[i].name === p) return getSwathVarColor(p, i);
+    }
   }
   return STATSCAT_PALETTE[fallbackIdx % STATSCAT_PALETTE.length];
 }
 
 function getAuxSwathUnit(auxColIdx, baseName) {
-  var sel = document.querySelector('.swath-var-unit[data-aux-col="' + auxColIdx + '"]');
-  var idx = sel ? parseInt(sel.value) : 0;
-  if (idx === 0 && baseName && globalUnits[baseName]) idx = globalUnits[baseName];
+  var idx = baseName ? catUnit('aux', baseName) : 0; // inherits the paired primary's unit
   var u = GRADE_UNITS[idx] || GRADE_UNITS[0];
   return { unitIdx: idx, symbol: u.symbol };
 }
@@ -231,7 +229,7 @@ function renderSwathConfig(data) {
     '</div>';
   }
   const varItems = swathNumCols.map(function(c, vi) {
-    var defUnit = globalUnits[c.name] || 0;
+    var defUnit = catUnit('model', c.name);
     var unitOpts = GRADE_UNITS.map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
@@ -277,7 +275,7 @@ function renderSwathConfig(data) {
       '<div style="margin-top:0.3rem">' +
         '<div class="swath-sidebar-title">Weight (model)</div>' +
         '<select class="swath-select" id="swathWeight"><option value="">\u2014 none</option>' +
-          swathNumCols.map(function(c) { return '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>'; }).join('') +
+          swathNumCols.map(function(c) { return '<option value="' + esc(c.name) + '"' + (c.name === catRole('model', 'weight') ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') +
         '</select>' +
       '</div>' +
     '</div>' +
@@ -301,7 +299,6 @@ function renderSwathConfig(data) {
       '<div class="swath-var-btns">' +
         '<button id="swathVarAll">All</button>' +
         '<button id="swathVarNone">None</button>' +
-        '<button id="swathUnitSync" class="swath-unit-sync" title="Sync units from Column Overview">Sync units</button>' +
       '</div>' +
       '<div class="swath-var-list" id="swathVarList">' + varItems + '<div id="swathAuxVars"></div></div>' +
     '</div>' +
@@ -350,19 +347,18 @@ function renderSwathConfig(data) {
     });
   });
 
-  // Sync units from global (aux selects sync by their own column name — shared
-  // names inherit the same unit as the model variable)
-  document.getElementById('swathUnitSync').addEventListener('click', function() {
-    document.querySelectorAll('.swath-var-unit').forEach(function(sel) {
-      var colName = sel.dataset.auxCol != null ? sel.dataset.auxName : currentHeader[parseInt(sel.dataset.col)];
-      sel.value = (colName && globalUnits[colName]) ? globalUnits[colName] : 0;
-    });
-    if (lastSwathData) renderSwathOutput();
-    autoSaveProject();
-  });
-
   // Generate button
   document.getElementById('swathGenerate').addEventListener('click', runSwath);
+
+  // Shared support weight (D3): writing here also re-points the Statistics
+  // tab's weight select — one role, two views
+  document.getElementById('swathWeight').addEventListener('change', function() {
+    catSetRole('model', 'weight', this.value || null);
+    var $ssel = document.getElementById('statsWeightSel');
+    if ($ssel) $ssel.value = this.value || '';
+    markAnalysisStale();
+    autoSaveProject();
+  });
 
   // Stat change re-renders from cache
   document.getElementById('swathStat').addEventListener('change', function() {
@@ -377,10 +373,20 @@ function renderSwathConfig(data) {
     });
   });
 
-  // Swath per-variable unit change — re-render from cache
+  // Swath per-variable unit change — write-through to the catalog (one unit
+  // per variable, D2), mirror every other unit select, re-render from cache
   document.getElementById('swathVarList').addEventListener('change', function(e) {
-    if (e.target.classList.contains('swath-var-unit') && lastSwathData) {
-      renderSwathOutput();
+    if (e.target.classList.contains('swath-var-unit')) {
+      var uv = parseInt(e.target.value);
+      if (e.target.dataset.auxCol != null) {
+        if (e.target.dataset.auxName) catSetUnit('aux', e.target.dataset.auxName, uv);
+      } else {
+        var un = currentHeader[parseInt(e.target.dataset.col)];
+        if (un) catSetUnit('model', un, uv);
+      }
+      catRefreshUnitSelects();
+      if (lastSwathData) renderSwathOutput();
+      autoSaveProject();
     }
   });
 
@@ -458,16 +464,13 @@ function renderSwathAuxVars() {
 
   // Capture current DOM state before wiping
   var prevChecked = null;
-  var prevUnits = {};
   wrap.querySelectorAll('input[data-aux="1"]').forEach(function(cb) {
     if (prevChecked === null) prevChecked = [];
     if (cb.checked && cb.dataset.name) prevChecked.push(cb.dataset.name);
   });
-  wrap.querySelectorAll('.swath-var-unit[data-aux-col]').forEach(function(sel) {
-    if (sel.dataset.auxName && parseInt(sel.value) !== 0) prevUnits[sel.dataset.auxName] = parseInt(sel.value);
-  });
 
   if (!auxFile || !auxPreflightData) { wrap.innerHTML = ''; return; }
+  catEnsureSeeded();
 
   var label = auxPrefix || 'aux';
   var divider = '<div class="swath-aux-divider">' + esc(label) + ': ' + esc(auxFile.name) + '</div>';
@@ -495,17 +498,14 @@ function renderSwathAuxVars() {
   var restore = pendingSwathAuxRestore;
   pendingSwathAuxRestore = null;
   var checkedNames = restore && restore.checked ? restore.checked : prevChecked;
-  var unitsByName = restore && restore.units ? restore.units : prevUnits;
-
-  var primaryLower = {};
-  for (var p = 0; p < swathNumCols.length; p++) primaryLower[swathNumCols[p].name.toLowerCase()] = true;
 
   var html = divider;
   for (var ai = 0; ai < auxCols.length; ai++) {
     var c = auxCols[ai];
-    // Default: checked when the model has a same-named variable (the comparison case)
-    var checked = checkedNames !== null ? checkedNames.indexOf(c.name) >= 0 : !!primaryLower[c.name.toLowerCase()];
-    var unitIdx = unitsByName[c.name] || globalUnits[c.name] || 0;
+    // Default: checked when the variable is paired with a model variable
+    // (the comparison case) — pairing is seeded by name, editable in C1a+
+    var checked = checkedNames !== null ? checkedNames.indexOf(c.name) >= 0 : !!catPair(c.name);
+    var unitIdx = catUnit('aux', c.name);
     var unitOpts = GRADE_UNITS.map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === unitIdx ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
@@ -701,7 +701,7 @@ function runSwath() {
       dxyzCols: [currentDXYZ.dx, currentDXYZ.dy, currentDXYZ.dz],
       directions: workerDirs,
       varCols: varCols,
-      weightColName: (document.getElementById('swathWeight') || {}).value || null,
+      weightColName: catRole('model', 'weight'),
       dmEndianness: preflightData && preflightData.dmEndianness || null,
       dmFormat: preflightData && preflightData.dmFormat || null
     });
@@ -731,7 +731,8 @@ function runSwath() {
   // otherwise the aux series soft-fails into the warning banner rather
   // than silently rendering unweighted
   var swathDeclusWeights = null, swathDeclusBlocked = null;
-  if (auxVarCols.length > 0 && auxWeightName === AUX_DECLUS_WEIGHT) {
+  var swathAuxWeight = catRole('aux', 'weight');
+  if (auxVarCols.length > 0 && swathAuxWeight === AUX_DECLUS_WEIGHT) {
     if (typeof auxDeclusFresh === 'function' && auxDeclusFresh()) swathDeclusWeights = auxDeclus.weights;
     else swathDeclusBlocked = 'aux series skipped: declustered weights missing or stale — re-run Declustering on the Aux tab';
   }
@@ -754,7 +755,7 @@ function runSwath() {
       directions: workerDirs,
       varCols: auxVarCols,
       rowVarOverride: AUX_ROW_VAR,
-      weightColName: swathDeclusWeights ? null : auxWeightName,
+      weightColName: swathDeclusWeights ? null : swathAuxWeight,
       weightArray: swathDeclusWeights,
       dmEndianness: auxPreflightData.dmEndianness || null,
       dmFormat: auxPreflightData.dmFormat || null
@@ -881,7 +882,7 @@ function renderSwathCharts(swathData, stat, $target) {
       upperLine: lines.upperLine,
       lowerLine: lines.lowerLine,
       unit: getSwathUnit(colIdx),
-      scaleKey: name.toLowerCase()
+      scaleKey: name
     });
   }
   if (swathData.auxVars) {
@@ -894,7 +895,9 @@ function renderSwathCharts(swathData, stat, $target) {
       if (aBins.length === 0) continue;
       var aLines = buildSwathStatLines(aBins, stat);
       var baseName = (swathData.auxHeader && swathData.auxHeader[aIdx]) || 'Variable';
-      var aKey = baseName.toLowerCase();
+      // A paired aux variable shares its primary's Y axis (and color, dashed)
+      var aPair = catPair(baseName);
+      var aKey = aPair && primaryKeys[aPair] ? aPair : 'aux:' + baseName;
       varEntries.push({
         colIdx: aIdx,
         isAux: true,
@@ -906,7 +909,7 @@ function renderSwathCharts(swathData, stat, $target) {
         upperLine: aLines.upperLine,
         lowerLine: aLines.lowerLine,
         unit: getAuxSwathUnit(aIdx, baseName),
-        scaleKey: primaryKeys[aKey] ? aKey : 'aux:' + aKey
+        scaleKey: aKey
       });
     }
   }

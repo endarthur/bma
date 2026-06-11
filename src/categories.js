@@ -68,17 +68,19 @@ function renderCatMain() {
   renderCatValueTable();
 }
 
-// Aux counterpart of a categorical column (matched by name, case-insensitive):
+// Aux counterpart of a categorical column (catalog pairing, seeded by name):
 // { counts, total, overflow } or null. Lets the chart/table compare category
 // proportions model-vs-samples — e.g. lithology shares.
 function getCatAuxCounts(colName) {
   if (!auxCompleteData || !auxCompleteData.categories || !colName) return null;
-  var lower = colName.toLowerCase();
+  catEnsureSeeded();
+  var revSet = new Set(catPairsRev(colName));
+  if (revSet.size === 0) return null;
   var idxs = Object.keys(auxCompleteData.categories);
   for (var i = 0; i < idxs.length; i++) {
     var ai = idxs[i];
     var aName = auxCompleteData.header[ai];
-    if (aName && aName.toLowerCase() === lower) {
+    if (aName && revSet.has(aName)) {
       var cat = auxCompleteData.categories[ai];
       if (!cat || !cat.counts) return null;
       var total = 0;
@@ -96,7 +98,7 @@ function getCatSortedEntries(colIdx) {
   var entries = Object.entries(cat.counts);
   var colName = _catData.header[colIdx];
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
-  var mode = catSortModes[colName] || defaultSort;
+  var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
 
   if (mode === 'count-desc') {
     entries.sort(function(a,b){ return b[1] - a[1]; });
@@ -105,7 +107,7 @@ function getCatSortedEntries(colIdx) {
   } else if (mode === 'alpha') {
     entries.sort(function(a,b){ return a[0].localeCompare(b[0]); });
   } else if (mode === 'custom') {
-    var order = catCustomOrders[colName];
+    var order = (catVarPeek('model', colName) || {}).valueOrder;
     if (order) {
       var posMap = {};
       for (var oi = 0; oi < order.length; oi++) posMap[order[oi]] = oi;
@@ -126,7 +128,7 @@ function renderCatToolbar() {
   var colName = header[catFocusedCol];
   var isCalcol = catFocusedCol >= origColCount;
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
-  var mode = catSortModes[colName] || defaultSort;
+  var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
 
   // Meta info
   var cat = _catData.categories[catFocusedCol];
@@ -281,7 +283,7 @@ function renderCatValueTable() {
   var maxCount = 0;
   for (var i = 0; i < entries.length; i++) { if (entries[i][1] > maxCount) maxCount = entries[i][1]; }
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
-  var mode = catSortModes[colName] || defaultSort;
+  var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
   var isCustom = mode === 'custom';
   var search = ($catValueSearch.value || '').toLowerCase();
 
@@ -381,17 +383,19 @@ function hideCatColorPicker() {
 }
 
 function applyCatColor(colName, value, color) {
-  if (!catColorOverrides[colName]) catColorOverrides[colName] = {};
-  catColorOverrides[colName][value] = color;
+  var rec = catVar('model', colName);
+  if (!rec.valueColors) rec.valueColors = {};
+  rec.valueColors[value] = color;
   renderCatBarChart();
   renderCatValueTable();
   autoSaveProject();
 }
 
 function initCustomOrder(colName) {
-  if (!catCustomOrders[colName]) {
+  var rec = catVar('model', colName);
+  if (!rec.valueOrder) {
     var entries = getCatSortedEntries(catFocusedCol);
-    catCustomOrders[colName] = entries.map(function(e){ return e[0]; });
+    rec.valueOrder = entries.map(function(e){ return e[0]; });
   }
 }
 
@@ -426,7 +430,7 @@ function wireCatEventsOnce() {
     if (sortBtn) {
       var colName = _catData.header[catFocusedCol];
       var newMode = sortBtn.dataset.sort;
-      catSortModes[colName] = newMode;
+      catVar('model', colName).sortMode = newMode;
       if (newMode === 'custom') initCustomOrder(colName);
       renderCatToolbar();
       renderCatBarChart();
@@ -561,7 +565,7 @@ function wireCatEventsOnce() {
 
     var colName = _catData.header[catFocusedCol];
     initCustomOrder(colName);
-    var order = catCustomOrders[colName];
+    var order = catVar('model', colName).valueOrder;
     var fromVal = dragSrcRow.dataset.val;
     var toVal = tr.dataset.val;
     var fromIdx = order.indexOf(fromVal);

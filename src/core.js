@@ -29,9 +29,8 @@ let auxCalcolMeta = [];            // [{name, type}] detected from aux calcol si
 let calcolMode = 'primary';        // which dataset the Calc editor is editing: 'primary' | 'aux'
 let projectTitle = null;           // optional project title (pack dialog) — display + archive naming
 let statsCdfMode = 'cdf';          // CDF panel mode: 'cdf' | 'logprob' | 'qq'
-let currentWeightName = null;      // weight column (by name, raw or calcol) for the primary analysis
-let auxWeightName = null;          // weight column (by name) for the aux passes — set on the Aux tab
-const AUX_DECLUS_WEIGHT = '__declus__'; // auxWeightName sentinel: use computed declustering weights
+// Support weights live in the catalog: catRole('model'|'aux', 'weight')
+const AUX_DECLUS_WEIGHT = '__declus__'; // aux weight sentinel: use computed declustering weights
 let auxDeclus = null;              // cell-declustering state: { params, weights (Float64Array|null),
                                    //   curve, optCellSize, declusteredMean, naiveMean, n, located,
                                    //   wtMin, wtMax, usedRange, fingerprint } — weights NOT persisted
@@ -171,16 +170,149 @@ let statsCatShowSelectedOnly = false;
 
 // Categories tab state
 let catFocusedCol = null;           // column index focused in main area
-let catSortModes = {};              // { colName: 'count-desc'|'count-asc'|'alpha'|'custom' }
-let catCustomOrders = {};           // { colName: [val1, val2, ...] }
-let catColorOverrides = {};         // { colName: { value: '#hex' } }
 let catChartShowAll = false;        // show all bars vs top 20
 let _catEventsWired = false;
 
-function getCategoryColor(colName, value, fallbackIdx) {
-  if (catColorOverrides[colName] && catColorOverrides[colName][value])
-    return catColorOverrides[colName][value];
+// ─── Property catalog (C1a) ─────────────────────────────────────────────
+// Single source of truth for per-variable / per-dataset properties: series
+// colors, units, categorical value colors/order/sort, roles (weight /
+// density / tonnageFactor), and model↔aux pairings. View membership stays
+// view-local. Design: docs/c1a-property-catalog.md.
+let catalog = newCatalog();
+
+function newCatalog() {
+  return {
+    datasets: { model: { label: 'Model' }, aux: { label: 'aux' } },
+    vars: {},                        // 'model:Fe' → sparse { color, unit, valueColors, valueOrder, sortMode }
+    roles: { model: {}, aux: {} },   // { weight, density, tonnageFactor } → variable name
+    pairs: {}                        // aux var name → model var name | null (null = explicit orphan)
+  };
+}
+
+// Live sparse record for a variable — created on demand; callers may set
+// properties directly, then must autoSaveProject()
+function catVar(ds, name) {
+  const key = ds + ':' + name;
+  let rec = catalog.vars[key];
+  if (!rec) { rec = {}; catalog.vars[key] = rec; }
+  return rec;
+}
+// Read-only lookup: never creates a record
+function catVarPeek(ds, name) { return catalog.vars[ds + ':' + name] || null; }
+
+// Series color: explicit → paired primary's (aux only) → palette fallback
+function catVarColor(ds, name, fallbackIdx) {
+  const rec = catVarPeek(ds, name);
+  if (rec && rec.color) return rec.color;
+  if (ds === 'aux') {
+    const p = catPair(name);
+    if (p) {
+      const prec = catVarPeek('model', p);
+      if (prec && prec.color) return prec.color;
+    }
+  }
   return STATSCAT_PALETTE[(fallbackIdx || 0) % STATSCAT_PALETTE.length];
+}
+
+// Unit as a GRADE_UNITS index (0 = raw). Aux variables without an explicit
+// unit inherit their paired primary's.
+function catUnit(ds, name) {
+  const rec = catVarPeek(ds, name);
+  if (rec && rec.unit) return rec.unit;
+  if (ds === 'aux') {
+    const p = catPair(name);
+    if (p) return catUnit('model', p);
+  }
+  return 0;
+}
+function catSetUnit(ds, name, idx) {
+  if (idx > 0) {
+    catVar(ds, name).unit = idx;
+  } else {
+    const rec = catVarPeek(ds, name);
+    if (rec) delete rec.unit;
+  }
+}
+
+// Roles: one variable name per role per dataset (null = unassigned)
+function catRole(ds, role) {
+  return (catalog.roles[ds] && catalog.roles[ds][role]) || null;
+}
+function catSetRole(ds, role, name) {
+  if (!catalog.roles[ds]) catalog.roles[ds] = {};
+  if (name) catalog.roles[ds][role] = name;
+  else delete catalog.roles[ds][role];
+}
+
+// Pairing: aux variable → model variable. Seeded case-insensitively when
+// the aux dataset loads; existing entries (including explicit null =
+// unpaired) are never overwritten by re-seeding.
+function catPair(auxName) {
+  const v = catalog.pairs[auxName];
+  return v === undefined ? null : v;
+}
+// Aux variables paired to a given model variable (reverse lookup)
+function catPairsRev(modelName) {
+  const out = [];
+  for (const an of Object.keys(catalog.pairs)) {
+    if (catalog.pairs[an] === modelName) out.push(an);
+  }
+  return out;
+}
+function catSeedPairs(auxNames, modelNames) {
+  const modelLower = {};
+  for (const n of modelNames) modelLower[String(n).trim().toLowerCase()] = n;
+  for (const an of auxNames) {
+    if (catalog.pairs[an] !== undefined) continue;
+    const m = modelLower[String(an).trim().toLowerCase()];
+    catalog.pairs[an] = m !== undefined ? m : null;
+  }
+}
+
+// Categorical value color: explicit override → palette by value position
+function getCategoryColor(colName, value, fallbackIdx) {
+  const rec = catVarPeek('model', colName);
+  if (rec && rec.valueColors && rec.valueColors[value]) return rec.valueColors[value];
+  return STATSCAT_PALETTE[(fallbackIdx || 0) % STATSCAT_PALETTE.length];
+}
+
+// Idempotent pairing seed from whatever headers are currently known —
+// callable from any renderer that needs pairs (aux list builders run off
+// preflight data, before any aux analyze)
+function catEnsureSeeded() {
+  if (!auxPreflightData || !currentHeader) return;
+  const modelNames = currentHeader.slice();
+  for (const cm of (currentCalcolMeta || [])) modelNames.push(cm.name);
+  const auxNames = (auxPreflightData.header || []).slice();
+  for (const am of (auxCalcolMeta || [])) auxNames.push(am.name);
+  catSeedPairs(auxNames, modelNames);
+}
+
+// All per-variable unit selects (stats sidebar, swath, GT) are views of the
+// catalog's one-unit-per-variable (D2) — refresh them after any unit edit
+function catRefreshUnitSelects() {
+  document.querySelectorAll('.col-unit-select').forEach(function(sel) {
+    if (sel.dataset.colName) sel.value = catUnit('model', sel.dataset.colName);
+  });
+  document.querySelectorAll('.swath-var-unit, .gt-var-unit').forEach(function(sel) {
+    if (sel.dataset.auxCol != null) {
+      if (sel.dataset.auxName) sel.value = catUnit('aux', sel.dataset.auxName);
+    } else {
+      const n = currentHeader && currentHeader[parseInt(sel.dataset.col)];
+      if (n) sel.value = catUnit('model', n);
+    }
+  });
+}
+
+// Drop empty structures so the serialized catalog stays sparse
+function catCompact() {
+  for (const k of Object.keys(catalog.vars)) {
+    const rec = catalog.vars[k];
+    if (rec.valueColors && Object.keys(rec.valueColors).length === 0) delete rec.valueColors;
+    if (rec.valueOrder && rec.valueOrder.length === 0) delete rec.valueOrder;
+    for (const f of Object.keys(rec)) { if (rec[f] == null) delete rec[f]; }
+    if (Object.keys(rec).length === 0) delete catalog.vars[k];
+  }
 }
 
 // Statistics tab state
@@ -237,11 +369,9 @@ let currentDXYZ = { dx: -1, dy: -1, dz: -1 };
 let swathWorker = null;
 let lastSwathData = null;
 let swathExprController = null;
-let swathColorOverrides = {};   // { colName: '#hex' }
 
 function getSwathVarColor(colName, paletteIdx) {
-  if (swathColorOverrides[colName]) return swathColorOverrides[colName];
-  return STATSCAT_PALETTE[paletteIdx % STATSCAT_PALETTE.length];
+  return catVarColor('model', colName, paletteIdx);
 }
 
 // GT state
@@ -275,7 +405,7 @@ const GRADE_UNITS = [
   { label: 'g/t',    symbol: 'g/t',  factor: 1e-6 },
   { label: 'oz/t',   symbol: 'oz/t', factor: 3.11035e-5 }
 ];
-let globalUnits = {}; // { colName: unitIdx }
+// (per-variable units live in the catalog — catUnit/catSetUnit)
 
 // Calcol editor DOM refs
 const $calcolBadge = document.getElementById('calcolBadge');

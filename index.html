@@ -4519,7 +4519,7 @@ table.stats tr.stats-delta-row td:first-child {
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 2b78cfc — click to check for updates">2b78cfc</div>
+<div class="build-badge" id="buildBadge" title="build c3fb6bc — click to check for updates">c3fb6bc</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -6937,9 +6937,8 @@ let auxCalcolMeta = [];            // [{name, type}] detected from aux calcol si
 let calcolMode = 'primary';        // which dataset the Calc editor is editing: 'primary' | 'aux'
 let projectTitle = null;           // optional project title (pack dialog) — display + archive naming
 let statsCdfMode = 'cdf';          // CDF panel mode: 'cdf' | 'logprob' | 'qq'
-let currentWeightName = null;      // weight column (by name, raw or calcol) for the primary analysis
-let auxWeightName = null;          // weight column (by name) for the aux passes — set on the Aux tab
-const AUX_DECLUS_WEIGHT = '__declus__'; // auxWeightName sentinel: use computed declustering weights
+// Support weights live in the catalog: catRole('model'|'aux', 'weight')
+const AUX_DECLUS_WEIGHT = '__declus__'; // aux weight sentinel: use computed declustering weights
 let auxDeclus = null;              // cell-declustering state: { params, weights (Float64Array|null),
                                    //   curve, optCellSize, declusteredMean, naiveMean, n, located,
                                    //   wtMin, wtMax, usedRange, fingerprint } — weights NOT persisted
@@ -7079,16 +7078,149 @@ let statsCatShowSelectedOnly = false;
 
 // Categories tab state
 let catFocusedCol = null;           // column index focused in main area
-let catSortModes = {};              // { colName: 'count-desc'|'count-asc'|'alpha'|'custom' }
-let catCustomOrders = {};           // { colName: [val1, val2, ...] }
-let catColorOverrides = {};         // { colName: { value: '#hex' } }
 let catChartShowAll = false;        // show all bars vs top 20
 let _catEventsWired = false;
 
-function getCategoryColor(colName, value, fallbackIdx) {
-  if (catColorOverrides[colName] && catColorOverrides[colName][value])
-    return catColorOverrides[colName][value];
+// ─── Property catalog (C1a) ─────────────────────────────────────────────
+// Single source of truth for per-variable / per-dataset properties: series
+// colors, units, categorical value colors/order/sort, roles (weight /
+// density / tonnageFactor), and model↔aux pairings. View membership stays
+// view-local. Design: docs/c1a-property-catalog.md.
+let catalog = newCatalog();
+
+function newCatalog() {
+  return {
+    datasets: { model: { label: 'Model' }, aux: { label: 'aux' } },
+    vars: {},                        // 'model:Fe' → sparse { color, unit, valueColors, valueOrder, sortMode }
+    roles: { model: {}, aux: {} },   // { weight, density, tonnageFactor } → variable name
+    pairs: {}                        // aux var name → model var name | null (null = explicit orphan)
+  };
+}
+
+// Live sparse record for a variable — created on demand; callers may set
+// properties directly, then must autoSaveProject()
+function catVar(ds, name) {
+  const key = ds + ':' + name;
+  let rec = catalog.vars[key];
+  if (!rec) { rec = {}; catalog.vars[key] = rec; }
+  return rec;
+}
+// Read-only lookup: never creates a record
+function catVarPeek(ds, name) { return catalog.vars[ds + ':' + name] || null; }
+
+// Series color: explicit → paired primary's (aux only) → palette fallback
+function catVarColor(ds, name, fallbackIdx) {
+  const rec = catVarPeek(ds, name);
+  if (rec && rec.color) return rec.color;
+  if (ds === 'aux') {
+    const p = catPair(name);
+    if (p) {
+      const prec = catVarPeek('model', p);
+      if (prec && prec.color) return prec.color;
+    }
+  }
   return STATSCAT_PALETTE[(fallbackIdx || 0) % STATSCAT_PALETTE.length];
+}
+
+// Unit as a GRADE_UNITS index (0 = raw). Aux variables without an explicit
+// unit inherit their paired primary's.
+function catUnit(ds, name) {
+  const rec = catVarPeek(ds, name);
+  if (rec && rec.unit) return rec.unit;
+  if (ds === 'aux') {
+    const p = catPair(name);
+    if (p) return catUnit('model', p);
+  }
+  return 0;
+}
+function catSetUnit(ds, name, idx) {
+  if (idx > 0) {
+    catVar(ds, name).unit = idx;
+  } else {
+    const rec = catVarPeek(ds, name);
+    if (rec) delete rec.unit;
+  }
+}
+
+// Roles: one variable name per role per dataset (null = unassigned)
+function catRole(ds, role) {
+  return (catalog.roles[ds] && catalog.roles[ds][role]) || null;
+}
+function catSetRole(ds, role, name) {
+  if (!catalog.roles[ds]) catalog.roles[ds] = {};
+  if (name) catalog.roles[ds][role] = name;
+  else delete catalog.roles[ds][role];
+}
+
+// Pairing: aux variable → model variable. Seeded case-insensitively when
+// the aux dataset loads; existing entries (including explicit null =
+// unpaired) are never overwritten by re-seeding.
+function catPair(auxName) {
+  const v = catalog.pairs[auxName];
+  return v === undefined ? null : v;
+}
+// Aux variables paired to a given model variable (reverse lookup)
+function catPairsRev(modelName) {
+  const out = [];
+  for (const an of Object.keys(catalog.pairs)) {
+    if (catalog.pairs[an] === modelName) out.push(an);
+  }
+  return out;
+}
+function catSeedPairs(auxNames, modelNames) {
+  const modelLower = {};
+  for (const n of modelNames) modelLower[String(n).trim().toLowerCase()] = n;
+  for (const an of auxNames) {
+    if (catalog.pairs[an] !== undefined) continue;
+    const m = modelLower[String(an).trim().toLowerCase()];
+    catalog.pairs[an] = m !== undefined ? m : null;
+  }
+}
+
+// Categorical value color: explicit override → palette by value position
+function getCategoryColor(colName, value, fallbackIdx) {
+  const rec = catVarPeek('model', colName);
+  if (rec && rec.valueColors && rec.valueColors[value]) return rec.valueColors[value];
+  return STATSCAT_PALETTE[(fallbackIdx || 0) % STATSCAT_PALETTE.length];
+}
+
+// Idempotent pairing seed from whatever headers are currently known —
+// callable from any renderer that needs pairs (aux list builders run off
+// preflight data, before any aux analyze)
+function catEnsureSeeded() {
+  if (!auxPreflightData || !currentHeader) return;
+  const modelNames = currentHeader.slice();
+  for (const cm of (currentCalcolMeta || [])) modelNames.push(cm.name);
+  const auxNames = (auxPreflightData.header || []).slice();
+  for (const am of (auxCalcolMeta || [])) auxNames.push(am.name);
+  catSeedPairs(auxNames, modelNames);
+}
+
+// All per-variable unit selects (stats sidebar, swath, GT) are views of the
+// catalog's one-unit-per-variable (D2) — refresh them after any unit edit
+function catRefreshUnitSelects() {
+  document.querySelectorAll('.col-unit-select').forEach(function(sel) {
+    if (sel.dataset.colName) sel.value = catUnit('model', sel.dataset.colName);
+  });
+  document.querySelectorAll('.swath-var-unit, .gt-var-unit').forEach(function(sel) {
+    if (sel.dataset.auxCol != null) {
+      if (sel.dataset.auxName) sel.value = catUnit('aux', sel.dataset.auxName);
+    } else {
+      const n = currentHeader && currentHeader[parseInt(sel.dataset.col)];
+      if (n) sel.value = catUnit('model', n);
+    }
+  });
+}
+
+// Drop empty structures so the serialized catalog stays sparse
+function catCompact() {
+  for (const k of Object.keys(catalog.vars)) {
+    const rec = catalog.vars[k];
+    if (rec.valueColors && Object.keys(rec.valueColors).length === 0) delete rec.valueColors;
+    if (rec.valueOrder && rec.valueOrder.length === 0) delete rec.valueOrder;
+    for (const f of Object.keys(rec)) { if (rec[f] == null) delete rec[f]; }
+    if (Object.keys(rec).length === 0) delete catalog.vars[k];
+  }
 }
 
 // Statistics tab state
@@ -7145,11 +7277,9 @@ let currentDXYZ = { dx: -1, dy: -1, dz: -1 };
 let swathWorker = null;
 let lastSwathData = null;
 let swathExprController = null;
-let swathColorOverrides = {};   // { colName: '#hex' }
 
 function getSwathVarColor(colName, paletteIdx) {
-  if (swathColorOverrides[colName]) return swathColorOverrides[colName];
-  return STATSCAT_PALETTE[paletteIdx % STATSCAT_PALETTE.length];
+  return catVarColor('model', colName, paletteIdx);
 }
 
 // GT state
@@ -7183,7 +7313,7 @@ const GRADE_UNITS = [
   { label: 'g/t',    symbol: 'g/t',  factor: 1e-6 },
   { label: 'oz/t',   symbol: 'oz/t', factor: 3.11035e-5 }
 ];
-let globalUnits = {}; // { colName: unitIdx }
+// (per-variable units live in the catalog — catUnit/catSetUnit)
 
 // Calcol editor DOM refs
 const $calcolBadge = document.getElementById('calcolBadge');
@@ -8767,7 +8897,8 @@ function runAuxAnalysis() {
   // Declustered weights: computed array, gated on a fresh fingerprint so the
   // row ordinals are guaranteed to align with this pass's filter
   var declusWeights = null;
-  if (auxWeightName === AUX_DECLUS_WEIGHT) {
+  var auxWeight = catRole('aux', 'weight');
+  if (auxWeight === AUX_DECLUS_WEIGHT) {
     if (!auxDeclus || !auxDeclus.weights) { fail('Run Declustering first — no weights computed.'); return; }
     if (auxDeclus.fingerprint !== auxDeclusFingerprintNow()) { fail('Aux config changed since declustering — re-run Declustering.'); return; }
     declusWeights = auxDeclus.weights;
@@ -8788,7 +8919,7 @@ function runAuxAnalysis() {
     dmEndianness: auxPreflightData.dmEndianness || null,
     dmFormat: auxPreflightData.dmFormat || null,
     rowVarOverride: AUX_ROW_VAR,
-    weightColName: declusWeights ? null : auxWeightName,
+    weightColName: declusWeights ? null : auxWeight,
     weightArray: declusWeights,
     weightArrayLabel: declusWeights ? 'declustered (cell ' + formatNum(auxDeclus.optCellSize) + ')' : null
   });
@@ -8827,16 +8958,17 @@ function runAuxAnalysis() {
 function auxWeightOptions() {
   var opts = '<option value="">— none</option>';
   if (!auxPreflightData) return opts;
-  opts += '<option value="' + AUX_DECLUS_WEIGHT + '"' + (auxWeightName === AUX_DECLUS_WEIGHT ? ' selected' : '') + '>(declustered weights)</option>';
+  var auxWeight = catRole('aux', 'weight');
+  opts += '<option value="' + AUX_DECLUS_WEIGHT + '"' + (auxWeight === AUX_DECLUS_WEIGHT ? ' selected' : '') + '>(declustered weights)</option>';
   for (var i = 0; i < auxPreflightData.header.length; i++) {
     if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
     var n = auxPreflightData.header[i];
-    opts += '<option value="' + esc(n) + '"' + (n === auxWeightName ? ' selected' : '') + '>' + esc(n) + '</option>';
+    opts += '<option value="' + esc(n) + '"' + (n === auxWeight ? ' selected' : '') + '>' + esc(n) + '</option>';
   }
   for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
     if (auxCalcolMeta[ci].type !== 'numeric') continue;
     var cn = auxCalcolMeta[ci].name;
-    opts += '<option value="' + esc(cn) + '"' + (cn === auxWeightName ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
+    opts += '<option value="' + esc(cn) + '"' + (cn === auxWeight ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
   }
   return opts;
 }
@@ -8874,7 +9006,7 @@ function onAuxConfigChange(e) {
   var f = document.getElementById('auxFilterInput');
   if (f) { var v = f.value.trim(); auxFilter = v ? { expression: v } : null; }
   var wSel = document.getElementById('auxWeightSel');
-  if (wSel) auxWeightName = wSel.value || null;
+  if (wSel) catSetRole('aux', 'weight', wSel.value || null);
   markAuxStale();
   // Live-update the prefix hint without a full re-render (keeps focus/caret)
   var hint = $auxSidebar.querySelector('.pf-sidebar-section .aux-hint code');
@@ -9001,7 +9133,7 @@ function renderAuxDeclusResults() {
     }
     html += auxDeclusCurveSvg(d);
   }
-  if (auxWeightName === AUX_DECLUS_WEIGHT) html += '<div class="aux-hint">In use as the aux weight.</div>';
+  if (catRole('aux', 'weight') === AUX_DECLUS_WEIGHT) html += '<div class="aux-hint">In use as the aux weight.</div>';
   else if (fresh) html += '<button class="aux-from-main-btn" id="auxDeclusUseBtn" style="margin-top:0.3rem">Use as aux weight</button>';
   return html + '</div>';
 }
@@ -9158,7 +9290,7 @@ function runAuxDeclus() {
         fingerprint: auxDeclusFingerprintNow()
       };
       // Fresh weights change the analysis result if they're the active weight
-      if (auxWeightName === AUX_DECLUS_WEIGHT) markAuxStale();
+      if (catRole('aux', 'weight') === AUX_DECLUS_WEIGHT) markAuxStale();
       renderAuxConfig();
       if (typeof autoSaveProject === 'function') autoSaveProject();
     }
@@ -9168,7 +9300,9 @@ function runAuxDeclus() {
 function applyAuxRestore(saved) {
   auxPrefix = saved.prefix || 'aux';
   auxFilter = saved.filter ? { expression: saved.filter } : null;
-  auxWeightName = saved.weight || null;
+  // Legacy projects carried the aux weight here; the catalog is canonical
+  // now (a project.catalog, when present, was applied before this runs)
+  if (saved.weight !== undefined && catRole('aux', 'weight') === null) catSetRole('aux', 'weight', saved.weight || null);
   // Declus params restore; weights are never persisted — re-run to compute
   auxDeclus = (saved.declus && saved.declus.params) ? { params: saved.declus.params, weights: null } : null;
   // Top-cut: variable + cap + scale restore; the distribution is re-loaded on demand
@@ -9258,7 +9392,7 @@ function clearAux() {
   statsCdfAuxSelected = new Set();
   auxCalcolCode = '';
   auxCalcolMeta = [];
-  auxWeightName = null;
+  catSetRole('aux', 'weight', null);
   auxDeclus = null;
   if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
   auxTopcut = null;
@@ -9333,7 +9467,7 @@ if ($auxDropzone) {
         if (auxDeclus && auxDeclus.params) auxDeclus.params.pinned = null;
         runAuxDeclus();
       } else if (e.target.id === 'auxDeclusUseBtn') {
-        auxWeightName = AUX_DECLUS_WEIGHT;
+        catSetRole('aux', 'weight', AUX_DECLUS_WEIGHT);
         markAuxStale();
         renderAuxConfig();
         if (typeof autoSaveProject === 'function') autoSaveProject();
@@ -10164,7 +10298,7 @@ function analysisFingerprint() {
     calcolMeta: currentCalcolMeta || [],
     groupBy: currentGroupBy,
     groupStatsCols: currentGroupBy !== null && statsCatSelectedVars.size > 0 ? Array.from(statsCatSelectedVars).sort() : null,
-    weight: currentWeightName || null
+    weight: catRole('model', 'weight')
   });
 }
 
@@ -10256,7 +10390,6 @@ function serializeProject() {
       xyz: auxPreflightData ? auxPreflightData.xyz : null,
       zipEntry: auxPreflightData ? (auxPreflightData.selectedZipEntry || null) : null,
       filter: auxFilter ? auxFilter.expression : '',
-      weight: auxWeightName,
       calcolCode: auxCalcolCode,
       calcolMeta: auxCalcolMeta,
       // Declus params only — weights are recomputed, never stored
@@ -10267,7 +10400,13 @@ function serializeProject() {
     } : null,
     calcolCode: currentCalcolCode,
     calcolMeta: currentCalcolMeta,
-    globalUnits: Object.keys(globalUnits).length > 0 ? Object.assign({}, globalUnits) : null,
+    // Property catalog — colors, units, roles, pairings (one key replaces
+    // the pre-C1a globalUnits / categories.* / swath color+unit / weight keys)
+    catalog: (function() {
+      catCompact();
+      catalog.datasets.aux.label = auxPrefix || 'aux';
+      return JSON.parse(JSON.stringify(catalog));
+    })(),
     filter: currentFilter,
     filterText: $filterExpr.value,
     statsCat: {
@@ -10293,14 +10432,10 @@ function serializeProject() {
       auxSelected: (auxCompleteData && statsAuxSelected !== null)
         ? Array.from(statsAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null,
       cdfAuxSelected: (auxCompleteData && statsCdfAuxSelected.size > 0)
-        ? Array.from(statsCdfAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null,
-      weight: currentWeightName
+        ? Array.from(statsCdfAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null
     },
     categories: {
-      focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null,
-      sortModes: catSortModes,
-      customOrders: catCustomOrders,
-      colorOverrides: catColorOverrides
+      focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null
     },
     exportCols: exportColumns.map(c => ({
       name: c.name, outputName: c.outputName, selected: c.selected
@@ -10327,21 +10462,11 @@ function serializeProject() {
         var name = currentHeader[colIdx];
         if (name) checkedVars.push(name);
       });
-      var swathUnits = {};
-      document.querySelectorAll('.swath-var-unit').forEach(function(sel) {
-        var colIdx = parseInt(sel.dataset.col);
-        var colName = currentHeader[colIdx];
-        if (colName && parseInt(sel.value) !== 0) swathUnits[colName] = parseInt(sel.value);
-      });
       var swathAuxChecked = null;
-      var swathAuxUnits = {};
       if (auxFile) {
         swathAuxChecked = [];
         document.querySelectorAll('#swathVarList input[data-aux="1"]:checked').forEach(function(cb) {
           if (cb.dataset.name) swathAuxChecked.push(cb.dataset.name);
-        });
-        document.querySelectorAll('#swathVarList .swath-var-unit[data-aux-col]').forEach(function(sel) {
-          if (sel.dataset.auxName && parseInt(sel.value) !== 0) swathAuxUnits[sel.dataset.auxName] = parseInt(sel.value);
         });
       }
       var swathDirs = {};
@@ -10359,11 +10484,7 @@ function serializeProject() {
         stat: $stat ? $stat.value : 'mean_std',
         checkedVars: checkedVars,
         localFilter: $filter ? $filter.value : '',
-        weight: (document.getElementById('swathWeight') || {}).value || null,
         auxCheckedVars: swathAuxChecked,
-        auxUnits: Object.keys(swathAuxUnits).length > 0 ? swathAuxUnits : null,
-        units: Object.keys(swathUnits).length > 0 ? swathUnits : null,
-        colorOverrides: Object.keys(swathColorOverrides).length > 0 ? swathColorOverrides : null,
         display: {
           showBands: document.getElementById('swathShowBands') ? document.getElementById('swathShowBands').checked : true,
           showCounts: document.getElementById('swathShowCounts') ? document.getElementById('swathShowCounts').checked : true,
@@ -10408,15 +10529,6 @@ function serializeProject() {
         theoEnabled: !!(document.getElementById('gtTheoEnabled') || {}).checked,
         theoEngine: (document.getElementById('gtTheoEngine') || {}).value || 'affine',
         theoF: parseFloat((document.getElementById('gtTheoFNum') || {}).value) || 0.6,
-        gradeUnits: (function() {
-          var gu = {};
-          document.querySelectorAll('.gt-var-unit').forEach(function(sel) {
-            var colIdx = parseInt(sel.dataset.col);
-            var colName = currentHeader[colIdx];
-            if (colName && parseInt(sel.value) !== 0) gu[colName] = parseInt(sel.value);
-          });
-          return Object.keys(gu).length > 0 ? gu : null;
-        })(),
         selectedGroups: (function() {
           var list = document.getElementById('gtGrpList');
           if (!list) return null;
@@ -10499,28 +10611,67 @@ async function applyProject(project) {
   setCalcolCode(currentCalcolCode);
   simulateCalcol();
 
-  // Restore categories tab state
-  catSortModes = project.categories?.sortModes || {};
-  catCustomOrders = project.categories?.customOrders || {};
-  catColorOverrides = project.categories?.colorOverrides || {};
+  // Restore the property catalog — new projects carry it whole; pre-C1a
+  // projects are migrated from their scattered keys
+  catalog = newCatalog();
+  if (project.catalog) {
+    if (project.catalog.datasets) catalog.datasets = project.catalog.datasets;
+    if (project.catalog.vars) catalog.vars = project.catalog.vars;
+    if (project.catalog.roles) catalog.roles = project.catalog.roles;
+    if (project.catalog.pairs) catalog.pairs = project.catalog.pairs;
+    if (!catalog.datasets.aux) catalog.datasets.aux = { label: 'aux' };
+    if (!catalog.roles.model) catalog.roles.model = {};
+    if (!catalog.roles.aux) catalog.roles.aux = {};
+  } else {
+    migrateLegacyCatalog(project);
+  }
 
   // Restore filter
   currentFilter = project.filter || null;
   $filterExpr.value = project.filterText || '';
 
   // Restore StatsCat groupBy + selectedVars NOW (before executeAnalysis)
-  // so the worker includes grouped stats in its analysis
+  // so the worker includes grouped stats in its analysis (the analysis
+  // weight rides in the catalog, restored above)
   const sc = project.statsCat || {};
   if (sc.groupBy != null) currentGroupBy = sc.groupBy;
   if (sc.selectedVars) statsCatSelectedVars = new Set(sc.selectedVars);
-  // Weight likewise feeds the analysis itself
-  currentWeightName = (project.statsTab && project.statsTab.weight) || null;
 
   // Stash aux config; applied when the aux file is (re)loaded on the Aux tab
   pendingAuxRestore = project.aux || null;
 
   // Stash remaining post-analysis config for when displayResults runs
   pendingProjectRestore = project;
+}
+
+// Build the catalog from a pre-C1a project's scattered keys. Precedence
+// for units: globalUnits < swath.units < gt.gradeUnits (later wins);
+// support weight: statsTab.weight wins over swath.weight.
+function migrateLegacyCatalog(project) {
+  const cats = project.categories || {};
+  for (const col of Object.keys(cats.sortModes || {})) catVar('model', col).sortMode = cats.sortModes[col];
+  for (const col of Object.keys(cats.customOrders || {})) catVar('model', col).valueOrder = cats.customOrders[col].slice();
+  for (const col of Object.keys(cats.colorOverrides || {})) catVar('model', col).valueColors = Object.assign({}, cats.colorOverrides[col]);
+
+  const units = Object.assign({}, project.globalUnits || {},
+    (project.swath && project.swath.units) || {},
+    (project.gt && project.gt.gradeUnits) || {});
+  for (const col of Object.keys(units)) catSetUnit('model', col, units[col]);
+  const auxUnits = (project.swath && project.swath.auxUnits) || {};
+  for (const an of Object.keys(auxUnits)) catSetUnit('aux', an, auxUnits[an]);
+
+  const swColors = (project.swath && project.swath.colorOverrides) || {};
+  for (const k of Object.keys(swColors)) {
+    if (k.indexOf('aux:') === 0) catVar('aux', k.slice(4)).color = swColors[k];
+    else catVar('model', k).color = swColors[k];
+  }
+
+  const w = (project.statsTab && project.statsTab.weight) || (project.swath && project.swath.weight) || null;
+  if (w) catSetRole('model', 'weight', w);
+  if (project.gt && project.gt.densityCol) catSetRole('model', 'density', project.gt.densityCol);
+  if (project.gt && project.gt.weightCol) catSetRole('model', 'tonnageFactor', project.gt.weightCol);
+  if (project.aux && project.aux.weight) catSetRole('aux', 'weight', project.aux.weight);
+  if (project.aux && project.aux.prefix) catalog.datasets.aux.label = project.aux.prefix;
 }
 
 function applyExportRestore(savedCols) {
@@ -10692,9 +10843,7 @@ function clearProject() {
   statsCatCrossMode = 'count';
   statsCatShowSelectedOnly = false;
   catFocusedCol = null;
-  catSortModes = {};
-  catCustomOrders = {};
-  catColorOverrides = {};
+  catalog = newCatalog();
   catChartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
@@ -10703,7 +10852,6 @@ function clearProject() {
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
-  currentWeightName = null;
   projectTitle = null;
   exportColumns = [];
   pendingProjectRestore = null;
@@ -10858,9 +11006,7 @@ async function handleFile(file, handle) {
   statsCatCdfMax = null;
   statsCatCrossMode = 'count';
   catFocusedCol = null;
-  catSortModes = {};
-  catCustomOrders = {};
-  catColorOverrides = {};
+  catalog = newCatalog();
   catChartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
@@ -10869,7 +11015,6 @@ async function handleFile(file, handle) {
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
-  currentWeightName = null;
   projectTitle = null;
   exportColumns = [];
   pendingProjectRestore = null;
@@ -11028,9 +11173,7 @@ $backToPreflight.addEventListener('click', () => {
   statsCatSelectedVars = new Set();
   statsCatShowSelectedOnly = false;
   catFocusedCol = null;
-  catSortModes = {};
-  catCustomOrders = {};
-  catColorOverrides = {};
+  catalog = newCatalog();
   catChartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
@@ -11039,7 +11182,6 @@ $backToPreflight.addEventListener('click', () => {
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
-  currentWeightName = null;
   projectTitle = null;
   exportColumns = [];
   pendingProjectRestore = null;
@@ -11232,7 +11374,7 @@ function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerpr
     groupStatsCols: currentGroupBy !== null && statsCatSelectedVars.size > 0 ? Array.from(statsCatSelectedVars) : null,
     dmEndianness: preflightData && preflightData.dmEndianness || null,
     dmFormat: preflightData && preflightData.dmFormat || null,
-    weightColName: currentWeightName
+    weightColName: catRole('model', 'weight')
   });
 }
 
@@ -11365,11 +11507,6 @@ function displayResults(data) {
   // OBJ export button visibility
   document.getElementById('exportObjBtn').style.display = lastGeoData ? '' : 'none';
 
-  // Restore globalUnits from pending project
-  if (pendingProjectRestore && pendingProjectRestore.globalUnits) {
-    globalUnits = pendingProjectRestore.globalUnits;
-  }
-
   // Column Overview
   const $colOverview = document.getElementById('colOverviewSection');
   const $colOverviewContent = document.getElementById('colOverviewContent');
@@ -11405,7 +11542,7 @@ function displayResults(data) {
       const typeLabel = isNum ? 'NUM' : 'CAT';
       let unitCell = '\u2014';
       if (isNum) {
-        let curUnit = globalUnits[cName] || 0;
+        let curUnit = catUnit('model', cName);
         let unitOpts = GRADE_UNITS.map(function(u, ui) {
           return '<option value="' + ui + '"' + (ui === curUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
         }).join('');
@@ -11603,24 +11740,8 @@ function displayResults(data) {
       if ($gTheoFNum) $gTheoFNum.value = gtp.theoF;
     }
 
-    // Per-variable grade units
-    var gradeUnits = gtp.gradeUnits || null;
-    // Backward compat: old single gradeUnit → apply to all
-    if (!gradeUnits && gtp.gradeUnit != null && gtp.gradeUnit > 0) {
-      gradeUnits = {};
-      document.querySelectorAll('.gt-var-unit').forEach(function(sel) {
-        var colIdx = parseInt(sel.dataset.col);
-        var colName = currentHeader[colIdx];
-        if (colName) gradeUnits[colName] = gtp.gradeUnit;
-      });
-    }
-    if (gradeUnits) {
-      document.querySelectorAll('.gt-var-unit').forEach(function(sel) {
-        var colIdx = parseInt(sel.dataset.col);
-        var colName = currentHeader[colIdx];
-        if (colName && gradeUnits[colName] != null) sel.value = gradeUnits[colName];
-      });
-    }
+    // (per-variable grade units come from the catalog — renderGtConfig
+    // reads it; legacy gt.gradeUnits migrate in migrateLegacyCatalog)
 
     // Restore group-by values and trigger checkbox population
     if (gtp.groupByCol && $gGroupBy && $gGroupBy.value !== '-1') {
@@ -11680,8 +11801,6 @@ function displayResults(data) {
     if (swpDip != null && document.getElementById('swathDip')) document.getElementById('swathDip').value = swpDip;
     if (swpRake != null && document.getElementById('swathRake')) document.getElementById('swathRake').value = swpRake;
     if ($sStat && swp.stat) $sStat.value = swp.stat;
-    var $sWeight = document.getElementById('swathWeight');
-    if ($sWeight && swp.weight != null) $sWeight.value = swp.weight;
     if ($sFilter && swp.localFilter) $sFilter.value = swp.localFilter;
     // Restore checked variables by name
     if (swp.checkedVars && swp.checkedVars.length > 0) {
@@ -11692,27 +11811,12 @@ function displayResults(data) {
         item.querySelector('input[type="checkbox"]').checked = !!nameSet[name];
       });
     }
-    // Restore swath per-variable units
-    if (swp.units) {
-      document.querySelectorAll('.swath-var-unit').forEach(function(sel) {
-        var colIdx = parseInt(sel.dataset.col);
-        var colName = currentHeader[colIdx];
-        if (colName && swp.units[colName] != null) sel.value = swp.units[colName];
-      });
-    }
-    // Restore swath color overrides
-    if (swp.colorOverrides) {
-      swathColorOverrides = swp.colorOverrides;
-      document.querySelectorAll('#swathVarList .swath-color-swatch').forEach(function(sw) {
-        var colIdx = parseInt(sw.dataset.col);
-        var colName = currentHeader[colIdx];
-        if (colName && swathColorOverrides[colName]) sw.style.background = swathColorOverrides[colName];
-      });
-    }
+    // (per-variable units, weight, and series colors come from the catalog —
+    // the sidebar renderers read it directly)
     // Restore aux swath selection — stashed and applied when the aux rows
     // render (the aux file may not be reloaded yet in a fresh session)
-    if (swp.auxCheckedVars || swp.auxUnits) {
-      pendingSwathAuxRestore = { checked: swp.auxCheckedVars || null, units: swp.auxUnits || null };
+    if (swp.auxCheckedVars) {
+      pendingSwathAuxRestore = { checked: swp.auxCheckedVars };
     }
     renderSwathAuxVars();
     // Restore swath display options
@@ -11887,7 +11991,8 @@ function getEffectiveStatsCatSort() {
   if (statsCatGroupSortMode !== null) return statsCatGroupSortMode;
   // Inherit from Categories tab
   const gbColName = currentGroupBy !== null && currentHeader[currentGroupBy] ? currentHeader[currentGroupBy] : null;
-  if (gbColName && catSortModes[gbColName]) return catSortModes[gbColName];
+  const inh = gbColName ? (catVarPeek('model', gbColName) || {}).sortMode : null;
+  if (inh) return inh;
   return 'count-desc';
 }
 
@@ -11901,7 +12006,7 @@ function sortStatsCatGroups(groups) {
   }
   if (mode === 'custom') {
     const gbColName = currentGroupBy !== null && currentHeader[currentGroupBy] ? currentHeader[currentGroupBy] : null;
-    const order = gbColName && catCustomOrders[gbColName] ? catCustomOrders[gbColName] : null;
+    const order = gbColName ? ((catVarPeek('model', gbColName) || {}).valueOrder || null) : null;
     if (order) {
       const pos = {};
       for (let i = 0; i < order.length; i++) pos[order[i]] = i;
@@ -12047,7 +12152,8 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
   $statsCatGroupSort.onclick = () => {
     var eff = getEffectiveStatsCatSort();
     var gbColName = currentGroupBy !== null && currentHeader[currentGroupBy] ? currentHeader[currentGroupBy] : null;
-    var hasCustom = gbColName && catCustomOrders[gbColName] && catCustomOrders[gbColName].length > 0;
+    var gbOrder = gbColName ? (catVarPeek('model', gbColName) || {}).valueOrder : null;
+    var hasCustom = !!(gbOrder && gbOrder.length > 0);
     var cycle = ['count-desc', 'count-asc', 'alpha'];
     if (hasCustom) cycle.push('custom');
     var idx = cycle.indexOf(eff);
@@ -12627,20 +12733,22 @@ function tdQuantileFromCentroids(centroids, totalCount, q) {
   return centroids[centroids.length - 1][0];
 }
 
-// Aux numeric columns available for comparison, each with its same-named
-// primary column (case-insensitive) when one exists. Selection defaults to
-// "matched only" until the user materializes a choice.
+// Aux numeric columns available for comparison, each with its paired
+// primary column (catalog pairing, seeded by name) when one exists.
+// Selection defaults to "paired only" until the user materializes a choice.
 function getStatsAuxCols() {
   if (!auxCompleteData || !auxCompleteData.stats) return [];
-  var primaryByLower = {};
+  catEnsureSeeded();
+  var primaryByName = {};
   for (var i = 0; i < _statsNumCols.length; i++) {
     var ci = _statsNumCols[i];
-    primaryByLower[(_statsHeader[ci] || '').toLowerCase()] = ci;
+    primaryByName[_statsHeader[ci]] = ci;
   }
   var out = [];
   Object.keys(auxCompleteData.stats).map(Number).sort(function(a, b) { return a - b; }).forEach(function(ai) {
     var name = auxCompleteData.header[ai];
-    var m = primaryByLower[(name || '').toLowerCase()];
+    var p = catPair(name);
+    var m = p !== null ? primaryByName[p] : undefined;
     out.push({ idx: ai, name: name, matchCi: m !== undefined ? m : null });
   });
   return out;
@@ -12797,20 +12905,22 @@ function renderStatsSidebar() {
     customInput.style.display = 'none';
   }
 
-  // Weight select — numeric variables (incl. calcols), choice kept by name
+  // Weight select — numeric variables (incl. calcols); one support weight
+  // per dataset, shared with the Swath tab (catalog role, D3)
   var $wSel = document.getElementById('statsWeightSel');
   if ($wSel) {
+    var curWeight = catRole('model', 'weight');
     var wOpts = '<option value="">— none</option>';
     for (var wci of numCols) {
       var wName = header[wci];
-      wOpts += '<option value="' + esc(wName) + '"' + (wName === currentWeightName ? ' selected' : '') + '>' + esc(wName) + '</option>';
+      wOpts += '<option value="' + esc(wName) + '"' + (wName === curWeight ? ' selected' : '') + '>' + esc(wName) + '</option>';
     }
     $wSel.innerHTML = wOpts;
-    if (currentWeightName && $wSel.value !== currentWeightName) $wSel.value = '';
+    if (curWeight && $wSel.value !== curWeight) $wSel.value = '';
     var $wNote = document.getElementById('statsWeightNote');
     if ($wNote) {
       var noteParts = [];
-      if (currentWeightName && lastCompleteData && lastCompleteData.weightApplied !== currentWeightName) noteParts.push('re-run analysis to apply');
+      if (curWeight && lastCompleteData && lastCompleteData.weightApplied !== curWeight) noteParts.push('re-run analysis to apply');
       if (lastCompleteData && lastCompleteData.weightExcluded > 0) noteParts.push(lastCompleteData.weightExcluded.toLocaleString() + ' rows excluded (invalid weight)');
       $wNote.textContent = noteParts.join(' · ');
     }
@@ -13425,8 +13535,12 @@ function wireStatsEventsOnce() {
   });
 
   // --- Weight select (static template element) ---
+  // Shared support weight (D3): writing here also re-points the Swath
+  // tab's weight select — one role, two views
   document.getElementById('statsWeightSel').addEventListener('change', function() {
-    currentWeightName = this.value || null;
+    catSetRole('model', 'weight', this.value || null);
+    var $sw = document.getElementById('swathWeight');
+    if ($sw) $sw.value = this.value || '';
     markAnalysisStale();
     renderStatsSidebar();
     autoSaveProject();
@@ -14378,7 +14492,6 @@ var pendingSwathAuxRestore = null;  // { checked: [names], units: {name: unitIdx
 
 function resetSwathState() {
   _swathChartParams = null;
-  swathColorOverrides = {};
 }
 
 function showSwathColorPicker(colName, colIdx, anchorEl, presetColor) {
@@ -14423,7 +14536,9 @@ function hideSwathColorPicker() {
 }
 
 function applySwathColor(colName, color) {
-  swathColorOverrides[colName] = color;
+  // colName is a primary variable name or an 'aux:NAME' color key
+  if (colName.indexOf('aux:') === 0) catVar('aux', colName.slice(4)).color = color;
+  else catVar('model', colName).color = color;
   // Update the swatch in the sidebar (aux swatches carry data-color-key, primary carry data-col)
   document.querySelectorAll('#swathVarList .swath-color-swatch').forEach(function(sw) {
     if (sw.dataset.colorKey != null) {
@@ -14439,31 +14554,28 @@ function applySwathColor(colName, color) {
 }
 
 function getSwathUnit(colIdx) {
-  var sel = document.querySelector('.swath-var-unit[data-col="' + colIdx + '"]');
-  var idx = sel ? parseInt(sel.value) : 0;
-  if (idx === 0 && currentHeader[colIdx] && globalUnits[currentHeader[colIdx]])
-    idx = globalUnits[currentHeader[colIdx]];
+  var idx = currentHeader[colIdx] ? catUnit('model', currentHeader[colIdx]) : 0;
   var u = GRADE_UNITS[idx] || GRADE_UNITS[0];
   return { unitIdx: idx, symbol: u.symbol };
 }
 
-// Aux series color: explicit override ('aux:NAME' key) → matching primary
-// variable's color (same hue + dashed reads as "same variable, other dataset")
-// → palette fallback.
+// Aux series color: explicit override → paired primary variable's EFFECTIVE
+// color, including its palette-by-position fallback (same hue + dashed reads
+// as "same variable, other dataset") → palette fallback.
 function getAuxSwathVarColor(baseName, fallbackIdx) {
-  var key = 'aux:' + baseName;
-  if (swathColorOverrides[key]) return swathColorOverrides[key];
-  var lower = (baseName || '').toLowerCase();
-  for (var i = 0; i < swathNumCols.length; i++) {
-    if (swathNumCols[i].name.toLowerCase() === lower) return getSwathVarColor(swathNumCols[i].name, i);
+  var rec = catVarPeek('aux', baseName);
+  if (rec && rec.color) return rec.color;
+  var p = catPair(baseName);
+  if (p) {
+    for (var i = 0; i < swathNumCols.length; i++) {
+      if (swathNumCols[i].name === p) return getSwathVarColor(p, i);
+    }
   }
   return STATSCAT_PALETTE[fallbackIdx % STATSCAT_PALETTE.length];
 }
 
 function getAuxSwathUnit(auxColIdx, baseName) {
-  var sel = document.querySelector('.swath-var-unit[data-aux-col="' + auxColIdx + '"]');
-  var idx = sel ? parseInt(sel.value) : 0;
-  if (idx === 0 && baseName && globalUnits[baseName]) idx = globalUnits[baseName];
+  var idx = baseName ? catUnit('aux', baseName) : 0; // inherits the paired primary's unit
   var u = GRADE_UNITS[idx] || GRADE_UNITS[0];
   return { unitIdx: idx, symbol: u.symbol };
 }
@@ -14602,7 +14714,7 @@ function renderSwathConfig(data) {
     '</div>';
   }
   const varItems = swathNumCols.map(function(c, vi) {
-    var defUnit = globalUnits[c.name] || 0;
+    var defUnit = catUnit('model', c.name);
     var unitOpts = GRADE_UNITS.map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
@@ -14648,7 +14760,7 @@ function renderSwathConfig(data) {
       '<div style="margin-top:0.3rem">' +
         '<div class="swath-sidebar-title">Weight (model)</div>' +
         '<select class="swath-select" id="swathWeight"><option value="">\u2014 none</option>' +
-          swathNumCols.map(function(c) { return '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>'; }).join('') +
+          swathNumCols.map(function(c) { return '<option value="' + esc(c.name) + '"' + (c.name === catRole('model', 'weight') ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') +
         '</select>' +
       '</div>' +
     '</div>' +
@@ -14672,7 +14784,6 @@ function renderSwathConfig(data) {
       '<div class="swath-var-btns">' +
         '<button id="swathVarAll">All</button>' +
         '<button id="swathVarNone">None</button>' +
-        '<button id="swathUnitSync" class="swath-unit-sync" title="Sync units from Column Overview">Sync units</button>' +
       '</div>' +
       '<div class="swath-var-list" id="swathVarList">' + varItems + '<div id="swathAuxVars"></div></div>' +
     '</div>' +
@@ -14721,19 +14832,18 @@ function renderSwathConfig(data) {
     });
   });
 
-  // Sync units from global (aux selects sync by their own column name — shared
-  // names inherit the same unit as the model variable)
-  document.getElementById('swathUnitSync').addEventListener('click', function() {
-    document.querySelectorAll('.swath-var-unit').forEach(function(sel) {
-      var colName = sel.dataset.auxCol != null ? sel.dataset.auxName : currentHeader[parseInt(sel.dataset.col)];
-      sel.value = (colName && globalUnits[colName]) ? globalUnits[colName] : 0;
-    });
-    if (lastSwathData) renderSwathOutput();
-    autoSaveProject();
-  });
-
   // Generate button
   document.getElementById('swathGenerate').addEventListener('click', runSwath);
+
+  // Shared support weight (D3): writing here also re-points the Statistics
+  // tab's weight select — one role, two views
+  document.getElementById('swathWeight').addEventListener('change', function() {
+    catSetRole('model', 'weight', this.value || null);
+    var $ssel = document.getElementById('statsWeightSel');
+    if ($ssel) $ssel.value = this.value || '';
+    markAnalysisStale();
+    autoSaveProject();
+  });
 
   // Stat change re-renders from cache
   document.getElementById('swathStat').addEventListener('change', function() {
@@ -14748,10 +14858,20 @@ function renderSwathConfig(data) {
     });
   });
 
-  // Swath per-variable unit change — re-render from cache
+  // Swath per-variable unit change — write-through to the catalog (one unit
+  // per variable, D2), mirror every other unit select, re-render from cache
   document.getElementById('swathVarList').addEventListener('change', function(e) {
-    if (e.target.classList.contains('swath-var-unit') && lastSwathData) {
-      renderSwathOutput();
+    if (e.target.classList.contains('swath-var-unit')) {
+      var uv = parseInt(e.target.value);
+      if (e.target.dataset.auxCol != null) {
+        if (e.target.dataset.auxName) catSetUnit('aux', e.target.dataset.auxName, uv);
+      } else {
+        var un = currentHeader[parseInt(e.target.dataset.col)];
+        if (un) catSetUnit('model', un, uv);
+      }
+      catRefreshUnitSelects();
+      if (lastSwathData) renderSwathOutput();
+      autoSaveProject();
     }
   });
 
@@ -14829,16 +14949,13 @@ function renderSwathAuxVars() {
 
   // Capture current DOM state before wiping
   var prevChecked = null;
-  var prevUnits = {};
   wrap.querySelectorAll('input[data-aux="1"]').forEach(function(cb) {
     if (prevChecked === null) prevChecked = [];
     if (cb.checked && cb.dataset.name) prevChecked.push(cb.dataset.name);
   });
-  wrap.querySelectorAll('.swath-var-unit[data-aux-col]').forEach(function(sel) {
-    if (sel.dataset.auxName && parseInt(sel.value) !== 0) prevUnits[sel.dataset.auxName] = parseInt(sel.value);
-  });
 
   if (!auxFile || !auxPreflightData) { wrap.innerHTML = ''; return; }
+  catEnsureSeeded();
 
   var label = auxPrefix || 'aux';
   var divider = '<div class="swath-aux-divider">' + esc(label) + ': ' + esc(auxFile.name) + '</div>';
@@ -14866,17 +14983,14 @@ function renderSwathAuxVars() {
   var restore = pendingSwathAuxRestore;
   pendingSwathAuxRestore = null;
   var checkedNames = restore && restore.checked ? restore.checked : prevChecked;
-  var unitsByName = restore && restore.units ? restore.units : prevUnits;
-
-  var primaryLower = {};
-  for (var p = 0; p < swathNumCols.length; p++) primaryLower[swathNumCols[p].name.toLowerCase()] = true;
 
   var html = divider;
   for (var ai = 0; ai < auxCols.length; ai++) {
     var c = auxCols[ai];
-    // Default: checked when the model has a same-named variable (the comparison case)
-    var checked = checkedNames !== null ? checkedNames.indexOf(c.name) >= 0 : !!primaryLower[c.name.toLowerCase()];
-    var unitIdx = unitsByName[c.name] || globalUnits[c.name] || 0;
+    // Default: checked when the variable is paired with a model variable
+    // (the comparison case) — pairing is seeded by name, editable in C1a+
+    var checked = checkedNames !== null ? checkedNames.indexOf(c.name) >= 0 : !!catPair(c.name);
+    var unitIdx = catUnit('aux', c.name);
     var unitOpts = GRADE_UNITS.map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === unitIdx ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
@@ -15072,7 +15186,7 @@ function runSwath() {
       dxyzCols: [currentDXYZ.dx, currentDXYZ.dy, currentDXYZ.dz],
       directions: workerDirs,
       varCols: varCols,
-      weightColName: (document.getElementById('swathWeight') || {}).value || null,
+      weightColName: catRole('model', 'weight'),
       dmEndianness: preflightData && preflightData.dmEndianness || null,
       dmFormat: preflightData && preflightData.dmFormat || null
     });
@@ -15102,7 +15216,8 @@ function runSwath() {
   // otherwise the aux series soft-fails into the warning banner rather
   // than silently rendering unweighted
   var swathDeclusWeights = null, swathDeclusBlocked = null;
-  if (auxVarCols.length > 0 && auxWeightName === AUX_DECLUS_WEIGHT) {
+  var swathAuxWeight = catRole('aux', 'weight');
+  if (auxVarCols.length > 0 && swathAuxWeight === AUX_DECLUS_WEIGHT) {
     if (typeof auxDeclusFresh === 'function' && auxDeclusFresh()) swathDeclusWeights = auxDeclus.weights;
     else swathDeclusBlocked = 'aux series skipped: declustered weights missing or stale — re-run Declustering on the Aux tab';
   }
@@ -15125,7 +15240,7 @@ function runSwath() {
       directions: workerDirs,
       varCols: auxVarCols,
       rowVarOverride: AUX_ROW_VAR,
-      weightColName: swathDeclusWeights ? null : auxWeightName,
+      weightColName: swathDeclusWeights ? null : swathAuxWeight,
       weightArray: swathDeclusWeights,
       dmEndianness: auxPreflightData.dmEndianness || null,
       dmFormat: auxPreflightData.dmFormat || null
@@ -15252,7 +15367,7 @@ function renderSwathCharts(swathData, stat, $target) {
       upperLine: lines.upperLine,
       lowerLine: lines.lowerLine,
       unit: getSwathUnit(colIdx),
-      scaleKey: name.toLowerCase()
+      scaleKey: name
     });
   }
   if (swathData.auxVars) {
@@ -15265,7 +15380,9 @@ function renderSwathCharts(swathData, stat, $target) {
       if (aBins.length === 0) continue;
       var aLines = buildSwathStatLines(aBins, stat);
       var baseName = (swathData.auxHeader && swathData.auxHeader[aIdx]) || 'Variable';
-      var aKey = baseName.toLowerCase();
+      // A paired aux variable shares its primary's Y axis (and color, dashed)
+      var aPair = catPair(baseName);
+      var aKey = aPair && primaryKeys[aPair] ? aPair : 'aux:' + baseName;
       varEntries.push({
         colIdx: aIdx,
         isAux: true,
@@ -15277,7 +15394,7 @@ function renderSwathCharts(swathData, stat, $target) {
         upperLine: aLines.upperLine,
         lowerLine: aLines.lowerLine,
         unit: getAuxSwathUnit(aIdx, baseName),
-        scaleKey: primaryKeys[aKey] ? aKey : 'aux:' + aKey
+        scaleKey: aKey
       });
     }
   }
@@ -16165,7 +16282,7 @@ function renderGtConfig(data) {
 
   // Grade variable checkbox list with per-variable unit selects
   var varItems = gtNumCols.map(function(c, i) {
-    var defUnit = globalUnits[c.name] || 0;
+    var defUnit = catUnit('model', c.name);
     var opts = GT_GRADE_UNITS.slice(0, -1).map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
@@ -16208,7 +16325,7 @@ function renderGtConfig(data) {
     '<div class="gt-sidebar-section--grow">' +
       '<div class="gt-sidebar-title">Grade Variables</div>' +
       '<input type="text" class="gt-input gt-var-search" id="gtVarSearch" placeholder="search\u2026" spellcheck="false">' +
-      '<div class="gt-var-btns"><button id="gtVarAll">All</button><button id="gtVarNone">None</button><button id="gtUnitSync" class="gt-unit-sync" title="Sync units from Column Overview">Sync units</button></div>' +
+      '<div class="gt-var-btns"><button id="gtVarAll">All</button><button id="gtVarNone">None</button></div>' +
       '<div class="gt-var-list" id="gtVarList">' + varItems + '</div>' +
     '</div>' +
     '<div class="gt-sidebar-section">' +
@@ -16336,17 +16453,6 @@ function renderGtConfig(data) {
     });
   });
 
-  // Sync units from global
-  document.getElementById('gtUnitSync').addEventListener('click', function() {
-    document.querySelectorAll('.gt-var-unit').forEach(function(sel) {
-      var colIdx = parseInt(sel.dataset.col);
-      var colName = currentHeader[colIdx];
-      sel.value = (colName && globalUnits[colName]) ? globalUnits[colName] : 0;
-    });
-    if (lastGtData) renderGtOutput();
-    autoSaveProject();
-  });
-
   // Theoretical overlay controls — slider re-renders through a small
   // debounce so dragging f stays smooth
   var $theoCb = document.getElementById('gtTheoEnabled');
@@ -16418,9 +16524,16 @@ function renderGtConfig(data) {
   document.getElementById('gtDensityCol').addEventListener('change', function() {
     document.getElementById('gtDensityConstWrap').style.display = this.value === 'const' ? 'flex' : 'none';
   });
-  // Per-variable grade unit change — re-render if results exist
+  // Per-variable grade unit change — write-through to the catalog (one unit
+  // per variable, D2), mirror the other unit selects, re-render if results
   document.getElementById('gtVarList').addEventListener('change', function(e) {
-    if (e.target.classList.contains('gt-var-unit') && lastGtData) renderGtOutput();
+    if (e.target.classList.contains('gt-var-unit')) {
+      var un = currentHeader[parseInt(e.target.dataset.col)];
+      if (un) catSetUnit('model', un, parseInt(e.target.value));
+      catRefreshUnitSelects();
+      if (lastGtData) renderGtOutput();
+      autoSaveProject();
+    }
   });
 
   // Group-by dropdown change — populate group value checkboxes
@@ -16466,9 +16579,10 @@ function updateGroupByValues() {
   var colName = currentHeader[colIdx] || '';
   var values = Object.keys(cats);
   // Use custom order if available
-  if (catCustomOrders[colName]) {
-    var orderedSet = new Set(catCustomOrders[colName]);
-    var ordered = catCustomOrders[colName].filter(function(v) { return cats[v] != null; });
+  var gtGrpOrder = (catVarPeek('model', colName) || {}).valueOrder;
+  if (gtGrpOrder) {
+    var orderedSet = new Set(gtGrpOrder);
+    var ordered = gtGrpOrder.filter(function(v) { return cats[v] != null; });
     var rest = values.filter(function(v) { return !orderedSet.has(v); }).sort();
     values = ordered.concat(rest);
   } else {
@@ -16517,11 +16631,7 @@ function gtFmt(v, dp) {
 }
 
 function getGtGradeUnit(colIdx) {
-  var sel = document.querySelector('.gt-var-unit[data-col="' + colIdx + '"]');
-  var idx = sel ? parseInt(sel.value) : 0;
-  // Fall back to global unit if GT select is raw (0)
-  if (idx === 0 && currentHeader[colIdx] && globalUnits[currentHeader[colIdx]])
-    idx = globalUnits[currentHeader[colIdx]];
+  var idx = currentHeader[colIdx] ? catUnit('model', currentHeader[colIdx]) : 0;
   var gu = GT_GRADE_UNITS[idx] || GT_GRADE_UNITS[0];
   return { gradeFactor: gu.factor, gradeSymbol: gu.symbol };
 }
@@ -16843,31 +16953,31 @@ function gtTheoFingerprintNow(auxNames) {
     z: auxPreflightData.selectedZipEntry || null,
     flt: auxFilter ? auxFilter.expression : '',
     cc: auxCalcolCode || '',
-    w: auxWeightName || '',
-    dw: auxWeightName === AUX_DECLUS_WEIGHT && auxDeclus ? auxDeclus.fingerprint : null,
+    w: catRole('aux', 'weight') || '',
+    dw: catRole('aux', 'weight') === AUX_DECLUS_WEIGHT && auxDeclus ? auxDeclus.fingerprint : null,
     vars: auxNames.slice().sort()
   });
 }
 
-// Checked GT grade variables matched (case-insensitively) to aux numeric
-// columns/calcols — the same pairing rule as Statistics/Swath/Categories
+// Checked GT grade variables matched to aux numeric columns/calcols through
+// the catalog pairing — the same pairing as Statistics/Swath/Categories
 function gtTheoMatchedVars() {
   if (!auxPreflightData) return [];
-  var auxLower = {};
+  catEnsureSeeded();
+  var auxNumeric = {};
   for (var i = 0; i < auxPreflightData.header.length; i++) {
-    if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
-    auxLower[auxPreflightData.header[i].toLowerCase()] = auxPreflightData.header[i];
+    if ((auxPreflightData.autoTypes || [])[i] === 'numeric') auxNumeric[auxPreflightData.header[i]] = true;
   }
   for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
-    if (auxCalcolMeta[ci].type === 'numeric') auxLower[auxCalcolMeta[ci].name.toLowerCase()] = auxCalcolMeta[ci].name;
+    if (auxCalcolMeta[ci].type === 'numeric') auxNumeric[auxCalcolMeta[ci].name] = true;
   }
   var out = [];
   document.querySelectorAll('#gtVarList input[type="checkbox"]:checked').forEach(function(cb) {
     var colIdx = parseInt(cb.value);
     var colName = currentHeader[colIdx];
-    if (colName && auxLower[colName.toLowerCase()]) {
-      out.push({ colIdx: colIdx, colName: colName, auxName: auxLower[colName.toLowerCase()] });
-    }
+    if (!colName) return;
+    var auxName = catPairsRev(colName).filter(function(n) { return auxNumeric[n]; })[0];
+    if (auxName) out.push({ colIdx: colIdx, colName: colName, auxName: auxName });
   });
   return out;
 }
@@ -16888,11 +16998,12 @@ function runGtTheoLoad() {
   }
   // Weight resolution mirrors the aux analyze pass
   var weightArray = null, weightCol = null;
-  if (auxWeightName === AUX_DECLUS_WEIGHT) {
+  var theoAuxWeight = catRole('aux', 'weight');
+  if (theoAuxWeight === AUX_DECLUS_WEIGHT) {
     if (typeof auxDeclusFresh === 'function' && auxDeclusFresh()) weightArray = auxDeclus.weights;
     else { gtTheoSetStatus('declustered weights missing or stale — re-run Declustering on the Aux tab', true); return; }
-  } else if (auxWeightName) {
-    weightCol = auxWeightName;
+  } else if (theoAuxWeight) {
+    weightCol = theoAuxWeight;
   }
 
   gtTheoLoading = true;
@@ -19307,24 +19418,20 @@ function sniffUnits() {
     var name = currentHeader[i];
     for (var pi = 0; pi < patterns.length; pi++) {
       if (patterns[pi].re.test(name)) {
-        globalUnits[name] = patterns[pi].idx;
+        catSetUnit('model', name, patterns[pi].idx);
         changed = true;
         break;
       }
     }
   }
   if (changed) {
-    refreshColumnUnitSelects();
+    catRefreshUnitSelects();
     autoSaveProject();
   }
 }
 
 function refreshColumnUnitSelects() {
-  document.querySelectorAll('.col-unit-select').forEach(function(sel) {
-    var colName = sel.dataset.colName;
-    if (colName && globalUnits[colName] != null) sel.value = globalUnits[colName];
-    else sel.value = 0;
-  });
+  catRefreshUnitSelects();
 }
 
 document.getElementById('sniffUnitsBtn').addEventListener('click', sniffUnits);
@@ -19333,9 +19440,8 @@ document.getElementById('sniffUnitsBtn').addEventListener('click', sniffUnits);
 document.getElementById('colOverviewContent').addEventListener('change', function(e) {
   if (e.target.classList.contains('col-unit-select')) {
     var colName = e.target.dataset.colName;
-    var val = parseInt(e.target.value);
-    if (val > 0) globalUnits[colName] = val;
-    else delete globalUnits[colName];
+    catSetUnit('model', colName, parseInt(e.target.value));
+    catRefreshUnitSelects();
     autoSaveProject();
   }
 });
@@ -20032,17 +20138,19 @@ function renderCatMain() {
   renderCatValueTable();
 }
 
-// Aux counterpart of a categorical column (matched by name, case-insensitive):
+// Aux counterpart of a categorical column (catalog pairing, seeded by name):
 // { counts, total, overflow } or null. Lets the chart/table compare category
 // proportions model-vs-samples — e.g. lithology shares.
 function getCatAuxCounts(colName) {
   if (!auxCompleteData || !auxCompleteData.categories || !colName) return null;
-  var lower = colName.toLowerCase();
+  catEnsureSeeded();
+  var revSet = new Set(catPairsRev(colName));
+  if (revSet.size === 0) return null;
   var idxs = Object.keys(auxCompleteData.categories);
   for (var i = 0; i < idxs.length; i++) {
     var ai = idxs[i];
     var aName = auxCompleteData.header[ai];
-    if (aName && aName.toLowerCase() === lower) {
+    if (aName && revSet.has(aName)) {
       var cat = auxCompleteData.categories[ai];
       if (!cat || !cat.counts) return null;
       var total = 0;
@@ -20060,7 +20168,7 @@ function getCatSortedEntries(colIdx) {
   var entries = Object.entries(cat.counts);
   var colName = _catData.header[colIdx];
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
-  var mode = catSortModes[colName] || defaultSort;
+  var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
 
   if (mode === 'count-desc') {
     entries.sort(function(a,b){ return b[1] - a[1]; });
@@ -20069,7 +20177,7 @@ function getCatSortedEntries(colIdx) {
   } else if (mode === 'alpha') {
     entries.sort(function(a,b){ return a[0].localeCompare(b[0]); });
   } else if (mode === 'custom') {
-    var order = catCustomOrders[colName];
+    var order = (catVarPeek('model', colName) || {}).valueOrder;
     if (order) {
       var posMap = {};
       for (var oi = 0; oi < order.length; oi++) posMap[order[oi]] = oi;
@@ -20090,7 +20198,7 @@ function renderCatToolbar() {
   var colName = header[catFocusedCol];
   var isCalcol = catFocusedCol >= origColCount;
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
-  var mode = catSortModes[colName] || defaultSort;
+  var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
 
   // Meta info
   var cat = _catData.categories[catFocusedCol];
@@ -20245,7 +20353,7 @@ function renderCatValueTable() {
   var maxCount = 0;
   for (var i = 0; i < entries.length; i++) { if (entries[i][1] > maxCount) maxCount = entries[i][1]; }
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
-  var mode = catSortModes[colName] || defaultSort;
+  var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
   var isCustom = mode === 'custom';
   var search = ($catValueSearch.value || '').toLowerCase();
 
@@ -20345,17 +20453,19 @@ function hideCatColorPicker() {
 }
 
 function applyCatColor(colName, value, color) {
-  if (!catColorOverrides[colName]) catColorOverrides[colName] = {};
-  catColorOverrides[colName][value] = color;
+  var rec = catVar('model', colName);
+  if (!rec.valueColors) rec.valueColors = {};
+  rec.valueColors[value] = color;
   renderCatBarChart();
   renderCatValueTable();
   autoSaveProject();
 }
 
 function initCustomOrder(colName) {
-  if (!catCustomOrders[colName]) {
+  var rec = catVar('model', colName);
+  if (!rec.valueOrder) {
     var entries = getCatSortedEntries(catFocusedCol);
-    catCustomOrders[colName] = entries.map(function(e){ return e[0]; });
+    rec.valueOrder = entries.map(function(e){ return e[0]; });
   }
 }
 
@@ -20390,7 +20500,7 @@ function wireCatEventsOnce() {
     if (sortBtn) {
       var colName = _catData.header[catFocusedCol];
       var newMode = sortBtn.dataset.sort;
-      catSortModes[colName] = newMode;
+      catVar('model', colName).sortMode = newMode;
       if (newMode === 'custom') initCustomOrder(colName);
       renderCatToolbar();
       renderCatBarChart();
@@ -20525,7 +20635,7 @@ function wireCatEventsOnce() {
 
     var colName = _catData.header[catFocusedCol];
     initCustomOrder(colName);
-    var order = catCustomOrders[colName];
+    var order = catVar('model', colName).valueOrder;
     var fromVal = dragSrcRow.dataset.val;
     var toVal = tr.dataset.val;
     var fromIdx = order.indexOf(fromVal);

@@ -165,24 +165,20 @@ function sniffUnits() {
     var name = currentHeader[i];
     for (var pi = 0; pi < patterns.length; pi++) {
       if (patterns[pi].re.test(name)) {
-        globalUnits[name] = patterns[pi].idx;
+        catSetUnit('model', name, patterns[pi].idx);
         changed = true;
         break;
       }
     }
   }
   if (changed) {
-    refreshColumnUnitSelects();
+    catRefreshUnitSelects();
     autoSaveProject();
   }
 }
 
 function refreshColumnUnitSelects() {
-  document.querySelectorAll('.col-unit-select').forEach(function(sel) {
-    var colName = sel.dataset.colName;
-    if (colName && globalUnits[colName] != null) sel.value = globalUnits[colName];
-    else sel.value = 0;
-  });
+  catRefreshUnitSelects();
 }
 
 document.getElementById('sniffUnitsBtn').addEventListener('click', sniffUnits);
@@ -191,9 +187,8 @@ document.getElementById('sniffUnitsBtn').addEventListener('click', sniffUnits);
 document.getElementById('colOverviewContent').addEventListener('change', function(e) {
   if (e.target.classList.contains('col-unit-select')) {
     var colName = e.target.dataset.colName;
-    var val = parseInt(e.target.value);
-    if (val > 0) globalUnits[colName] = val;
-    else delete globalUnits[colName];
+    catSetUnit('model', colName, parseInt(e.target.value));
+    catRefreshUnitSelects();
     autoSaveProject();
   }
 });
