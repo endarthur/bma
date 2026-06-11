@@ -15,6 +15,7 @@ immediately, B is the platform investment, C is the workspace.
 | Section overhaul scope | **Slimmed**: inline plane predicate (~10 lines, per-row DXYZ) + vendor `@gcu/dee` color.js only | `@gcu/grid slicePlane` iterates a materialized regular grid — wrong shape for streamed rows |
 | Storage layer | Vendor **@gcu/vfs** (core + opfs/idb/fsaa) as the **source-resolution layer** ("phonebook, not pipe") | Mount table resolves dropped Files/FSAA handles/zip-entries-as-folders to native Files; streaming hot path never goes *through* it. Scratch = custom backend with positional writes over OPFS sync access handles |
 | Layout | Vendor **@gcu/rails** (~6 KB gz), dockable panels | Domain-real (geologists work in docked layouts); dissolves tab-bar crowding; panels-coexist work is mechanical (ResizeObserver re-render) |
+| Data tree panel | **Yes, with catalog semantics** (Leapfrog-style project tree), designed jointly with rails as one workspace rework | Tree = what exists (datasets, variables by kind, colors/units/roles, filters); each view keeps its own membership. NOT GIS visibility semantics — many views, legitimately different selections. Unifies the scattered per-variable property systems and is the UI prerequisite for N-dataset comparison (QP check-model practice: samples vs up to 3 estimates). Tree node model designed alongside `bma:roles` so UI and file format agree |
 | works-core as host | **No** — keep sovereign single file; thin surface wrapper later, additively | Identity + the host's package model is mid-rebuild |
 | Declustering | **Plain-JS GSLIB DECLUS** in worker (~80 lines); `gslib.atra` as test oracle | No wasm in BMA; DECLUS is the simple corner of GSLIB; GSLIB citation > vendor parity |
 | Change of support | **r/f as user input** (slider), never derived from the model (circular) and no variography UI | Affine v0 → Hermite DGM v1; oracles: lognormal closed forms (exact) + gstlearn Python (BSD-3) |
@@ -56,14 +57,17 @@ absent from sampled QP validation sections), variography, KNA.
 
 | # | Item | Size | Notes |
 |---|------|------|-------|
-| C1 | **Rails dockable layout** | M–L | Vendor @gcu/rails; panels coexist (ResizeObserver re-render for SVG charts — the bulk of the work); layout state in `serializeProject()`; `--au-*` → BMA token map. Best landed before B5/B7 so Table/3D arrive as dockable panels. Deletes the `.results-panel.active` CSS-scoping bug class |
+| C1a | **Data tree, step 1: property catalog** | M | Left tree panel: datasets → variables grouped by kind (coordinates / grades / categories / calculated), per-variable color chip, unit, role badges (weight/density/class), dataset metadata. Becomes the single source of truth for the currently-scattered systems (`catColorOverrides`, swath `'aux:NAME'` color keys, GT units, weight selections) — existing per-tab pickers stay and *read* from it. Independently useful for `bma:roles` (B3) |
+| C1b | **Rails dockable layout + tree as left rail** | M–L | Vendor @gcu/rails; panels coexist (ResizeObserver re-render for SVG charts — the bulk of the work); per-panel sidebars slim to view-local config (percentiles/directions/cutoffs), membership fed from the tree; layout state in `serializeProject()`; `--au-*` → BMA token map. Best landed before B5/B7 so Table/3D arrive as dockable panels. Deletes the `.results-panel.active` CSS-scoping bug class. Export keeps its full column selector (export *is* a selection task) |
 | C2 | works surface wrapper | S (later) | Thin `package.json` + `works.js` around index.html, additive, after the .gcupkg registry settles. Verify VFS/mount-delegation perf on multi-GB before promising |
+| C3 | (door marked, not walked through) Tree as live lineage graph | L (later) | BMA already has implicit dependency semantics (`auxStale`, stats stale marks, `analysisFingerprint()`); promoting the tree to Leapfrog-style propagate-downstream is a separate decision — engine candidate exists (`@gcu/flowsheet`: lazy, content-addressed, hash = params + upstream hashes). Likely where BMA and the works workbench eventually meet |
 
 ## Suggested order
 
 A1+A2 (one sitting) → A3 → B0 (cheap, gates platform design) → A4 → A5 →
-C1 → B1 → B2 → A6 → B3 → B4 → B5 → B6 → B7.
+C1a → C1b → B1 → B2 → A6 → B3 → B4 → B5 → B6 → B7.
 Track A through A5 is shippable continuously; A6 can ride alongside early B work.
+C1a can slide earlier if the color/unit scatter starts hurting during Track A.
 
 ## Housekeeping (standing)
 
