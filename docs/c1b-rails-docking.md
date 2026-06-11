@@ -169,6 +169,10 @@ layout: {
 1. **C1b-0 — container-width charts** (no rails yet): `observeChartWidth`
    helper + convert the seven renderers. Full smoke suite green; new
    assertions: chart svg width tracks container after a tree toggle.
+   ✅ **DONE 2026-06-11 (253560c)** — six renderers converted (top-cut kept
+   fixed cells: its drag math is scale-aware, revisit with panels; section
+   hidden); the Statistics 340px max-height that letterboxed every CDF is
+   gone; tree-smoke asserts the viewBox widens on tree close.
 2. **C1b-1 — vendor rails + shell**: `src/vendor-rails.js` + token map +
    `workspace.js`; default layout; `showPanel`; badges; tree rail;
    breakpoint shell switch. Smokes updated where they click
