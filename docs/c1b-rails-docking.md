@@ -185,7 +185,7 @@ layout: {
 | D1 | Vendor rails as-is (`vendor-rails.js` + rails.css), pin upstream commit in header | **Made** |
 | D2 | Skip rails-default.css; map `--rails-*` tokens to BMA vars | **Made** |
 | D3 | Default layout = tree rail + single main stack (familiar-first) | **Made** — a curated multi-panel default would impose a workflow; let users split |
-| D4 | Floats on from the start? | **Proposed: yes** (free feature, big value on wide screens) — flag for Arthur, easy to defer to C1b-2 |
+| D4 | Floats on from the start? | **DECIDED (Arthur, 2026-06-11): yes — with `dropZones: { 'tab-append-body': false }`.** Full-body drop targets make floats unusable: any move snaps them into a stack. Docking happens on tab strips/titlebars/edges only. (Rails supports this natively; its own demo ships the same config with the same rationale.) Available zone toggles in drag.js: `new-float`, `new-rail`, `new-stack`, `tab-append-strip`, `tab-insert`, `tab-append-body`, `float-titlebar` |
 | D5 | Legacy tab shell survives <700px until C1c | **Made** (C1c constraint) |
 | D6 | C1b-0 (chart widths) lands independently first | **Made** — lowest risk, immediate payoff |
 
