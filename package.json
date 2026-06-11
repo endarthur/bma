@@ -1,6 +1,6 @@
 {
   "name": "bma",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Client-side CSV block model analyzer for mining and geostatistics. Drop a file, get instant statistics — nothing leaves your browser.",
   "main": "build.js",
   "directories": {
