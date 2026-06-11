@@ -30,8 +30,8 @@ Chilès & Delfiner). Pure worker/UI increments on existing infrastructure.
 
 | # | Feature | Size | Depends | Notes |
 |---|---------|------|---------|-------|
-| A1 | **% difference columns** in Statistics comparison table | S | — | The headline QP acceptance statistic (mean diff %, single-digit band). Both sides already computed; add Δ% to the aux row rendering |
-| A2 | **Per-bin count bars** on swath plots | S | — | Secondary right axis, n samples / n blocks as bars — the universal QP swath template element BMA lacks. Counts already in bin payload |
+| A1 | **% difference columns** in Statistics comparison table | S | — | ✅ **DONE 2026-06-11** — Δ% row under each matched model/aux pair, (model − aux)/aux per metric; count-like and skew/kurt skipped. Smoke: `experiments/delta-row-smoke.js` |
+| A2 | ~~Per-bin count bars on swath plots~~ | — | — | **Already existed** (pre-dates the roadmap: `showCounts` strip, primary filled + aux hollow, both layouts — the gap analysis was wrong). Optional polish only: numeric max-count label on the strip |
 | A3 | **Cell declustering weights** (aux) | M | — | GSLIB DECLUS: cell-size sweep, origin offsets, inverse-density weights, optimal size by min/max declustered mean. New *computed-weight source* (Float64Array by row ordinal) alongside `weightColName`. UI on Aux tab (range + auto/manual cell size). Harness: `experiments/` vs `../auditable/ext/gslib` `declus()` |
 | A4 | **Log-probability CDF mode** | S–M | — | Probability-scale Y (Φ⁻¹, port `gauinv`), log X. Third mode of the Stats CDF panel (CDF / Q-Q / log-prob). The canonical capping figure |
 | A5 | **Top-cut analysis panel** (aux) | M | A4 | Four linked views: histogram-with-cap, log-prob, mean & variance vs cap, cumulative metal vs cap; draggable cap line; before/after stats incl. Δ%. Aux column sorted once → all caps are prefix sums |
@@ -73,5 +73,5 @@ C1a can slide earlier if the color/unit scatter starts hurting during Track A.
 
 - `worker-protocol.md` / `code-map.md` refresh (stale since aux/weights/directions)
 - pt-BR manual regen after UI changes (`experiments/manual-shots.js` → `manual-pdf.js`)
-- `experiments/bma-swath-test.js` update for the directions-based swath protocol
+- ~~`experiments/bma-swath-test.js` update for the directions-based swath protocol~~ done 2026-06-11 (39 assertions incl. multi-direction single-pass)
 - Tag a release at next push
