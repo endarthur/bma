@@ -515,8 +515,8 @@ function applyAuxRestore(saved) {
   auxWeightName = saved.weight || null;
   // Declus params restore; weights are never persisted — re-run to compute
   auxDeclus = (saved.declus && saved.declus.params) ? { params: saved.declus.params, weights: null } : null;
-  // Top-cut: variable + cap restore; the distribution is re-loaded on demand
-  auxTopcut = (saved.topcut && saved.topcut.varName) ? { varName: saved.topcut.varName, cap: saved.topcut.cap != null ? saved.topcut.cap : null, values: null } : null;
+  // Top-cut: variable + cap + scale restore; the distribution is re-loaded on demand
+  auxTopcut = (saved.topcut && saved.topcut.varName) ? { varName: saved.topcut.varName, cap: saved.topcut.cap != null ? saved.topcut.cap : null, xlog: !!saved.topcut.xlog, values: null } : null;
   auxView = saved.view === 'topcut' ? 'topcut' : 'preview';
   if (saved.xyz && auxPreflightData) auxPreflightData.xyz = saved.xyz;
   auxCalcolCode = saved.calcolCode || '';

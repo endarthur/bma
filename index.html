@@ -4514,7 +4514,7 @@ table.stats tr.stats-delta-row td:first-child {
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 627504e — click to check for updates">627504e</div>
+<div class="build-badge" id="buildBadge" title="build 11944fb — click to check for updates">11944fb</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -9412,8 +9412,8 @@ function applyAuxRestore(saved) {
   auxWeightName = saved.weight || null;
   // Declus params restore; weights are never persisted — re-run to compute
   auxDeclus = (saved.declus && saved.declus.params) ? { params: saved.declus.params, weights: null } : null;
-  // Top-cut: variable + cap restore; the distribution is re-loaded on demand
-  auxTopcut = (saved.topcut && saved.topcut.varName) ? { varName: saved.topcut.varName, cap: saved.topcut.cap != null ? saved.topcut.cap : null, values: null } : null;
+  // Top-cut: variable + cap + scale restore; the distribution is re-loaded on demand
+  auxTopcut = (saved.topcut && saved.topcut.varName) ? { varName: saved.topcut.varName, cap: saved.topcut.cap != null ? saved.topcut.cap : null, xlog: !!saved.topcut.xlog, values: null } : null;
   auxView = saved.view === 'topcut' ? 'topcut' : 'preview';
   if (saved.xyz && auxPreflightData) auxPreflightData.xyz = saved.xyz;
   auxCalcolCode = saved.calcolCode || '';
@@ -9727,12 +9727,19 @@ function renderAuxTopcut() {
   var un = auxTopcutCappedStats(vMax);
   var cs = auxTopcutCappedStats(t.cap);
 
+  var canLog = vMin > 0;
+  if (!canLog) t.xlog = false;
   html += '<div class="tc-stats" id="auxTopcutStats">' + auxTopcutStatsHtml(un, cs) + '</div>';
   html += '<div class="tc-caprow">' +
     '<label>Cap</label>' +
     '<input type="text" class="aux-input" id="auxTopcutCapInput" value="' + formatNum(t.cap) + '" spellcheck="false" style="width:90px">' +
     '<button class="aux-from-main-btn" id="auxTopcutCopyBtn" title="copy a capping calcol for the Calc tab (Aux mode)">Copy calcol</button>' +
     '<span class="aux-hint" id="auxTopcutCopied" style="margin:0"></span>' +
+    '<span style="margin-left:auto;display:flex;gap:0.25rem">' +
+      '<button class="aux-view-btn' + (!t.xlog ? ' active' : '') + '" id="auxTopcutXLin">Linear</button>' +
+      '<button class="aux-view-btn' + (t.xlog ? ' active' : '') + '" id="auxTopcutXLog"' +
+        (canLog ? ' title="log value axis on all four plots"' : ' disabled title="log X needs all values > 0 (min here is ' + formatNum(vMin) + ')"') + '>Log</button>' +
+    '</span>' +
   '</div>';
   html += '<div class="tc-grid">' +
     '<div class="tc-plot">' + auxTopcutHistSvg() + '</div>' +
@@ -9808,12 +9815,16 @@ function tcSvgOpen(ax) {
 
 function auxTopcutHistSvg() {
   var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
+  var xlog = !!t.xlog;
   var x0 = v[0], x1 = v[m - 1];
   if (x1 <= x0) x1 = x0 + 1;
-  var ax = tcAxis(x0, x1, false);
+  var ax = tcAxis(x0, x1, xlog);
+  // Bins are equal-width in display space: log-spaced bins under log X
   var nb = 50, bins = new Array(nb).fill(0);
+  var l0 = xlog ? Math.log10(x0) : x0, l1 = xlog ? Math.log10(x1) : x1;
   for (var i = 0; i < m; i++) {
-    var b = Math.min(nb - 1, Math.floor((v[i] - x0) / (x1 - x0) * nb));
+    var lv = xlog ? Math.log10(v[i]) : v[i];
+    var b = Math.min(nb - 1, Math.max(0, Math.floor((lv - l0) / (l1 - l0) * nb)));
     bins[b]++;
   }
   var bMax = Math.max.apply(null, bins) || 1;
@@ -9825,12 +9836,12 @@ function auxTopcutHistSvg() {
     var bh = bins[b2] / bMax * plotH;
     bars += '<rect x="' + (P.padL + b2 * bw).toFixed(1) + '" y="' + (P.padT + plotH - bh).toFixed(1) + '" width="' + Math.max(0.5, bw - 0.6).toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="rgba(240,178,50,0.45)"/>';
   }
-  return tcSvgOpen(ax) + tcXTicks(ax, x0, x1, false) + bars + tcCapMarker(ax) + tcFrame('Histogram', 'count') + '</svg>';
+  return tcSvgOpen(ax) + tcXTicks(ax, x0, x1, xlog) + bars + tcCapMarker(ax) + tcFrame('Histogram' + (xlog ? ' (log X)' : ''), 'count') + '</svg>';
 }
 
 function auxTopcutLogProbSvg() {
   var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
-  var xlog = v[0] > 0;
+  var xlog = !!t.xlog;
   var x0 = v[0], x1 = v[m - 1];
   if (x1 <= x0) x1 = x0 + 1;
   var ax = tcAxis(x0, x1, xlog);
@@ -9857,14 +9868,16 @@ function auxTopcutLogProbSvg() {
 
 function auxTopcutMeanCvSvg() {
   var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
+  var xlog = !!t.xlog;
   var x0 = v[Math.floor(m * 0.5)], x1 = v[m - 1];
   if (x1 <= x0) { x0 = v[0]; x1 = v[m - 1] || x0 + 1; }
   if (x1 <= x0) x1 = x0 + 1;
-  var ax = tcAxis(x0, x1, false);
+  var ax = tcAxis(x0, x1, xlog);
   var N = 220, means = [], cvs = [];
   var mnLo = Infinity, mnHi = -Infinity, cvLo = Infinity, cvHi = -Infinity;
   for (var i = 0; i <= N; i++) {
-    var c = x0 + (x1 - x0) * i / N;
+    var c = xlog ? Math.pow(10, Math.log10(x0) + (Math.log10(x1) - Math.log10(x0)) * i / N)
+                 : x0 + (x1 - x0) * i / N;
     var s = auxTopcutCappedStats(c);
     means.push([c, s.mean]); cvs.push([c, s.cv]);
     if (s.mean < mnLo) mnLo = s.mean; if (s.mean > mnHi) mnHi = s.mean;
@@ -9879,23 +9892,25 @@ function auxTopcutMeanCvSvg() {
   var pC = cvs.filter(function(p2) { return p2[1] != null; }).map(function(p2, i2) { return (i2 ? 'L' : 'M') + ax.sx(p2[0]).toFixed(1) + ',' + syC(p2[1]).toFixed(1); }).join('');
   var legend = '<text x="' + (P.padL + 4) + '" y="' + (P.padT + 9) + '" fill="var(--amber)" font-size="8.5">mean</text>' +
     '<text x="' + (P.padL + 34) + '" y="' + (P.padT + 9) + '" fill="#56b6c2" font-size="8.5">CV</text>';
-  return tcSvgOpen(ax) + tcXTicks(ax, x0, x1, false) +
+  return tcSvgOpen(ax) + tcXTicks(ax, x0, x1, xlog) +
     '<path d="' + pM + '" fill="none" stroke="var(--amber)" stroke-width="1.4"/>' +
     '<path d="' + pC + '" fill="none" stroke="#56b6c2" stroke-width="1.2"/>' +
-    legend + tcCapMarker(ax) + tcFrame('Mean & CV vs cap', '') + '</svg>';
+    legend + tcCapMarker(ax) + tcFrame('Mean & CV vs cap' + (xlog ? ' (log X)' : ''), '') + '</svg>';
 }
 
 function auxTopcutMetalSvg() {
   var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
+  var xlog = !!t.xlog;
   var x0 = v[0], x1 = v[m - 1];
   if (x1 <= x0) x1 = x0 + 1;
-  var ax = tcAxis(x0, x1, false);
+  var ax = tcAxis(x0, x1, xlog);
   var plotH = P.H - P.padT - P.padB;
   var total = t.prefixS[m] || 1;
   var N = 240, path = '';
   var yMax = 0, pts2 = [];
   for (var i = 0; i <= N; i++) {
-    var c = x0 + (x1 - x0) * i / N;
+    var c = xlog ? Math.pow(10, Math.log10(x0) + (Math.log10(x1) - Math.log10(x0)) * i / N)
+                 : x0 + (x1 - x0) * i / N;
     var s = auxTopcutCappedStats(c);
     pts2.push([c, s.metalRemovedPct]);
     if (s.metalRemovedPct > yMax) yMax = s.metalRemovedPct;
@@ -9909,9 +9924,9 @@ function auxTopcutMetalSvg() {
     grid += '<line x1="' + P.padL + '" x2="' + (P.W - P.padR) + '" y1="' + sy(gy).toFixed(1) + '" y2="' + sy(gy).toFixed(1) + '" stroke="#1e2228"/>' +
       '<text x="' + (P.padL - 4) + '" y="' + (sy(gy) + 3).toFixed(1) + '" text-anchor="end" fill="#6a737d" font-size="8">' + gy.toFixed(1) + '%</text>';
   }
-  return tcSvgOpen(ax) + grid + tcXTicks(ax, x0, x1, false) +
+  return tcSvgOpen(ax) + grid + tcXTicks(ax, x0, x1, xlog) +
     '<path d="' + path + '" fill="none" stroke="var(--amber)" stroke-width="1.4"/>' +
-    tcCapMarker(ax) + tcFrame('Metal removed by cap', '') + '</svg>';
+    tcCapMarker(ax) + tcFrame('Metal removed by cap' + (xlog ? ' (log X)' : ''), '') + '</svg>';
 }
 
 // Reposition every cap marker + refresh the stats strip (drag-time path —
@@ -9995,8 +10010,13 @@ function loadAuxTopcut() {
         SS[i + 1] = SS[i] + msg.values[i] * msg.values[i];
       }
       var prevCap = (auxTopcut && auxTopcut.varName === varName) ? auxTopcut.cap : null;
+      var prevXlog = (auxTopcut && auxTopcut.varName === varName) ? auxTopcut.xlog : undefined;
+      // Default scale: log when the data is strictly positive and spans
+      // ~2 decades (lognormal-shaped) — a seed, the toggle is right there
+      var autoLog = msg.values[0] > 0 && (msg.values[m - 1] / msg.values[0] > 50);
       auxTopcut = {
         varName: varName, cap: prevCap,
+        xlog: prevXlog !== undefined ? prevXlog : autoLog,
         values: msg.values, prefixS: S, prefixSS: SS,
         n: msg.n, finite: msg.finite,
         fingerprint: auxTopcutFingerprintNow()
@@ -10035,6 +10055,16 @@ if ($auxTopcut) {
   $auxTopcut.addEventListener('click', function(e) {
     if (e.target.id === 'auxTopcutLoadBtn') loadAuxTopcut();
     else if (e.target.id === 'auxTopcutCopyBtn') auxTopcutCopyCalcol();
+    else if (e.target.id === 'auxTopcutXLin' || e.target.id === 'auxTopcutXLog') {
+      if (!auxTopcut || !auxTopcut.values) return;
+      var wantLog = e.target.id === 'auxTopcutXLog';
+      if (wantLog && !(auxTopcut.values[0] > 0)) return; // disabled anyway
+      if (!!auxTopcut.xlog !== wantLog) {
+        auxTopcut.xlog = wantLog;
+        renderAuxTopcut();
+        if (typeof autoSaveProject === 'function') autoSaveProject();
+      }
+    }
   });
   $auxTopcut.addEventListener('change', function(e) {
     if (e.target.id === 'auxTopcutVar') {
@@ -10422,8 +10452,8 @@ function serializeProject() {
       calcolMeta: auxCalcolMeta,
       // Declus params only — weights are recomputed, never stored
       declus: (auxDeclus && auxDeclus.params) ? { params: auxDeclus.params } : null,
-      // Top-cut: variable + cap; the distribution is re-loaded on demand
-      topcut: (auxTopcut && auxTopcut.varName) ? { varName: auxTopcut.varName, cap: auxTopcut.cap } : null,
+      // Top-cut: variable + cap + scale; the distribution is re-loaded on demand
+      topcut: (auxTopcut && auxTopcut.varName) ? { varName: auxTopcut.varName, cap: auxTopcut.cap, xlog: !!auxTopcut.xlog } : null,
       view: auxView
     } : null,
     calcolCode: currentCalcolCode,
