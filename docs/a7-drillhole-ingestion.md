@@ -174,10 +174,24 @@ sidebar, filters, calcols, declus, top-cut — nothing new to learn.
 
 ## Phasing (each lands green)
 
-- **Phase 0 — `@gcu/drillhole`** (in auditable/ext): `desurvey.js`
+- **Phase 0 — `@gcu/drillhole`** (reverse-vendored per D9): `desurvey.js`
   (min-curvature + tangential + arc interpolation), `composite.js`,
   `validate.js`, SPEC + oracle fixtures. BMA-side harness
   `experiments/drillhole-test.js` passes against the analytic fixtures.
+  ✅ **DONE 2026-06-11** — `src/vendor-drillhole.js` (pure functions,
+  `Drillhole.*` namespace, upstream-style section banners; in
+  `APP_MODULES`, no callers yet). Harness: 50 asserts — straight holes
+  closed-form; 21-station horizontal circle exact to 1e-14 incl.
+  *mid-segment* `positionAt` (proves D2 arc-correctness — chord would err
+  ~0.125 m at R=100/Δ=10); vertical-plane quarter circle; both dip
+  conventions detect + normalize to the same path; normalization edges
+  (sort/dup/bad/synth station 0); all hand-computed composite fixtures
+  (gaps, overlaps, missing assays, domain breaks, majority, minCoverage,
+  default-length mode); validation counts for all eight checks; output
+  shape. Implementation notes: composite XYZ = covered-length **centroid**
+  (not window midpoint — honest for partial coverage); run extent =
+  min(FROM)…max(TO) with a scan (an early long interval can outrun the
+  last-sorted one); windows index-stepped (no float drift).
 - **Phase 1 — ingestion UI**: vendor the lib; Drillhole-set card + role
   detection + mapping panel + report + Composite-&-load → `loadAuxFile`.
   Playwright smoke `experiments/drillhole-smoke.js` (synthetic trio →
@@ -193,19 +207,21 @@ sidebar, filters, calcols, declus, top-cut — nothing new to learn.
 
 | # | Decision | Call |
 |---|---|---|
-| D1 | Dip convention | **Proposed**: mining positive-down as the declared convention; auto-detect sign from the median survey dip; visible toggle in the mapping panel |
-| D2 | Chord vs arc interpolation of composite endpoints | **Proposed**: arc-correct in the lib (slerp attitude + integrate); harness reports the chord delta |
-| D3 | Default composite length | **Proposed**: mode of (TO−FROM), tidied; always editable |
-| D4 | Domain-boundary breaking | **Proposed**: optional categorical select, default off |
+| D1 | Dip convention | **Made (Arthur, 2026-06-11)**: mining positive-down declared; auto-detect sign from the median survey dip; **the convention toggle must be very visible** in the mapping panel — not tucked in an advanced section |
+| D2 | Chord vs arc interpolation of composite endpoints | **Made**: arc-correct in the lib (slerp attitude + closed-form integral); harness reports the chord delta |
+| D3 | Default composite length | **Made**: mode of (TO−FROM), tidied; always editable (the default is a seed, never a constraint) |
+| D4 | Domain-boundary breaking | **Made**: optional categorical select, default off. **Future (Arthur)**: add the ability to *materialize* the composited dataset (export the derived table as a real file) — noted under Out of scope |
 | D5 | Low-coverage composites | **Proposed**: always emitted with true SUPPORT; min-coverage filter visible + default off; counts in report |
 | D6 | Categorical compositing | **Proposed**: majority by covered length; sub-100% majority counted in report; no purity column in v1 |
 | D7 | Where the compositor runs | **Proposed**: main thread with size guard; lib is pure so a worker mode is a relocation, not a rewrite |
 | D8 | Pack contents | **Proposed**: raw trio + recipe; derived CSV never packed (recompute like declus weights) |
-| D9 | Library home | **Proposed**: new `auditable/ext/drillhole`, seeded from dee's desurvey; dee adopts it later |
+| D9 | Library home | **Made (Arthur, 2026-06-11): reverse vendoring.** Developed *here* as `src/vendor-drillhole.js`, written in the upstream ext-source style (section banners, `Drillhole.*` namespace) as if vendored from `auditable/ext/drillhole`; transferred upstream once it settles (the auditable repo has an active claude code session — avoid concurrent edits there). Dee adopts the lib after the upstream transfer |
 
 ## Out of scope (this row)
 
 Contact analysis (unlocked, separate row), 3D traces (B7), survey
 corrections (declination, gyro vs magnetic), composite back-flagging into
 the interval table, multi-element unit harmonization beyond the catalog's
-existing per-variable units.
+existing per-variable units, **materializing the composited dataset as an
+exportable file** (Arthur, D4 note — wanted eventually; today the derived
+table lives only in memory + recipe).
