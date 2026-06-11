@@ -536,12 +536,33 @@ function renderStatsQqSvg(entries) {
     '</svg>';
 }
 
+// Inverse standard normal CDF — GSLIB gauinv (Kennedy & Gentle 1980, p.95),
+// f64 throughout. Drives the probability-scale axis of the log-prob plot.
+function normInv(p) {
+  var lim = 1e-10;
+  if (p < lim) return -1e10;
+  if (p > 1 - lim) return 1e10;
+  if (p === 0.5) return 0;
+  var pp = p > 0.5 ? 1 - p : p;
+  var y = Math.sqrt(Math.log(1 / (pp * pp)));
+  var xp = y + ((((y * -0.0000453642210148 + -0.0204231210245) * y + -0.342242088547) * y + -1.0) * y + -0.322232431088) /
+               ((((y * 0.0038560700634 + 0.103537752850) * y + 0.531103462366) * y + 0.588581570495) * y + 0.0993484626060);
+  return p === pp ? -xp : xp;
+}
+
+// The classic probability-paper ruling (0.2%–99.8%, deciles emphasized in
+// validation figures); the axis spans normInv of the extremes
+var STATS_LOGPROB_TICKS = [0.002, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.998];
+
 function renderStatsCdfSvg(entries) {
   var isLog = statsCdfScale === 'log';
+  var probScale = statsCdfMode === 'logprob';
   var W = 700, plotBaseH = 380;
   var pad = { top: 20, right: 30, bottom: 50, left: 60 };
   var plotW = W - pad.left - pad.right;
   var plotH = plotBaseH - pad.top - pad.bottom;
+  var zLo = normInv(STATS_LOGPROB_TICKS[0]);
+  var zHi = normInv(STATS_LOGPROB_TICKS[STATS_LOGPROB_TICKS.length - 1]);
 
   var legCols = 3;
   var legRowH = 16;
@@ -572,15 +593,24 @@ function renderStatsCdfSvg(entries) {
     }
     return pad.left + ((v - globalMin) / xRange) * plotW;
   }
-  function sy(v) { return pad.top + (1 - v) * plotH; }
+  function sy(v) {
+    if (probScale) {
+      var z = normInv(Math.min(Math.max(v, STATS_LOGPROB_TICKS[0]), STATS_LOGPROB_TICKS[STATS_LOGPROB_TICKS.length - 1]));
+      return pad.top + (1 - (z - zLo) / (zHi - zLo)) * plotH;
+    }
+    return pad.top + (1 - v) * plotH;
+  }
 
-  var yTicks = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0];
+  var yTicks = probScale ? STATS_LOGPROB_TICKS : [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0];
   var gridSvg = '';
   for (var yi = 0; yi < yTicks.length; yi++) {
     var yt = yTicks[yi];
     var y = sy(yt);
+    var ytLabel = probScale
+      ? (yt * 100 < 1 || yt * 100 > 99 ? (yt * 100).toFixed(1) : (yt * 100).toFixed(0))
+      : (yt * 100).toFixed(0);
     gridSvg += '<line x1="' + pad.left + '" y1="' + y + '" x2="' + (W - pad.right) + '" y2="' + y + '" stroke="#1e2228" stroke-width="1"/>';
-    gridSvg += '<text x="' + (pad.left - 8) + '" y="' + (y + 3.5) + '" text-anchor="end" fill="#6a737d" font-size="10">' + (yt * 100).toFixed(0) + '%</text>';
+    gridSvg += '<text x="' + (pad.left - 8) + '" y="' + (y + 3.5) + '" text-anchor="end" fill="#6a737d" font-size="10">' + ytLabel + '%</text>';
   }
   var nxTicks = 6;
   for (var xi = 0; xi <= nxTicks; xi++) {
@@ -607,9 +637,12 @@ function renderStatsCdfSvg(entries) {
       var cMean = eStats.centroids[ci][0], cCount = eStats.centroids[ci][1];
       if (isLog && cMean <= 0) { cumCount += cCount; continue; }
       cumCount += cCount;
+      var cumP = cumCount / eStats.count;
+      // Probability paper has no 0%/100% — points beyond the ruling are off-scale
+      if (probScale && (cumP < STATS_LOGPROB_TICKS[0] || cumP > STATS_LOGPROB_TICKS[STATS_LOGPROB_TICKS.length - 1])) continue;
       var px = sx(cMean);
       if (px < pad.left || px > W - pad.right) continue;
-      points.push({ x: px, y: sy(cumCount / eStats.count) });
+      points.push({ x: px, y: sy(cumP) });
     }
     if (points.length > 0) {
       var pathParts = points.map(function(p, i) { return (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1); });
@@ -641,6 +674,7 @@ function renderStatsCdfSvg(entries) {
   // Store params for tooltip interaction
   _statsCdfParams = {
     entries: entries, isLog: isLog,
+    probScale: probScale, zLo: zLo, zHi: zHi,
     globalMin: globalMin, globalMax: globalMax,
     logMin: isLog ? logMin : 0, logMax: isLog ? logMax : 0,
     xRange: xRange, pad: pad, plotW: plotW, plotH: plotH,
@@ -656,11 +690,13 @@ function renderStatsCdfSvg(entries) {
   overlaySvg += '<rect x="' + pad.left + '" y="' + pad.top + '" width="' + plotW + '" height="' + plotH + '" fill="transparent" id="statsCdfOverlay" style="cursor:crosshair"/>';
 
   var scaleLabel = isLog ? ' (log)' : '';
+  var titleLabel = probScale ? (isLog ? 'Log-probability' : 'Probability' + scaleLabel) : 'CDF' + scaleLabel;
+  var yAxisLabel = probScale ? 'Cumulative % (normal probability scale)' : 'Cumulative %';
   return '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)" id="statsCdfSvg">' +
     '<rect width="' + W + '" height="' + H + '" fill="var(--bg)" rx="4"/>' +
     gridSvg + meansSvg + curvesSvg + overlaySvg +
-    '<text x="' + (W / 2) + '" y="' + (plotBaseH - 4) + '" text-anchor="middle" fill="#6a737d" font-size="10">CDF' + scaleLabel + '</text>' +
-    '<text x="12" y="' + (plotBaseH / 2) + '" text-anchor="middle" fill="#6a737d" font-size="10" transform="rotate(-90, 12, ' + (plotBaseH / 2) + ')">Cumulative %</text>' +
+    '<text x="' + (W / 2) + '" y="' + (plotBaseH - 4) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + titleLabel + '</text>' +
+    '<text x="12" y="' + (plotBaseH / 2) + '" text-anchor="middle" fill="#6a737d" font-size="10" transform="rotate(-90, 12, ' + (plotBaseH / 2) + ')">' + yAxisLabel + '</text>' +
     legendSvg +
     '</svg>';
 }
@@ -721,6 +757,11 @@ function wireStatsCdfTooltip() {
   }
 
   function syFromCdf(cdf) {
+    if (p.probScale) {
+      var lo = STATS_LOGPROB_TICKS[0], hi = STATS_LOGPROB_TICKS[STATS_LOGPROB_TICKS.length - 1];
+      var z = normInv(Math.min(Math.max(cdf, lo), hi));
+      return p.pad.top + (1 - (z - p.zLo) / (p.zHi - p.zLo)) * p.plotH;
+    }
     return p.pad.top + (1 - cdf) * p.plotH;
   }
 
@@ -747,7 +788,8 @@ function wireStatsCdfTooltip() {
         dots[i].setAttribute('cx', svgX);
         dots[i].setAttribute('cy', dotY);
         dots[i].setAttribute('visibility', 'visible');
-        lines += '<div><span style="color:' + color + '">\u25CF</span> ' + esc(eName) + ': ' + (cdf * 100).toFixed(1) + '%</div>';
+        var pctTxt = (p.probScale && (cdf * 100 < 1 || cdf * 100 > 99)) ? (cdf * 100).toFixed(2) : (cdf * 100).toFixed(1);
+        lines += '<div><span style="color:' + color + '">\u25CF</span> ' + esc(eName) + ': ' + pctTxt + '%</div>';
       } else {
         dots[i].setAttribute('visibility', 'hidden');
       }

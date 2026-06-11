@@ -28,7 +28,7 @@ let auxCalcolCode = '';            // calculated-columns code block for the aux 
 let auxCalcolMeta = [];            // [{name, type}] detected from aux calcol simulation
 let calcolMode = 'primary';        // which dataset the Calc editor is editing: 'primary' | 'aux'
 let projectTitle = null;           // optional project title (pack dialog) — display + archive naming
-let statsCdfMode = 'cdf';          // CDF panel mode: 'cdf' | 'qq'
+let statsCdfMode = 'cdf';          // CDF panel mode: 'cdf' | 'logprob' | 'qq'
 let currentWeightName = null;      // weight column (by name, raw or calcol) for the primary analysis
 let auxWeightName = null;          // weight column (by name) for the aux passes — set on the Aux tab
 const AUX_DECLUS_WEIGHT = '__declus__'; // auxWeightName sentinel: use computed declustering weights
@@ -392,7 +392,8 @@ var _helpTabs = {
       '<div class="help-row"><span><strong>Weight</strong> \u2014 weight all numeric statistics by a column or calcol (e.g. ore proportion). Re-run analysis to apply. Weighted runs use population-form std/skew/kurt; rows with missing/\u22640 weight are excluded (count shown below the select). Toggle the <strong>\u03a3W</strong> metric to see weight totals.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">CDF</div>' +
       '<div class="help-row"><span>Click the <strong>CDF</strong> link on any variable row to open a cumulative distribution overlay.</span></div>' +
-      '<div class="help-row"><span>Toggle multiple variables to compare CDFs. Linear or log scale.</span></div></div>' +
+      '<div class="help-row"><span>Toggle multiple variables to compare CDFs. Linear or log scale.</span></div>' +
+      '<div class="help-row"><span><strong>Prob mode</strong> — the same curves on a normal probability scale (classic probability paper, 0.2–99.8%). With log X, a lognormal distribution plots as a straight line; breaks in the curve mark population mixtures, and the high-grade break is the conventional capping pick.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Aux comparison</div>' +
       '<div class="help-row"><span>After running <strong>Analyze</strong> on the Aux tab, aux variables appear at the bottom of the sidebar. A same-named aux variable shows as an indented row right under its model counterpart — mean against mean, CV against CV.</span></div>' +
       '<div class="help-row"><span><strong>Δ% row</strong> — under each matched pair: (model − aux) / aux per metric. The mean difference is the headline acceptance number in model validation; single-digit percentages are the conventional comfort zone. Count-like metrics and skew/kurtosis are skipped.</span></div>' +
