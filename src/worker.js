@@ -1760,6 +1760,112 @@ async function declusAnalysis(data) {
   }, [weights.buffer]);
 }
 
+// ─── Column values pass ───────────────────────────────────────────────
+// Streams the file once and returns the SORTED finite values of one column
+// (raw or calcol) after the global filter — the exact-distribution input
+// for top-cut analysis, where prefix sums make every candidate cap O(log n).
+async function colValuesAnalysis(data) {
+  const { file, zipEntry, globalFilter, calcolCode, calcolMeta, resolvedTypes, varColName } = data;
+  const startTime = performance.now();
+
+  let csvFile = file;
+  if (isZipFile(file)) {
+    try { csvFile = await extractCSVFromZip(file, zipEntry); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  } else if (isDmFile(file)) {
+    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  }
+
+  const sampleLines = await readSample(csvFile, 50);
+  if (sampleLines.length < 2) { self.postMessage({ type: 'error', message: 'File appears empty.' }); return; }
+  const delimiter = detectDelimiter(sampleLines.slice(0, 20));
+  const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
+  const nCols = header.length;
+  let rowVarName = 'r';
+  if (data.rowVarOverride) {
+    rowVarName = data.rowVarOverride;
+  } else {
+    const colSet = new Set(header);
+    for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
+  }
+  const colTypes = resolvedTypes;
+
+  let calcolFn = null;
+  if (calcolCode && calcolMeta && calcolMeta.length > 0) {
+    try { calcolFn = new Function(rowVarName, MATH_PREAMBLE + calcolCode); }
+    catch(e) { calcolFn = null; }
+  }
+  let globalFn = null;
+  if (globalFilter) {
+    try { globalFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + globalFilter.expression + '); } catch(e) { return false; }'); }
+    catch(e) { self.postMessage({ type: 'error', message: 'Global filter error: ' + e.message }); return; }
+  }
+
+  function buildRow(fields) {
+    const obj = {};
+    for (let i = 0; i < nCols; i++) {
+      const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+    }
+    if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) { /* skip */ } delete obj.META; }
+    return obj;
+  }
+
+  const extHeader = [...header];
+  if (calcolMeta) { for (const cm of calcolMeta) extHeader.push(cm.name); }
+  if (extHeader.indexOf(varColName) < 0) {
+    self.postMessage({ type: 'error', message: 'Variable not found: ' + varColName });
+    return;
+  }
+
+  const vals = [];
+  let n = 0;
+  const reader = csvFile.stream().pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '', isFirstLine = true, totalChars = 0, lastProgress = 0;
+
+  function collectRow(fields) {
+    const row = buildRow(fields);
+    if (globalFn && !globalFn(row)) return;
+    n++;
+    const v = row[varColName];
+    if (typeof v === 'number' && isFinite(v)) vals.push(v);
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalChars += value.length;
+    buffer += value;
+    const parts = buffer.split('\n');
+    buffer = parts.pop();
+    for (const raw of parts) {
+      const line = raw.replace(/\r$/, '');
+      if (line.startsWith('#')) continue;
+      if (isFirstLine) { isFirstLine = false; continue; }
+      if (!line) continue;
+      collectRow(line.split(delimiter));
+    }
+    if (totalChars - lastProgress >= 500000) {
+      lastProgress = totalChars;
+      self.postMessage({ type: 'colvalues-progress', percent: (totalChars / csvFile.size) * 90 });
+    }
+  }
+  if (buffer) {
+    const line = buffer.replace(/\r$/, '');
+    if (line && !line.startsWith('#') && !isFirstLine) collectRow(line.split(delimiter));
+  }
+
+  const values = Float64Array.from(vals);
+  values.sort();
+
+  const elapsed = performance.now() - startTime;
+  self.postMessage({
+    type: 'colvalues-complete',
+    values, n, finite: values.length, elapsed
+  }, [values.buffer]);
+}
+
 async function sectionAnalysis(data) {
   const { file, zipEntry, globalFilter, localFilter, calcolCode, calcolMeta, resolvedTypes,
           xyzCols, dxyzCols, normalAxis, slicePos, tolerance, varCol } = data;
@@ -2482,6 +2588,8 @@ self.onmessage = (e) => {
     swathAnalysis(e.data);
   } else if (e.data.mode === 'declus') {
     declusAnalysis(e.data);
+  } else if (e.data.mode === 'colvalues') {
+    colValuesAnalysis(e.data);
   } else if (e.data.mode === 'section') {
     sectionAnalysis(e.data);
   } else if (e.data.mode === 'gt') {

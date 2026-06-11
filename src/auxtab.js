@@ -81,6 +81,7 @@ function renderAuxConfig() {
     '</div>';
 
   renderAuxPreview();
+  if (typeof renderAuxView === 'function') renderAuxView();
 }
 
 function runAuxAnalysis() {
@@ -514,6 +515,9 @@ function applyAuxRestore(saved) {
   auxWeightName = saved.weight || null;
   // Declus params restore; weights are never persisted — re-run to compute
   auxDeclus = (saved.declus && saved.declus.params) ? { params: saved.declus.params, weights: null } : null;
+  // Top-cut: variable + cap restore; the distribution is re-loaded on demand
+  auxTopcut = (saved.topcut && saved.topcut.varName) ? { varName: saved.topcut.varName, cap: saved.topcut.cap != null ? saved.topcut.cap : null, values: null } : null;
+  auxView = saved.view === 'topcut' ? 'topcut' : 'preview';
   if (saved.xyz && auxPreflightData) auxPreflightData.xyz = saved.xyz;
   auxCalcolCode = saved.calcolCode || '';
   auxCalcolMeta = saved.calcolMeta || [];
@@ -601,6 +605,10 @@ function clearAux() {
   auxWeightName = null;
   auxDeclus = null;
   if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
+  auxTopcut = null;
+  auxView = 'preview';
+  if (typeof auxTopcutWorker !== 'undefined' && auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} auxTopcutWorker = null; }
+  if (typeof renderAuxView === 'function') renderAuxView();
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
   if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
   $auxConfig.style.display = 'none';

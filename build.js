@@ -16,6 +16,7 @@ const APP_MODULES = [
   'core.js',
   'preflight.js',
   'auxtab.js',
+  'topcut.js',
   'project.js',
   'statistics.js',
   'export.js',

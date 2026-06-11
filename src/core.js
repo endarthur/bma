@@ -36,6 +36,11 @@ let auxDeclus = null;              // cell-declustering state: { params, weights
                                    //   curve, optCellSize, declusteredMean, naiveMean, n, located,
                                    //   wtMin, wtMax, usedRange, fingerprint } — weights NOT persisted
 let auxDeclusWorker = null;        // worker handle for the declustering pass
+let auxView = 'preview';           // aux main-area view: 'preview' | 'topcut'
+let auxTopcut = null;              // top-cut analysis state: { varName, cap, values (sorted
+                                   //   Float64Array)|null, prefixS, prefixSS, n, finite,
+                                   //   fingerprint } — values NOT persisted (re-loaded on demand)
+let auxTopcutWorker = null;        // worker handle for the column-values pass
 let statsAuxSelected = null;       // Set of aux col indices shown in the stats table (null = defaults)
 let statsCdfAuxSelected = new Set(); // aux col indices with CDF curves
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes
@@ -329,7 +334,8 @@ var _helpTabs = {
       '<div class="help-row"><span><strong>Weight</strong> — e.g. declustering weights (a column or an aux calcol). Applied to every aux statistic: Statistics rows, CDF overlay, and the swath series. Rows with missing/≤0 weight are excluded.</span></div>' +
       '<div class="help-row"><span><strong>Analyze</strong> — run the full aux statistics pass. Required for the Statistics-tab comparison and CDF overlay; the Swath overlay runs its own pass and does not need it.</span></div>' +
       '<div class="help-row"><span><strong>Aux calcols</strong> — switch the Calc tab to <strong>Aux</strong> to define calculated columns on the aux rows (<code>aux.</code> syntax); they join the comparisons and the weight list.</span></div>' +
-      '<div class="help-row"><span><strong>Declustering</strong> — GSLIB cell declustering (DECLUS): weights each sample by 1/(samples per cell), averaged over origin offsets, sweeping cell sizes to find the minimum (or maximum) declustered mean. The curve shows the sweep — the optimum is marked, and you can pin a size by setting Cell min = max. <em>Use as aux weight</em> feeds the weights into every aux statistic, so Q–Q, CDF and swath comparisons run against declustered samples. Weights are tied to the current filter/calcol config and ask for a re-run when it drifts.</span></div></div>' +
+      '<div class="help-row"><span><strong>Declustering</strong> — GSLIB cell declustering (DECLUS): weights each sample by 1/(samples per cell), averaged over origin offsets, sweeping cell sizes to find the minimum (or maximum) declustered mean. The curve shows the sweep — the optimum is marked, and you can pin a size by setting Cell min = max. <em>Use as aux weight</em> feeds the weights into every aux statistic, so Q–Q, CDF and swath comparisons run against declustered samples. Weights are tied to the current filter/calcol config and ask for a re-run when it drifts.</span></div>' +
+      '<div class="help-row"><span><strong>Top-cut view</strong> — switch the main area from Preview to Top-cut: load a variable’s sample distribution and analyse candidate caps across four linked plots (histogram, log-probability, mean & CV vs cap, metal removed). Drag the cap line on any plot; the before/after strip updates live. No automatic pick — the conventional reading is the break near the top of the log-probability curve, weighed against the metal a cap removes. <em>Copy calcol</em> hands you <code>aux.X_cap = cap(aux.X, …)</code> for the Calc tab, which flows into every comparison.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Scope</div>' +
       '<div class="help-row"><span>Comparison is statistical/spatial — aux is a separate set of rows, not extra columns. No geometry, export, or per-row joins.</span></div></div>'
   },

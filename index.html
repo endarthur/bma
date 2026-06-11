@@ -3868,6 +3868,46 @@ table.cat-values tr.cat-aux-only td { background: rgba(184,115,51,0.05); }
   border: 1px solid var(--bg2);
 }
 .aux-xyz-row input.aux-input { min-width: 0; flex: 1; }
+
+/* Aux main-area view toggle + top-cut panel */
+.aux-view-toggle {
+  display: flex; gap: 0.25rem;
+  padding: 0.4rem 0.7rem 0;
+}
+.aux-view-btn {
+  font: 0.65rem var(--mono); letter-spacing: 0.05em;
+  background: none; border: 1px solid var(--border); color: var(--fg-dim);
+  padding: 0.2rem 0.7rem; border-radius: 3px; cursor: pointer;
+}
+.aux-view-btn.active { color: var(--amber); border-color: var(--amber); }
+.aux-topcut { padding: 0.5rem 0.7rem 1rem; overflow-y: auto; }
+.tc-toolbar {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.2rem 0 0.5rem;
+}
+.tc-toolbar label { font: 0.65rem var(--mono); color: var(--fg-dim); letter-spacing: 0.05em; }
+.tc-empty { color: var(--fg-dim); font-size: 0.78rem; max-width: 60ch; padding: 0.5rem 0; }
+.tc-stats {
+  display: flex; flex-wrap: wrap; gap: 0.3rem 1.4rem;
+  font: 0.7rem var(--mono); color: var(--fg-dim);
+  padding: 0.3rem 0 0.45rem;
+  border-bottom: 1px dashed var(--border);
+}
+.tc-stats strong { color: var(--fg-bright); font-weight: 500; }
+.tc-stats em { color: var(--amber); font-style: normal; letter-spacing: 0.04em; }
+.tc-delta { opacity: 0.8; }
+.tc-caprow { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0; }
+.tc-caprow label { font: 0.65rem var(--mono); color: var(--fg-dim); letter-spacing: 0.05em; }
+.tc-grid {
+  display: grid; gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  max-width: 960px;
+}
+.tc-plot .tc-svg {
+  display: block; width: 100%; height: auto;
+  border: 1px solid var(--bg2); border-radius: 3px;
+  cursor: col-resize;
+}
 table.stats tr.stats-aux-row td {
   background: rgba(184,115,51,0.05);
   font-style: italic;
@@ -4066,7 +4106,12 @@ table.stats tr.stats-delta-row td:first-child {
           <div class="preflight-body">
             <div class="preflight-sidebar" id="auxSidebar"></div>
             <div class="preflight-preview-wrap">
+              <div class="aux-view-toggle" id="auxViewToggle">
+                <button class="aux-view-btn active" data-auxview="preview">Preview</button>
+                <button class="aux-view-btn" data-auxview="topcut">Top-cut</button>
+              </div>
               <div class="preflight-preview" id="auxPreview"></div>
+              <div class="aux-topcut" id="auxTopcut" style="display:none"></div>
             </div>
           </div>
         </div>
@@ -4469,7 +4514,7 @@ table.stats tr.stats-delta-row td:first-child {
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 5368a58 — click to check for updates">5368a58</div>
+<div class="build-badge" id="buildBadge" title="build 627504e — click to check for updates">627504e</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -6265,6 +6310,112 @@ async function declusAnalysis(data) {
   }, [weights.buffer]);
 }
 
+// ─── Column values pass ───────────────────────────────────────────────
+// Streams the file once and returns the SORTED finite values of one column
+// (raw or calcol) after the global filter — the exact-distribution input
+// for top-cut analysis, where prefix sums make every candidate cap O(log n).
+async function colValuesAnalysis(data) {
+  const { file, zipEntry, globalFilter, calcolCode, calcolMeta, resolvedTypes, varColName } = data;
+  const startTime = performance.now();
+
+  let csvFile = file;
+  if (isZipFile(file)) {
+    try { csvFile = await extractCSVFromZip(file, zipEntry); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  } else if (isDmFile(file)) {
+    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  }
+
+  const sampleLines = await readSample(csvFile, 50);
+  if (sampleLines.length < 2) { self.postMessage({ type: 'error', message: 'File appears empty.' }); return; }
+  const delimiter = detectDelimiter(sampleLines.slice(0, 20));
+  const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
+  const nCols = header.length;
+  let rowVarName = 'r';
+  if (data.rowVarOverride) {
+    rowVarName = data.rowVarOverride;
+  } else {
+    const colSet = new Set(header);
+    for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
+  }
+  const colTypes = resolvedTypes;
+
+  let calcolFn = null;
+  if (calcolCode && calcolMeta && calcolMeta.length > 0) {
+    try { calcolFn = new Function(rowVarName, MATH_PREAMBLE + calcolCode); }
+    catch(e) { calcolFn = null; }
+  }
+  let globalFn = null;
+  if (globalFilter) {
+    try { globalFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + globalFilter.expression + '); } catch(e) { return false; }'); }
+    catch(e) { self.postMessage({ type: 'error', message: 'Global filter error: ' + e.message }); return; }
+  }
+
+  function buildRow(fields) {
+    const obj = {};
+    for (let i = 0; i < nCols; i++) {
+      const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+    }
+    if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) { /* skip */ } delete obj.META; }
+    return obj;
+  }
+
+  const extHeader = [...header];
+  if (calcolMeta) { for (const cm of calcolMeta) extHeader.push(cm.name); }
+  if (extHeader.indexOf(varColName) < 0) {
+    self.postMessage({ type: 'error', message: 'Variable not found: ' + varColName });
+    return;
+  }
+
+  const vals = [];
+  let n = 0;
+  const reader = csvFile.stream().pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '', isFirstLine = true, totalChars = 0, lastProgress = 0;
+
+  function collectRow(fields) {
+    const row = buildRow(fields);
+    if (globalFn && !globalFn(row)) return;
+    n++;
+    const v = row[varColName];
+    if (typeof v === 'number' && isFinite(v)) vals.push(v);
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalChars += value.length;
+    buffer += value;
+    const parts = buffer.split('\\n');
+    buffer = parts.pop();
+    for (const raw of parts) {
+      const line = raw.replace(/\\r$/, '');
+      if (line.startsWith('#')) continue;
+      if (isFirstLine) { isFirstLine = false; continue; }
+      if (!line) continue;
+      collectRow(line.split(delimiter));
+    }
+    if (totalChars - lastProgress >= 500000) {
+      lastProgress = totalChars;
+      self.postMessage({ type: 'colvalues-progress', percent: (totalChars / csvFile.size) * 90 });
+    }
+  }
+  if (buffer) {
+    const line = buffer.replace(/\\r$/, '');
+    if (line && !line.startsWith('#') && !isFirstLine) collectRow(line.split(delimiter));
+  }
+
+  const values = Float64Array.from(vals);
+  values.sort();
+
+  const elapsed = performance.now() - startTime;
+  self.postMessage({
+    type: 'colvalues-complete',
+    values, n, finite: values.length, elapsed
+  }, [values.buffer]);
+}
+
 async function sectionAnalysis(data) {
   const { file, zipEntry, globalFilter, localFilter, calcolCode, calcolMeta, resolvedTypes,
           xyzCols, dxyzCols, normalAxis, slicePos, tolerance, varCol } = data;
@@ -6987,6 +7138,8 @@ self.onmessage = (e) => {
     swathAnalysis(e.data);
   } else if (e.data.mode === 'declus') {
     declusAnalysis(e.data);
+  } else if (e.data.mode === 'colvalues') {
+    colValuesAnalysis(e.data);
   } else if (e.data.mode === 'section') {
     sectionAnalysis(e.data);
   } else if (e.data.mode === 'gt') {
@@ -7036,6 +7189,11 @@ let auxDeclus = null;              // cell-declustering state: { params, weights
                                    //   curve, optCellSize, declusteredMean, naiveMean, n, located,
                                    //   wtMin, wtMax, usedRange, fingerprint } — weights NOT persisted
 let auxDeclusWorker = null;        // worker handle for the declustering pass
+let auxView = 'preview';           // aux main-area view: 'preview' | 'topcut'
+let auxTopcut = null;              // top-cut analysis state: { varName, cap, values (sorted
+                                   //   Float64Array)|null, prefixS, prefixSS, n, finite,
+                                   //   fingerprint } — values NOT persisted (re-loaded on demand)
+let auxTopcutWorker = null;        // worker handle for the column-values pass
 let statsAuxSelected = null;       // Set of aux col indices shown in the stats table (null = defaults)
 let statsCdfAuxSelected = new Set(); // aux col indices with CDF curves
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes
@@ -7329,7 +7487,8 @@ var _helpTabs = {
       '<div class="help-row"><span><strong>Weight</strong> — e.g. declustering weights (a column or an aux calcol). Applied to every aux statistic: Statistics rows, CDF overlay, and the swath series. Rows with missing/≤0 weight are excluded.</span></div>' +
       '<div class="help-row"><span><strong>Analyze</strong> — run the full aux statistics pass. Required for the Statistics-tab comparison and CDF overlay; the Swath overlay runs its own pass and does not need it.</span></div>' +
       '<div class="help-row"><span><strong>Aux calcols</strong> — switch the Calc tab to <strong>Aux</strong> to define calculated columns on the aux rows (<code>aux.</code> syntax); they join the comparisons and the weight list.</span></div>' +
-      '<div class="help-row"><span><strong>Declustering</strong> — GSLIB cell declustering (DECLUS): weights each sample by 1/(samples per cell), averaged over origin offsets, sweeping cell sizes to find the minimum (or maximum) declustered mean. The curve shows the sweep — the optimum is marked, and you can pin a size by setting Cell min = max. <em>Use as aux weight</em> feeds the weights into every aux statistic, so Q–Q, CDF and swath comparisons run against declustered samples. Weights are tied to the current filter/calcol config and ask for a re-run when it drifts.</span></div></div>' +
+      '<div class="help-row"><span><strong>Declustering</strong> — GSLIB cell declustering (DECLUS): weights each sample by 1/(samples per cell), averaged over origin offsets, sweeping cell sizes to find the minimum (or maximum) declustered mean. The curve shows the sweep — the optimum is marked, and you can pin a size by setting Cell min = max. <em>Use as aux weight</em> feeds the weights into every aux statistic, so Q–Q, CDF and swath comparisons run against declustered samples. Weights are tied to the current filter/calcol config and ask for a re-run when it drifts.</span></div>' +
+      '<div class="help-row"><span><strong>Top-cut view</strong> — switch the main area from Preview to Top-cut: load a variable’s sample distribution and analyse candidate caps across four linked plots (histogram, log-probability, mean & CV vs cap, metal removed). Drag the cap line on any plot; the before/after strip updates live. No automatic pick — the conventional reading is the break near the top of the log-probability curve, weighed against the metal a cap removes. <em>Copy calcol</em> hands you <code>aux.X_cap = cap(aux.X, …)</code> for the Calc tab, which flows into every comparison.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Scope</div>' +
       '<div class="help-row"><span>Comparison is statistical/spatial — aux is a separate set of rows, not extra columns. No geometry, export, or per-row joins.</span></div></div>'
   },
@@ -8819,6 +8978,7 @@ function renderAuxConfig() {
     '</div>';
 
   renderAuxPreview();
+  if (typeof renderAuxView === 'function') renderAuxView();
 }
 
 function runAuxAnalysis() {
@@ -9252,6 +9412,9 @@ function applyAuxRestore(saved) {
   auxWeightName = saved.weight || null;
   // Declus params restore; weights are never persisted — re-run to compute
   auxDeclus = (saved.declus && saved.declus.params) ? { params: saved.declus.params, weights: null } : null;
+  // Top-cut: variable + cap restore; the distribution is re-loaded on demand
+  auxTopcut = (saved.topcut && saved.topcut.varName) ? { varName: saved.topcut.varName, cap: saved.topcut.cap != null ? saved.topcut.cap : null, values: null } : null;
+  auxView = saved.view === 'topcut' ? 'topcut' : 'preview';
   if (saved.xyz && auxPreflightData) auxPreflightData.xyz = saved.xyz;
   auxCalcolCode = saved.calcolCode || '';
   auxCalcolMeta = saved.calcolMeta || [];
@@ -9339,6 +9502,10 @@ function clearAux() {
   auxWeightName = null;
   auxDeclus = null;
   if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
+  auxTopcut = null;
+  auxView = 'preview';
+  if (typeof auxTopcutWorker !== 'undefined' && auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} auxTopcutWorker = null; }
+  if (typeof renderAuxView === 'function') renderAuxView();
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
   if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
   $auxConfig.style.display = 'none';
@@ -9451,6 +9618,462 @@ if ($auxDropzone) {
   }
   var $auxClearBtn = document.getElementById('auxClear');
   if ($auxClearBtn) $auxClearBtn.addEventListener('click', clearAux);
+}
+
+// ─── Top-cut analysis — Aux tab main-area view ─────────────────────────
+// Supervisor-style Global Topcut Analysis on the aux samples: one worker
+// pass returns the SORTED finite values of a variable (after the aux
+// filter); prefix sums then make every candidate cap O(log n), so the cap
+// line is live while dragging across four linked plots — histogram,
+// log-probability, mean & CV vs cap, and % metal above cap. No auto-pick:
+// the plots are the evidence, the user moves the line. Applying a cap is a
+// one-click calcol (cap() already lives in the Math preamble).
+
+var $auxViewToggle = document.getElementById('auxViewToggle');
+var $auxTopcut = document.getElementById('auxTopcut');
+
+function auxTopcutFingerprintNow() {
+  if (!auxFile || !auxPreflightData) return null;
+  return JSON.stringify({
+    f: auxFile.name + '|' + auxFile.size,
+    z: auxPreflightData.selectedZipEntry || null,
+    flt: auxFilter ? auxFilter.expression : '',
+    cc: auxCalcolCode || ''
+  });
+}
+
+function auxTopcutFresh() {
+  return !!(auxTopcut && auxTopcut.values && auxTopcut.fingerprint === auxTopcutFingerprintNow());
+}
+
+function renderAuxView() {
+  if (!$auxViewToggle) return;
+  var hasAux = !!auxPreflightData;
+  $auxViewToggle.style.display = hasAux ? '' : 'none';
+  $auxViewToggle.querySelectorAll('.aux-view-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.auxview === auxView);
+  });
+  var showTopcut = hasAux && auxView === 'topcut';
+  if ($auxPreview) $auxPreview.style.display = showTopcut ? 'none' : '';
+  if ($auxTopcut) $auxTopcut.style.display = showTopcut ? '' : 'none';
+  if (showTopcut) renderAuxTopcut();
+}
+
+// ── Capped statistics from prefix sums ──
+// k = count of values ≤ c (binary search), then every capped moment is
+// arithmetic: sum' = S[k] + (m−k)·c, ss' = SS[k] + (m−k)·c²
+function auxTopcutCappedStats(c) {
+  var t = auxTopcut;
+  var v = t.values, m = v.length;
+  var lo = 0, hi = m;
+  while (lo < hi) { var mid = (lo + hi) >> 1; if (v[mid] <= c) lo = mid + 1; else hi = mid; }
+  var k = lo;
+  var sum = t.prefixS[k] + (m - k) * c;
+  var ss = t.prefixSS[k] + (m - k) * c * c;
+  var mean = sum / m;
+  var variance = m > 1 ? Math.max(0, (ss - sum * sum / m) / (m - 1)) : 0;
+  var std = Math.sqrt(variance);
+  var metalRemoved = (t.prefixS[m] - t.prefixS[k]) - (m - k) * c;
+  return {
+    k: k, nCapped: m - k, mean: mean, std: std,
+    cv: mean !== 0 ? Math.abs(std / mean * 100) : null,
+    metalRemovedPct: t.prefixS[m] > 0 ? metalRemoved / t.prefixS[m] * 100 : 0
+  };
+}
+
+function renderAuxTopcut() {
+  if (!$auxTopcut || !auxPreflightData) return;
+  var t = auxTopcut;
+
+  // Variable options: numeric raw columns + numeric aux calcols
+  var chosen = (t && t.varName) || null;
+  var varOpts = '';
+  for (var i = 0; i < auxPreflightData.header.length; i++) {
+    if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
+    var nm = auxPreflightData.header[i];
+    if (chosen === null) chosen = nm;
+    varOpts += '<option value="' + esc(nm) + '"' + (nm === chosen ? ' selected' : '') + '>' + esc(nm) + '</option>';
+  }
+  for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
+    if (auxCalcolMeta[ci].type !== 'numeric') continue;
+    var cn = auxCalcolMeta[ci].name;
+    varOpts += '<option value="' + esc(cn) + '"' + (cn === chosen ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
+  }
+
+  var html = '<div class="tc-toolbar">' +
+    '<label>Variable</label>' +
+    '<select class="aux-select" id="auxTopcutVar" style="width:auto;min-width:120px">' + varOpts + '</select>' +
+    '<button class="aux-from-main-btn" id="auxTopcutLoadBtn">' + (auxTopcutFresh() ? 'Reload' : 'Load distribution') + '</button>' +
+    '<span class="aux-hint" id="auxTopcutStatus" style="margin:0"></span>' +
+  '</div>';
+
+  if (!auxTopcutFresh()) {
+    if (t && t.varName && !t.values) {
+      html += '<div class="tc-empty">Restored top-cut config (' + esc(t.varName) + (t.cap != null ? ', cap ' + formatNum(t.cap) : '') + ') — load the distribution to continue.</div>';
+    } else if (t && t.values) {
+      html += '<div class="tc-empty" style="color:var(--amber)">Aux config changed since this distribution was loaded — reload.</div>';
+    } else {
+      html += '<div class="tc-empty">Load a variable’s sample distribution to analyse top cuts: histogram, log-probability, mean & CV vs cap, and metal above cap, with a draggable cap line across all four.</div>';
+    }
+    $auxTopcut.innerHTML = html;
+    return;
+  }
+
+  var m = t.values.length;
+  var vMin = t.values[0], vMax = t.values[m - 1];
+  if (t.cap == null || !(t.cap >= vMin && t.cap <= vMax)) {
+    t.cap = t.values[Math.min(m - 1, Math.floor(0.99 * m))]; // starting handle at P99 — a position, not a recommendation
+  }
+  var un = auxTopcutCappedStats(vMax);
+  var cs = auxTopcutCappedStats(t.cap);
+
+  html += '<div class="tc-stats" id="auxTopcutStats">' + auxTopcutStatsHtml(un, cs) + '</div>';
+  html += '<div class="tc-caprow">' +
+    '<label>Cap</label>' +
+    '<input type="text" class="aux-input" id="auxTopcutCapInput" value="' + formatNum(t.cap) + '" spellcheck="false" style="width:90px">' +
+    '<button class="aux-from-main-btn" id="auxTopcutCopyBtn" title="copy a capping calcol for the Calc tab (Aux mode)">Copy calcol</button>' +
+    '<span class="aux-hint" id="auxTopcutCopied" style="margin:0"></span>' +
+  '</div>';
+  html += '<div class="tc-grid">' +
+    '<div class="tc-plot">' + auxTopcutHistSvg() + '</div>' +
+    '<div class="tc-plot">' + auxTopcutLogProbSvg() + '</div>' +
+    '<div class="tc-plot">' + auxTopcutMeanCvSvg() + '</div>' +
+    '<div class="tc-plot">' + auxTopcutMetalSvg() + '</div>' +
+  '</div>';
+  html += '<div class="aux-hint">drag the cap line on any plot (or type a value) · n ' + m.toLocaleString() +
+    (t.n > m ? ' (+' + (t.n - m) + ' non-numeric/null excluded)' : '') +
+    ' · raw unweighted sample distribution</div>';
+
+  $auxTopcut.innerHTML = html;
+  auxTopcutPositionCaps();
+}
+
+function auxTopcutStatsHtml(un, cs) {
+  var t = auxTopcut;
+  function d(a, b) {
+    if (b === 0 || b == null || a == null) return '';
+    var p = (a - b) / Math.abs(b) * 100;
+    return ' <span class="tc-delta">(' + (p >= 0 ? '+' : '−') + Math.abs(p).toFixed(1) + '%)</span>';
+  }
+  return '<span><em>uncapped</em> mean <strong>' + formatNum(un.mean) + '</strong> · CV ' + (un.cv != null ? un.cv.toFixed(1) : '—') + ' · max ' + formatNum(t.values[t.values.length - 1]) + '</span>' +
+    '<span><em>cap ' + formatNum(t.cap) + '</em> caps <strong>' + cs.nCapped.toLocaleString() + '</strong> (' + (cs.nCapped / t.values.length * 100).toFixed(2) + '%)' +
+    ' · mean <strong>' + formatNum(cs.mean) + '</strong>' + d(cs.mean, un.mean) +
+    ' · CV ' + (cs.cv != null ? cs.cv.toFixed(1) : '—') + d(cs.cv, un.cv) +
+    ' · metal removed <strong>' + cs.metalRemovedPct.toFixed(2) + '%</strong></span>';
+}
+
+// ── Plot geometry ── all four share the value domain on X, so the cap drag
+// is the same mapping everywhere; per-svg constants ride in data attributes
+var TC_PLOT = { W: 430, H: 215, padL: 46, padR: 14, padT: 18, padB: 30 };
+
+function tcAxis(x0, x1, xlog) {
+  var P = TC_PLOT, plotW = P.W - P.padL - P.padR;
+  var lx0 = xlog ? Math.log10(x0) : x0, lx1 = xlog ? Math.log10(x1) : x1;
+  if (lx1 <= lx0) lx1 = lx0 + 1;
+  return {
+    sx: function(v) { var lv = xlog ? Math.log10(Math.max(v, 1e-12)) : v; return P.padL + (lv - lx0) / (lx1 - lx0) * plotW; },
+    attrs: ' data-x0="' + x0 + '" data-x1="' + x1 + '" data-xlog="' + (xlog ? 1 : 0) + '"',
+    plotW: plotW
+  };
+}
+
+function tcFrame(title, yLabel) {
+  var P = TC_PLOT;
+  return '<text x="' + (P.W / 2) + '" y="11" text-anchor="middle" fill="#6a737d" font-size="9.5">' + title + '</text>' +
+    (yLabel ? '<text x="10" y="' + ((P.padT + P.H - P.padB) / 2) + '" text-anchor="middle" fill="#6a737d" font-size="9" transform="rotate(-90, 10, ' + ((P.padT + P.H - P.padB) / 2) + ')">' + yLabel + '</text>' : '');
+}
+
+function tcCapMarker(ax) {
+  var P = TC_PLOT;
+  var x = ax.sx(auxTopcut.cap).toFixed(1);
+  return '<g class="tc-cap"><line x1="' + x + '" x2="' + x + '" y1="' + P.padT + '" y2="' + (P.H - P.padB) + '" stroke="var(--red, #e05555)" stroke-width="1.2" stroke-dasharray="5,3"/>' +
+    '<text x="' + x + '" y="' + (P.padT - 4 + 10) + '" fill="var(--red, #e05555)" font-size="8.5" text-anchor="middle"></text></g>';
+}
+
+function tcXTicks(ax, x0, x1, xlog) {
+  var P = TC_PLOT, out = '';
+  for (var i = 0; i <= 4; i++) {
+    var v = xlog ? Math.pow(10, Math.log10(x0) + (Math.log10(x1) - Math.log10(x0)) * i / 4) : x0 + (x1 - x0) * i / 4;
+    var x = ax.sx(v);
+    out += '<line x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + P.padT + '" y2="' + (P.H - P.padB) + '" stroke="#1e2228"/>' +
+      '<text x="' + x.toFixed(1) + '" y="' + (P.H - P.padB + 13) + '" text-anchor="middle" fill="#6a737d" font-size="8.5">' + formatNum(v) + '</text>';
+  }
+  return out;
+}
+
+function tcSvgOpen(ax) {
+  var P = TC_PLOT;
+  return '<svg class="tc-svg" viewBox="0 0 ' + P.W + ' ' + P.H + '"' + ax.attrs + '><rect width="' + P.W + '" height="' + P.H + '" fill="var(--bg)" rx="3"/>';
+}
+
+function auxTopcutHistSvg() {
+  var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
+  var x0 = v[0], x1 = v[m - 1];
+  if (x1 <= x0) x1 = x0 + 1;
+  var ax = tcAxis(x0, x1, false);
+  var nb = 50, bins = new Array(nb).fill(0);
+  for (var i = 0; i < m; i++) {
+    var b = Math.min(nb - 1, Math.floor((v[i] - x0) / (x1 - x0) * nb));
+    bins[b]++;
+  }
+  var bMax = Math.max.apply(null, bins) || 1;
+  var plotH = P.H - P.padT - P.padB;
+  var bw = ax.plotW / nb;
+  var bars = '';
+  for (var b2 = 0; b2 < nb; b2++) {
+    if (!bins[b2]) continue;
+    var bh = bins[b2] / bMax * plotH;
+    bars += '<rect x="' + (P.padL + b2 * bw).toFixed(1) + '" y="' + (P.padT + plotH - bh).toFixed(1) + '" width="' + Math.max(0.5, bw - 0.6).toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="rgba(240,178,50,0.45)"/>';
+  }
+  return tcSvgOpen(ax) + tcXTicks(ax, x0, x1, false) + bars + tcCapMarker(ax) + tcFrame('Histogram', 'count') + '</svg>';
+}
+
+function auxTopcutLogProbSvg() {
+  var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
+  var xlog = v[0] > 0;
+  var x0 = v[0], x1 = v[m - 1];
+  if (x1 <= x0) x1 = x0 + 1;
+  var ax = tcAxis(x0, x1, xlog);
+  var pLo = STATS_LOGPROB_TICKS[0], pHi = STATS_LOGPROB_TICKS[STATS_LOGPROB_TICKS.length - 1];
+  var zLo = normInv(pLo), zHi = normInv(pHi);
+  var plotH = P.H - P.padT - P.padB;
+  function sy(p) { return P.padT + (1 - (normInv(p) - zLo) / (zHi - zLo)) * plotH; }
+  var grid = '';
+  [0.01, 0.1, 0.5, 0.9, 0.99].forEach(function(p) {
+    var y = sy(p).toFixed(1);
+    grid += '<line x1="' + P.padL + '" x2="' + (P.W - P.padR) + '" y1="' + y + '" y2="' + y + '" stroke="#1e2228"/>' +
+      '<text x="' + (P.padL - 4) + '" y="' + (+y + 3) + '" text-anchor="end" fill="#6a737d" font-size="8">' + (p * 100) + '%</text>';
+  });
+  var step = Math.max(1, Math.floor(m / 360));
+  var pts = '';
+  for (var i = 0; i < m; i += step) {
+    var p = (i + 0.5) / m;
+    if (p < pLo || p > pHi) continue;
+    pts += '<circle cx="' + ax.sx(v[i]).toFixed(1) + '" cy="' + sy(p).toFixed(1) + '" r="1.2" fill="var(--amber)" opacity="0.7"/>';
+  }
+  return tcSvgOpen(ax) + grid + tcXTicks(ax, x0, x1, xlog) + pts + tcCapMarker(ax) +
+    tcFrame(xlog ? 'Log-probability' : 'Probability (linear X)', 'cum %') + '</svg>';
+}
+
+function auxTopcutMeanCvSvg() {
+  var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
+  var x0 = v[Math.floor(m * 0.5)], x1 = v[m - 1];
+  if (x1 <= x0) { x0 = v[0]; x1 = v[m - 1] || x0 + 1; }
+  if (x1 <= x0) x1 = x0 + 1;
+  var ax = tcAxis(x0, x1, false);
+  var N = 220, means = [], cvs = [];
+  var mnLo = Infinity, mnHi = -Infinity, cvLo = Infinity, cvHi = -Infinity;
+  for (var i = 0; i <= N; i++) {
+    var c = x0 + (x1 - x0) * i / N;
+    var s = auxTopcutCappedStats(c);
+    means.push([c, s.mean]); cvs.push([c, s.cv]);
+    if (s.mean < mnLo) mnLo = s.mean; if (s.mean > mnHi) mnHi = s.mean;
+    if (s.cv != null) { if (s.cv < cvLo) cvLo = s.cv; if (s.cv > cvHi) cvHi = s.cv; }
+  }
+  if (mnHi <= mnLo) mnHi = mnLo + 1;
+  if (cvHi <= cvLo) cvHi = cvLo + 1;
+  var plotH = P.H - P.padT - P.padB;
+  function syM(y) { return P.padT + (1 - (y - mnLo) / (mnHi - mnLo)) * plotH; }
+  function syC(y) { return P.padT + (1 - (y - cvLo) / (cvHi - cvLo)) * plotH; }
+  var pM = means.map(function(p2, i2) { return (i2 ? 'L' : 'M') + ax.sx(p2[0]).toFixed(1) + ',' + syM(p2[1]).toFixed(1); }).join('');
+  var pC = cvs.filter(function(p2) { return p2[1] != null; }).map(function(p2, i2) { return (i2 ? 'L' : 'M') + ax.sx(p2[0]).toFixed(1) + ',' + syC(p2[1]).toFixed(1); }).join('');
+  var legend = '<text x="' + (P.padL + 4) + '" y="' + (P.padT + 9) + '" fill="var(--amber)" font-size="8.5">mean</text>' +
+    '<text x="' + (P.padL + 34) + '" y="' + (P.padT + 9) + '" fill="#56b6c2" font-size="8.5">CV</text>';
+  return tcSvgOpen(ax) + tcXTicks(ax, x0, x1, false) +
+    '<path d="' + pM + '" fill="none" stroke="var(--amber)" stroke-width="1.4"/>' +
+    '<path d="' + pC + '" fill="none" stroke="#56b6c2" stroke-width="1.2"/>' +
+    legend + tcCapMarker(ax) + tcFrame('Mean & CV vs cap', '') + '</svg>';
+}
+
+function auxTopcutMetalSvg() {
+  var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
+  var x0 = v[0], x1 = v[m - 1];
+  if (x1 <= x0) x1 = x0 + 1;
+  var ax = tcAxis(x0, x1, false);
+  var plotH = P.H - P.padT - P.padB;
+  var total = t.prefixS[m] || 1;
+  var N = 240, path = '';
+  var yMax = 0, pts2 = [];
+  for (var i = 0; i <= N; i++) {
+    var c = x0 + (x1 - x0) * i / N;
+    var s = auxTopcutCappedStats(c);
+    pts2.push([c, s.metalRemovedPct]);
+    if (s.metalRemovedPct > yMax) yMax = s.metalRemovedPct;
+  }
+  if (yMax <= 0) yMax = 1;
+  function sy(y) { return P.padT + (1 - y / yMax) * plotH; }
+  path = pts2.map(function(p2, i2) { return (i2 ? 'L' : 'M') + ax.sx(p2[0]).toFixed(1) + ',' + sy(p2[1]).toFixed(1); }).join('');
+  var grid = '';
+  for (var gi = 0; gi <= 3; gi++) {
+    var gy = yMax * gi / 3;
+    grid += '<line x1="' + P.padL + '" x2="' + (P.W - P.padR) + '" y1="' + sy(gy).toFixed(1) + '" y2="' + sy(gy).toFixed(1) + '" stroke="#1e2228"/>' +
+      '<text x="' + (P.padL - 4) + '" y="' + (sy(gy) + 3).toFixed(1) + '" text-anchor="end" fill="#6a737d" font-size="8">' + gy.toFixed(1) + '%</text>';
+  }
+  return tcSvgOpen(ax) + grid + tcXTicks(ax, x0, x1, false) +
+    '<path d="' + path + '" fill="none" stroke="var(--amber)" stroke-width="1.4"/>' +
+    tcCapMarker(ax) + tcFrame('Metal removed by cap', '') + '</svg>';
+}
+
+// Reposition every cap marker + refresh the stats strip (drag-time path —
+// curves are static, only the markers and numbers move)
+function auxTopcutPositionCaps() {
+  var t = auxTopcut;
+  if (!t || !t.values) return;
+  document.querySelectorAll('#auxTopcut .tc-svg').forEach(function(svg) {
+    var x0 = parseFloat(svg.dataset.x0), x1 = parseFloat(svg.dataset.x1), xlog = svg.dataset.xlog === '1';
+    var P = TC_PLOT, plotW = P.W - P.padL - P.padR;
+    var lx0 = xlog ? Math.log10(x0) : x0, lx1 = xlog ? Math.log10(x1) : x1;
+    var lv = xlog ? Math.log10(Math.max(t.cap, 1e-12)) : t.cap;
+    var x = P.padL + Math.min(1, Math.max(0, (lv - lx0) / (lx1 - lx0))) * plotW;
+    var g = svg.querySelector('.tc-cap');
+    if (!g) return;
+    var line = g.querySelector('line'), txt = g.querySelector('text');
+    line.setAttribute('x1', x.toFixed(1)); line.setAttribute('x2', x.toFixed(1));
+    txt.setAttribute('x', x.toFixed(1));
+    txt.textContent = formatNum(t.cap);
+    txt.setAttribute('text-anchor', x > P.W * 0.8 ? 'end' : (x < P.W * 0.2 ? 'start' : 'middle'));
+  });
+  var strip = document.getElementById('auxTopcutStats');
+  if (strip) {
+    var un = auxTopcutCappedStats(t.values[t.values.length - 1]);
+    strip.innerHTML = auxTopcutStatsHtml(un, auxTopcutCappedStats(t.cap));
+  }
+  var inp = document.getElementById('auxTopcutCapInput');
+  if (inp && document.activeElement !== inp) inp.value = formatNum(t.cap);
+}
+
+function auxTopcutSetCap(c, save) {
+  var t = auxTopcut;
+  if (!t || !t.values || !isFinite(c)) return;
+  var m = t.values.length;
+  t.cap = Math.min(Math.max(c, t.values[0]), t.values[m - 1]);
+  auxTopcutPositionCaps();
+  if (save && typeof autoSaveProject === 'function') autoSaveProject();
+}
+
+function loadAuxTopcut() {
+  if (!auxFile || !auxPreflightData) return;
+  var sel = document.getElementById('auxTopcutVar');
+  var varName = sel ? sel.value : (auxTopcut && auxTopcut.varName);
+  if (!varName) return;
+  var $st = document.getElementById('auxTopcutStatus');
+  function tfail(msg) {
+    if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
+    if (auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} auxTopcutWorker = null; }
+  }
+  if (auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} }
+  auxTopcutWorker = new Worker(workerUrl);
+  if ($st) { $st.textContent = '0%'; $st.style.color = ''; }
+  auxTopcutWorker.postMessage({
+    mode: 'colvalues',
+    file: auxFile,
+    zipEntry: auxPreflightData.selectedZipEntry || null,
+    globalFilter: auxFilter ? { expression: auxFilter.expression } : null,
+    calcolCode: auxCalcolCode || null,
+    calcolMeta: auxCalcolMeta.length > 0 ? auxCalcolMeta : null,
+    resolvedTypes: auxPreflightData.autoTypes,
+    varColName: varName,
+    rowVarOverride: AUX_ROW_VAR,
+    dmEndianness: auxPreflightData.dmEndianness || null,
+    dmFormat: auxPreflightData.dmFormat || null
+  });
+  auxTopcutWorker.onerror = function(e) { tfail(e.message || 'unknown error'); };
+  auxTopcutWorker.onmessage = function(e) {
+    var msg = e.data;
+    if (msg.type === 'colvalues-progress') {
+      if ($st) $st.textContent = Math.min(99, msg.percent).toFixed(0) + '%';
+    } else if (msg.type === 'error') {
+      tfail(msg.message);
+    } else if (msg.type === 'colvalues-complete') {
+      auxTopcutWorker.terminate();
+      auxTopcutWorker = null;
+      if (msg.finite < 2) { tfail('Not enough numeric values.'); return; }
+      var m = msg.values.length;
+      var S = new Float64Array(m + 1), SS = new Float64Array(m + 1);
+      for (var i = 0; i < m; i++) {
+        S[i + 1] = S[i] + msg.values[i];
+        SS[i + 1] = SS[i] + msg.values[i] * msg.values[i];
+      }
+      var prevCap = (auxTopcut && auxTopcut.varName === varName) ? auxTopcut.cap : null;
+      auxTopcut = {
+        varName: varName, cap: prevCap,
+        values: msg.values, prefixS: S, prefixSS: SS,
+        n: msg.n, finite: msg.finite,
+        fingerprint: auxTopcutFingerprintNow()
+      };
+      renderAuxTopcut();
+      if (typeof autoSaveProject === 'function') autoSaveProject();
+    }
+  };
+}
+
+function auxTopcutCopyCalcol() {
+  var t = auxTopcut;
+  if (!t || t.cap == null) return;
+  var safe = t.varName.replace(/[^\w]/g, '_');
+  var code = 'aux.' + safe + '_cap = cap(aux.' + t.varName + ', ' + formatNum(t.cap) + ');';
+  var done = document.getElementById('auxTopcutCopied');
+  function ok() { if (done) { done.textContent = 'copied — paste in Calc (Aux mode)'; setTimeout(function() { if (done) done.textContent = ''; }, 3000); } }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(code).then(ok, function() { if (done) done.textContent = code; });
+  } else if (done) {
+    done.textContent = code;
+  }
+}
+
+// ── Wiring (static container — listeners attach once) ──
+if ($auxViewToggle) {
+  $auxViewToggle.addEventListener('click', function(e) {
+    var btn = e.target.closest('.aux-view-btn');
+    if (!btn) return;
+    auxView = btn.dataset.auxview;
+    renderAuxView();
+    if (typeof autoSaveProject === 'function') autoSaveProject();
+  });
+}
+if ($auxTopcut) {
+  $auxTopcut.addEventListener('click', function(e) {
+    if (e.target.id === 'auxTopcutLoadBtn') loadAuxTopcut();
+    else if (e.target.id === 'auxTopcutCopyBtn') auxTopcutCopyCalcol();
+  });
+  $auxTopcut.addEventListener('change', function(e) {
+    if (e.target.id === 'auxTopcutVar') {
+      // Variable switch invalidates the loaded distribution
+      if (auxTopcut && auxTopcut.varName !== e.target.value) {
+        auxTopcut = { varName: e.target.value, cap: null, values: null };
+        renderAuxTopcut();
+        if (typeof autoSaveProject === 'function') autoSaveProject();
+      }
+    } else if (e.target.id === 'auxTopcutCapInput') {
+      var c = parseFloat(e.target.value);
+      if (isFinite(c)) auxTopcutSetCap(c, true);
+    }
+  });
+  // Cap drag across any plot — the svg is captured at mousedown so the drag
+  // keeps tracking even when the pointer leaves it
+  $auxTopcut.addEventListener('mousedown', function(e) {
+    var svg = e.target.closest ? e.target.closest('.tc-svg') : null;
+    if (!svg || !auxTopcut || !auxTopcut.values) return;
+    var P = TC_PLOT;
+    var x0 = parseFloat(svg.dataset.x0), x1 = parseFloat(svg.dataset.x1), xlog = svg.dataset.xlog === '1';
+    function capFrom(ev) {
+      var rect = svg.getBoundingClientRect();
+      var vx = (ev.clientX - rect.left) * (P.W / rect.width);
+      var frac = Math.min(1, Math.max(0, (vx - P.padL) / (P.W - P.padL - P.padR)));
+      if (xlog) return Math.pow(10, Math.log10(x0) + frac * (Math.log10(x1) - Math.log10(x0)));
+      return x0 + frac * (x1 - x0);
+    }
+    auxTopcutSetCap(capFrom(e), false);
+    e.preventDefault();
+    function onMove(ev) { auxTopcutSetCap(capFrom(ev), false); }
+    function onUp() {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      auxTopcutSetCap(auxTopcut.cap, true); // settle + autosave
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
 }
 
 // ─── Result Cache (IndexedDB) ──────────────────────────────────────────
@@ -9798,7 +10421,10 @@ function serializeProject() {
       calcolCode: auxCalcolCode,
       calcolMeta: auxCalcolMeta,
       // Declus params only — weights are recomputed, never stored
-      declus: (auxDeclus && auxDeclus.params) ? { params: auxDeclus.params } : null
+      declus: (auxDeclus && auxDeclus.params) ? { params: auxDeclus.params } : null,
+      // Top-cut: variable + cap; the distribution is re-loaded on demand
+      topcut: (auxTopcut && auxTopcut.varName) ? { varName: auxTopcut.varName, cap: auxTopcut.cap } : null,
+      view: auxView
     } : null,
     calcolCode: currentCalcolCode,
     calcolMeta: currentCalcolMeta,
