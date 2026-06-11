@@ -13,9 +13,11 @@ var dhFiles = { collar: null, survey: null, intervals: null };   // File per rol
 var dhParsed = { collar: null, survey: null, intervals: null };  // {header, rows}
 var dhMap = { collar: {}, survey: {}, intervals: {} };           // field → col idx
 var dhDipConvention = null;   // 'pos-down' | 'neg-down' (null = not detected yet)
+var dhOpts = { method: 'minimumCurvature', length: '', domainCol: '', minCov: '' }; // serializable (Phase 2)
 var dhLastReport = null;      // last Drillhole.process report (for the modal)
 var dhDerivedName = null;     // file name of the loaded composite CSV
 var dhProvFiles = null;       // [names] for the provenance banner
+var dhPendingRestore = null;  // project.drillholes awaiting its files (Phase 2)
 
 var DH_ROLES = ['collar', 'survey', 'intervals'];
 var DH_SYN = {
@@ -148,6 +150,8 @@ async function dhAssignFiles(files) {
     dhSetStatus('Read failed: ' + err.message, true);
   }
   renderDhCard();
+  dhTryApplyPendingRestore(); // saved recipe applies when its files land
+  dhAutoSave();
 }
 
 async function dhAssignOne(file) {
@@ -184,9 +188,9 @@ function dhClearAll() {
   dhMap = { collar: {}, survey: {}, intervals: {} };
   dhDipConvention = null;
   dhLastReport = null;
-  renderDhCard();
   var $r = document.getElementById('dhReportInline');
   if ($r) $r.innerHTML = '';
+  renderDhCard(); // re-writes the pending-restore hint when one is staged
 }
 
 // ── rendering ───────────────────────────────────────────────────────────
@@ -215,6 +219,15 @@ function renderDhCard() {
   $slots.innerHTML = html;
   var $clear = document.getElementById('dhClearBtn');
   if ($clear) $clear.style.display = (dhFiles.collar || dhFiles.survey || dhFiles.intervals) ? '' : 'none';
+
+  // pending project recipe: tell the user which files it expects
+  var $rep = document.getElementById('dhReportInline');
+  if (dhPendingRestore && !(dhFiles.collar && dhFiles.survey && dhFiles.intervals)) {
+    var pf = dhPendingRestore.files;
+    if ($rep) $rep.innerHTML = '<div class="dh-status">This project used a drillhole set — drop ' +
+      '<b>' + esc(pf.collar.name) + '</b> + <b>' + esc(pf.survey.name) + '</b> + <b>' + esc(pf.intervals.name) +
+      '</b> (or the packed zip) to re-composite with the saved mapping.</div>';
+  }
   renderDhMapping();
 }
 
@@ -266,13 +279,6 @@ function renderDhMapping() {
     return;
   }
 
-  // option inputs survive the re-render (mapping edits and the convention
-  // toggle rebuild this panel)
-  var keep = {};
-  ['dhMethod', 'dhLength', 'dhDomain', 'dhMinCov'].forEach(function(id) {
-    var el = document.getElementById(id);
-    if (el) keep[id] = el.value;
-  });
 
   var html = '<div class="dh-map-tables">';
   html += '<div class="dh-map-table"><div class="dh-map-title">Collar — ' + esc(dhFiles.collar.name) + '</div>' +
@@ -311,14 +317,17 @@ function renderDhMapping() {
     if (dataCols[dc].type === 'cat') catOpts += '<option value="' + esc(dataCols[dc].name) + '">' + esc(dataCols[dc].name) + '</option>';
   }
   var autoLen = dhAutoLength();
+  function mOpt(v, label) {
+    return '<option value="' + v + '"' + (dhOpts.method === v ? ' selected' : '') + '>' + label + '</option>';
+  }
   html += '<div class="dh-opts">' +
     '<div class="dh-opt"><label>Desurvey method</label><select id="dhMethod">' +
-      '<option value="minimumCurvature">Minimum curvature</option>' +
-      '<option value="balancedTangential">Balanced tangential</option>' +
-      '<option value="tangential">Tangential</option></select></div>' +
-    '<div class="dh-opt"><label>Composite length</label><input type="number" id="dhLength" class="dh-narrow" min="0" step="any" placeholder="' + (autoLen != null ? autoLen : 'auto') + '"></div>' +
+      mOpt('minimumCurvature', 'Minimum curvature') +
+      mOpt('balancedTangential', 'Balanced tangential') +
+      mOpt('tangential', 'Tangential') + '</select></div>' +
+    '<div class="dh-opt"><label>Composite length</label><input type="number" id="dhLength" class="dh-narrow" min="0" step="any" value="' + esc(dhOpts.length) + '" placeholder="' + (autoLen != null ? autoLen : 'auto') + '"></div>' +
     '<div class="dh-opt"><label>Break on (domain)</label><select id="dhDomain">' + catOpts + '</select></div>' +
-    '<div class="dh-opt"><label>Min coverage %</label><input type="number" id="dhMinCov" class="dh-narrow" min="0" max="100" step="any" placeholder="off"></div>' +
+    '<div class="dh-opt"><label>Min coverage %</label><input type="number" id="dhMinCov" class="dh-narrow" min="0" max="100" step="any" value="' + esc(dhOpts.minCov) + '" placeholder="off"></div>' +
     '</div>';
 
   html += '<div class="dh-actions">' +
@@ -326,10 +335,9 @@ function renderDhMapping() {
     '<span class="dh-status" id="dhStatus"></span></div>';
 
   $m.innerHTML = html;
-  for (var kid in keep) {
-    var kel = document.getElementById(kid);
-    if (kel && keep[kid] !== '') kel.value = keep[kid];
-  }
+  // domain select value applied after render (option list is data-driven)
+  var $dom = document.getElementById('dhDomain');
+  if ($dom && dhOpts.domainCol) $dom.value = dhOpts.domainCol;
 }
 
 function dhAutoLength() {
@@ -398,13 +406,13 @@ function dhCsvCell(v) {
 function dhCompositeAndLoad() {
   if (!dhMappingComplete()) return;
   dhSetStatus('Compositing…');
-  var lenInput = parseFloat((document.getElementById('dhLength') || {}).value);
-  var covInput = parseFloat((document.getElementById('dhMinCov') || {}).value);
+  var lenInput = parseFloat(dhOpts.length);
+  var covInput = parseFloat(dhOpts.minCov);
   var opts = {
-    method: (document.getElementById('dhMethod') || {}).value || 'minimumCurvature',
+    method: dhOpts.method || 'minimumCurvature',
     dipConvention: dhDipConvention || 'pos-down',
     compositeLength: isFinite(lenInput) && lenInput > 0 ? lenInput : null,
-    domainCol: (document.getElementById('dhDomain') || {}).value || null,
+    domainCol: dhOpts.domainCol || null,
     minCoverage: isFinite(covInput) && covInput > 0 ? covInput / 100 : null,
   };
   var result;
@@ -493,6 +501,123 @@ function renderDhProvenance() {
   });
 }
 
+// ── persistence (Phase 2, D8) ───────────────────────────────────────────
+// The recipe (file identities + mapping + options) rides the project; the
+// derived CSV is never persisted — restore re-derives, like declus weights.
+
+function dhAutoSave() {
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+
+// Mapping stored by column NAME (robust to reordered exports), index kept
+// as the tiebreaker for duplicate headers
+function dhMapToNames(role) {
+  var p = dhParsed[role];
+  var out = {};
+  for (var f in dhMap[role]) {
+    var idx = dhMap[role][f];
+    out[f] = (idx != null && idx >= 0) ? { name: p.header[idx], idx: idx } : null;
+  }
+  return out;
+}
+
+function dhMapFromNames(role, saved) {
+  var p = dhParsed[role];
+  var out = {};
+  for (var f in saved) {
+    var s = saved[f];
+    if (!s) { out[f] = -1; continue; }
+    var idx = p.header.indexOf(s.name);
+    if (idx < 0 && s.idx != null && s.idx < p.header.length) idx = s.idx;
+    out[f] = idx;
+  }
+  return out;
+}
+
+// The `drillholes` project key — null when no complete trio is staged
+function dhSerialize() {
+  if (!dhParsed.collar || !dhParsed.survey || !dhParsed.intervals) return null;
+  return {
+    files: {
+      collar: { name: dhFiles.collar.name, size: dhFiles.collar.size },
+      survey: { name: dhFiles.survey.name, size: dhFiles.survey.size },
+      intervals: { name: dhFiles.intervals.name, size: dhFiles.intervals.size },
+    },
+    map: { collar: dhMapToNames('collar'), survey: dhMapToNames('survey'), intervals: dhMapToNames('intervals') },
+    dipConvention: dhDipConvention,
+    opts: { method: dhOpts.method, length: dhOpts.length, domainCol: dhOpts.domainCol, minCov: dhOpts.minCov },
+    loaded: !!(auxFile && dhDerivedName && auxFile.name === dhDerivedName),
+  };
+}
+
+// applyProject hands the saved recipe here; it applies when the files land
+function dhRestoreFromProject(saved) {
+  dhPendingRestore = (saved && saved.files) ? saved : null;
+  renderDhCard();
+}
+
+// Files just landed in slots — if a pending recipe matches by name, apply
+// its mapping/options; when the whole trio matches a loaded:true recipe,
+// re-composite automatically (the user's saved intent — and the report
+// still renders, so nothing happens invisibly)
+function dhTryApplyPendingRestore() {
+  var pr = dhPendingRestore;
+  if (!pr) return;
+  var allMatch = true;
+  for (var r = 0; r < DH_ROLES.length; r++) {
+    var role = DH_ROLES[r];
+    if (!dhFiles[role] || dhFiles[role].name !== pr.files[role].name) { allMatch = false; continue; }
+    dhMap[role] = dhMapFromNames(role, pr.map[role]);
+  }
+  if (pr.dipConvention) dhDipConvention = pr.dipConvention;
+  if (pr.opts) {
+    dhOpts.method = pr.opts.method || 'minimumCurvature';
+    dhOpts.length = pr.opts.length || '';
+    dhOpts.domainCol = pr.opts.domainCol || '';
+    dhOpts.minCov = pr.opts.minCov || '';
+  }
+  if (allMatch) {
+    var wasLoaded = pr.loaded;
+    dhPendingRestore = null;
+    renderDhCard();
+    if (wasLoaded && dhMappingComplete()) dhCompositeAndLoad();
+  }
+}
+
+// Packed-project path: the raw trio extracted from the archive
+async function dhLoadTrio(trio) {
+  for (var r = 0; r < DH_ROLES.length; r++) {
+    var f = trio[DH_ROLES[r]];
+    if (f) {
+      dhFiles[DH_ROLES[r]] = f;
+      dhParsed[DH_ROLES[r]] = await dhParseFile(f);
+      dhMap[DH_ROLES[r]] = dhAutoMap(DH_ROLES[r], dhParsed[DH_ROLES[r]].header);
+    }
+  }
+  dhDipConvention = dhDetectConventionFromParsed();
+  renderDhCard();
+  dhTryApplyPendingRestore();
+}
+
+// Pack integration (D8): when the aux is drillhole-derived, the archive
+// carries the RAW trio — the recipe in the project json re-derives on load
+function dhIsDerivedAux() {
+  return !!(auxFile && dhDerivedName && auxFile.name === dhDerivedName &&
+    dhFiles.collar && dhFiles.survey && dhFiles.intervals);
+}
+function dhPackFiles() {
+  return [dhFiles.collar, dhFiles.survey, dhFiles.intervals];
+}
+
+// New file / Clear project: drillhole state starts fresh
+function dhReset() {
+  dhPendingRestore = null;
+  dhDerivedName = null;
+  dhProvFiles = null;
+  dhOpts = { method: 'minimumCurvature', length: '', domainCol: '', minCov: '' };
+  dhClearAll();
+}
+
 // ── wiring (DOM is parsed; runs at load) ────────────────────────────────
 (function() {
   var $card = document.getElementById('dhCard');
@@ -523,7 +648,7 @@ function renderDhProvenance() {
     if (files.length) dhAssignFiles(files);
   });
 
-  // delegated: mapping selects, convention toggle, composite button, clear
+  // delegated: mapping selects, option inputs, convention toggle, composite, clear
   $card.addEventListener('change', function(e) {
     var map = e.target.dataset && e.target.dataset.dhmap;
     if (map) {
@@ -531,7 +656,13 @@ function renderDhProvenance() {
       dhMap[parts[0]][parts[1]] = parseInt(e.target.value);
       if (parts[0] === 'survey' && parts[1] === 'dip') dhDipConvention = dhDetectConventionFromParsed();
       renderDhMapping();
+      dhAutoSave();
+      return;
     }
+    if (e.target.id === 'dhMethod') { dhOpts.method = e.target.value; dhAutoSave(); }
+    else if (e.target.id === 'dhLength') { dhOpts.length = e.target.value; dhAutoSave(); }
+    else if (e.target.id === 'dhDomain') { dhOpts.domainCol = e.target.value; dhAutoSave(); }
+    else if (e.target.id === 'dhMinCov') { dhOpts.minCov = e.target.value; dhAutoSave(); }
   });
   $card.addEventListener('click', function(e) {
     if (e.target.id === 'dhGoBtn') { dhCompositeAndLoad(); return; }
@@ -539,6 +670,7 @@ function renderDhProvenance() {
     if (conv) {
       dhDipConvention = conv;
       renderDhMapping();
+      dhAutoSave();
       return;
     }
   });

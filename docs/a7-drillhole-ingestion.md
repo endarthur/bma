@@ -227,6 +227,24 @@ sidebar, filters, calcols, declus, top-cut — nothing new to learn.
   contract pinned in the harness). Full suite green (10/10).
 - **Phase 2 — persistence + pack**: project key, pack the raw trio,
   restore re-derivation. Smoke extends to reload/pack round-trip.
+  ✅ **DONE 2026-06-11** — `drillholes` project key (file identities by
+  name+size, mapping **by column name** with index fallback, dip
+  convention, method/length/domain/coverage opts, `loaded` flag); options
+  refactored from DOM-only into serializable `dhOpts` state, autosaved on
+  every dh change. Restore: `dhRestoreFromProject` stages the recipe, the
+  card shows a hint naming the expected trio; when the files land
+  (re-drop or zip) the mapping re-applies and a `loaded:true` recipe
+  **auto-recomposites** — the derived CSV then matches
+  `pendingAuxRestore` by name, so aux filter/calcols/declus params
+  restore through the existing machinery untouched. Pack (D8): the
+  dialog shows the raw trio ("composites re-derive on load"), `runPack`
+  packs the three raw files + recipe, never the derived CSV;
+  `tryPackedProject` extracts the trio and the packed-load path
+  re-derives end-to-end. New file / Clear project → `dhReset()`. Smoke
+  +11 asserts (35 total): recipe contents, restore hint, manual re-drop
+  auto-recomposite, pack dialog text, real download → reload →
+  packed-load re-derivation (600 composites, SUPPORT weight, dh prefix).
+  Full suite green (10/10).
 - **Phase 3 — example + docs**: the example generator emits a drillhole
   trio for the same synthetic deposit (the current samples file becomes
   *derivable* — keep both so old tutorials hold); TUTORIAL.txt section;

@@ -389,6 +389,9 @@ function serializeProject() {
     tree: { open: catalogTreeOpen },
     // Rails workspace arrangement (C1b-2) — {v:1, rails: <serialized state>}
     layout: wsSerializeLayout(),
+    // Drillhole-set recipe (A7 Phase 2, D8) — file identities + mapping +
+    // options; the derived composite CSV is never persisted (re-derived)
+    drillholes: dhSerialize(),
     exportCols: exportColumns.map(c => ({
       name: c.name, outputName: c.outputName, selected: c.selected
     })),
@@ -603,6 +606,10 @@ async function applyProject(project) {
   // Stash aux config; applied when the aux file is (re)loaded on the Aux tab
   pendingAuxRestore = project.aux || null;
 
+  // Drillhole-set recipe — applies when its three files land on the card
+  // (a re-derived composite CSV then matches pendingAuxRestore by name)
+  dhRestoreFromProject(project.drillholes || null);
+
   // Stash remaining post-analysis config for when displayResults runs
   pendingProjectRestore = project;
 }
@@ -684,16 +691,27 @@ function openPackModal() {
   document.getElementById('packTitle').value = projectTitle || '';
   document.getElementById('packModelName').textContent = currentFile.name + ' (' + formatBytes(currentFile.size) + ')';
   var $auxRow = document.getElementById('packAuxRow');
+  var auxPackSize = 0;
   if (auxFile && auxFile.name !== currentFile.name) {
     $auxRow.style.display = '';
-    document.getElementById('packAuxName').textContent = auxFile.name + ' (' + formatBytes(auxFile.size) + ')';
+    if (dhIsDerivedAux()) {
+      // D8: the raw trio rides the pack; the recipe re-derives the composites
+      var trio = dhPackFiles();
+      auxPackSize = trio[0].size + trio[1].size + trio[2].size;
+      document.getElementById('packAuxName').textContent =
+        'drillhole set: ' + trio.map(function(f) { return f.name; }).join(' + ') +
+        ' (' + formatBytes(auxPackSize) + ' — composites re-derive on load)';
+    } else {
+      auxPackSize = auxFile.size;
+      document.getElementById('packAuxName').textContent = auxFile.name + ' (' + formatBytes(auxFile.size) + ')';
+    }
     document.getElementById('packIncAux').checked = true;
   } else {
     $auxRow.style.display = 'none';
   }
   var $compress = document.getElementById('packCompress');
   var $note = document.getElementById('packNote');
-  var totalData = currentFile.size + (auxFile ? auxFile.size : 0);
+  var totalData = currentFile.size + auxPackSize;
   if (typeof CompressionStream === 'undefined') {
     $compress.checked = false;
     $compress.disabled = true;
@@ -738,7 +756,14 @@ async function runPack() {
     // Never re-deflate archives; everything else follows the toggle
     function wantsDeflate(name) { return compress && !/\.zip$/i.test(name); }
     var files = [{ name: currentFile.name, blob: currentFile, deflate: wantsDeflate(currentFile.name) }];
-    if (includeAux) files.push({ name: auxFile.name, blob: auxFile, deflate: wantsDeflate(auxFile.name) });
+    if (includeAux && dhIsDerivedAux()) {
+      // D8: pack the raw trio, never the derived composite CSV
+      dhPackFiles().forEach(function(f) {
+        files.push({ name: f.name, blob: f, deflate: wantsDeflate(f.name) });
+      });
+    } else if (includeAux) {
+      files.push({ name: auxFile.name, blob: auxFile, deflate: wantsDeflate(auxFile.name) });
+    }
     files.push({ name: stem + '.bma.json', blob: new Blob([json]), deflate: compress });
 
     var prepared = await new Promise(function(resolve, reject) {
@@ -820,6 +845,7 @@ function clearProject() {
   pendingProjectRestore = null;
   resetExportSettings();
   wsResetLayout(true); // skipSave — clearProject just removed the stored key
+  dhReset();
 
   runPreflight(currentFile).then(data => {
     renderPreflight(data);
@@ -896,6 +922,7 @@ $projectFileInput.addEventListener('change', (e) => {
 // Project file dropped before its data file (or pulled from a packed zip)
 let pendingDroppedProject = null;
 let pendingDroppedAuxFile = null;
+let pendingDroppedDhTrio = null; // raw drillhole trio from a packed project (A7)
 
 // A "packed project" is a zip containing a .bma.json plus the data files it
 // references. Returns {project, modelFile, auxFile} or null (not packed /
@@ -916,7 +943,9 @@ async function tryPackedProject(file) {
       (project.title ? ': <strong>' + esc(project.title) + '</strong>' : '') +
       '<div class="confirm-detail"><code>' + esc(pjEntry.name) + '</code></div>' +
       'Load <strong>' + esc(project.file.name) + '</strong>' +
-      (project.aux && project.aux.fileName ? ' and <strong>' + esc(project.aux.fileName) + '</strong>' : '') +
+      (project.drillholes && project.drillholes.files
+        ? ' and the packed <strong>drillhole set</strong> (composites re-derive on load)'
+        : (project.aux && project.aux.fileName ? ' and <strong>' + esc(project.aux.fileName) + '</strong>' : '')) +
       ' with that setup?' +
       '<div class="confirm-hint">“Open as zip” ignores the project and opens the archive normally.</div>',
     okLabel: 'Load project',
@@ -929,7 +958,20 @@ async function tryPackedProject(file) {
     const auxEntry = entries.find(e => e.name === project.aux.fileName);
     if (auxEntry) { try { auxF = await zipEntryToFile(file, auxEntry); } catch (e) {} }
   }
-  return { project: project, modelFile: modelFile, auxFile: auxF };
+  // Drillhole packs carry the RAW trio (A7 D8) — the derived composite CSV
+  // is never in the archive; it re-derives on load
+  let dhTrio = null;
+  if (project.drillholes && project.drillholes.files) {
+    dhTrio = {};
+    let found = 0;
+    for (const role of ['collar', 'survey', 'intervals']) {
+      const want = project.drillholes.files[role];
+      const fe = want && entries.find(e => e.name === want.name);
+      if (fe) { try { dhTrio[role] = await zipEntryToFile(file, fe); found++; } catch (e) {} }
+    }
+    if (!found) dhTrio = null;
+  }
+  return { project: project, modelFile: modelFile, auxFile: auxF, dhTrio: dhTrio };
 }
 
 async function handleFile(file, handle) {
@@ -958,6 +1000,7 @@ async function handleFile(file, handle) {
     if (packed) {
       pendingDroppedProject = packed.project;
       pendingDroppedAuxFile = packed.auxFile;
+      pendingDroppedDhTrio = packed.dhTrio;
       handleFile(packed.modelFile, null);
       return;
     }
@@ -993,6 +1036,7 @@ async function handleFile(file, handle) {
   pendingProjectRestore = null;
   resetExportSettings();
   wsResetLayout(true); // fresh file starts from the default workspace layout
+  dhReset();           // fresh file starts with empty drillhole slots
   currentTypeOverrides = null;
   currentZipEntry = null;
   currentSkipCols = null;
@@ -1084,12 +1128,15 @@ async function handleFile(file, handle) {
       if (saved) { try { project = JSON.parse(saved); } catch (e) { /* corrupt — ignore */ } }
     }
     const auxToLoad = pendingDroppedAuxFile;
+    const dhTrioToLoad = pendingDroppedDhTrio;
     pendingDroppedProject = null;
     pendingDroppedAuxFile = null;
+    pendingDroppedDhTrio = null;
     if (project) {
       try {
         await applyProject(project);
         if (auxToLoad) loadAuxFile(auxToLoad, null);
+        else if (dhTrioToLoad) await dhLoadTrio(dhTrioToLoad); // re-derives + loads via the saved recipe
         executeAnalysis();
       } catch (e) { /* corrupt — ignore */ }
     }
