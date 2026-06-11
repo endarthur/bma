@@ -152,8 +152,11 @@ their old keys. `serializeProject()` keeps every *view* key it has today
 
 Collapsible fixed-width left panel (CSS grid column, `--tree-w`), visible on
 all results tabs, toggled by a header button; collapsed state persisted in
-the project. C1b later re-homes the same component as a rails dock panel —
-keep the render entry (`renderCatalogTree(container)`) container-agnostic.
+the project. C1b later re-homes the same component as a rails dock panel,
+and on mobile (C1c) it renders as a slide-over sheet — both are reasons the
+render entry (`renderCatalogTree(container)`) stays container-agnostic. Use
+pointer events (not mouse events) for any tree drag/edit interactions from
+day one; below the existing 700px breakpoint the tree defaults to collapsed.
 
 ```
 ▾ Model — model.csv (1.2M rows)
@@ -182,8 +185,8 @@ Categories tab affordances or just deep-linking to that tab — see D5).
 | # | Decision | Call |
 |---|---|---|
 | D1 | Variable identity by `dataset:name`; stale entries kept, shown grayed | **Made** (matches existing by-name persistence) |
-| D2 | Units: one unit per variable in the catalog; swath/GT per-view unit selects become write-through views of it (migration: `globalUnits` < `swath.units` < `gt.gradeUnits`) | **Proposed — needs Arthur.** Alternative: keep per-view unit overrides layered over a catalog default. One unit per variable is simpler and almost certainly what users mean; divergent per-view units look like an accident of independent tab development |
-| D3 | Support weight: single `roles.model.weight` shared by Statistics and Swath (their selects sync); GT's tonnage multiplier is a separate `tonnageFactor` role; GT density a `density` role | **Proposed — needs Arthur.** Today stats weight and swath weight are independent selects that default the same way; unifying changes behavior only for someone deliberately weighting swaths differently from stats |
+| D2 | Units: one unit per variable in the catalog; swath/GT per-view unit selects become write-through views of it (migration: `globalUnits` < `swath.units` < `gt.gradeUnits`) | **DECIDED (Arthur, 2026-06-11): unify.** One unit per variable; per-view selects are synchronized views |
+| D3 | Support weight: single `roles.model.weight` shared by Statistics and Swath (their selects sync); GT's tonnage multiplier is a separate `tonnageFactor` role; GT density a `density` role | **DECIDED (Arthur, 2026-06-11): unify** stats+swath weight; GT stays independent (`tonnageFactor`, `density` roles) |
 | D4 | Pairing: materialized `pairs` map, case-insensitive seed, never re-overwritten, `null` = explicit orphan; all four match sites switch to `catPair()` | **Made** (this is the C1a raison d'être; also fixes Categories' case-sensitive mismatch) |
 | D5 | Categorical value colors/order editing in the tree vs deep-link to Categories tab | **Open — implementation-time call** (tree can start with a "edit in Categories →" link; zero risk) |
 | D6 | Roles not guessed from column names — user-assigned only (seeded from migration) | **Made** (no-magic) |
