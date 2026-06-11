@@ -56,10 +56,19 @@ rails/menu/dee — and vendored into BMA like rails/menu. Dee's
 `desurvey()`/`interpolatePath()` (`ext/dee/src/layers.js:303`) is the seed;
 dee later adopts the lib and drops its inline copy.
 
-- **Desurvey: minimum curvature** with the standard dogleg ratio factor
-  (dee's implementation is already correct: RF = (2/dl)·tan(dl/2), straight
-  fallback below 1e-6). Tangential kept as a secondary option (cheap, ships
-  with the seed code).
+- **Desurvey: three methods, user-selectable** (Arthur, 2026-06-11 —
+  straight-segment methods are genuinely useful for sparse/legacy surveys
+  and for matching historic desurveys):
+  - **minimum curvature** (default) — standard dogleg ratio factor
+    (dee's implementation is already correct: RF = (2/θ)·tan(θ/2),
+    straight fallback below 1e-6);
+  - **balanced tangential** — the same segment step without RF (averages
+    the end tangents; matches several packages' legacy output);
+  - **tangential** — straight segments along the lower station's attitude
+    (matches dee's simple-tangential seed).
+  `positionAt` interpolates **consistently with the hole's method** (arc /
+  straight segment / chord) — interpolated depths must land on the same
+  path the stations were placed on; the harness pins all three.
 - **Conventions (D1)**: azimuth degrees clockwise from north; dip in the
   *mining convention*, **positive down** (a -60 file means 60° below
   horizontal in the signed-math convention dee uses). Auto-detect: if the
@@ -147,8 +156,9 @@ on it (or dropping three files at once) role-detects the entries; each slot
 shows the matched file + a role override select. Below the slots:
 
 1. **Mapping panel** — per-table column selects (auto-detected, editable),
-   the dip-convention toggle, composite length, optional domain column,
-   optional min-coverage filter.
+   the dip-convention toggle (prominent, D1), the **desurvey method select**
+   (minimum curvature default | balanced tangential | tangential),
+   composite length, optional domain column, optional min-coverage filter.
 2. **[Composite & load]** — runs validate → desurvey → composite, shows the
    **consistency report**, and loads the derived File as the aux dataset.
 3. After load, the aux header line shows the provenance ("562 composites

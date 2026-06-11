@@ -69,13 +69,20 @@ function dhNormalizeSurveys(rawSurveys, dipConvention) {
   return { stations: stations, dupCount: dupCount, badCount: badCount };
 }
 
-// Minimum-curvature (default) or tangential desurvey of one hole.
+// Desurvey one hole. Methods:
+// - 'minimumCurvature' (default): circular-arc model, RF = (2/θ)·tan(θ/2)
+// - 'balancedTangential': the same without RF — averages the two end
+//   tangents per segment (matches legacy desurveys from several packages)
+// - 'tangential': straight segments along the LOWER station's attitude
+//   (sparse/legacy surveys; matches dee's simple-tangential seed)
 // collar = [x, y, z]; stations from dhNormalizeSurveys (pos-down).
-// Returns { depths, px, py, pz, tx, ty, tz } (typed arrays, one per station)
-// — tangents ride along so dhPositionAt can interpolate the arc.
+// Returns { method, depths, px, py, pz, tx, ty, tz } — tangents and the
+// method ride along so dhPositionAt interpolates consistently.
 function dhDesurveyHole(collar, stations, method) {
+  method = method || 'minimumCurvature';
   var n = stations.length;
   var out = {
+    method: method,
     depths: new Float64Array(n),
     px: new Float64Array(n), py: new Float64Array(n), pz: new Float64Array(n),
     tx: new Float64Array(n), ty: new Float64Array(n), tz: new Float64Array(n),
@@ -94,10 +101,13 @@ function dhDesurveyHole(collar, stations, method) {
       out.py[k] = out.py[k - 1] + dl * out.ty[k];
       out.pz[k] = out.pz[k - 1] + dl * out.tz[k];
     } else {
-      // minimum curvature: RF = (2/θ)·tan(θ/2)
-      var dot = out.tx[k - 1] * out.tx[k] + out.ty[k - 1] * out.ty[k] + out.tz[k - 1] * out.tz[k];
-      var dogleg = Math.acos(Math.max(-1, Math.min(1, dot)));
-      var rf = dogleg > 1e-6 ? (2 / dogleg) * Math.tan(dogleg / 2) : 1;
+      var rf = 1; // balanced tangential
+      if (method !== 'balancedTangential') {
+        // minimum curvature: RF = (2/θ)·tan(θ/2)
+        var dot = out.tx[k - 1] * out.tx[k] + out.ty[k - 1] * out.ty[k] + out.tz[k - 1] * out.tz[k];
+        var dogleg = Math.acos(Math.max(-1, Math.min(1, dot)));
+        rf = dogleg > 1e-6 ? (2 / dogleg) * Math.tan(dogleg / 2) : 1;
+      }
       out.px[k] = out.px[k - 1] + 0.5 * dl * (out.tx[k - 1] + out.tx[k]) * rf;
       out.py[k] = out.py[k - 1] + 0.5 * dl * (out.ty[k - 1] + out.ty[k]) * rf;
       out.pz[k] = out.pz[k - 1] + 0.5 * dl * (out.tz[k - 1] + out.tz[k]) * rf;
@@ -106,12 +116,17 @@ function dhDesurveyHole(collar, stations, method) {
   return out;
 }
 
-// Position at an arbitrary down-hole depth — arc-correct (D2). Within a
-// segment the minimum-curvature model is a circular arc; the position is
-// the closed-form integral of the slerp of the end tangents:
+// Position at an arbitrary down-hole depth, consistent with the hole's
+// desurvey method (depths between stations must land on the SAME path the
+// stations were placed on):
+// - minimumCurvature: arc-correct (D2) — the closed-form integral of the
+//   slerp of the end tangents:
 //   p(s) = p1 + L/(θ·sinθ)·[(cos(θ−φ) − cosθ)·d1 + (1 − cosφ)·d2], φ = θ·s/L
-// (At s = L this reduces to the RF endpoint formula — the harness pins
-// mid-segment points to an analytic circle to 1e-9.)
+//   (at s = L this reduces to the RF endpoint formula; the harness pins
+//   mid-segment points to an analytic circle at 1e-14)
+// - tangential: straight along the lower station's attitude (how the
+//   segment was built)
+// - balancedTangential: linear along the segment chord
 // Beyond the last station: straight extrapolation along the last tangent
 // (standard practice — intervals routinely outrun the survey).
 function dhPositionAt(hole, depth) {
@@ -132,11 +147,29 @@ function dhPositionAt(hole, depth) {
     if (d[mid] <= depth) lo = mid; else hi = mid;
   }
   var L = d[lo + 1] - d[lo], s = depth - d[lo];
+  if (L < 1e-12) return [hole.px[lo], hole.py[lo], hole.pz[lo]];
+
+  if (hole.method === 'tangential') {
+    return [
+      hole.px[lo] + s * hole.tx[lo + 1],
+      hole.py[lo] + s * hole.ty[lo + 1],
+      hole.pz[lo] + s * hole.tz[lo + 1],
+    ];
+  }
+  if (hole.method === 'balancedTangential') {
+    var t = s / L;
+    return [
+      hole.px[lo] + t * (hole.px[lo + 1] - hole.px[lo]),
+      hole.py[lo] + t * (hole.py[lo + 1] - hole.py[lo]),
+      hole.pz[lo] + t * (hole.pz[lo + 1] - hole.pz[lo]),
+    ];
+  }
+
   var d1 = [hole.tx[lo], hole.ty[lo], hole.tz[lo]];
   var d2 = [hole.tx[lo + 1], hole.ty[lo + 1], hole.tz[lo + 1]];
   var dot = d1[0] * d2[0] + d1[1] * d2[1] + d1[2] * d2[2];
   var theta = Math.acos(Math.max(-1, Math.min(1, dot)));
-  if (theta < 1e-9 || L < 1e-12) {
+  if (theta < 1e-9) {
     return [hole.px[lo] + s * d1[0], hole.py[lo] + s * d1[1], hole.pz[lo] + s * d1[2]];
   }
   var phi = theta * s / L;
