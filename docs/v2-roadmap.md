@@ -38,8 +38,11 @@ Chilès & Delfiner). Pure worker/UI increments on existing infrastructure.
 | A6a | **Theoretical GT overlay — affine engine** | M | A3 | ✅ **DONE 2026-06-12 (65a7c6e)** — GT sidebar "Theoretical (samples)" section: f slider (user input, never model-derived), dashed overlay scaled to model total tonnage, aux-weighted distribution via `colvalues` (+weights), live re-evaluation. Smoke: `experiments/gt-theo-smoke.js` |
 | A6b | **DGM (Hermite) engine** | L | A6a | Hermite anamorphosis fit on the (declustered) aux distribution, φₙ→φₙrⁿ, r from f by root-find; closed-form T/Q above cutoff; slots into the existing engine select. Caveats (multigaussianity, no info effect) in help. Oracles: lognormal closed forms (exact — block dist is lognormal σ→rσ under lognormal anamorphosis); gstlearn (BSD-3 Python) harness |
 
-Out of scope, confirmed: contact analysis (needs BHID/domain-pair structure;
-absent from sampled QP validation sections), variography, KNA.
+| A7 | **Drillhole aux ingestion** (collar + survey + intervals) | L | soft: C1a | The adoption unlock: raw drillhole tables → min-curvature desurvey → length-weighted down-hole compositing (SUPPORT emitted, optional domain boundaries) → a synthesized point dataset feeding the existing aux pipeline **unchanged** (declus/top-cut/Δ%/Q-Q/swath/theoretical GT all free). **The consistency report is the feature**: BHID join failures, overlapping intervals, missing surveys, EOH mismatches surfaced, never silently dropped (no-magic). UI: pre-tree = three slots + zip role detection on the Aux empty state; re-homes naturally under the C1a tree (a drillhole set *is* a tree). Math factored as `@gcu/drillhole` (dee already has min-curvature desurvey — extract/share; oracle-harness playbook like DECLUS). Unlocks later: contact analysis (was LOW *because* BHID was missing), 3D traces in B7 |
+
+Out of scope, confirmed: variography, KNA. Contact analysis graduates from
+out-of-scope to "post-A7" — it was excluded for missing BHID structure, which
+A7 provides.
 
 ## Track B — Platform (amended v2 spec)
 
@@ -69,6 +72,8 @@ A1+A2 (one sitting) → A3 → B0 (cheap, gates platform design) → A4 → A5 �
 C1a → C1b → B1 → B2 → A6 → B3 → B4 → B5 → B6 → B7.
 Track A through A5 is shippable continuously; A6 can ride alongside early B work.
 C1a can slide earlier if the color/unit scatter starts hurting during Track A.
+A7 (drillhole ingestion) slots best around C1a — buildable before it with the
+three-slot UI, but the tree is its natural home; A6b and B0 come first regardless.
 
 ## Housekeeping (standing)
 
