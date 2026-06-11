@@ -1698,6 +1698,43 @@ async function declusAnalysis(data) {
     self.postMessage({ type: 'declus-progress', percent: 50 + 50 * lp / (ncell + 1) });
   }
 
+  // Pinned cell size: the user chose a size on the curve — recompute the
+  // weights at exactly that size and let it override the sweep optimum
+  // (the sweep curve above is kept for display)
+  const pinnedCell = (data.pinnedCell > 0) ? data.pinnedCell : null;
+  if (pinnedCell) {
+    const pxcs = pinnedCell, pycs = pinnedCell * anisy, pzcs = pinnedCell * anisz;
+    wt.fill(0);
+    const ncellx = Math.floor((xmax - (xo1 - pxcs)) / pxcs) + 1;
+    const ncelly = Math.floor((ymax - (yo1 - pycs)) / pycs) + 1;
+    const xfac = Math.min(pxcs / roff, 0.5 * (xmax - xmin));
+    const yfac = Math.min(pycs / roff, 0.5 * (ymax - ymin));
+    const zfac = Math.min(pzcs / roff, 0.5 * (zmax - zmin));
+    for (let kp = 1; kp <= noff; kp++) {
+      const xo = xo1 - (kp - 1) * xfac;
+      const yo = yo1 - (kp - 1) * yfac;
+      const zo = zo1 - (kp - 1) * zfac;
+      const cellwt = new Map();
+      for (let i = 0; i < nd; i++) {
+        const icellx = Math.floor((xs[i] - xo) / pxcs) + 1;
+        const icelly = Math.floor((ys[i] - yo) / pycs) + 1;
+        const icellz = Math.floor((zs[i] - zo) / pzcs) + 1;
+        const icell = icellx + (icelly - 1) * ncellx + (icellz - 1) * ncelly * ncellx;
+        cellIdx[i] = icell;
+        cellwt.set(icell, (cellwt.get(icell) || 0) + 1);
+      }
+      let sumw = 0;
+      for (let i = 0; i < nd; i++) sumw += 1 / cellwt.get(cellIdx[i]);
+      sumw = 1 / sumw;
+      for (let i = 0; i < nd; i++) wt[i] += (1 / cellwt.get(cellIdx[i])) * sumw;
+    }
+    let sumw = 0, sumwg = 0;
+    for (let i = 0; i < nd; i++) { sumw += wt[i]; sumwg += wt[i] * vs[i]; }
+    best = pinnedCell;
+    vrop = sumwg / sumw;
+    wtopt.set(wt);
+  }
+
   // Normalize optimal weights to mean 1 (facto = nd/sumw)
   let sumo = 0;
   for (let i = 0; i < nd; i++) sumo += wtopt[i];
@@ -1718,6 +1755,7 @@ async function declusAnalysis(data) {
     type: 'declus-complete',
     weights, n, located: nd,
     curve, optCellSize: best, declusteredMean: vrop, naiveMean: vrav,
+    pinned: !!pinnedCell,
     usedRange: [cmin, cmax, ncell, noff], wtMin, wtMax, elapsed
   }, [weights.buffer]);
 }

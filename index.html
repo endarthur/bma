@@ -3860,7 +3860,13 @@ table.cat-values tr.cat-aux-only td { background: rgba(184,115,51,0.05); }
   padding: 0.1rem 0;
 }
 .aux-declus-stat strong { color: var(--fg-bright); font-weight: 500; }
-.aux-declus-curve { display: block; margin: 0.3rem 0 0.1rem; }
+.aux-declus-curve {
+  display: block; margin: 0.3rem 0 0.1rem;
+  width: 100%; height: auto;
+  cursor: crosshair;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--bg2);
+}
 .aux-xyz-row input.aux-input { min-width: 0; flex: 1; }
 table.stats tr.stats-aux-row td {
   background: rgba(184,115,51,0.05);
@@ -4462,7 +4468,7 @@ table.stats tr.stats-delta-row td:first-child {
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 21928c7 — click to check for updates">21928c7</div>
+<div class="build-badge" id="buildBadge" title="build c9c75e1 — click to check for updates">c9c75e1</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -6196,6 +6202,43 @@ async function declusAnalysis(data) {
     self.postMessage({ type: 'declus-progress', percent: 50 + 50 * lp / (ncell + 1) });
   }
 
+  // Pinned cell size: the user chose a size on the curve — recompute the
+  // weights at exactly that size and let it override the sweep optimum
+  // (the sweep curve above is kept for display)
+  const pinnedCell = (data.pinnedCell > 0) ? data.pinnedCell : null;
+  if (pinnedCell) {
+    const pxcs = pinnedCell, pycs = pinnedCell * anisy, pzcs = pinnedCell * anisz;
+    wt.fill(0);
+    const ncellx = Math.floor((xmax - (xo1 - pxcs)) / pxcs) + 1;
+    const ncelly = Math.floor((ymax - (yo1 - pycs)) / pycs) + 1;
+    const xfac = Math.min(pxcs / roff, 0.5 * (xmax - xmin));
+    const yfac = Math.min(pycs / roff, 0.5 * (ymax - ymin));
+    const zfac = Math.min(pzcs / roff, 0.5 * (zmax - zmin));
+    for (let kp = 1; kp <= noff; kp++) {
+      const xo = xo1 - (kp - 1) * xfac;
+      const yo = yo1 - (kp - 1) * yfac;
+      const zo = zo1 - (kp - 1) * zfac;
+      const cellwt = new Map();
+      for (let i = 0; i < nd; i++) {
+        const icellx = Math.floor((xs[i] - xo) / pxcs) + 1;
+        const icelly = Math.floor((ys[i] - yo) / pycs) + 1;
+        const icellz = Math.floor((zs[i] - zo) / pzcs) + 1;
+        const icell = icellx + (icelly - 1) * ncellx + (icellz - 1) * ncelly * ncellx;
+        cellIdx[i] = icell;
+        cellwt.set(icell, (cellwt.get(icell) || 0) + 1);
+      }
+      let sumw = 0;
+      for (let i = 0; i < nd; i++) sumw += 1 / cellwt.get(cellIdx[i]);
+      sumw = 1 / sumw;
+      for (let i = 0; i < nd; i++) wt[i] += (1 / cellwt.get(cellIdx[i])) * sumw;
+    }
+    let sumw = 0, sumwg = 0;
+    for (let i = 0; i < nd; i++) { sumw += wt[i]; sumwg += wt[i] * vs[i]; }
+    best = pinnedCell;
+    vrop = sumwg / sumw;
+    wtopt.set(wt);
+  }
+
   // Normalize optimal weights to mean 1 (facto = nd/sumw)
   let sumo = 0;
   for (let i = 0; i < nd; i++) sumo += wtopt[i];
@@ -6216,6 +6259,7 @@ async function declusAnalysis(data) {
     type: 'declus-complete',
     weights, n, located: nd,
     curve, optCellSize: best, declusteredMean: vrop, naiveMean: vrav,
+    pinned: !!pinnedCell,
     usedRange: [cmin, cmax, ncell, noff], wtMin, wtMax, elapsed
   }, [weights.buffer]);
 }
@@ -8966,7 +9010,8 @@ function auxDeclusParamsFromUI() {
     noff: num('auxDeclusNoff') || 8,
     anisy: num('auxDeclusAnisY') || 1,
     anisz: num('auxDeclusAnisZ') || 1,
-    criterion: crit ? crit.value : (prev.criterion || 'min')
+    criterion: crit ? crit.value : (prev.criterion || 'min'),
+    pinned: prev.pinned || null  // set by clicking the curve, cleared by Run
   };
 }
 
@@ -9026,10 +9071,12 @@ function renderAuxDeclusResults() {
     html += '<div class="aux-declus-stat">mean ' + formatNum(d.naiveMean) + ' → <strong>' + formatNum(d.declusteredMean) + '</strong>' +
       (delta !== null ? ' (' + (delta >= 0 ? '+' : '−') + Math.abs(delta).toFixed(1) + '%)' : '') + '</div>';
     if (d.optCellSize > 0) {
-      html += '<div class="aux-declus-stat">cell <strong>' + formatNum(d.optCellSize) + '</strong> · w ' + formatNum(d.wtMin) + '–' + formatNum(d.wtMax) +
+      html += '<div class="aux-declus-stat">cell <strong>' + formatNum(d.optCellSize) + '</strong>' +
+        (d.pinned ? ' <span style="color:var(--fg-bright)">(pinned — Run to re-sweep)</span>' : ' (sweep optimum)') +
+        ' · w ' + formatNum(d.wtMin) + '–' + formatNum(d.wtMax) +
         ' · n ' + d.located.toLocaleString() + (d.n > d.located ? ' <span title="rows without valid XYZ + variable get no weight and are excluded">(+' + (d.n - d.located) + ' unlocated)</span>' : '') + '</div>';
     } else {
-      html += '<div class="aux-declus-stat" style="color:var(--amber)">No cell size beat the naive mean — weights stay 1. Data may not be clustered (or try the other criterion).</div>';
+      html += '<div class="aux-declus-stat" style="color:var(--amber)">No cell size beat the naive mean — weights stay 1. Data may not be clustered (or try the other criterion, or click the curve to pin a size).</div>';
     }
     html += auxDeclusCurveSvg(d);
   }
@@ -9039,10 +9086,14 @@ function renderAuxDeclusResults() {
 }
 
 // Declustered-mean vs cell-size curve — the honest surface for the cell-size
-// choice: you see why the optimum won, and can override it via the Cell range
+// choice: you see why the optimum won, hover to inspect any size, and click
+// a point to pin that cell size (weights recompute at the pinned size).
+var AUX_DECLUS_SVG = { W: 276, H: 150, padL: 8, padR: 8, padT: 10, padB: 18 };
+
 function auxDeclusCurveSvg(d) {
   if (!d.curve || d.curve.length < 2) return '';
-  var W = 224, H = 88, padL = 8, padR = 8, padT = 8, padB = 16;
+  var W = AUX_DECLUS_SVG.W, H = AUX_DECLUS_SVG.H;
+  var padL = AUX_DECLUS_SVG.padL, padR = AUX_DECLUS_SVG.padR, padT = AUX_DECLUS_SVG.padT, padB = AUX_DECLUS_SVG.padB;
   var xmax = 0, ymin = Infinity, ymax = -Infinity;
   for (var i = 0; i < d.curve.length; i++) {
     var pt = d.curve[i];
@@ -9050,26 +9101,81 @@ function auxDeclusCurveSvg(d) {
     if (pt[1] < ymin) ymin = pt[1];
     if (pt[1] > ymax) ymax = pt[1];
   }
+  // The pinned mean may sit outside the sweep's y-range
+  if (d.pinned && d.declusteredMean < ymin) ymin = d.declusteredMean;
+  if (d.pinned && d.declusteredMean > ymax) ymax = d.declusteredMean;
   if (!(xmax > 0)) return '';
   if (ymax === ymin) { ymax += 1; ymin -= 1; }
   var yr = ymax - ymin;
   ymin -= yr * 0.08; ymax += yr * 0.08;
   function sx(x) { return padL + (x / xmax) * (W - padL - padR); }
   function sy(y) { return padT + (1 - (y - ymin) / (ymax - ymin)) * (H - padT - padB); }
-  var poly = '';
+  var poly = '', pts = [];
   for (var j = 0; j < d.curve.length; j++) {
-    poly += (j ? ' ' : '') + sx(d.curve[j][0]).toFixed(1) + ',' + sy(d.curve[j][1]).toFixed(1);
+    var px = sx(d.curve[j][0]), py = sy(d.curve[j][1]);
+    poly += (j ? ' ' : '') + px.toFixed(1) + ',' + py.toFixed(1);
+    pts.push([+px.toFixed(1), +py.toFixed(1), d.curve[j][0], d.curve[j][1]]);
   }
-  var svg = '<svg class="aux-declus-curve" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '">' +
-    '<line x1="' + padL + '" y1="' + sy(d.naiveMean).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + sy(d.naiveMean).toFixed(1) + '" stroke="var(--fg-dim)" stroke-dasharray="3,3" stroke-width="0.75"><title>naive mean</title></line>' +
+  var svg = '<svg class="aux-declus-curve" id="auxDeclusCurveSvg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" data-pts="' + esc(JSON.stringify(pts)) + '">' +
+    '<line x1="' + padL + '" y1="' + sy(d.naiveMean).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + sy(d.naiveMean).toFixed(1) + '" stroke="var(--fg-dim)" stroke-dasharray="3,3" stroke-width="0.75"/>' +
     '<polyline points="' + poly + '" fill="none" stroke="var(--amber)" stroke-width="1.3"/>';
-  if (d.optCellSize > 0) {
-    svg += '<circle cx="' + sx(d.optCellSize).toFixed(1) + '" cy="' + sy(d.declusteredMean).toFixed(1) + '" r="3" fill="var(--amber)"><title>optimum: cell ' + formatNum(d.optCellSize) + ', mean ' + formatNum(d.declusteredMean) + '</title></circle>';
+  // Sweep points — visible click targets
+  for (var k = 0; k < pts.length; k++) {
+    if (pts[k][2] <= 0) continue;
+    svg += '<circle cx="' + pts[k][0] + '" cy="' + pts[k][1] + '" r="1.7" fill="var(--amber)" opacity="0.55"/>';
   }
-  svg += '<text x="' + padL + '" y="' + (H - 4) + '" fill="var(--fg-dim)" font-size="8">0</text>' +
-    '<text x="' + (W - padR) + '" y="' + (H - 4) + '" text-anchor="end" fill="var(--fg-dim)" font-size="8">cell ' + formatNum(xmax) + '</text>' +
-  '</svg>';
+  if (d.pinned) {
+    var pxp = sx(d.pinned), pyp = sy(d.declusteredMean);
+    svg += '<line x1="' + pxp.toFixed(1) + '" y1="' + padT + '" x2="' + pxp.toFixed(1) + '" y2="' + (H - padB) + '" stroke="var(--fg-bright)" stroke-dasharray="2,2" stroke-width="0.75"/>' +
+      '<rect x="' + (pxp - 3.2).toFixed(1) + '" y="' + (pyp - 3.2).toFixed(1) + '" width="6.4" height="6.4" transform="rotate(45 ' + pxp.toFixed(1) + ' ' + pyp.toFixed(1) + ')" fill="var(--fg-bright)"/>';
+  } else if (d.optCellSize > 0) {
+    svg += '<circle cx="' + sx(d.optCellSize).toFixed(1) + '" cy="' + sy(d.declusteredMean).toFixed(1) + '" r="3.2" fill="var(--amber)"/>';
+  }
+  // Hover cursor (positioned by the delegated mousemove handler)
+  svg += '<g id="auxDeclusCursor" style="display:none">' +
+    '<line y1="' + padT + '" y2="' + (H - padB) + '" stroke="var(--fg-dim)" stroke-width="0.6"/>' +
+    '<circle r="2.6" fill="none" stroke="var(--fg-bright)" stroke-width="1"/>' +
+    '<text y="' + (padT + 8) + '" fill="var(--fg-bright)" font-size="9"></text>' +
+  '</g>' +
+  '<text x="' + padL + '" y="' + (H - 5) + '" fill="var(--fg-dim)" font-size="8">0</text>' +
+  '<text x="' + (W - padR) + '" y="' + (H - 5) + '" text-anchor="end" fill="var(--fg-dim)" font-size="8">cell ' + formatNum(xmax) + '</text>' +
+  '<text x="' + (padL + 3) + '" y="' + (padT + 7) + '" fill="var(--fg-dim)" font-size="8" opacity="0.8">' + formatNum(ymax) + '</text>' +
+  '<text x="' + (padL + 3) + '" y="' + (H - padB - 3) + '" fill="var(--fg-dim)" font-size="8" opacity="0.8">' + formatNum(ymin) + '</text>' +
+  '</svg>' +
+  '<div class="aux-hint" style="margin-top:0.1rem">hover to inspect · click a point to pin that cell size</div>';
   return svg;
+}
+
+// Nearest sweep point to a mouse event, in viewBox coordinates
+function auxDeclusNearestPt(svg, e) {
+  if (!svg._pts) { try { svg._pts = JSON.parse(svg.dataset.pts); } catch (err) { return null; } }
+  var rect = svg.getBoundingClientRect();
+  var vx = (e.clientX - rect.left) * (AUX_DECLUS_SVG.W / rect.width);
+  var bestPt = null, bestDx = Infinity;
+  for (var i = 0; i < svg._pts.length; i++) {
+    var dx = Math.abs(svg._pts[i][0] - vx);
+    if (dx < bestDx) { bestDx = dx; bestPt = svg._pts[i]; }
+  }
+  return bestPt;
+}
+
+function auxDeclusUpdateCursor(svg, pt) {
+  var g = svg.querySelector('#auxDeclusCursor');
+  if (!g) return;
+  if (!pt) { g.style.display = 'none'; return; }
+  g.style.display = '';
+  var line = g.querySelector('line'), circ = g.querySelector('circle'), txt = g.querySelector('text');
+  line.setAttribute('x1', pt[0]); line.setAttribute('x2', pt[0]);
+  circ.setAttribute('cx', pt[0]); circ.setAttribute('cy', pt[1]);
+  var d = auxDeclus;
+  var lbl = pt[2] <= 0 ? 'naive ' + formatNum(pt[3])
+    : 'cell ' + formatNum(pt[2]) + ' → ' + formatNum(pt[3]) +
+      (d && d.naiveMean ? ' (' + (pt[3] >= d.naiveMean ? '+' : '−') + Math.abs((pt[3] - d.naiveMean) / Math.abs(d.naiveMean) * 100).toFixed(1) + '%)' : '');
+  txt.textContent = lbl;
+  // Flip the label side near the right edge
+  var flip = pt[0] > AUX_DECLUS_SVG.W * 0.55;
+  txt.setAttribute('x', flip ? pt[0] - 4 : pt[0] + 4);
+  txt.setAttribute('text-anchor', flip ? 'end' : 'start');
 }
 
 function runAuxDeclus() {
@@ -9106,6 +9212,7 @@ function runAuxDeclus() {
     ncell: params.ncell, noff: params.noff,
     anisy: params.anisy, anisz: params.anisz,
     iminmax: params.criterion === 'max' ? 1 : 0,
+    pinnedCell: params.pinned || null,
     rowVarOverride: AUX_ROW_VAR,
     dmEndianness: auxPreflightData.dmEndianness || null,
     dmFormat: auxPreflightData.dmFormat || null
@@ -9125,6 +9232,7 @@ function runAuxDeclus() {
         weights: m.weights, n: m.n, located: m.located,
         curve: m.curve, optCellSize: m.optCellSize,
         declusteredMean: m.declusteredMean, naiveMean: m.naiveMean,
+        pinned: m.pinned ? params.pinned : null,
         wtMin: m.wtMin, wtMax: m.wtMax, usedRange: m.usedRange,
         fingerprint: auxDeclusFingerprintNow()
       };
@@ -9292,13 +9400,38 @@ if ($auxDropzone) {
     $auxSidebar.addEventListener('click', function(e) {
       if (!e.target) return;
       if (e.target.id === 'auxAnalyzeBtn') runAuxAnalysis();
-      else if (e.target.id === 'auxDeclusRunBtn') runAuxDeclus();
-      else if (e.target.id === 'auxDeclusUseBtn') {
+      else if (e.target.id === 'auxDeclusRunBtn') {
+        // Run = fresh sweep; an existing pin is released
+        if (auxDeclus && auxDeclus.params) auxDeclus.params.pinned = null;
+        runAuxDeclus();
+      } else if (e.target.id === 'auxDeclusUseBtn') {
         auxWeightName = AUX_DECLUS_WEIGHT;
         markAuxStale();
         renderAuxConfig();
         if (typeof autoSaveProject === 'function') autoSaveProject();
+      } else {
+        // Click on the sweep curve: pin the nearest cell size and recompute
+        var svg = e.target.closest ? e.target.closest('#auxDeclusCurveSvg') : null;
+        if (svg && auxDeclus) {
+          var pt = auxDeclusNearestPt(svg, e);
+          if (pt && pt[2] > 0) {
+            auxDeclus.params = auxDeclus.params || {};
+            auxDeclus.params.pinned = pt[2];
+            runAuxDeclus();
+          }
+        }
       }
+    });
+    // Curve scrubbing: crosshair with cell size, declustered mean and Δ%
+    $auxSidebar.addEventListener('mousemove', function(e) {
+      var svg = e.target && e.target.closest ? e.target.closest('#auxDeclusCurveSvg') : null;
+      var anySvg = document.getElementById('auxDeclusCurveSvg');
+      if (!svg) { if (anySvg) auxDeclusUpdateCursor(anySvg, null); return; }
+      auxDeclusUpdateCursor(svg, auxDeclusNearestPt(svg, e));
+    });
+    $auxSidebar.addEventListener('mouseleave', function() {
+      var svg = document.getElementById('auxDeclusCurveSvg');
+      if (svg) auxDeclusUpdateCursor(svg, null);
     });
     // Zip entry switch — re-read header/types/xyz from the chosen entry
     $auxSidebar.addEventListener('change', async function(e) {
@@ -19671,8 +19804,10 @@ renderRecentFiles();
 // Landing-page button that builds and downloads bma-example.zip: a synthetic
 // block model + the composites "behind" it + TUTORIAL.txt. Everything is
 // generated client-side and deterministic (seeded PRNG), so every download
-// is byte-identical. The samples carry a planted +2% Fe bias and the model
-// an Fe trend along X, so the tutorial's punchlines actually show up.
+// is byte-identical. Three plantings make the tutorial's punchlines show up:
+// a +2 Fe assay bias on the samples, an infill campaign clustered in the
+// high-grade east (declustering separates it from the assay bias), and the
+// model's Fe trend along X (swaths, block-support smoothing).
 
 // ── Minimal store-mode ZIP writer (no compression, no dependencies) ──
 // Assembles the archive from Blob parts: data blobs are referenced, never
@@ -19861,11 +19996,13 @@ function exampleData() {
     }
   }
 
-  // Composites: 420 samples in the same volume, same geology but with a
-  // planted +2% Fe bias, more noise (point support), and composite lengths
+  // Composites: 420 exploration samples across the volume plus a 140-hole
+  // infill campaign clustered in the high-grade east — naive sample stats
+  // therefore conflate SAMPLING bias (clustering) with the planted +2 Fe
+  // ASSAY bias; cell declustering separates the two. Point support (more
+  // noise) and composite lengths complete the picture.
   var samples = 'EAST,NORTH,ELEV,Fe,SiO2,Al2O3,LITO,SUPPORT\n';
-  for (var si = 0; si < 420; si++) {
-    var sx = rnd() * 240, sy = rnd() * 240, sz = rnd() * 100;
+  function sampleAt(sx, sy, sz) {
     var sfe = clampv(feAt(sx / 10, sy / 10, sz / 10) + 2.0 + gauss() * 3.2, 25, 70);
     var ssio2 = clampv(38 - 0.45 * sfe + gauss() * 2.4, 0.3, 34);
     var sal = clampv(3.5 + 1.2 * Math.cos(sx / 40) + gauss() * 1.1, 0.1, 11);
@@ -19879,6 +20016,14 @@ function exampleData() {
     samples += (600000 + sx).toFixed(1) + ',' + (7780000 + sy).toFixed(1) + ',' + (800 + sz).toFixed(1) + ',' +
       sfe.toFixed(2) + ',' + ssio2.toFixed(2) + ',' + sal.toFixed(2) + ',' + slito + ',' + sup.toFixed(2) + '\n';
   }
+  for (var si = 0; si < 420; si++) {
+    sampleAt(rnd() * 240, rnd() * 240, rnd() * 100);
+  }
+  // Infill: tight drilling chasing grade in the east (~9% of the area
+  // holding 25% of the samples)
+  for (var ii = 0; ii < 140; ii++) {
+    sampleAt(175 + rnd() * 60, 55 + rnd() * 90, rnd() * 100);
+  }
 
   return { model: model, samples: samples };
 }
@@ -19890,13 +20035,15 @@ var EXAMPLE_TUTORIAL = [
 '',
 '- bma-example-model.csv   — a 24 x 24 x 10 block model (10 m blocks):',
 '                            X,Y,Z, Fe, SiO2, Al2O3, DENSITY, LITO',
-'- bma-example-samples.csv — 420 drillhole composites: EAST,NORTH,ELEV,',
+'- bma-example-samples.csv — 560 drillhole composites: EAST,NORTH,ELEV,',
 '                            Fe, SiO2, Al2O3, LITO, SUPPORT (composite length, m)',
 '',
 'Fe trends from ~44% in the west to ~57% in the east, with a fold along Y.',
-'Two things are planted for you to find: the samples carry a +2% Fe bias',
-'relative to the model, and the model (block support) is smoother than the',
-'point-support samples. Both are classic validation findings.',
+'Three things are planted for you to find: the samples carry a +2% Fe',
+'assay bias relative to the model; an infill campaign clusters a quarter',
+'of the holes in the high-grade east (sampling bias); and the model (block',
+'support) is smoother than the point-support samples. All three are',
+'classic validation findings.',
 '',
 '## 0. The shortcut',
 '',
@@ -19951,8 +20098,10 @@ var EXAMPLE_TUTORIAL = [
 'detected as coordinates. Set Weight to SUPPORT (length-weighted compositing',
 'statistics) and click Analyze.',
 '',
-'- Statistics now shows aux:Fe as an indented row right under Fe:',
-'  the sample mean runs about +2% above the model. That is the planted bias.',
+'- Statistics now shows aux:Fe as an indented row right under Fe, with a',
+'  Δ% row reading the difference per metric. The sample mean runs well',
+'  above the model — MORE than the planted +2 bias, because the clustered',
+'  infill drags the naive mean up too. Section 7 untangles the two.',
 '- Click aux:Fe to overlay its CDF (dashed): the model curve is steeper —',
 '  block support smooths away the tails the samples still have.',
 '- On Swath, the aux variables appear at the bottom of the list, already',
@@ -19965,7 +20114,24 @@ var EXAMPLE_TUTORIAL = [
 '  the modelled bars (the samples log more HEM/ITA — biased Fe, same',
 '  classification rule), and a rare unit appears as "aux only".',
 '',
-'## 7. Aux calculated columns',
+'## 7. Declustering — sampling bias vs assay bias',
+'',
+'The infill holes oversample the high-grade east, so the naive sample mean',
+'is not comparable to the model mean: part of the gap is clustering, not',
+'assay bias. In the Declustering section of the Aux tab, keep Var = Fe and',
+'click Run declustering. The curve shows the declustered mean for every',
+'cell size — hover to inspect, click a point to pin a size by hand (the',
+'sweep optimum is marked). With ~10 m sample spacing in the infill zone,',
+'sizes around 20-60 m do the real work.',
+'',
+'Click "Use as aux weight" and re-run Analyze. The Δ% row under Fe drops',
+'to roughly the planted +2 assay bias — the clustering component is gone.',
+'That separation (declustered comparison isolates assay bias from drilling',
+'pattern) is exactly why validation tables decluster composites first.',
+'(BMA applies one weight at a time: switching to declustered weights',
+'replaces the SUPPORT length-weighting from section 6.)',
+'',
+'## 8. Aux calculated columns',
 '',
 'On the Calc tab, switch the toggle to Aux and paste:',
 '',
@@ -19975,7 +20141,7 @@ var EXAMPLE_TUTORIAL = [
 'RATIO with the model calcol, it pairs up automatically: same row in',
 'Statistics, same axis and color (dashed) in Swath.',
 '',
-'## 8. Where to go from here',
+'## 9. Where to go from here',
 '',
 'Everything you configured is autosaved per file — reload the page and drop',
 'the same file to pick up where you left off. The aux filter box accepts',
@@ -20005,7 +20171,8 @@ function exampleProjectJson(modelSize, samplesSize) {
       prefix: 'aux', xyz: { x: 0, y: 1, z: 2 }, filter: '',
       weight: 'SUPPORT',
       calcolCode: 'aux.RATIO = aux.Fe / aux.SiO2;',
-      calcolMeta: [{ name: 'RATIO', type: 'numeric' }]
+      calcolMeta: [{ name: 'RATIO', type: 'numeric' }],
+      declus: { params: { varName: 'Fe', cellMin: null, cellMax: null, ncell: 24, noff: 8, anisy: 1, anisz: 1, criterion: 'min', pinned: null } }
     },
     statsTab: { cdfSelected: [3] },
     gt: {

@@ -274,7 +274,8 @@ function auxDeclusParamsFromUI() {
     noff: num('auxDeclusNoff') || 8,
     anisy: num('auxDeclusAnisY') || 1,
     anisz: num('auxDeclusAnisZ') || 1,
-    criterion: crit ? crit.value : (prev.criterion || 'min')
+    criterion: crit ? crit.value : (prev.criterion || 'min'),
+    pinned: prev.pinned || null  // set by clicking the curve, cleared by Run
   };
 }
 
@@ -334,10 +335,12 @@ function renderAuxDeclusResults() {
     html += '<div class="aux-declus-stat">mean ' + formatNum(d.naiveMean) + ' → <strong>' + formatNum(d.declusteredMean) + '</strong>' +
       (delta !== null ? ' (' + (delta >= 0 ? '+' : '−') + Math.abs(delta).toFixed(1) + '%)' : '') + '</div>';
     if (d.optCellSize > 0) {
-      html += '<div class="aux-declus-stat">cell <strong>' + formatNum(d.optCellSize) + '</strong> · w ' + formatNum(d.wtMin) + '–' + formatNum(d.wtMax) +
+      html += '<div class="aux-declus-stat">cell <strong>' + formatNum(d.optCellSize) + '</strong>' +
+        (d.pinned ? ' <span style="color:var(--fg-bright)">(pinned — Run to re-sweep)</span>' : ' (sweep optimum)') +
+        ' · w ' + formatNum(d.wtMin) + '–' + formatNum(d.wtMax) +
         ' · n ' + d.located.toLocaleString() + (d.n > d.located ? ' <span title="rows without valid XYZ + variable get no weight and are excluded">(+' + (d.n - d.located) + ' unlocated)</span>' : '') + '</div>';
     } else {
-      html += '<div class="aux-declus-stat" style="color:var(--amber)">No cell size beat the naive mean — weights stay 1. Data may not be clustered (or try the other criterion).</div>';
+      html += '<div class="aux-declus-stat" style="color:var(--amber)">No cell size beat the naive mean — weights stay 1. Data may not be clustered (or try the other criterion, or click the curve to pin a size).</div>';
     }
     html += auxDeclusCurveSvg(d);
   }
@@ -347,10 +350,14 @@ function renderAuxDeclusResults() {
 }
 
 // Declustered-mean vs cell-size curve — the honest surface for the cell-size
-// choice: you see why the optimum won, and can override it via the Cell range
+// choice: you see why the optimum won, hover to inspect any size, and click
+// a point to pin that cell size (weights recompute at the pinned size).
+var AUX_DECLUS_SVG = { W: 276, H: 150, padL: 8, padR: 8, padT: 10, padB: 18 };
+
 function auxDeclusCurveSvg(d) {
   if (!d.curve || d.curve.length < 2) return '';
-  var W = 224, H = 88, padL = 8, padR = 8, padT = 8, padB = 16;
+  var W = AUX_DECLUS_SVG.W, H = AUX_DECLUS_SVG.H;
+  var padL = AUX_DECLUS_SVG.padL, padR = AUX_DECLUS_SVG.padR, padT = AUX_DECLUS_SVG.padT, padB = AUX_DECLUS_SVG.padB;
   var xmax = 0, ymin = Infinity, ymax = -Infinity;
   for (var i = 0; i < d.curve.length; i++) {
     var pt = d.curve[i];
@@ -358,26 +365,81 @@ function auxDeclusCurveSvg(d) {
     if (pt[1] < ymin) ymin = pt[1];
     if (pt[1] > ymax) ymax = pt[1];
   }
+  // The pinned mean may sit outside the sweep's y-range
+  if (d.pinned && d.declusteredMean < ymin) ymin = d.declusteredMean;
+  if (d.pinned && d.declusteredMean > ymax) ymax = d.declusteredMean;
   if (!(xmax > 0)) return '';
   if (ymax === ymin) { ymax += 1; ymin -= 1; }
   var yr = ymax - ymin;
   ymin -= yr * 0.08; ymax += yr * 0.08;
   function sx(x) { return padL + (x / xmax) * (W - padL - padR); }
   function sy(y) { return padT + (1 - (y - ymin) / (ymax - ymin)) * (H - padT - padB); }
-  var poly = '';
+  var poly = '', pts = [];
   for (var j = 0; j < d.curve.length; j++) {
-    poly += (j ? ' ' : '') + sx(d.curve[j][0]).toFixed(1) + ',' + sy(d.curve[j][1]).toFixed(1);
+    var px = sx(d.curve[j][0]), py = sy(d.curve[j][1]);
+    poly += (j ? ' ' : '') + px.toFixed(1) + ',' + py.toFixed(1);
+    pts.push([+px.toFixed(1), +py.toFixed(1), d.curve[j][0], d.curve[j][1]]);
   }
-  var svg = '<svg class="aux-declus-curve" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '">' +
-    '<line x1="' + padL + '" y1="' + sy(d.naiveMean).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + sy(d.naiveMean).toFixed(1) + '" stroke="var(--fg-dim)" stroke-dasharray="3,3" stroke-width="0.75"><title>naive mean</title></line>' +
+  var svg = '<svg class="aux-declus-curve" id="auxDeclusCurveSvg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" data-pts="' + esc(JSON.stringify(pts)) + '">' +
+    '<line x1="' + padL + '" y1="' + sy(d.naiveMean).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + sy(d.naiveMean).toFixed(1) + '" stroke="var(--fg-dim)" stroke-dasharray="3,3" stroke-width="0.75"/>' +
     '<polyline points="' + poly + '" fill="none" stroke="var(--amber)" stroke-width="1.3"/>';
-  if (d.optCellSize > 0) {
-    svg += '<circle cx="' + sx(d.optCellSize).toFixed(1) + '" cy="' + sy(d.declusteredMean).toFixed(1) + '" r="3" fill="var(--amber)"><title>optimum: cell ' + formatNum(d.optCellSize) + ', mean ' + formatNum(d.declusteredMean) + '</title></circle>';
+  // Sweep points — visible click targets
+  for (var k = 0; k < pts.length; k++) {
+    if (pts[k][2] <= 0) continue;
+    svg += '<circle cx="' + pts[k][0] + '" cy="' + pts[k][1] + '" r="1.7" fill="var(--amber)" opacity="0.55"/>';
   }
-  svg += '<text x="' + padL + '" y="' + (H - 4) + '" fill="var(--fg-dim)" font-size="8">0</text>' +
-    '<text x="' + (W - padR) + '" y="' + (H - 4) + '" text-anchor="end" fill="var(--fg-dim)" font-size="8">cell ' + formatNum(xmax) + '</text>' +
-  '</svg>';
+  if (d.pinned) {
+    var pxp = sx(d.pinned), pyp = sy(d.declusteredMean);
+    svg += '<line x1="' + pxp.toFixed(1) + '" y1="' + padT + '" x2="' + pxp.toFixed(1) + '" y2="' + (H - padB) + '" stroke="var(--fg-bright)" stroke-dasharray="2,2" stroke-width="0.75"/>' +
+      '<rect x="' + (pxp - 3.2).toFixed(1) + '" y="' + (pyp - 3.2).toFixed(1) + '" width="6.4" height="6.4" transform="rotate(45 ' + pxp.toFixed(1) + ' ' + pyp.toFixed(1) + ')" fill="var(--fg-bright)"/>';
+  } else if (d.optCellSize > 0) {
+    svg += '<circle cx="' + sx(d.optCellSize).toFixed(1) + '" cy="' + sy(d.declusteredMean).toFixed(1) + '" r="3.2" fill="var(--amber)"/>';
+  }
+  // Hover cursor (positioned by the delegated mousemove handler)
+  svg += '<g id="auxDeclusCursor" style="display:none">' +
+    '<line y1="' + padT + '" y2="' + (H - padB) + '" stroke="var(--fg-dim)" stroke-width="0.6"/>' +
+    '<circle r="2.6" fill="none" stroke="var(--fg-bright)" stroke-width="1"/>' +
+    '<text y="' + (padT + 8) + '" fill="var(--fg-bright)" font-size="9"></text>' +
+  '</g>' +
+  '<text x="' + padL + '" y="' + (H - 5) + '" fill="var(--fg-dim)" font-size="8">0</text>' +
+  '<text x="' + (W - padR) + '" y="' + (H - 5) + '" text-anchor="end" fill="var(--fg-dim)" font-size="8">cell ' + formatNum(xmax) + '</text>' +
+  '<text x="' + (padL + 3) + '" y="' + (padT + 7) + '" fill="var(--fg-dim)" font-size="8" opacity="0.8">' + formatNum(ymax) + '</text>' +
+  '<text x="' + (padL + 3) + '" y="' + (H - padB - 3) + '" fill="var(--fg-dim)" font-size="8" opacity="0.8">' + formatNum(ymin) + '</text>' +
+  '</svg>' +
+  '<div class="aux-hint" style="margin-top:0.1rem">hover to inspect · click a point to pin that cell size</div>';
   return svg;
+}
+
+// Nearest sweep point to a mouse event, in viewBox coordinates
+function auxDeclusNearestPt(svg, e) {
+  if (!svg._pts) { try { svg._pts = JSON.parse(svg.dataset.pts); } catch (err) { return null; } }
+  var rect = svg.getBoundingClientRect();
+  var vx = (e.clientX - rect.left) * (AUX_DECLUS_SVG.W / rect.width);
+  var bestPt = null, bestDx = Infinity;
+  for (var i = 0; i < svg._pts.length; i++) {
+    var dx = Math.abs(svg._pts[i][0] - vx);
+    if (dx < bestDx) { bestDx = dx; bestPt = svg._pts[i]; }
+  }
+  return bestPt;
+}
+
+function auxDeclusUpdateCursor(svg, pt) {
+  var g = svg.querySelector('#auxDeclusCursor');
+  if (!g) return;
+  if (!pt) { g.style.display = 'none'; return; }
+  g.style.display = '';
+  var line = g.querySelector('line'), circ = g.querySelector('circle'), txt = g.querySelector('text');
+  line.setAttribute('x1', pt[0]); line.setAttribute('x2', pt[0]);
+  circ.setAttribute('cx', pt[0]); circ.setAttribute('cy', pt[1]);
+  var d = auxDeclus;
+  var lbl = pt[2] <= 0 ? 'naive ' + formatNum(pt[3])
+    : 'cell ' + formatNum(pt[2]) + ' → ' + formatNum(pt[3]) +
+      (d && d.naiveMean ? ' (' + (pt[3] >= d.naiveMean ? '+' : '−') + Math.abs((pt[3] - d.naiveMean) / Math.abs(d.naiveMean) * 100).toFixed(1) + '%)' : '');
+  txt.textContent = lbl;
+  // Flip the label side near the right edge
+  var flip = pt[0] > AUX_DECLUS_SVG.W * 0.55;
+  txt.setAttribute('x', flip ? pt[0] - 4 : pt[0] + 4);
+  txt.setAttribute('text-anchor', flip ? 'end' : 'start');
 }
 
 function runAuxDeclus() {
@@ -414,6 +476,7 @@ function runAuxDeclus() {
     ncell: params.ncell, noff: params.noff,
     anisy: params.anisy, anisz: params.anisz,
     iminmax: params.criterion === 'max' ? 1 : 0,
+    pinnedCell: params.pinned || null,
     rowVarOverride: AUX_ROW_VAR,
     dmEndianness: auxPreflightData.dmEndianness || null,
     dmFormat: auxPreflightData.dmFormat || null
@@ -433,6 +496,7 @@ function runAuxDeclus() {
         weights: m.weights, n: m.n, located: m.located,
         curve: m.curve, optCellSize: m.optCellSize,
         declusteredMean: m.declusteredMean, naiveMean: m.naiveMean,
+        pinned: m.pinned ? params.pinned : null,
         wtMin: m.wtMin, wtMax: m.wtMax, usedRange: m.usedRange,
         fingerprint: auxDeclusFingerprintNow()
       };
@@ -600,13 +664,38 @@ if ($auxDropzone) {
     $auxSidebar.addEventListener('click', function(e) {
       if (!e.target) return;
       if (e.target.id === 'auxAnalyzeBtn') runAuxAnalysis();
-      else if (e.target.id === 'auxDeclusRunBtn') runAuxDeclus();
-      else if (e.target.id === 'auxDeclusUseBtn') {
+      else if (e.target.id === 'auxDeclusRunBtn') {
+        // Run = fresh sweep; an existing pin is released
+        if (auxDeclus && auxDeclus.params) auxDeclus.params.pinned = null;
+        runAuxDeclus();
+      } else if (e.target.id === 'auxDeclusUseBtn') {
         auxWeightName = AUX_DECLUS_WEIGHT;
         markAuxStale();
         renderAuxConfig();
         if (typeof autoSaveProject === 'function') autoSaveProject();
+      } else {
+        // Click on the sweep curve: pin the nearest cell size and recompute
+        var svg = e.target.closest ? e.target.closest('#auxDeclusCurveSvg') : null;
+        if (svg && auxDeclus) {
+          var pt = auxDeclusNearestPt(svg, e);
+          if (pt && pt[2] > 0) {
+            auxDeclus.params = auxDeclus.params || {};
+            auxDeclus.params.pinned = pt[2];
+            runAuxDeclus();
+          }
+        }
       }
+    });
+    // Curve scrubbing: crosshair with cell size, declustered mean and Δ%
+    $auxSidebar.addEventListener('mousemove', function(e) {
+      var svg = e.target && e.target.closest ? e.target.closest('#auxDeclusCurveSvg') : null;
+      var anySvg = document.getElementById('auxDeclusCurveSvg');
+      if (!svg) { if (anySvg) auxDeclusUpdateCursor(anySvg, null); return; }
+      auxDeclusUpdateCursor(svg, auxDeclusNearestPt(svg, e));
+    });
+    $auxSidebar.addEventListener('mouseleave', function() {
+      var svg = document.getElementById('auxDeclusCurveSvg');
+      if (svg) auxDeclusUpdateCursor(svg, null);
     });
     // Zip entry switch — re-read header/types/xyz from the chosen entry
     $auxSidebar.addEventListener('change', async function(e) {

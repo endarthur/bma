@@ -3847,7 +3847,13 @@ table.cat-values tr.cat-aux-only td { background: rgba(184,115,51,0.05); }
   padding: 0.1rem 0;
 }
 .aux-declus-stat strong { color: var(--fg-bright); font-weight: 500; }
-.aux-declus-curve { display: block; margin: 0.3rem 0 0.1rem; }
+.aux-declus-curve {
+  display: block; margin: 0.3rem 0 0.1rem;
+  width: 100%; height: auto;
+  cursor: crosshair;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--bg2);
+}
 .aux-xyz-row input.aux-input { min-width: 0; flex: 1; }
 table.stats tr.stats-aux-row td {
   background: rgba(184,115,51,0.05);

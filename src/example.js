@@ -2,8 +2,10 @@
 // Landing-page button that builds and downloads bma-example.zip: a synthetic
 // block model + the composites "behind" it + TUTORIAL.txt. Everything is
 // generated client-side and deterministic (seeded PRNG), so every download
-// is byte-identical. The samples carry a planted +2% Fe bias and the model
-// an Fe trend along X, so the tutorial's punchlines actually show up.
+// is byte-identical. Three plantings make the tutorial's punchlines show up:
+// a +2 Fe assay bias on the samples, an infill campaign clustered in the
+// high-grade east (declustering separates it from the assay bias), and the
+// model's Fe trend along X (swaths, block-support smoothing).
 
 // ── Minimal store-mode ZIP writer (no compression, no dependencies) ──
 // Assembles the archive from Blob parts: data blobs are referenced, never
@@ -192,11 +194,13 @@ function exampleData() {
     }
   }
 
-  // Composites: 420 samples in the same volume, same geology but with a
-  // planted +2% Fe bias, more noise (point support), and composite lengths
+  // Composites: 420 exploration samples across the volume plus a 140-hole
+  // infill campaign clustered in the high-grade east — naive sample stats
+  // therefore conflate SAMPLING bias (clustering) with the planted +2 Fe
+  // ASSAY bias; cell declustering separates the two. Point support (more
+  // noise) and composite lengths complete the picture.
   var samples = 'EAST,NORTH,ELEV,Fe,SiO2,Al2O3,LITO,SUPPORT\n';
-  for (var si = 0; si < 420; si++) {
-    var sx = rnd() * 240, sy = rnd() * 240, sz = rnd() * 100;
+  function sampleAt(sx, sy, sz) {
     var sfe = clampv(feAt(sx / 10, sy / 10, sz / 10) + 2.0 + gauss() * 3.2, 25, 70);
     var ssio2 = clampv(38 - 0.45 * sfe + gauss() * 2.4, 0.3, 34);
     var sal = clampv(3.5 + 1.2 * Math.cos(sx / 40) + gauss() * 1.1, 0.1, 11);
@@ -210,6 +214,14 @@ function exampleData() {
     samples += (600000 + sx).toFixed(1) + ',' + (7780000 + sy).toFixed(1) + ',' + (800 + sz).toFixed(1) + ',' +
       sfe.toFixed(2) + ',' + ssio2.toFixed(2) + ',' + sal.toFixed(2) + ',' + slito + ',' + sup.toFixed(2) + '\n';
   }
+  for (var si = 0; si < 420; si++) {
+    sampleAt(rnd() * 240, rnd() * 240, rnd() * 100);
+  }
+  // Infill: tight drilling chasing grade in the east (~9% of the area
+  // holding 25% of the samples)
+  for (var ii = 0; ii < 140; ii++) {
+    sampleAt(175 + rnd() * 60, 55 + rnd() * 90, rnd() * 100);
+  }
 
   return { model: model, samples: samples };
 }
@@ -221,13 +233,15 @@ var EXAMPLE_TUTORIAL = [
 '',
 '- bma-example-model.csv   — a 24 x 24 x 10 block model (10 m blocks):',
 '                            X,Y,Z, Fe, SiO2, Al2O3, DENSITY, LITO',
-'- bma-example-samples.csv — 420 drillhole composites: EAST,NORTH,ELEV,',
+'- bma-example-samples.csv — 560 drillhole composites: EAST,NORTH,ELEV,',
 '                            Fe, SiO2, Al2O3, LITO, SUPPORT (composite length, m)',
 '',
 'Fe trends from ~44% in the west to ~57% in the east, with a fold along Y.',
-'Two things are planted for you to find: the samples carry a +2% Fe bias',
-'relative to the model, and the model (block support) is smoother than the',
-'point-support samples. Both are classic validation findings.',
+'Three things are planted for you to find: the samples carry a +2% Fe',
+'assay bias relative to the model; an infill campaign clusters a quarter',
+'of the holes in the high-grade east (sampling bias); and the model (block',
+'support) is smoother than the point-support samples. All three are',
+'classic validation findings.',
 '',
 '## 0. The shortcut',
 '',
@@ -282,8 +296,10 @@ var EXAMPLE_TUTORIAL = [
 'detected as coordinates. Set Weight to SUPPORT (length-weighted compositing',
 'statistics) and click Analyze.',
 '',
-'- Statistics now shows aux:Fe as an indented row right under Fe:',
-'  the sample mean runs about +2% above the model. That is the planted bias.',
+'- Statistics now shows aux:Fe as an indented row right under Fe, with a',
+'  Δ% row reading the difference per metric. The sample mean runs well',
+'  above the model — MORE than the planted +2 bias, because the clustered',
+'  infill drags the naive mean up too. Section 7 untangles the two.',
 '- Click aux:Fe to overlay its CDF (dashed): the model curve is steeper —',
 '  block support smooths away the tails the samples still have.',
 '- On Swath, the aux variables appear at the bottom of the list, already',
@@ -296,7 +312,24 @@ var EXAMPLE_TUTORIAL = [
 '  the modelled bars (the samples log more HEM/ITA — biased Fe, same',
 '  classification rule), and a rare unit appears as "aux only".',
 '',
-'## 7. Aux calculated columns',
+'## 7. Declustering — sampling bias vs assay bias',
+'',
+'The infill holes oversample the high-grade east, so the naive sample mean',
+'is not comparable to the model mean: part of the gap is clustering, not',
+'assay bias. In the Declustering section of the Aux tab, keep Var = Fe and',
+'click Run declustering. The curve shows the declustered mean for every',
+'cell size — hover to inspect, click a point to pin a size by hand (the',
+'sweep optimum is marked). With ~10 m sample spacing in the infill zone,',
+'sizes around 20-60 m do the real work.',
+'',
+'Click "Use as aux weight" and re-run Analyze. The Δ% row under Fe drops',
+'to roughly the planted +2 assay bias — the clustering component is gone.',
+'That separation (declustered comparison isolates assay bias from drilling',
+'pattern) is exactly why validation tables decluster composites first.',
+'(BMA applies one weight at a time: switching to declustered weights',
+'replaces the SUPPORT length-weighting from section 6.)',
+'',
+'## 8. Aux calculated columns',
 '',
 'On the Calc tab, switch the toggle to Aux and paste:',
 '',
@@ -306,7 +339,7 @@ var EXAMPLE_TUTORIAL = [
 'RATIO with the model calcol, it pairs up automatically: same row in',
 'Statistics, same axis and color (dashed) in Swath.',
 '',
-'## 8. Where to go from here',
+'## 9. Where to go from here',
 '',
 'Everything you configured is autosaved per file — reload the page and drop',
 'the same file to pick up where you left off. The aux filter box accepts',
@@ -336,7 +369,8 @@ function exampleProjectJson(modelSize, samplesSize) {
       prefix: 'aux', xyz: { x: 0, y: 1, z: 2 }, filter: '',
       weight: 'SUPPORT',
       calcolCode: 'aux.RATIO = aux.Fe / aux.SiO2;',
-      calcolMeta: [{ name: 'RATIO', type: 'numeric' }]
+      calcolMeta: [{ name: 'RATIO', type: 'numeric' }],
+      declus: { params: { varName: 'Fe', cellMin: null, cellMax: null, ncell: 24, noff: 8, anisy: 1, anisz: 1, criterion: 'min', pinned: null } }
     },
     statsTab: { cdfSelected: [3] },
     gt: {
