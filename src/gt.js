@@ -189,6 +189,20 @@ function renderGtConfig(data) {
       '<input type="text" class="gt-input" id="gtLocalFilter" placeholder="e.g. r.zone == 1" autocomplete="off" spellcheck="false">' +
     '</div>' +
     '<div class="gt-sidebar-section">' +
+      '<div class="gt-sidebar-title">Theoretical (samples)</div>' +
+      '<label class="gt-radio-label" style="display:block"><input type="checkbox" id="gtTheoEnabled"> Overlay theoretical GT</label>' +
+      '<select class="gt-select" id="gtTheoEngine" style="margin-top:0.25rem">' +
+        '<option value="affine">Affine correction</option>' +
+        '<option value="dgm" disabled>DGM (Hermite) — next</option>' +
+      '</select>' +
+      '<div style="display:flex;gap:0.3rem;align-items:center;margin-top:0.3rem">' +
+        '<span style="font-size:0.55rem;color:var(--fg-dim);white-space:nowrap" title="variance reduction factor: Var(blocks)/Var(samples). From your estimation work, or explore — never derived from the model (circular)">f</span>' +
+        '<input type="range" id="gtTheoF" min="0.05" max="1" step="0.01" value="0.6" style="flex:1">' +
+        '<input type="number" class="gt-input" id="gtTheoFNum" value="0.6" min="0.05" max="1" step="0.01" style="width:52px">' +
+      '</div>' +
+      '<div class="gt-theo-status" id="gtTheoStatus"></div>' +
+    '</div>' +
+    '<div class="gt-sidebar-section">' +
       '<button class="gt-generate" id="gtGenerate">Generate</button>' +
       '<div class="gt-progress" id="gtProgress">' +
         '<div class="gt-progress-bar"><div class="gt-progress-fill" id="gtProgressFill"></div></div>' +
@@ -238,6 +252,32 @@ function renderGtConfig(data) {
     });
     if (lastGtData) renderGtOutput();
     autoSaveProject();
+  });
+
+  // Theoretical overlay controls — slider re-renders through a small
+  // debounce so dragging f stays smooth
+  var $theoCb = document.getElementById('gtTheoEnabled');
+  var $theoF = document.getElementById('gtTheoF');
+  var $theoFNum = document.getElementById('gtTheoFNum');
+  var theoRerender = (function() {
+    var t = null;
+    return function() {
+      if (t) return;
+      t = setTimeout(function() { t = null; if (lastGtData) renderGtOutput(); }, 60);
+    };
+  })();
+  if ($theoCb) $theoCb.addEventListener('change', function() {
+    gtTheoSetStatus($theoCb.checked && !lastGtData ? 'Generate to draw the overlay' : '');
+    if (lastGtData) renderGtOutput();
+  });
+  if ($theoF) $theoF.addEventListener('input', function() {
+    if ($theoFNum) $theoFNum.value = $theoF.value;
+    if (gtTheoActive()) theoRerender();
+  });
+  if ($theoFNum) $theoFNum.addEventListener('input', function() {
+    var fv = parseFloat($theoFNum.value);
+    if (isFinite(fv) && fv >= 0.05 && fv <= 1 && $theoF) $theoF.value = fv;
+    if (gtTheoActive()) theoRerender();
   });
 
   // Cutoff mode radio
@@ -591,9 +631,33 @@ function renderGtOutput() {
   var gradeResults = lastGtData.gradeResults;
   var html = '<div class="gt-toolbar"><span class="gt-elapsed">' + (lastGtData.elapsed / 1000).toFixed(1) + 's</span></div>';
 
+  // Theoretical overlay: kick a (re)load when enabled but not covered/fresh;
+  // the load completion re-renders. Grouped charts skip the overlay.
+  var theoOn = gtTheoActive();
+  if (theoOn && isGrouped) gtTheoSetStatus('overlay shows on ungrouped charts only');
+  if (theoOn && !isGrouped && !gtTheoLoading && auxFile) {
+    var matchedNow = gtTheoMatchedVars();
+    var covered = gtTheo && gtTheo.fingerprint === gtTheoFingerprintNow(Object.keys(gtTheo.byVar)) &&
+      matchedNow.length > 0 && matchedNow.every(function(v) { return gtTheo.byVar[v.auxName]; });
+    if (!covered && matchedNow.length > 0) runGtTheoLoad();
+  }
+
   for (var gi = 0; gi < gradeResults.length; gi++) {
     var gr = gradeResults[gi];
     var units = unitsFor(gr.colIdx);
+    var theo = null;
+    if (theoOn && !isGrouped && gtTheo && gtTheo.fingerprint === gtTheoFingerprintNow(Object.keys(gtTheo.byVar))) {
+      var mv = gtTheoMatchedVars().filter(function(v) { return v.colName === gr.colName; })[0];
+      if (mv && gtTheo.byVar[mv.auxName]) {
+        var fVal = gtTheoF();
+        theo = {
+          f: fVal,
+          points: gtTheoCurve(gtTheo.byVar[mv.auxName], cutoffs, fVal).map(function(p) {
+            return { cutoff: p.cutoff, tonnage: p.tFrac * gr.totalTonnage / (units.tonnageDivisor || 1), grade: p.grade };
+          })
+        };
+      }
+    }
     if (gradeResults.length > 1) {
       html += '<div class="gt-chart-title">' + esc(gr.colName) + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') + '</div>';
     }
@@ -601,7 +665,7 @@ function renderGtOutput() {
       '<button class="swath-chart-btn" data-gt-copysvg="' + gi + '">Copy SVG</button>' +
       '<button class="swath-chart-btn" data-gt-png="' + gi + '" data-col-name="' + esc(gr.colName || '') + '">Download PNG</button>' +
     '</div>';
-    html += '<div class="gt-chart-wrap">' + renderGtChart(gr, cutoffs, units, isGrouped, gi, selectedGroups, showTotal) + '</div>';
+    html += '<div class="gt-chart-wrap">' + renderGtChart(gr, cutoffs, units, isGrouped, gi, selectedGroups, showTotal, theo) + '</div>';
     // Collapsible table with per-table copy button
     var tableTitle = gradeResults.length > 1 ? esc(gr.colName) + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') : 'Table';
     html += '<div class="gt-table-section">' +
@@ -667,6 +731,166 @@ function renderGtOutput() {
   }
 }
 
+// ─── Theoretical GT from the aux samples ────────────────────────────────
+// Change-of-support overlay: the sample distribution (weighted as the aux
+// stats are — declustering/length weights included) corrected to block
+// support and drawn against the model's actual GT curve. The variance
+// reduction factor f = Var(blocks)/Var(samples) is USER INPUT — never
+// derived from the model being validated (that would be circular).
+// v0 engine: affine correction Z_v = m + √f·(Z − m). Honest about its
+// crudeness (shape is preserved exactly); the DGM (Hermite) engine slots
+// in here next.
+var gtTheo = null;        // { byVar: {AUXNAME: dist}, fingerprint } — dist = sorted weighted distribution + prefix sums
+var gtTheoLoading = false;
+
+function gtTheoFingerprintNow(auxNames) {
+  if (!auxFile || !auxPreflightData) return null;
+  return JSON.stringify({
+    f: auxFile.name + '|' + auxFile.size,
+    z: auxPreflightData.selectedZipEntry || null,
+    flt: auxFilter ? auxFilter.expression : '',
+    cc: auxCalcolCode || '',
+    w: auxWeightName || '',
+    dw: auxWeightName === AUX_DECLUS_WEIGHT && auxDeclus ? auxDeclus.fingerprint : null,
+    vars: auxNames.slice().sort()
+  });
+}
+
+// Checked GT grade variables matched (case-insensitively) to aux numeric
+// columns/calcols — the same pairing rule as Statistics/Swath/Categories
+function gtTheoMatchedVars() {
+  if (!auxPreflightData) return [];
+  var auxLower = {};
+  for (var i = 0; i < auxPreflightData.header.length; i++) {
+    if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
+    auxLower[auxPreflightData.header[i].toLowerCase()] = auxPreflightData.header[i];
+  }
+  for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
+    if (auxCalcolMeta[ci].type === 'numeric') auxLower[auxCalcolMeta[ci].name.toLowerCase()] = auxCalcolMeta[ci].name;
+  }
+  var out = [];
+  document.querySelectorAll('#gtVarList input[type="checkbox"]:checked').forEach(function(cb) {
+    var colIdx = parseInt(cb.value);
+    var colName = currentHeader[colIdx];
+    if (colName && auxLower[colName.toLowerCase()]) {
+      out.push({ colIdx: colIdx, colName: colName, auxName: auxLower[colName.toLowerCase()] });
+    }
+  });
+  return out;
+}
+
+function gtTheoSetStatus(msg, isErr) {
+  var el = document.getElementById('gtTheoStatus');
+  if (el) { el.textContent = msg || ''; el.style.color = isErr ? 'var(--red)' : ''; }
+}
+
+// Sequential colvalues passes (one per matched variable) → weighted sorted
+// distributions with prefix sums of w and w·v
+function runGtTheoLoad() {
+  if (gtTheoLoading) return;
+  var matched = gtTheoMatchedVars();
+  if (!auxFile || matched.length === 0) {
+    gtTheoSetStatus(auxFile ? 'no checked grade variable has an aux match' : 'load an aux dataset first', true);
+    return;
+  }
+  // Weight resolution mirrors the aux analyze pass
+  var weightArray = null, weightCol = null;
+  if (auxWeightName === AUX_DECLUS_WEIGHT) {
+    if (typeof auxDeclusFresh === 'function' && auxDeclusFresh()) weightArray = auxDeclus.weights;
+    else { gtTheoSetStatus('declustered weights missing or stale — re-run Declustering on the Aux tab', true); return; }
+  } else if (auxWeightName) {
+    weightCol = auxWeightName;
+  }
+
+  gtTheoLoading = true;
+  var byVar = {}, queue = matched.slice();
+  var fp = gtTheoFingerprintNow(matched.map(function(v) { return v.auxName; }));
+
+  function fail(msg) {
+    gtTheoLoading = false;
+    gtTheoSetStatus('Error: ' + msg, true);
+  }
+  function next() {
+    if (queue.length === 0) {
+      gtTheo = { byVar: byVar, fingerprint: fp };
+      gtTheoLoading = false;
+      var names = Object.keys(byVar);
+      gtTheoSetStatus(names.map(function(nm) { return nm + ' (' + byVar[nm].values.length.toLocaleString() + ')'; }).join(' · '));
+      if (lastGtData) renderGtOutput();
+      return;
+    }
+    var v = queue.shift();
+    gtTheoSetStatus('loading ' + v.auxName + '…');
+    var w = new Worker(workerUrl);
+    w.postMessage({
+      mode: 'colvalues',
+      file: auxFile,
+      zipEntry: auxPreflightData.selectedZipEntry || null,
+      globalFilter: auxFilter ? { expression: auxFilter.expression } : null,
+      calcolCode: auxCalcolCode || null,
+      calcolMeta: auxCalcolMeta.length > 0 ? auxCalcolMeta : null,
+      resolvedTypes: auxPreflightData.autoTypes,
+      varColName: v.auxName,
+      weightColName: weightCol,
+      weightArray: weightArray,
+      rowVarOverride: AUX_ROW_VAR,
+      dmEndianness: auxPreflightData.dmEndianness || null,
+      dmFormat: auxPreflightData.dmFormat || null
+    });
+    w.onerror = function(e) { w.terminate(); fail(e.message || 'unknown error'); };
+    w.onmessage = function(e) {
+      var m = e.data;
+      if (m.type === 'error') { w.terminate(); fail(m.message); return; }
+      if (m.type !== 'colvalues-complete') return;
+      w.terminate();
+      if (m.finite < 2) { fail('not enough numeric values for ' + v.auxName); return; }
+      var nVals = m.values.length;
+      var prefW = new Float64Array(nVals + 1), prefWV = new Float64Array(nVals + 1);
+      for (var i = 0; i < nVals; i++) {
+        var wi = m.weights ? m.weights[i] : 1;
+        prefW[i + 1] = prefW[i] + wi;
+        prefWV[i + 1] = prefWV[i] + wi * m.values[i];
+      }
+      byVar[v.auxName] = {
+        values: m.values, weights: m.weights,
+        prefW: prefW, prefWV: prefWV,
+        W: prefW[nVals], WV: prefWV[nVals]
+      };
+      next();
+    };
+  }
+  next();
+}
+
+// Affine theoretical GT at the model's cutoffs: tonnage FRACTION above
+// cutoff and mean grade above, on the support-corrected distribution.
+// Monotone transform ⇒ evaluate on raw values at x = m + (c−m)/√f.
+function gtTheoCurve(dist, cutoffs, f) {
+  var v = dist.values, n = v.length;
+  var m = dist.WV / dist.W;
+  var sf = Math.sqrt(Math.max(f, 1e-6));
+  return cutoffs.map(function(c) {
+    var x = m + (c - m) / sf;
+    var lo = 0, hi = n;
+    while (lo < hi) { var mid = (lo + hi) >> 1; if (v[mid] <= x) lo = mid + 1; else hi = mid; }
+    var wAbove = dist.W - dist.prefW[lo];
+    if (!(wAbove > 0)) return { cutoff: c, tFrac: 0, grade: 0 };
+    var meanAboveRaw = (dist.WV - dist.prefWV[lo]) / wAbove;
+    return { cutoff: c, tFrac: wAbove / dist.W, grade: m + sf * (meanAboveRaw - m) };
+  });
+}
+
+function gtTheoF() {
+  var el = document.getElementById('gtTheoFNum');
+  var f = el ? parseFloat(el.value) : 0.6;
+  return isFinite(f) && f > 0 && f <= 1 ? f : 0.6;
+}
+
+function gtTheoActive() {
+  var cb = document.getElementById('gtTheoEnabled');
+  return !!(cb && cb.checked);
+}
+
 function interpolateGt(results, cutoff, binWidth, gradeMin) {
   var zero = { tonnage: 0, grade: 0, metal: 0 };
   if (!results || results.length === 0) return zero;
@@ -691,7 +915,7 @@ function interpolateGt(results, cutoff, binWidth, gradeMin) {
   };
 }
 
-function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGroups, showTotal) {
+function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGroups, showTotal, theo) {
   var results = grData.results;
   if (!results || results.length === 0) return '<div class="gt-hint">No GT data available.</div>';
   var binWidth = grData.binWidth;
@@ -724,12 +948,14 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
   var plotW = W - pad.left - pad.right;
   var plotH = H - pad.top - pad.bottom;
 
-  // Tonnage range (left Y)
+  // Tonnage range (left Y) — theoretical included so the overlay never clips
   var tMin = 0, tMax = Math.max.apply(null, points.map(function(p) { return p.tonnage; })) || 1;
+  if (theo) tMax = Math.max(tMax, Math.max.apply(null, theo.points.map(function(p) { return p.tonnage; })) || 0);
   tMax += tMax * 0.05;
 
   // Grade range (right Y) — only from points with tonnage > 0
   var validGrades = points.filter(function(p) { return p.tonnage > 0; }).map(function(p) { return p.grade; });
+  if (theo) validGrades = validGrades.concat(theo.points.filter(function(p) { return p.tonnage > 0; }).map(function(p) { return p.grade; }));
   if (validGrades.length === 0) validGrades = [0, 1];
   var gMin = Math.min.apply(null, validGrades);
   var gMax = Math.max.apply(null, validGrades);
@@ -831,6 +1057,18 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
       mPath += (n === 0 ? 'M' : 'L') + sx(points[n].cutoff).toFixed(1) + ',' + syM(points[n].metal).toFixed(1);
     }
     svg += '<path d="' + mPath + '" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-dasharray="4,3"/>';
+
+    // Theoretical GT (samples at block support, scaled to model total tonnage)
+    if (theo) {
+      var thT = '', thG = '';
+      for (var th = 0; th < theo.points.length; th++) {
+        var tp = theo.points[th];
+        thT += (th === 0 ? 'M' : 'L') + sx(tp.cutoff).toFixed(1) + ',' + syT(tp.tonnage).toFixed(1);
+        if (tp.tonnage > 0) thG += (thG ? 'L' : 'M') + sx(tp.cutoff).toFixed(1) + ',' + syG(tp.grade).toFixed(1);
+      }
+      svg += '<path d="' + thT + '" fill="none" stroke="var(--amber)" stroke-width="1.3" stroke-dasharray="7,4" opacity="0.9"/>';
+      if (thG) svg += '<path d="' + thG + '" fill="none" stroke="var(--blue)" stroke-width="1.3" stroke-dasharray="7,4" opacity="0.9"/>';
+    }
   }
 
   svg += '</g>'; // close clip group
@@ -866,6 +1104,11 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
     svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 22) + '" fill="var(--blue)" font-size="8">Grade</text>';
     svg += '<line x1="' + (pad.left + 10) + '" y1="' + (pad.top + 31.5) + '" x2="' + (pad.left + 20) + '" y2="' + (pad.top + 31.5) + '" stroke="var(--green)" stroke-width="1.5" stroke-dasharray="3,2"/>';
     svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 34) + '" fill="var(--green)" font-size="8">Metal (' + esc(units.metalSymbol) + ')</text>';
+    if (theo) {
+      svg += '<line x1="' + (pad.left + 10) + '" y1="' + (pad.top + 43.5) + '" x2="' + (pad.left + 20) + '" y2="' + (pad.top + 43.5) + '" stroke="var(--amber)" stroke-width="1.3" stroke-dasharray="5,3"/>';
+      svg += '<line x1="' + (pad.left + 10) + '" y1="' + (pad.top + 47.5) + '" x2="' + (pad.left + 20) + '" y2="' + (pad.top + 47.5) + '" stroke="var(--blue)" stroke-width="1.3" stroke-dasharray="5,3"/>';
+      svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 48) + '" fill="var(--fg-dim)" font-size="8">Theoretical (samples, affine f=' + theo.f.toFixed(2) + ', scaled to model total)</text>';
+    }
   }
 
   // Crosshair overlay area

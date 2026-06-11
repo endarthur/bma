@@ -488,6 +488,9 @@ function serializeProject() {
         tonnageDp: (document.getElementById('gtTonnageDp') || {}).value || '',
         gradeDp: (document.getElementById('gtGradeDp') || {}).value || '',
         metalDp: (document.getElementById('gtMetalDp') || {}).value || '',
+        theoEnabled: !!(document.getElementById('gtTheoEnabled') || {}).checked,
+        theoEngine: (document.getElementById('gtTheoEngine') || {}).value || 'affine',
+        theoF: parseFloat((document.getElementById('gtTheoFNum') || {}).value) || 0.6,
         gradeUnits: (function() {
           var gu = {};
           document.querySelectorAll('.gt-var-unit').forEach(function(sel) {
@@ -1672,6 +1675,16 @@ function displayResults(data) {
     if ($gTDp && gtp.tonnageDp) $gTDp.value = gtp.tonnageDp;
     if ($gGDp && gtp.gradeDp) $gGDp.value = gtp.gradeDp;
     if ($gMDp && gtp.metalDp) $gMDp.value = gtp.metalDp;
+    var $gTheoCb = document.getElementById('gtTheoEnabled');
+    var $gTheoEng = document.getElementById('gtTheoEngine');
+    var $gTheoF = document.getElementById('gtTheoF');
+    var $gTheoFNum = document.getElementById('gtTheoFNum');
+    if ($gTheoCb && gtp.theoEnabled != null) $gTheoCb.checked = !!gtp.theoEnabled;
+    if ($gTheoEng && gtp.theoEngine) $gTheoEng.value = gtp.theoEngine;
+    if (gtp.theoF != null && isFinite(gtp.theoF)) {
+      if ($gTheoF) $gTheoF.value = gtp.theoF;
+      if ($gTheoFNum) $gTheoFNum.value = gtp.theoF;
+    }
 
     // Per-variable grade units
     var gradeUnits = gtp.gradeUnits || null;

@@ -1819,7 +1819,16 @@ async function colValuesAnalysis(data) {
     return;
   }
 
-  const vals = [];
+  // Optional row weight: a column/calcol by name, or a computed array by
+  // global-filter-surviving ordinal (declustering weights) — same contract
+  // as analyze/swath. Invalid weights exclude the row, counted.
+  let weightName = null;
+  if (data.weightColName && extHeader.indexOf(data.weightColName) >= 0) weightName = data.weightColName;
+  const wArr = data.weightArray || null;
+  let weightExcluded = 0;
+
+  const vals = [], wts = [];
+  const weighted = !!(weightName || wArr);
   let n = 0;
   const reader = csvFile.stream().pipeThrough(new TextDecoderStream()).getReader();
   let buffer = '', isFirstLine = true, totalChars = 0, lastProgress = 0;
@@ -1827,9 +1836,22 @@ async function colValuesAnalysis(data) {
   function collectRow(fields) {
     const row = buildRow(fields);
     if (globalFn && !globalFn(row)) return;
-    n++;
+    const ord = n++;
+    let w = 1;
+    if (wArr) {
+      const wv = wArr[ord];
+      if (!(wv > 0) || !isFinite(wv)) { weightExcluded++; return; }
+      w = wv;
+    } else if (weightName) {
+      const wv = row[weightName];
+      if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) { weightExcluded++; return; }
+      w = wv;
+    }
     const v = row[varColName];
-    if (typeof v === 'number' && isFinite(v)) vals.push(v);
+    if (typeof v === 'number' && isFinite(v)) {
+      vals.push(v);
+      if (weighted) wts.push(w);
+    }
   }
 
   while (true) {
@@ -1856,14 +1878,25 @@ async function colValuesAnalysis(data) {
     if (line && !line.startsWith('#') && !isFirstLine) collectRow(line.split(delimiter));
   }
 
-  const values = Float64Array.from(vals);
-  values.sort();
+  let values, weights = null;
+  if (weighted) {
+    // Sort pairs by value, weights permuted along
+    const idx = Array.from(vals.keys()).sort((a, b) => vals[a] - vals[b]);
+    values = new Float64Array(vals.length);
+    weights = new Float64Array(vals.length);
+    for (let i = 0; i < idx.length; i++) { values[i] = vals[idx[i]]; weights[i] = wts[idx[i]]; }
+  } else {
+    values = Float64Array.from(vals);
+    values.sort();
+  }
 
   const elapsed = performance.now() - startTime;
+  const transfers = [values.buffer];
+  if (weights) transfers.push(weights.buffer);
   self.postMessage({
     type: 'colvalues-complete',
-    values, n, finite: values.length, elapsed
-  }, [values.buffer]);
+    values, weights, n, finite: values.length, weightExcluded, elapsed
+  }, transfers);
 }
 
 async function sectionAnalysis(data) {

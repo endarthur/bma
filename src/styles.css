@@ -3895,6 +3895,11 @@ table.cat-values tr.cat-aux-only td { background: rgba(184,115,51,0.05); }
   border: 1px solid var(--bg2); border-radius: 3px;
   cursor: col-resize;
 }
+.gt-theo-status {
+  font: 0.6rem var(--mono); color: var(--fg-dim);
+  margin-top: 0.25rem; min-height: 0.8rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 table.stats tr.stats-aux-row td {
   background: rgba(184,115,51,0.05);
   font-style: italic;

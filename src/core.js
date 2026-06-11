@@ -473,7 +473,11 @@ var _helpTabs = {
       '<div class="help-section"><div class="help-section-title">Output</div>' +
       '<div class="help-row"><span>Chart with tonnage (amber, left Y), grade (blue, right Y), and metal (green, dashed). Hover for crosshair readout.</span></div>' +
       '<div class="help-row"><span><strong>Copy SVG / Download PNG</strong> — export each chart (PNG is a light-themed 2× render; both carry the variable name as a title)</span></div>' +
-      '<div class="help-row"><span>Collapsible table below each chart. Copy button for clipboard export.</span></div></div>'
+      '<div class="help-row"><span>Collapsible table below each chart. Copy button for clipboard export.</span></div></div>' +
+      '<div class="help-section"><div class="help-section-title">Theoretical GT (samples)</div>' +
+      '<div class="help-row"><span>With an aux dataset loaded, overlay the GT curve the <em>samples</em> predict at block support (dashed, scaled to the model’s total tonnage). The sample distribution uses the aux weights — declustering included — and is matched to each grade variable by name.</span></div>' +
+      '<div class="help-row"><span><strong>f</strong> is the variance reduction factor Var(blocks)/Var(samples) — bring it from your estimation work or explore with the slider. It is deliberately never derived from the model under validation (circular). At f=1 the overlay is the sample GT itself.</span></div>' +
+      '<div class="help-row"><span>The v0 engine is the <strong>affine correction</strong> (mean-preserving variance shrink) — honest but crude: it preserves the distribution’s shape exactly, which real support change does not. A discrete-Gaussian (Hermite) engine is planned. If the model’s curves sit far from the theoretical at any plausible f, the difference is worth explaining.</span></div></div>'
   },
   swath: {
     title: 'Swath Plots',
