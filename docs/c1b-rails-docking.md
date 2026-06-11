@@ -242,7 +242,12 @@ layout: {
    keeps writing the hidden legacy buttons (they remain the <700px shell
    and the state store) — `wsTabBadge` unchanged; update help texts;
    manual section + screenshots (both languages).
-   ✅ **DONE 2026-06-11 (code + help; manuals tracked separately)** —
+   ✅ **DONE 2026-06-11 (incl. manuals)** — manuals: new §2.4 "The
+   workspace: panels that coexist" in both languages + §13 tree-toggle
+   sentence fixed (rail ◀/▶ buttons); all 24 screenshots regenerated at
+   the rails-shell build (new `24-workspace.png`: split + float); both
+   PDFs regenerated (pt-BR 34pp, EN 33pp); `experiments/bma.html` offline
+   copy refreshed. Code/help details:
    @gcu/menu vendored per D7 (`src/vendor-menu.js` + menu.css + `--ui-*`
    token map; toolbar ⋮ is now a `Menu.dropdown` with factory items, the
    old `.toolbar-menu` HTML/CSS/JS removed). Legacy bar hidden via
