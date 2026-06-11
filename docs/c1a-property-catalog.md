@@ -209,10 +209,21 @@ Categories tab affordances or just deep-linking to that tab — see D5).
    *effective* color (palette included), matching the swath rule.
 3. **Editing affordances** (color/unit/role/pairing) + stale-mark
    integration + `autoSaveProject()` wiring (new-tab checklist applies).
+   ✅ **DONE 2026-06-11 (c936048)** — row popover (`#treePopover`, fixed
+   position, survives tree refreshes); pairing select is kind-filtered
+   (num↔num, cat↔cat) with explicit "— unpaired"; many-to-one pairs are
+   allowed (single-slot consumers — Categories comparison, GT-theo — take
+   the first by header order); model categorical rows deep-link to the
+   Categories tab (D5 resolved as deep-link).
 4. **New smoke**: `experiments/tree-smoke.js` — load example pack, assert
    seeded pairs (Fe⇄Fe, LITO⇄LITO, CAN orphan-side visible), edit a pairing
    + a color, reload project, assert persistence; assert Statistics/Swath/
    Categories/GT-theo all honor an edited pairing.
+   ✅ **DONE 2026-06-11** — 27 asserts incl. edit roundtrips (orphan
+   re-pair, color inheritance, unit mirroring, weight role sync,
+   persistence of all of it).
+
+**C1a COMPLETE 2026-06-11.** Next per roadmap: C1b (rails docking).
 
 Step 1 is the bulk and is testable without any visible change; the tree
 (steps 2–3) is then pure presentation over a proven model.
