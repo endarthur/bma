@@ -748,7 +748,8 @@ header .logo-mark {
 }
 .toolbar-icon-btn:hover { color: var(--amber); border-color: var(--amber); }
 .toolbar-overflow {
-  display: none;
+  /* visible on desktop too since C1b-2 — hosts the Reset layout action */
+  display: block;
   background: none; border: none; color: var(--fg-dim);
   font-size: 1.1rem; cursor: pointer; padding: 0.2rem 0.4rem;
 }
@@ -2050,7 +2051,7 @@ table.stats tr:hover td:first-child { background: var(--bg2); }
   position: absolute;
   top: 0; right: 0; bottom: 0;
   width: 340px;
-  z-index: 50;
+  z-index: 5000; /* above rails float chrome (100 + z·10), below the drag scrim */
   pointer-events: none;
   overflow: hidden;
 }
@@ -4613,7 +4614,10 @@ table.stats tr.stats-delta-row td:first-child {
    the not-yet-mounted ones (and #panelSection). Panels under rails carry
    .active permanently — the wrapper, not the class, controls visibility —
    so each panel keeps its own .active display rules (flex vs block). */
-.results-main { position: relative; }
+/* z-index:0 makes the workspace a stacking context: rails' internal z
+   values (panels 5, floats 100+, drag scrim 9500, ghost 10000) stay
+   contained below the document-level modals (100) / popovers (200+) */
+.results-main { position: relative; z-index: 0; }
 .results-main.rails-root > .results-panels { display: none; }
 
 /* The catalog tree as the Data panel: fill the wrapper, drop the legacy

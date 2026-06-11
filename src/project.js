@@ -387,6 +387,8 @@ function serializeProject() {
       focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null
     },
     tree: { open: catalogTreeOpen },
+    // Rails workspace arrangement (C1b-2) — {v:1, rails: <serialized state>}
+    layout: wsSerializeLayout(),
     exportCols: exportColumns.map(c => ({
       name: c.name, outputName: c.outputName, selected: c.selected
     })),
@@ -583,6 +585,9 @@ async function applyProject(project) {
   // the coalesced re-render also re-aligns the tree rail's collapsed state
   catalogTreeOpen = (project.tree && project.tree.open !== undefined) ? project.tree.open : null;
   refreshCatalogTree();
+
+  // Restore the rails workspace arrangement (missing/invalid → default)
+  wsRestoreProjectLayout(project.layout);
 
   // Restore filter
   currentFilter = project.filter || null;
@@ -814,6 +819,7 @@ function clearProject() {
   exportColumns = [];
   pendingProjectRestore = null;
   resetExportSettings();
+  wsResetLayout(true); // skipSave — clearProject just removed the stored key
 
   runPreflight(currentFile).then(data => {
     renderPreflight(data);
@@ -827,6 +833,9 @@ function clearProject() {
 // Toolbar overflow menu
 $toolbarOverflow.addEventListener('click', (e) => {
   e.stopPropagation();
+  // Reset layout only applies to the rails shell (C1b-2)
+  const $reset = document.getElementById('menuResetLayout');
+  if ($reset) $reset.style.display = wsRails ? '' : 'none';
   $toolbarMenu.classList.toggle('open');
 });
 document.addEventListener('click', () => $toolbarMenu.classList.remove('open'));
@@ -840,6 +849,7 @@ $toolbarMenu.addEventListener('click', (e) => {
   if (action === 'save') saveProjectFile();
   else if (action === 'load') $projectFileInput.click();
   else if (action === 'clear') clearProject();
+  else if (action === 'resetLayout') wsResetLayout();
   else if (action === 'settings') openSettings();
   else if (action === 'help') toggleHelp();
 });
@@ -977,6 +987,7 @@ async function handleFile(file, handle) {
   exportColumns = [];
   pendingProjectRestore = null;
   resetExportSettings();
+  wsResetLayout(true); // fresh file starts from the default workspace layout
   currentTypeOverrides = null;
   currentZipEntry = null;
   currentSkipCols = null;

@@ -15,8 +15,16 @@
 // delegates here when the rails shell is up, so stragglers stay correct.
 // The legacy tab bar stays visible and synced on the rails shell during
 // C1b-1/2 (smoke-suite shim + familiar chrome); it retires in C1b-3.
+//
+// C1b-2: floats are on (D4 — tab-append-body drops stay off so floats
+// don't snap into stacks); tabs are closeable. Closing destroys the rails
+// tab but the singleton panel just re-homes to .results-panels — clicking
+// the tab's legacy-bar button re-adds it (wsActivateInRails). The layout
+// persists as the `layout` project key ({v:1, rails: serialize()}) and
+// survives breakpoint crossings via wsLastLayout.
 
-var wsRails = null;   // rails instance when the rails shell is up, else null
+var wsRails = null;      // rails instance when the rails shell is up, else null
+var wsLastLayout = null; // serialized rails layout — survives shell exits, rides projects
 
 var WS_PANELS = [
   { id: 'preflight',  title: 'Preflight',  el: 'panelPreflight' },
@@ -42,7 +50,40 @@ function showPanel(tabId) {
 }
 
 function wsActivateInRails(tabId) {
-  if (wsRails) wsRails.activateTab(tabId);
+  if (!wsRails) return;
+  if (findTab(wsRails.state, tabId)) { wsRails.activateTab(tabId); return; }
+  // Closed panel: re-add it to the main workspace. Panels are singletons —
+  // renderPanel re-fetches the same element it re-homed at close.
+  var p = wsPanelById(tabId);
+  if (!p) return;
+  wsRails.addTab({ id: p.id, title: p.title }, wsMainTarget());
+  wsSyncBadgesFromLegacy();
+  wsSyncLegacyTabbar(tabId); // addTab activates without emitting tab:activate
+}
+
+// Where re-added (or re-opened) tabs land: the first stack of the first
+// non-tree rail; a fresh rail if the user closed everything
+function wsMainTarget() {
+  var rails = wsRails.state.rails;
+  for (var i = 0; i < rails.length; i++) {
+    if (rails[i].id === WS_TREE_RAIL) continue;
+    if (rails[i].stacks.length) return { to: 'stack', stackId: rails[i].stacks[0].id };
+  }
+  return { to: 'new-rail', at: rails.length };
+}
+
+// First visible (active, non-tree) tab — legacy-bar fallback when the
+// focused tab gets closed
+function wsFirstVisibleTab() {
+  var rails = wsRails.state.rails;
+  for (var i = 0; i < rails.length; i++) {
+    if (rails[i].id === WS_TREE_RAIL || rails[i].collapsed) continue;
+    for (var j = 0; j < rails[i].stacks.length; j++) {
+      var a = rails[i].stacks[j].active;
+      if (a && a !== 'data') return a;
+    }
+  }
+  return 'preflight';
 }
 
 function wsPanelById(id) {
@@ -64,7 +105,7 @@ function wsDefaultLayout(activeId) {
       { id: WS_MAIN_RAIL, flex: 1,
         stacks: [{ id: WS_MAIN_STACK, flex: 1, active: activeId,
           tabs: WS_PANELS.map(function(p) {
-            return { id: p.id, title: p.title, closeable: false };
+            return { id: p.id, title: p.title };
           }) }] }
     ],
     floats: []
@@ -168,9 +209,9 @@ function buildRailsShell(host) {
       if (zone.type === 'new-stack' && zone.railId === WS_TREE_RAIL) return false;
       return true;
     },
-    // Floats land in C1b-2; tab-append-body stays off for good (D4)
-    canCreateFloat: function() { return false; },
-    dropZones: { 'new-float': false, 'tab-append-body': false }
+    // D4: floats on, but full-body drop targets stay off — they make any
+    // float move snap into a stack
+    dropZones: { 'tab-append-body': false }
   });
 
   wsRails.on('tab:activate', function(ev) {
@@ -179,12 +220,29 @@ function buildRailsShell(host) {
     if ($helpOverlay && $helpOverlay.classList.contains('active')) renderHelp(ev.tab.id);
     if (typeof autoSaveProject === 'function') autoSaveProject();
   });
+  wsRails.on('tab:close', function(ev) {
+    if (!ev || !ev.tab || ev.tab.id === 'data') return;
+    // Focused tab closed → point the legacy bar at what's still visible
+    var btn = $resultsTabs.querySelector('.results-tab.active');
+    if (btn && btn.dataset.tab === ev.tab.id) wsSyncLegacyTabbar(wsFirstVisibleTab());
+  });
   wsRails.on('rail:collapse', function(ev) {
     if (ev && ev.rail && ev.rail.id === WS_TREE_RAIL) wsOnTreeRailToggled(true);
   });
   wsRails.on('rail:expand', function(ev) {
     if (ev && ev.rail && ev.rail.id === WS_TREE_RAIL) wsOnTreeRailToggled(false);
   });
+  // Every structural change (drag/split/float/close/resize-drag) → remember
+  // + persist through the project autosave (debounced there)
+  wsRails.on('layout:change', function() {
+    if (!wsRails) return;
+    wsLastLayout = wsRails.serialize();
+    if (typeof autoSaveProject === 'function') autoSaveProject();
+  });
+
+  // Re-entry across the breakpoint (or a project restored on mobile):
+  // bring back the remembered arrangement
+  if (wsLastLayout) wsApplyLayout(wsLastLayout);
 
   wsSyncBadgesFromLegacy();
   wsSyncResultsTreeClass();
@@ -201,6 +259,7 @@ function wsExitRails() {
   if (!wsRails) return;
   var activeId = getActiveTabId();
   var inst = wsRails;
+  wsLastLayout = inst.serialize(); // arrangement survives the legacy interlude
   wsRails = null;        // legacy arm live before destroy() re-homes panels
   inst.destroy();        // onPanelDestroy → wsRehomePanel for every mounted panel
   WS_PANELS.forEach(function(p) {
@@ -209,6 +268,78 @@ function wsExitRails() {
   });
   switchTab(activeId);   // restore single-active-panel display
   renderCatalogTree();   // legacy tree-open handling
+}
+
+// ─── Layout persistence (C1b-2) ─────────────────────────────────────────
+
+// Hydrate a serialized layout. Sanitized first — tabs we no longer
+// register, empty stacks/rails/floats and duplicate ids are dropped, so a
+// stale project can't wedge the workspace. Anything structurally invalid →
+// false, current layout untouched (deserialize validates before swapping).
+function wsApplyLayout(json) {
+  if (!wsRails || !json) return false;
+  try {
+    wsRails.deserialize(JSON.stringify(wsSanitizeLayout(JSON.parse(json))));
+  } catch (e) {
+    return false;
+  }
+  wsLastLayout = wsRails.serialize();
+  wsSyncBadgesFromLegacy();
+  wsSyncTreeRail();
+  wsSyncResultsTreeClass();
+  wsRails.activateTab(getActiveTabId()); // keep the focused tab focused if it survived
+  return true;
+}
+
+function wsSanitizeLayout(st) {
+  if (!st || !Array.isArray(st.rails)) throw new Error('bad layout');
+  var known = { data: true };
+  WS_PANELS.forEach(function(p) { known[p.id] = true; });
+  var seen = {};
+  function cleanStack(s) {
+    s.tabs = (s.tabs || []).filter(function(t) {
+      if (!t || !known[t.id] || seen[t.id]) return false;
+      seen[t.id] = true;
+      return true;
+    });
+    if (s.tabs.length && !s.tabs.some(function(t) { return t.id === s.active; })) {
+      s.active = s.tabs[0].id;
+    }
+    return s.tabs.length > 0;
+  }
+  st.rails = st.rails.filter(function(r) {
+    r.stacks = (r.stacks || []).filter(cleanStack);
+    return r.stacks.length > 0;
+  });
+  st.floats = (st.floats || []).filter(function(f) { return f.stack && cleanStack(f.stack); });
+  if (!seen.data || !st.rails.length) throw new Error('layout missing core structure');
+  return st;
+}
+
+// Toolbar action + the missing/invalid-layout fallback
+function wsResetLayout(skipSave) {
+  wsLastLayout = null;
+  if (!wsRails) return;
+  wsRails.deserialize(JSON.stringify(wsDefaultLayout(getActiveTabId())));
+  wsLastLayout = wsRails.serialize();
+  wsSyncBadgesFromLegacy();
+  wsSyncTreeRail();
+  wsSyncResultsTreeClass();
+  if (!skipSave && typeof autoSaveProject === 'function') autoSaveProject();
+}
+
+// The `layout` project key (serializeProject / applyProject)
+function wsSerializeLayout() {
+  var json = wsRails ? wsRails.serialize() : wsLastLayout;
+  return json ? { v: 1, rails: json } : null;
+}
+
+function wsRestoreProjectLayout(layout) {
+  if (layout && layout.v === 1 && typeof layout.rails === 'string') {
+    wsLastLayout = layout.rails;            // applied at next rails entry if on mobile
+    if (!wsRails || wsApplyLayout(layout.rails)) return;
+  }
+  wsResetLayout(true); // missing or invalid → default (autosave follows restore anyway)
 }
 
 // Shell choice by viewport, re-evaluated on breakpoint crossing (C1b D5:

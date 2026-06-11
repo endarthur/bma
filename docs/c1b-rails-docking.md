@@ -199,6 +199,26 @@ layout: {
    fixed `width: 250` wins over flex on every chrome rebuild, so dragging
    the rail splitter next to it doesn't stick.
 3. **C1b-2 — layout persistence** + reset-layout action + floats enabled.
+   ✅ **DONE 2026-06-11** — floats on per D4 (`dropZones: {'tab-append-body':
+   false}` only); tabs are closeable now: close destroys the rails tab but
+   the singleton panel re-homes to `.results-panels`, and `showPanel`
+   re-adds on demand (the legacy tab bar is the reopen affordance until
+   C1b-3 — its replacement needs deciding then). `layout` project key =
+   `{v: 1, rails: serialize()}`, written by `serializeProject()` from the
+   live instance or `wsLastLayout` (so a project saved on mobile keeps the
+   desktop layout); autosaved via `rails.on('layout:change')`; restored in
+   `applyProject` through `wsApplyLayout`, which sanitizes first
+   (unregistered/duplicate tab ids, empty stacks/rails/floats dropped, Data
+   tab required) and falls back to the default layout on anything invalid.
+   `wsLastLayout` also carries the arrangement across breakpoint crossings.
+   Reset layout lives in the toolbar ⋮ menu (now visible on desktop, item
+   shown only on the rails shell). New file / Clear project → default
+   layout. Workspace z-containment: `.results-main { z-index: 0 }` makes it
+   a stacking context so float chrome (z 100+) can't paint over the
+   document-level modals (z 100) / popovers; help overlay bumped to z 5000
+   (above floats, below the drag scrim). rails-smoke extended: tear-off via
+   the new-float zone, float ✕ → re-home → legacy-bar re-add, autosaved
+   layout JSON, breakpoint retention, reload-restores-layout, reset action.
 4. **C1b-3 — cleanup**: retire desktop tab bar; keep legacy shell <700px;
    update help texts; manual section + screenshots (both languages).
 
