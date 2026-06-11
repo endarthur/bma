@@ -389,6 +389,7 @@ var _helpTabs = {
       '<div class="help-row"><span>Toggle multiple variables to compare CDFs. Linear or log scale.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Aux comparison</div>' +
       '<div class="help-row"><span>After running <strong>Analyze</strong> on the Aux tab, aux variables appear at the bottom of the sidebar. A same-named aux variable shows as an indented row right under its model counterpart — mean against mean, CV against CV.</span></div>' +
+      '<div class="help-row"><span><strong>Δ% row</strong> — under each matched pair: (model − aux) / aux per metric. The mean difference is the headline acceptance number in model validation; single-digit percentages are the conventional comfort zone. Count-like metrics and skew/kurtosis are skipped.</span></div>' +
       '<div class="help-row"><span>Click an aux row’s name to overlay its CDF as a dashed curve. A steeper model CDF over a flatter sample CDF is the classic kriging smoothing signature.</span></div>' +
       '<div class="help-row"><span><strong>Q–Q mode</strong> — switch the panel to a quantile–quantile plot: the first selected curve is the reference axis, every other curve plots against it at P1–P99 (large dots at deciles). Offset from the dashed identity line = bias; slope rotation = support/smoothing difference. Hover dots for values.</span></div></div>'
   },

@@ -3842,3 +3842,14 @@ table.stats tr.stats-aux-row td {
   font-style: italic;
 }
 table.stats tr.stats-aux-row td:first-child { padding-left: 1.1rem; }
+table.stats tr.stats-delta-row td {
+  background: rgba(184,115,51,0.09);
+  color: var(--fg-dim);
+  font-size: 0.68rem;
+  padding-top: 0.15rem; padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border);
+}
+table.stats tr.stats-delta-row td:first-child {
+  padding-left: 1.6rem; color: var(--fg-dim); font-weight: 400;
+  letter-spacing: 0.05em; cursor: help;
+}

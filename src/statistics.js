@@ -143,6 +143,18 @@ function formatStatValue(val, metric) {
   return formatNum(val);
 }
 
+// Metrics where a relative % difference is meaningless (dataset-size counts)
+// or unstable (moments with near-zero reference values)
+var STATS_DELTA_SKIP = new Set(['count', 'sumw', 'nulls', 'zeros', 'skew', 'kurt']);
+
+function formatDeltaPct(p, a, metric) {
+  if (STATS_DELTA_SKIP.has(metric.key)) return '—';
+  if (p == null || a == null || !isFinite(p) || !isFinite(a) || a === 0) return '—';
+  var d = (p - a) / Math.abs(a) * 100;
+  if (!isFinite(d)) return '—';
+  return (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(1) + '%';
+}
+
 function isMetricVisible(key) {
   if (statsVisibleMetrics === null) {
     if (key.startsWith('p') && key.length > 1 && !isNaN(key.slice(1))) return true;
@@ -295,6 +307,19 @@ function renderStatsTable() {
     var aNameClass = aCdfActive ? 'cdf-link cdf-active' : 'cdf-link';
     var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-aux-col="' + ac.idx + '" href="#">' + esc(auxLabel + ':' + ac.name) + '</a></td>';
     for (var m of metrics) rowHtml += '<td>' + formatStatValue(getStatValue(as, m), m) + '</td>';
+    return rowHtml + '</tr>' + deltaRowHtml(ac);
+  }
+
+  // Δ% row: model vs aux, relative to aux (the reference dataset) — the
+  // mean-difference % is the headline acceptance statistic in validation
+  // comparison tables
+  function deltaRowHtml(ac) {
+    if (ac.matchCi === null || !stats[ac.matchCi]) return '';
+    var ps = stats[ac.matchCi];
+    var as = auxCompleteData.stats[ac.idx];
+    var tip = '(' + header[ac.matchCi] + ' − ' + auxLabel + ':' + ac.name + ') / ' + auxLabel + ':' + ac.name;
+    var rowHtml = '<tr class="stats-delta-row"><td title="' + esc(tip) + '">Δ%</td>';
+    for (var m of metrics) rowHtml += '<td>' + formatDeltaPct(getStatValue(ps, m), getStatValue(as, m), m) + '</td>';
     return rowHtml + '</tr>';
   }
 

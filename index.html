@@ -3855,6 +3855,17 @@ table.stats tr.stats-aux-row td {
   font-style: italic;
 }
 table.stats tr.stats-aux-row td:first-child { padding-left: 1.1rem; }
+table.stats tr.stats-delta-row td {
+  background: rgba(184,115,51,0.09);
+  color: var(--fg-dim);
+  font-size: 0.68rem;
+  padding-top: 0.15rem; padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border);
+}
+table.stats tr.stats-delta-row td:first-child {
+  padding-left: 1.6rem; color: var(--fg-dim); font-weight: 400;
+  letter-spacing: 0.05em; cursor: help;
+}
 </style>
 <script>try{var t=JSON.parse(localStorage.getItem('bma:settings')||'{}').theme;if(t&&t!=='default')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 </head>
@@ -4439,7 +4450,7 @@ table.stats tr.stats-aux-row td:first-child { padding-left: 1.1rem; }
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 495f4ae — click to check for updates">495f4ae</div>
+<div class="build-badge" id="buildBadge" title="build 5ec9523 — click to check for updates">5ec9523</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -7069,6 +7080,7 @@ var _helpTabs = {
       '<div class="help-row"><span>Toggle multiple variables to compare CDFs. Linear or log scale.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Aux comparison</div>' +
       '<div class="help-row"><span>After running <strong>Analyze</strong> on the Aux tab, aux variables appear at the bottom of the sidebar. A same-named aux variable shows as an indented row right under its model counterpart — mean against mean, CV against CV.</span></div>' +
+      '<div class="help-row"><span><strong>Δ% row</strong> — under each matched pair: (model − aux) / aux per metric. The mean difference is the headline acceptance number in model validation; single-digit percentages are the conventional comfort zone. Count-like metrics and skew/kurtosis are skipped.</span></div>' +
       '<div class="help-row"><span>Click an aux row’s name to overlay its CDF as a dashed curve. A steeper model CDF over a flatter sample CDF is the classic kriging smoothing signature.</span></div>' +
       '<div class="help-row"><span><strong>Q–Q mode</strong> — switch the panel to a quantile–quantile plot: the first selected curve is the reference axis, every other curve plots against it at P1–P99 (large dots at deciles). Offset from the dashed identity line = bias; slope rotation = support/smoothing difference. Hover dots for values.</span></div></div>'
   },
@@ -11576,6 +11588,18 @@ function formatStatValue(val, metric) {
   return formatNum(val);
 }
 
+// Metrics where a relative % difference is meaningless (dataset-size counts)
+// or unstable (moments with near-zero reference values)
+var STATS_DELTA_SKIP = new Set(['count', 'sumw', 'nulls', 'zeros', 'skew', 'kurt']);
+
+function formatDeltaPct(p, a, metric) {
+  if (STATS_DELTA_SKIP.has(metric.key)) return '—';
+  if (p == null || a == null || !isFinite(p) || !isFinite(a) || a === 0) return '—';
+  var d = (p - a) / Math.abs(a) * 100;
+  if (!isFinite(d)) return '—';
+  return (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(1) + '%';
+}
+
 function isMetricVisible(key) {
   if (statsVisibleMetrics === null) {
     if (key.startsWith('p') && key.length > 1 && !isNaN(key.slice(1))) return true;
@@ -11728,6 +11752,19 @@ function renderStatsTable() {
     var aNameClass = aCdfActive ? 'cdf-link cdf-active' : 'cdf-link';
     var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-aux-col="' + ac.idx + '" href="#">' + esc(auxLabel + ':' + ac.name) + '</a></td>';
     for (var m of metrics) rowHtml += '<td>' + formatStatValue(getStatValue(as, m), m) + '</td>';
+    return rowHtml + '</tr>' + deltaRowHtml(ac);
+  }
+
+  // Δ% row: model vs aux, relative to aux (the reference dataset) — the
+  // mean-difference % is the headline acceptance statistic in validation
+  // comparison tables
+  function deltaRowHtml(ac) {
+    if (ac.matchCi === null || !stats[ac.matchCi]) return '';
+    var ps = stats[ac.matchCi];
+    var as = auxCompleteData.stats[ac.idx];
+    var tip = '(' + header[ac.matchCi] + ' − ' + auxLabel + ':' + ac.name + ') / ' + auxLabel + ':' + ac.name;
+    var rowHtml = '<tr class="stats-delta-row"><td title="' + esc(tip) + '">Δ%</td>';
+    for (var m of metrics) rowHtml += '<td>' + formatDeltaPct(getStatValue(ps, m), getStatValue(as, m), m) + '</td>';
     return rowHtml + '</tr>';
   }
 
