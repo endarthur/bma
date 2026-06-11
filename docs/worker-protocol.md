@@ -130,6 +130,14 @@ Type detection samples rows until every non-forced column has ≥20 non-null val
 }
 ```
 
+**T-digest accuracy contract (since 2026-06-11):** a digest is EXACT (one
+centroid per distinct value) until it has seen more than 20 000 distinct
+values — typical aux sample sets and quantized grade columns never
+lossy-compress. Beyond that it degrades to a merging digest (Dunning bound,
+δ = 300): ≲0.05 % relative error across p01–p99, sharpest in the tails,
+~1–2k centroids. Centroids with exactly equal means always merge
+(lossless). Same machinery backs the per-bin swath digests.
+
 ## Mode: `'swath'`
 
 ```javascript

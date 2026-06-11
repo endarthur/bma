@@ -337,11 +337,23 @@ async function readSample(file, maxLines) {
 }
 
 // ─── T-Digest for streaming approximate quantiles ─────────────────────
-const TD_COMPRESSION = 100;
+// Merging digest with the standard size bound (weight ≤ 4·n·q(1−q)/δ,
+// Dunning) — the bound used before 2026-06-11 was the ABSOLUTE form
+// 4·δ·q(1−q), which degraded to ~n/100 centroids on large files and made
+// the digest ~77% of analyze wall-clock. Two accuracy refinements ride on
+// the fix:
+//  • centroids with exactly equal means always merge (lossless — quantized
+//    grades collapse to one centroid per distinct value)
+//  • exact phase: a digest never lossy-compresses until it holds more than
+//    TD_EXACT_LIMIT distinct values, so small datasets (typical aux sample
+//    sets) and low-cardinality columns report EXACT quantiles; only
+//    genuinely continuous high-count columns degrade to the digest
+const TD_COMPRESSION = 300;
 const TD_BUFFER_SIZE = 2000;
+const TD_EXACT_LIMIT = 20000;
 
 function newTDigest() {
-  return { centroids: [], buffer: [], totalCount: 0 };
+  return { centroids: [], buffer: [], totalCount: 0, exact: true };
 }
 
 // Weighted ingest: each buffered point is [value, weight]. Centroid counts
@@ -351,7 +363,7 @@ function tdAdd(td, value, w) {
   if (w === undefined) w = 1;
   td.buffer.push([value, w]);
   td.totalCount += w;
-  if (td.buffer.length >= TD_BUFFER_SIZE) tdFlush(td);
+  if (td.buffer.length >= (td.exact ? TD_EXACT_LIMIT : TD_BUFFER_SIZE)) tdFlush(td);
 }
 
 function tdFlush(td) {
@@ -370,7 +382,30 @@ function tdFlush(td) {
     }
   }
   td.buffer = [];
+  if (td.exact) {
+    const collapsed = tdMergeEqual(merged);
+    if (collapsed.length <= TD_EXACT_LIMIT) {
+      td.centroids = collapsed; // still exact: no lossy merge has happened
+      return;
+    }
+    td.exact = false; // too many distinct values — degrade to a real digest
+    td.centroids = tdCompress(collapsed, td.totalCount);
+    return;
+  }
   td.centroids = tdCompress(merged, td.totalCount);
+}
+
+// Lossless collapse: adjacent centroids with identical means become one
+function tdMergeEqual(centroids) {
+  if (centroids.length <= 1) return centroids;
+  const result = [centroids[0]];
+  for (let i = 1; i < centroids.length; i++) {
+    const c = centroids[i];
+    const last = result[result.length - 1];
+    if (c.mean === last.mean) last.count += c.count;
+    else result.push(c);
+  }
+  return result;
 }
 
 function tdCompress(centroids, totalCount) {
@@ -381,8 +416,8 @@ function tdCompress(centroids, totalCount) {
     const c = centroids[i];
     const last = result[result.length - 1];
     const q = cumCount / totalCount;
-    const maxSize = Math.max(1, Math.floor(4 * TD_COMPRESSION * q * (1 - q)));
-    if (last.count + c.count <= maxSize) {
+    const maxSize = Math.max(1, Math.floor(4 * totalCount * q * (1 - q) / TD_COMPRESSION));
+    if (c.mean === last.mean || last.count + c.count <= maxSize) {
       const newCount = last.count + c.count;
       last.mean += (c.mean - last.mean) * c.count / newCount;
       last.count = newCount;
