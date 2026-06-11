@@ -344,8 +344,8 @@ function serializeProject() {
       calcolMeta: auxCalcolMeta,
       // Declus params only — weights are recomputed, never stored
       declus: (auxDeclus && auxDeclus.params) ? { params: auxDeclus.params } : null,
-      // Top-cut: variable + cap + scale; the distribution is re-loaded on demand
-      topcut: (auxTopcut && auxTopcut.varName) ? { varName: auxTopcut.varName, cap: auxTopcut.cap, xlog: !!auxTopcut.xlog } : null,
+      // Top-cut: variable + cap + scale + weight mode; the distribution is re-loaded on demand
+      topcut: (auxTopcut && auxTopcut.varName) ? { varName: auxTopcut.varName, cap: auxTopcut.cap, xlog: !!auxTopcut.xlog, useDeclus: !!auxTopcut.useDeclus } : null,
       view: auxView
     } : null,
     calcolCode: currentCalcolCode,

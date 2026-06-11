@@ -12,11 +12,16 @@ var $auxTopcut = document.getElementById('auxTopcut');
 
 function auxTopcutFingerprintNow() {
   if (!auxFile || !auxPreflightData) return null;
+  var useDeclus = !!(auxTopcut && auxTopcut.useDeclus);
   return JSON.stringify({
     f: auxFile.name + '|' + auxFile.size,
     z: auxPreflightData.selectedZipEntry || null,
     flt: auxFilter ? auxFilter.expression : '',
-    cc: auxCalcolCode || ''
+    cc: auxCalcolCode || '',
+    // Weight mode is part of the distribution's identity: flipping
+    // Raw | Declustered (or re-running declus) demands a reload
+    uw: useDeclus,
+    dw: useDeclus && auxDeclus ? auxDeclus.fingerprint : null
   });
 }
 
@@ -37,23 +42,31 @@ function renderAuxView() {
   if (showTopcut) renderAuxTopcut();
 }
 
-// ── Capped statistics from prefix sums ──
-// k = count of values ≤ c (binary search), then every capped moment is
-// arithmetic: sum' = S[k] + (m−k)·c, ss' = SS[k] + (m−k)·c²
+// ── Capped statistics from (weighted) prefix sums ──
+// k = count of values ≤ c (binary search); prefixS/prefixSS carry Σw·v and
+// Σw·v² (w=1 in raw mode, prefixW = counts), so every capped moment is
+// arithmetic: sum' = S[k] + (W−W[k])·c, ss' = SS[k] + (W−W[k])·c².
+// Weighted runs use population variance, raw keeps the sample form —
+// the same convention as every other weighted statistic in BMA.
 function auxTopcutCappedStats(c) {
   var t = auxTopcut;
   var v = t.values, m = v.length;
   var lo = 0, hi = m;
   while (lo < hi) { var mid = (lo + hi) >> 1; if (v[mid] <= c) lo = mid + 1; else hi = mid; }
   var k = lo;
-  var sum = t.prefixS[k] + (m - k) * c;
-  var ss = t.prefixSS[k] + (m - k) * c * c;
-  var mean = sum / m;
-  var variance = m > 1 ? Math.max(0, (ss - sum * sum / m) / (m - 1)) : 0;
+  var W = t.prefixW[m];
+  var wAbove = W - t.prefixW[k];
+  var sum = t.prefixS[k] + wAbove * c;
+  var ss = t.prefixSS[k] + wAbove * c * c;
+  var mean = sum / W;
+  var variance;
+  if (t.weights) variance = Math.max(0, ss / W - mean * mean);
+  else variance = m > 1 ? Math.max(0, (ss - sum * sum / m) / (m - 1)) : 0;
   var std = Math.sqrt(variance);
-  var metalRemoved = (t.prefixS[m] - t.prefixS[k]) - (m - k) * c;
+  var metalRemoved = (t.prefixS[m] - t.prefixS[k]) - wAbove * c;
   return {
-    k: k, nCapped: m - k, mean: mean, std: std,
+    k: k, nCapped: m - k, capShare: W > 0 ? wAbove / W : 0,
+    mean: mean, std: std,
     cv: mean !== 0 ? Math.abs(std / mean * 100) : null,
     metalRemovedPct: t.prefixS[m] > 0 ? metalRemoved / t.prefixS[m] * 100 : 0
   };
@@ -114,6 +127,12 @@ function renderAuxTopcut() {
     '<button class="aux-from-main-btn" id="auxTopcutCopyBtn" title="copy a capping calcol for the Calc tab (Aux mode)">Copy calcol</button>' +
     '<span class="aux-hint" id="auxTopcutCopied" style="margin:0"></span>' +
     '<span style="margin-left:auto;display:flex;gap:0.25rem">' +
+      '<button class="aux-view-btn' + (!t.useDeclus ? ' active' : '') + '" id="auxTopcutWRaw" title="raw sample distribution — the capping convention">Raw</button>' +
+      '<button class="aux-view-btn' + (t.useDeclus ? ' active' : '') + '" id="auxTopcutWDeclus"' +
+        (typeof auxDeclusFresh === 'function' && auxDeclusFresh()
+          ? ' title="weight every statistic by the declustering weights — capped means/metal unbiased by drilling pattern"'
+          : ' disabled title="run Declustering on the sidebar first (weights missing or stale)"') + '>Declustered</button>' +
+      '<span style="width:0.4rem"></span>' +
       '<button class="aux-view-btn' + (!t.xlog ? ' active' : '') + '" id="auxTopcutXLin">Linear</button>' +
       '<button class="aux-view-btn' + (t.xlog ? ' active' : '') + '" id="auxTopcutXLog"' +
         (canLog ? ' title="log value axis on all four plots"' : ' disabled title="log X needs all values > 0 (min here is ' + formatNum(vMin) + ')"') + '>Log</button>' +
@@ -126,8 +145,9 @@ function renderAuxTopcut() {
     '<div class="tc-plot">' + auxTopcutMetalSvg() + '</div>' +
   '</div>';
   html += '<div class="aux-hint">drag the cap line on any plot (or type a value) · n ' + m.toLocaleString() +
-    (t.n > m ? ' (+' + (t.n - m) + ' non-numeric/null excluded)' : '') +
-    ' · raw unweighted sample distribution</div>';
+    (t.n > m + (t.weightExcluded || 0) ? ' (+' + (t.n - m - (t.weightExcluded || 0)) + ' non-numeric/null excluded)' : '') +
+    (t.weightExcluded ? ' (+' + t.weightExcluded + ' invalid-weight excluded)' : '') +
+    ' · ' + (t.weights ? 'declustering-weighted distribution' : 'raw unweighted sample distribution (the capping convention)') + '</div>';
 
   $auxTopcut.innerHTML = html;
   auxTopcutPositionCaps();
@@ -140,8 +160,8 @@ function auxTopcutStatsHtml(un, cs) {
     var p = (a - b) / Math.abs(b) * 100;
     return ' <span class="tc-delta">(' + (p >= 0 ? '+' : '−') + Math.abs(p).toFixed(1) + '%)</span>';
   }
-  return '<span><em>uncapped</em> mean <strong>' + formatNum(un.mean) + '</strong> · CV ' + (un.cv != null ? un.cv.toFixed(1) : '—') + ' · max ' + formatNum(t.values[t.values.length - 1]) + '</span>' +
-    '<span><em>cap ' + formatNum(t.cap) + '</em> caps <strong>' + cs.nCapped.toLocaleString() + '</strong> (' + (cs.nCapped / t.values.length * 100).toFixed(2) + '%)' +
+  return '<span><em>uncapped' + (t.weights ? ' (declustered)' : '') + '</em> mean <strong>' + formatNum(un.mean) + '</strong> · CV ' + (un.cv != null ? un.cv.toFixed(1) : '—') + ' · max ' + formatNum(t.values[t.values.length - 1]) + '</span>' +
+    '<span><em>cap ' + formatNum(t.cap) + '</em> caps <strong>' + cs.nCapped.toLocaleString() + '</strong> <span title="' + (t.weights ? 'share of total declustering weight' : 'share of samples') + '">(' + (cs.capShare * 100).toFixed(2) + '%)</span>' +
     ' · mean <strong>' + formatNum(cs.mean) + '</strong>' + d(cs.mean, un.mean) +
     ' · CV ' + (cs.cv != null ? cs.cv.toFixed(1) : '—') + d(cs.cv, un.cv) +
     ' · metal removed <strong>' + cs.metalRemovedPct.toFixed(2) + '%</strong></span>';
@@ -197,13 +217,14 @@ function auxTopcutHistSvg() {
   var x0 = v[0], x1 = v[m - 1];
   if (x1 <= x0) x1 = x0 + 1;
   var ax = tcAxis(x0, x1, xlog);
-  // Bins are equal-width in display space: log-spaced bins under log X
+  // Bins are equal-width in display space: log-spaced bins under log X;
+  // weighted mode stacks declustering weight instead of counts
   var nb = 50, bins = new Array(nb).fill(0);
   var l0 = xlog ? Math.log10(x0) : x0, l1 = xlog ? Math.log10(x1) : x1;
   for (var i = 0; i < m; i++) {
     var lv = xlog ? Math.log10(v[i]) : v[i];
     var b = Math.min(nb - 1, Math.max(0, Math.floor((lv - l0) / (l1 - l0) * nb)));
-    bins[b]++;
+    bins[b] += t.weights ? t.weights[i] : 1;
   }
   var bMax = Math.max.apply(null, bins) || 1;
   var plotH = P.H - P.padT - P.padB;
@@ -233,15 +254,19 @@ function auxTopcutLogProbSvg() {
     grid += '<line x1="' + P.padL + '" x2="' + (P.W - P.padR) + '" y1="' + y + '" y2="' + y + '" stroke="#1e2228"/>' +
       '<text x="' + (P.padL - 4) + '" y="' + (+y + 3) + '" text-anchor="end" fill="#6a737d" font-size="8">' + (p * 100) + '%</text>';
   });
+  // Cumulative probability is weight-cumulative in declustered mode
   var step = Math.max(1, Math.floor(m / 360));
   var pts = '';
+  var W = t.prefixW[m];
   for (var i = 0; i < m; i += step) {
-    var p = (i + 0.5) / m;
+    var p = t.weights
+      ? (t.prefixW[i] + t.weights[i] / 2) / W
+      : (i + 0.5) / m;
     if (p < pLo || p > pHi) continue;
     pts += '<circle cx="' + ax.sx(v[i]).toFixed(1) + '" cy="' + sy(p).toFixed(1) + '" r="1.2" fill="var(--amber)" opacity="0.7"/>';
   }
   return tcSvgOpen(ax) + grid + tcXTicks(ax, x0, x1, xlog) + pts + tcCapMarker(ax) +
-    tcFrame(xlog ? 'Log-probability' : 'Probability (linear X)', 'cum %') + '</svg>';
+    tcFrame((xlog ? 'Log-probability' : 'Probability (linear X)') + (t.weights ? ' · declustered' : ''), 'cum %') + '</svg>';
 }
 
 function auxTopcutMeanCvSvg() {
@@ -354,6 +379,14 @@ function loadAuxTopcut() {
     if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
     if (auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} auxTopcutWorker = null; }
   }
+  // Declustered mode: weights ride per-row, fingerprint-gated like every
+  // other consumer of the declus weights
+  var useDeclus = !!(auxTopcut && auxTopcut.useDeclus);
+  var declusWeights = null;
+  if (useDeclus) {
+    if (typeof auxDeclusFresh === 'function' && auxDeclusFresh()) declusWeights = auxDeclus.weights;
+    else { tfail('declustered weights missing or stale — run Declustering on the sidebar'); return; }
+  }
   if (auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} }
   auxTopcutWorker = new Worker(workerUrl);
   if ($st) { $st.textContent = '0%'; $st.style.color = ''; }
@@ -366,6 +399,7 @@ function loadAuxTopcut() {
     calcolMeta: auxCalcolMeta.length > 0 ? auxCalcolMeta : null,
     resolvedTypes: auxPreflightData.autoTypes,
     varColName: varName,
+    weightArray: declusWeights,
     rowVarOverride: AUX_ROW_VAR,
     dmEndianness: auxPreflightData.dmEndianness || null,
     dmFormat: auxPreflightData.dmFormat || null
@@ -382,10 +416,13 @@ function loadAuxTopcut() {
       auxTopcutWorker = null;
       if (msg.finite < 2) { tfail('Not enough numeric values.'); return; }
       var m = msg.values.length;
-      var S = new Float64Array(m + 1), SS = new Float64Array(m + 1);
+      // Prefix sums of w, w·v, w·v² (w = 1 in raw mode)
+      var PW = new Float64Array(m + 1), S = new Float64Array(m + 1), SS = new Float64Array(m + 1);
       for (var i = 0; i < m; i++) {
-        S[i + 1] = S[i] + msg.values[i];
-        SS[i + 1] = SS[i] + msg.values[i] * msg.values[i];
+        var wi = msg.weights ? msg.weights[i] : 1;
+        PW[i + 1] = PW[i] + wi;
+        S[i + 1] = S[i] + wi * msg.values[i];
+        SS[i + 1] = SS[i] + wi * msg.values[i] * msg.values[i];
       }
       var prevCap = (auxTopcut && auxTopcut.varName === varName) ? auxTopcut.cap : null;
       var prevXlog = (auxTopcut && auxTopcut.varName === varName) ? auxTopcut.xlog : undefined;
@@ -395,8 +432,10 @@ function loadAuxTopcut() {
       auxTopcut = {
         varName: varName, cap: prevCap,
         xlog: prevXlog !== undefined ? prevXlog : autoLog,
-        values: msg.values, prefixS: S, prefixSS: SS,
-        n: msg.n, finite: msg.finite,
+        useDeclus: useDeclus,
+        values: msg.values, weights: msg.weights || null,
+        prefixW: PW, prefixS: S, prefixSS: SS,
+        n: msg.n, finite: msg.finite, weightExcluded: msg.weightExcluded || 0,
         fingerprint: auxTopcutFingerprintNow()
       };
       renderAuxTopcut();
@@ -433,6 +472,17 @@ if ($auxTopcut) {
   $auxTopcut.addEventListener('click', function(e) {
     if (e.target.id === 'auxTopcutLoadBtn') loadAuxTopcut();
     else if (e.target.id === 'auxTopcutCopyBtn') auxTopcutCopyCalcol();
+    else if (e.target.id === 'auxTopcutWRaw' || e.target.id === 'auxTopcutWDeclus') {
+      if (!auxTopcut) return;
+      var wantDeclus = e.target.id === 'auxTopcutWDeclus';
+      if (wantDeclus && !(typeof auxDeclusFresh === 'function' && auxDeclusFresh())) return; // disabled anyway
+      if (!!auxTopcut.useDeclus !== wantDeclus) {
+        auxTopcut.useDeclus = wantDeclus;
+        // The distribution itself changes — reload as pairs
+        loadAuxTopcut();
+        if (typeof autoSaveProject === 'function') autoSaveProject();
+      }
+    }
     else if (e.target.id === 'auxTopcutXLin' || e.target.id === 'auxTopcutXLog') {
       if (!auxTopcut || !auxTopcut.values) return;
       var wantLog = e.target.id === 'auxTopcutXLog';
@@ -446,9 +496,9 @@ if ($auxTopcut) {
   });
   $auxTopcut.addEventListener('change', function(e) {
     if (e.target.id === 'auxTopcutVar') {
-      // Variable switch invalidates the loaded distribution
+      // Variable switch invalidates the loaded distribution (weight mode carries over)
       if (auxTopcut && auxTopcut.varName !== e.target.value) {
-        auxTopcut = { varName: e.target.value, cap: null, values: null };
+        auxTopcut = { varName: e.target.value, cap: null, values: null, useDeclus: !!auxTopcut.useDeclus };
         renderAuxTopcut();
         if (typeof autoSaveProject === 'function') autoSaveProject();
       }
