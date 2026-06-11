@@ -22,6 +22,8 @@
   },
   "homepage": "https://github.com/endarthur/bma#readme",
   "devDependencies": {
+    "hyparquet": "^1.26.0",
+    "hyparquet-writer": "^0.15.6",
     "playwright": "^1.60.0"
   }
 }
