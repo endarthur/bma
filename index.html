@@ -3929,6 +3929,94 @@ table.stats tr.stats-delta-row td:first-child {
   padding-left: 1.6rem; color: var(--fg-dim); font-weight: 400;
   letter-spacing: 0.05em; cursor: help;
 }
+
+/* ─── Catalog tree (C1a) ────────────────────────────────────────────── */
+.results-main { flex: 1; min-height: 0; display: flex; }
+.results-main > .results-panels { flex: 1; min-width: 0; }
+.catalog-tree {
+  display: none;
+  width: 250px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg1);
+  overflow-y: auto;
+  padding: 0.5rem 0.55rem 1rem;
+  font-size: 0.7rem;
+}
+#results.tree-open .catalog-tree { display: block; }
+.tree-toggle {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--fg-dim); cursor: pointer;
+  padding: 0.45rem 0.55rem 0.35rem; margin-right: 0.2rem;
+  display: flex; align-items: center;
+}
+.tree-toggle:hover { color: var(--fg); }
+.tree-toggle.active { color: var(--amber); }
+.tree-ds { margin-bottom: 0.4rem; }
+.tree-ds > summary {
+  cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 0.4rem;
+  padding: 0.25rem 0.2rem; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--bg1); z-index: 1;
+}
+.tree-ds > summary::before { content: '▾'; color: var(--fg-dim); font-size: 0.6rem; }
+.tree-ds:not([open]) > summary::before { content: '▸'; }
+.tree-ds-label { color: var(--amber); font-weight: 600; letter-spacing: 0.04em; }
+.tree-ds-file { color: var(--fg-dim); font-size: 0.62rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.tree-ds-count { color: var(--fg-dim); font-size: 0.62rem; white-space: nowrap; }
+.tree-ds-note { color: var(--fg-dim); font-size: 0.64rem; padding: 0.2rem 0.3rem 0; }
+.tree-group { margin: 0.15rem 0 0.15rem 0.3rem; }
+.tree-group > summary {
+  cursor: pointer; list-style: none; color: var(--fg-dim);
+  font-size: 0.64rem; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 0.2rem 0;
+}
+.tree-group > summary::before { content: '▾ '; font-size: 0.58rem; }
+.tree-group:not([open]) > summary::before { content: '▸ '; }
+.tree-row {
+  display: flex; align-items: center; gap: 0.35rem;
+  padding: 0.14rem 0.2rem 0.14rem 0.8rem;
+  border-radius: 2px;
+}
+.tree-row:hover { background: var(--bg2); }
+.tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tree-chip {
+  width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0;
+}
+.tree-chip--cat {
+  background: transparent; border: 1.5px solid var(--fg-dim);
+  transform: rotate(45deg); width: 7px; height: 7px; border-radius: 1px;
+}
+.tree-chip--stale { background: transparent; border: 1px dashed var(--fg-dim); }
+.tree-axis {
+  color: var(--amber); font-size: 0.6rem; font-weight: 600; width: 1.4rem;
+  flex-shrink: 0; text-align: right;
+}
+.tree-unit {
+  color: var(--fg-dim); font-size: 0.6rem; border: 1px solid var(--border);
+  border-radius: 2px; padding: 0 0.2rem; flex-shrink: 0;
+}
+.tree-badge {
+  color: var(--amber); font-size: 0.58rem; font-weight: 700;
+  border: 1px solid var(--amber); border-radius: 2px; padding: 0 0.18rem;
+  flex-shrink: 0; cursor: help; opacity: 0.85;
+}
+.tree-count { color: var(--fg-dim); font-size: 0.6rem; flex-shrink: 0; }
+.tree-pair {
+  color: var(--fg-dim); font-size: 0.6rem; margin-left: auto; flex-shrink: 0;
+  max-width: 7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tree-pair--orphan { color: var(--red, #f87171); opacity: 0.8; }
+.tree-row--coord .tree-name { color: var(--fg-dim); }
+.tree-row--stale { opacity: 0.45; }
+.tree-hint { color: var(--fg-dim); font-size: 0.66rem; padding: 0.4rem 0.3rem; }
+@media (max-width: 700px) {
+  /* proto-sheet until C1c: overlays the panels instead of squeezing them */
+  #results.tree-open .catalog-tree {
+    position: absolute; left: 0; top: 0; bottom: 0; z-index: 30;
+    box-shadow: 4px 0 18px rgba(0,0,0,0.5);
+  }
+  .results-main { position: relative; }
+}
 </style>
 <script>try{var t=JSON.parse(localStorage.getItem('bma:settings')||'{}').theme;if(t&&t!=='default')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 </head>
@@ -4059,6 +4147,12 @@ table.stats tr.stats-delta-row td:first-child {
       </div>
     </div>
     <div class="results-tabs" id="resultsTabs">
+      <button class="tree-toggle" id="treeToggle" title="Data tree">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M3 3h4M3 3v10M3 8h5M3 13h5"/>
+          <circle cx="10" cy="3" r="1.4"/><circle cx="11" cy="8" r="1.4"/><circle cx="11" cy="13" r="1.4"/>
+        </svg>
+      </button>
       <button class="results-tab active" data-tab="preflight">Preflight</button>
       <button class="results-tab" data-tab="aux">Aux</button>
       <button class="results-tab" data-tab="summary">Summary</button>
@@ -4071,6 +4165,8 @@ table.stats tr.stats-delta-row td:first-child {
       <button class="results-tab" data-tab="section" style="display:none">Section</button>
       <button class="results-tab" data-tab="export">Export</button>
     </div>
+    <div class="results-main" id="resultsMain">
+    <aside class="catalog-tree" id="catalogTree"></aside>
     <div class="results-panels">
       <div class="help-overlay" id="helpOverlay">
         <div class="help-panel">
@@ -4475,6 +4571,7 @@ table.stats tr.stats-delta-row td:first-child {
         </div>
       </div>
     </div>
+    </div>
   </div>
 </div>
 
@@ -4519,7 +4616,7 @@ table.stats tr.stats-delta-row td:first-child {
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build c3fb6bc — click to check for updates">c3fb6bc</div>
+<div class="build-badge" id="buildBadge" title="build 477aa39 — click to check for updates">477aa39</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -10437,6 +10534,7 @@ function serializeProject() {
     categories: {
       focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null
     },
+    tree: { open: catalogTreeOpen },
     exportCols: exportColumns.map(c => ({
       name: c.name, outputName: c.outputName, selected: c.selected
     })),
@@ -10546,6 +10644,9 @@ function serializeProject() {
 }
 
 function autoSaveProject() {
+  // Every config mutation funnels through here (new-tab checklist), which
+  // makes it the one hook the catalog tree needs to stay current
+  refreshCatalogTree();
   clearTimeout(autoSaveTimer);
   autoSaveTimer = setTimeout(() => {
     if (!currentFile || !preflightData) return;
@@ -10625,6 +10726,9 @@ async function applyProject(project) {
   } else {
     migrateLegacyCatalog(project);
   }
+
+  // Restore tree panel state (null = viewport default)
+  catalogTreeOpen = (project.tree && project.tree.open !== undefined) ? project.tree.open : null;
 
   // Restore filter
   currentFilter = project.filter || null;
@@ -20657,6 +20761,255 @@ function wireCatEventsOnce() {
     dragSrcRow = null;
   });
 }
+
+// ─── Catalog tree (C1a step 2: read-only) ─────────────────────────────
+// Left panel listing datasets → variable groups (Coordinates / Grades /
+// Categories / Calculated) with the catalog's properties: series color
+// chips, unit chips, role badges, model↔aux pairing indicators, orphans,
+// and stale entries. Container-agnostic render (C1b re-homes it as a dock
+// panel; C1c as a mobile sheet). Editing lands in step 3.
+
+var catalogTreeOpen = null;   // null = default by viewport (open ≥ 701px)
+var _treeRefreshQueued = false;
+
+function catalogTreeIsOpen() {
+  if (catalogTreeOpen === null) return window.matchMedia('(min-width: 701px)').matches;
+  return !!catalogTreeOpen;
+}
+
+function toggleCatalogTree() {
+  catalogTreeOpen = !catalogTreeIsOpen();
+  renderCatalogTree();
+  autoSaveProject();
+}
+
+// Cheap coalesced refresh — hooked into autoSaveProject(), which every
+// config mutation already calls (the new-tab checklist convention)
+function refreshCatalogTree() {
+  if (_treeRefreshQueued) return;
+  _treeRefreshQueued = true;
+  requestAnimationFrame(function() {
+    _treeRefreshQueued = false;
+    renderCatalogTree();
+  });
+}
+
+function renderCatalogTree(container) {
+  var $tree = container || document.getElementById('catalogTree');
+  var $results = document.getElementById('results');
+  if (!$tree) return;
+  var open = catalogTreeIsOpen();
+  if ($results) $results.classList.toggle('tree-open', open);
+  var $btn = document.getElementById('treeToggle');
+  if ($btn) $btn.classList.toggle('active', open);
+  if (!open) return;
+
+  catEnsureSeeded();
+
+  // Preserve <details> open/closed across re-renders
+  var openState = {};
+  $tree.querySelectorAll('details[data-key]').forEach(function(d) {
+    openState[d.dataset.key] = d.open;
+  });
+
+  var html = treeDatasetHtml('model', openState);
+  if (auxFile && auxPreflightData) html += treeDatasetHtml('aux', openState);
+  $tree.innerHTML = html;
+}
+
+// Variable description for one dataset, derived from the live headers —
+// the catalog stays sparse, so the tree renders from the data, not from
+// catalog.vars keys
+function treeDatasetVars(ds) {
+  if (ds === 'model') {
+    if (!lastCompleteData) return null;
+    var d = lastCompleteData;
+    var xyz = currentXYZ || { x: -1, y: -1, z: -1 };
+    var dxyz = currentDXYZ || { dx: -1, dy: -1, dz: -1 };
+    var coordIdx = {};
+    coordIdx[xyz.x] = 'X'; coordIdx[xyz.y] = 'Y'; coordIdx[xyz.z] = 'Z';
+    coordIdx[dxyz.dx] = 'dX'; coordIdx[dxyz.dy] = 'dY'; coordIdx[dxyz.dz] = 'dZ';
+    delete coordIdx[-1];
+    return {
+      header: d.header, colTypes: d.colTypes, origColCount: d.origColCount,
+      coordIdx: coordIdx, categories: d.categories,
+      label: 'Model', fileName: currentFile ? currentFile.name : '',
+      countNote: d.rowCount != null ? d.rowCount.toLocaleString() + ' rows' : ''
+    };
+  }
+  // aux: preflight header + calcols (analysis optional)
+  var ph = auxPreflightData;
+  var header = ph.header.slice();
+  var colTypes = (ph.autoTypes || []).slice();
+  for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
+    header.push(auxCalcolMeta[ci].name);
+    colTypes.push(auxCalcolMeta[ci].type);
+  }
+  var axyz = ph.xyz || { x: -1, y: -1, z: -1 };
+  var auxCoordIdx = {};
+  auxCoordIdx[axyz.x] = 'X'; auxCoordIdx[axyz.y] = 'Y'; auxCoordIdx[axyz.z] = 'Z';
+  delete auxCoordIdx[-1];
+  return {
+    header: header, colTypes: colTypes, origColCount: ph.header.length,
+    coordIdx: auxCoordIdx, categories: auxCompleteData ? auxCompleteData.categories : null,
+    label: auxPrefix || 'aux', fileName: auxFile ? auxFile.name : '',
+    countNote: auxCompleteData && auxCompleteData.rowCount != null
+      ? auxCompleteData.rowCount.toLocaleString() + ' rows' : 'not analyzed'
+  };
+}
+
+function treeRoleBadges(ds, name) {
+  var b = '';
+  if (catRole(ds, 'weight') === name) b += '<span class="tree-badge" title="support weight (Statistics/Swath)">W</span>';
+  if (ds === 'model' && catRole('model', 'density') === name) b += '<span class="tree-badge" title="density (GT)">ρ</span>';
+  if (ds === 'model' && catRole('model', 'tonnageFactor') === name) b += '<span class="tree-badge" title="tonnage factor (GT)">TF</span>';
+  return b;
+}
+
+function treeUnitChip(ds, name) {
+  var u = catUnit(ds, name);
+  if (!u || !GRADE_UNITS[u] || !GRADE_UNITS[u].symbol) return '';
+  return '<span class="tree-unit">' + esc(GRADE_UNITS[u].symbol) + '</span>';
+}
+
+function treePairChip(name) {
+  var p = catPair(name);
+  if (p) return '<span class="tree-pair" title="paired with model:' + esc(p) + '">⇄ ' + esc(p) + '</span>';
+  return '<span class="tree-pair tree-pair--orphan" title="no model counterpart — compared nowhere">⇄ —</span>';
+}
+
+function treeDatasetHtml(ds, openState) {
+  var v = treeDatasetVars(ds);
+  var dsKey = 'ds:' + ds;
+  var dsOpen = openState[dsKey] !== undefined ? openState[dsKey] : true;
+  var head = '<summary><span class="tree-ds-label">' + esc(ds === 'model' ? 'Model' : (auxPrefix || 'aux')) + '</span>' +
+    (v && v.fileName ? '<span class="tree-ds-file" title="' + esc(v.fileName) + '">' + esc(v.fileName) + '</span>' : '') +
+    (v && v.countNote ? '<span class="tree-ds-count">' + esc(v.countNote) + '</span>' : '') +
+    '</summary>';
+
+  if (!v) {
+    return '<details class="tree-ds" data-key="' + dsKey + '"' + (dsOpen ? ' open' : '') + '>' + head +
+      '<div class="tree-hint">Run Analyze to populate.</div></details>';
+  }
+
+  // classify
+  var coords = [], grades = [], cats = [], calcs = [];
+  var known = {};
+  var numIdx = 0; // palette position, mirrors the swath sidebar ordering
+  for (var i = 0; i < v.header.length; i++) {
+    var name = v.header[i];
+    known[name] = true;
+    var isCalc = i >= v.origColCount;
+    var axis = !isCalc ? v.coordIdx[i] : undefined;
+    if (axis) { coords.push({ name: name, axis: axis }); continue; }
+    var isNum = v.colTypes[i] === 'numeric';
+    var entry = { name: name, idx: i, isNum: isNum };
+    if (isNum) { entry.palIdx = numIdx++; }
+    if (isCalc) calcs.push(entry);
+    else if (isNum) grades.push(entry);
+    else cats.push(entry);
+  }
+
+  // stale catalog entries: records that reference variables this dataset
+  // no longer has (renamed calcol etc.) — kept, shown grayed
+  var stale = [];
+  for (var key in catalog.vars) {
+    if (key.indexOf(ds + ':') !== 0) continue;
+    var vn = key.slice(ds.length + 1);
+    if (!known[vn] && Object.keys(catalog.vars[key]).length > 0) stale.push(vn);
+  }
+
+  var auxModelOffset = 0;
+  var modelPal = {};
+  if (ds === 'aux' && lastCompleteData) {
+    // aux palette fallback continues after the model's numeric vars, and a
+    // paired aux variable shows its primary's EFFECTIVE color (palette
+    // included) — both matching the swath sidebar's assignment
+    var mv = treeDatasetVars('model');
+    var mCoord = mv ? mv.coordIdx : {};
+    for (var mi = 0; mi < lastCompleteData.header.length; mi++) {
+      if (lastCompleteData.colTypes[mi] === 'numeric' && !mCoord[mi]) {
+        modelPal[lastCompleteData.header[mi]] = auxModelOffset++;
+      }
+    }
+  }
+
+  function numRow(e) {
+    var color = null;
+    if (ds === 'aux') {
+      var rec = catVarPeek('aux', e.name);
+      if (rec && rec.color) color = rec.color;
+      else {
+        var pr = catPair(e.name);
+        if (pr && modelPal[pr] !== undefined) color = catVarColor('model', pr, modelPal[pr]);
+      }
+    }
+    if (!color) color = catVarColor(ds, e.name, (ds === 'aux' ? auxModelOffset : 0) + e.palIdx);
+    return '<div class="tree-row">' +
+      '<span class="tree-chip" style="background:' + color + '"></span>' +
+      '<span class="tree-name" title="' + esc(e.name) + '">' + esc(e.name) + '</span>' +
+      treeUnitChip(ds, e.name) + treeRoleBadges(ds, e.name) +
+      (ds === 'aux' ? treePairChip(e.name) : '') +
+      '</div>';
+  }
+  function catRow(e) {
+    var nVals = '';
+    if (v.categories && v.categories[e.idx] && v.categories[e.idx].counts) {
+      nVals = '<span class="tree-count">' + Object.keys(v.categories[e.idx].counts).length +
+        (v.categories[e.idx].overflow ? '+' : '') + '</span>';
+    }
+    return '<div class="tree-row">' +
+      '<span class="tree-chip tree-chip--cat"></span>' +
+      '<span class="tree-name" title="' + esc(e.name) + '">' + esc(e.name) + '</span>' + nVals +
+      treeRoleBadges(ds, e.name) +
+      (ds === 'aux' ? treePairChip(e.name) : '') +
+      '</div>';
+  }
+  function coordRow(c) {
+    return '<div class="tree-row tree-row--coord">' +
+      '<span class="tree-axis">' + c.axis + '</span>' +
+      '<span class="tree-name" title="' + esc(c.name) + '">' + esc(c.name) + '</span>' +
+      '</div>';
+  }
+  function calcRow(e) {
+    return e.isNum ? numRow(e) : catRow(e);
+  }
+  function group(label, rows, key) {
+    if (rows.length === 0) return '';
+    var gKey = 'g:' + ds + ':' + key;
+    var gOpen = openState[gKey] !== undefined ? openState[gKey] : true;
+    return '<details class="tree-group" data-key="' + gKey + '"' + (gOpen ? ' open' : '') + '>' +
+      '<summary>' + label + ' <span class="tree-count">' + rows.length + '</span></summary>' +
+      rows.join('') + '</details>';
+  }
+
+  var body =
+    group('Coordinates', coords.map(coordRow), 'coords') +
+    group('Grades', grades.map(numRow), 'grades') +
+    group('Categories', cats.map(catRow), 'cats') +
+    group('Calculated', calcs.map(calcRow), 'calc') +
+    (stale.length > 0
+      ? group('Missing', stale.map(function(n) {
+          return '<div class="tree-row tree-row--stale" title="catalog entry with no matching variable">' +
+            '<span class="tree-chip tree-chip--stale"></span><span class="tree-name">' + esc(n) + '</span></div>';
+        }), 'stale')
+      : '');
+
+  // dataset-level note: declustered-weights sentinel isn't a variable
+  var dsNote = '';
+  if (ds === 'aux' && catRole('aux', 'weight') === AUX_DECLUS_WEIGHT) {
+    dsNote = '<div class="tree-ds-note" title="aux support weight: computed declustering weights"><span class="tree-badge">W</span> declustered weights</div>';
+  }
+
+  return '<details class="tree-ds" data-key="' + dsKey + '"' + (dsOpen ? ' open' : '') + '>' +
+    head + dsNote + body + '</details>';
+}
+
+// Toggle button (static template element)
+(function() {
+  var $btn = document.getElementById('treeToggle');
+  if ($btn) $btn.addEventListener('click', toggleCatalogTree);
+})();
 
 // ─── CDF Plot ─────────────────────────────────────────────────────────
 $cdfClose.addEventListener('click', () => $cdfModal.classList.remove('active'));

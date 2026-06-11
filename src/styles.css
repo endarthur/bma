@@ -3916,3 +3916,91 @@ table.stats tr.stats-delta-row td:first-child {
   padding-left: 1.6rem; color: var(--fg-dim); font-weight: 400;
   letter-spacing: 0.05em; cursor: help;
 }
+
+/* ─── Catalog tree (C1a) ────────────────────────────────────────────── */
+.results-main { flex: 1; min-height: 0; display: flex; }
+.results-main > .results-panels { flex: 1; min-width: 0; }
+.catalog-tree {
+  display: none;
+  width: 250px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg1);
+  overflow-y: auto;
+  padding: 0.5rem 0.55rem 1rem;
+  font-size: 0.7rem;
+}
+#results.tree-open .catalog-tree { display: block; }
+.tree-toggle {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--fg-dim); cursor: pointer;
+  padding: 0.45rem 0.55rem 0.35rem; margin-right: 0.2rem;
+  display: flex; align-items: center;
+}
+.tree-toggle:hover { color: var(--fg); }
+.tree-toggle.active { color: var(--amber); }
+.tree-ds { margin-bottom: 0.4rem; }
+.tree-ds > summary {
+  cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 0.4rem;
+  padding: 0.25rem 0.2rem; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--bg1); z-index: 1;
+}
+.tree-ds > summary::before { content: '▾'; color: var(--fg-dim); font-size: 0.6rem; }
+.tree-ds:not([open]) > summary::before { content: '▸'; }
+.tree-ds-label { color: var(--amber); font-weight: 600; letter-spacing: 0.04em; }
+.tree-ds-file { color: var(--fg-dim); font-size: 0.62rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.tree-ds-count { color: var(--fg-dim); font-size: 0.62rem; white-space: nowrap; }
+.tree-ds-note { color: var(--fg-dim); font-size: 0.64rem; padding: 0.2rem 0.3rem 0; }
+.tree-group { margin: 0.15rem 0 0.15rem 0.3rem; }
+.tree-group > summary {
+  cursor: pointer; list-style: none; color: var(--fg-dim);
+  font-size: 0.64rem; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 0.2rem 0;
+}
+.tree-group > summary::before { content: '▾ '; font-size: 0.58rem; }
+.tree-group:not([open]) > summary::before { content: '▸ '; }
+.tree-row {
+  display: flex; align-items: center; gap: 0.35rem;
+  padding: 0.14rem 0.2rem 0.14rem 0.8rem;
+  border-radius: 2px;
+}
+.tree-row:hover { background: var(--bg2); }
+.tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tree-chip {
+  width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0;
+}
+.tree-chip--cat {
+  background: transparent; border: 1.5px solid var(--fg-dim);
+  transform: rotate(45deg); width: 7px; height: 7px; border-radius: 1px;
+}
+.tree-chip--stale { background: transparent; border: 1px dashed var(--fg-dim); }
+.tree-axis {
+  color: var(--amber); font-size: 0.6rem; font-weight: 600; width: 1.4rem;
+  flex-shrink: 0; text-align: right;
+}
+.tree-unit {
+  color: var(--fg-dim); font-size: 0.6rem; border: 1px solid var(--border);
+  border-radius: 2px; padding: 0 0.2rem; flex-shrink: 0;
+}
+.tree-badge {
+  color: var(--amber); font-size: 0.58rem; font-weight: 700;
+  border: 1px solid var(--amber); border-radius: 2px; padding: 0 0.18rem;
+  flex-shrink: 0; cursor: help; opacity: 0.85;
+}
+.tree-count { color: var(--fg-dim); font-size: 0.6rem; flex-shrink: 0; }
+.tree-pair {
+  color: var(--fg-dim); font-size: 0.6rem; margin-left: auto; flex-shrink: 0;
+  max-width: 7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tree-pair--orphan { color: var(--red, #f87171); opacity: 0.8; }
+.tree-row--coord .tree-name { color: var(--fg-dim); }
+.tree-row--stale { opacity: 0.45; }
+.tree-hint { color: var(--fg-dim); font-size: 0.66rem; padding: 0.4rem 0.3rem; }
+@media (max-width: 700px) {
+  /* proto-sheet until C1c: overlays the panels instead of squeezing them */
+  #results.tree-open .catalog-tree {
+    position: absolute; left: 0; top: 0; bottom: 0; z-index: 30;
+    box-shadow: 4px 0 18px rgba(0,0,0,0.5);
+  }
+  .results-main { position: relative; }
+}

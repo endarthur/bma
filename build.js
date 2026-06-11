@@ -28,6 +28,7 @@ const APP_MODULES = [
   'filter.js',
   'settings.js',
   'categories.js',
+  'tree.js',
   'cdf.js',
   'example.js',
   'pwa.js',

@@ -386,6 +386,7 @@ function serializeProject() {
     categories: {
       focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null
     },
+    tree: { open: catalogTreeOpen },
     exportCols: exportColumns.map(c => ({
       name: c.name, outputName: c.outputName, selected: c.selected
     })),
@@ -495,6 +496,9 @@ function serializeProject() {
 }
 
 function autoSaveProject() {
+  // Every config mutation funnels through here (new-tab checklist), which
+  // makes it the one hook the catalog tree needs to stay current
+  refreshCatalogTree();
   clearTimeout(autoSaveTimer);
   autoSaveTimer = setTimeout(() => {
     if (!currentFile || !preflightData) return;
@@ -574,6 +578,9 @@ async function applyProject(project) {
   } else {
     migrateLegacyCatalog(project);
   }
+
+  // Restore tree panel state (null = viewport default)
+  catalogTreeOpen = (project.tree && project.tree.open !== undefined) ? project.tree.open : null;
 
   // Restore filter
   currentFilter = project.filter || null;

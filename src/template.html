@@ -142,6 +142,12 @@
       </div>
     </div>
     <div class="results-tabs" id="resultsTabs">
+      <button class="tree-toggle" id="treeToggle" title="Data tree">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M3 3h4M3 3v10M3 8h5M3 13h5"/>
+          <circle cx="10" cy="3" r="1.4"/><circle cx="11" cy="8" r="1.4"/><circle cx="11" cy="13" r="1.4"/>
+        </svg>
+      </button>
       <button class="results-tab active" data-tab="preflight">Preflight</button>
       <button class="results-tab" data-tab="aux">Aux</button>
       <button class="results-tab" data-tab="summary">Summary</button>
@@ -154,6 +160,8 @@
       <button class="results-tab" data-tab="section" style="display:none">Section</button>
       <button class="results-tab" data-tab="export">Export</button>
     </div>
+    <div class="results-main" id="resultsMain">
+    <aside class="catalog-tree" id="catalogTree"></aside>
     <div class="results-panels">
       <div class="help-overlay" id="helpOverlay">
         <div class="help-panel">
@@ -557,6 +565,7 @@
           </div>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </div>
