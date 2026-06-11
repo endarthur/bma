@@ -170,6 +170,10 @@ function treeDatasetHtml(ds, openState) {
     }
   }
 
+  function rowAttrs(e, kind) {
+    return ' data-ds="' + ds + '" data-name="' + esc(e.name) + '" data-kind="' + kind + '"' +
+      (e.idx !== undefined ? ' data-idx="' + e.idx + '"' : '');
+  }
   function numRow(e) {
     var color = null;
     if (ds === 'aux') {
@@ -181,9 +185,9 @@ function treeDatasetHtml(ds, openState) {
       }
     }
     if (!color) color = catVarColor(ds, e.name, (ds === 'aux' ? auxModelOffset : 0) + e.palIdx);
-    return '<div class="tree-row">' +
+    return '<div class="tree-row tree-row--edit"' + rowAttrs(e, 'num') + ' title="click to edit">' +
       '<span class="tree-chip" style="background:' + color + '"></span>' +
-      '<span class="tree-name" title="' + esc(e.name) + '">' + esc(e.name) + '</span>' +
+      '<span class="tree-name">' + esc(e.name) + '</span>' +
       treeUnitChip(ds, e.name) + treeRoleBadges(ds, e.name) +
       (ds === 'aux' ? treePairChip(e.name) : '') +
       '</div>';
@@ -194,9 +198,9 @@ function treeDatasetHtml(ds, openState) {
       nVals = '<span class="tree-count">' + Object.keys(v.categories[e.idx].counts).length +
         (v.categories[e.idx].overflow ? '+' : '') + '</span>';
     }
-    return '<div class="tree-row">' +
+    return '<div class="tree-row tree-row--edit"' + rowAttrs(e, 'cat') + ' title="click to edit">' +
       '<span class="tree-chip tree-chip--cat"></span>' +
-      '<span class="tree-name" title="' + esc(e.name) + '">' + esc(e.name) + '</span>' + nVals +
+      '<span class="tree-name">' + esc(e.name) + '</span>' + nVals +
       treeRoleBadges(ds, e.name) +
       (ds === 'aux' ? treePairChip(e.name) : '') +
       '</div>';
@@ -241,8 +245,228 @@ function treeDatasetHtml(ds, openState) {
     head + dsNote + body + '</details>';
 }
 
-// Toggle button (static template element)
+// ─── Row editor popover (C1a step 3) ──────────────────────────────────
+// One fixed-position popover per row: series color, unit, roles, pairing.
+// Lives outside the tree so re-renders (autoSaveProject → refresh) don't
+// destroy it mid-edit; content re-renders in place after each action.
+
+var _treePopTarget = null; // { ds, name, kind }
+
+function treePopoverEl() { return document.getElementById('treePopover'); }
+
+function hideTreePopover() {
+  var $p = treePopoverEl();
+  if ($p) $p.classList.remove('open');
+  _treePopTarget = null;
+}
+
+// Model numeric variables (incl. calcols, excl. coordinates) — the legal
+// pairing targets for an aux variable of the same kind
+function treePairTargets(kind) {
+  var v = treeDatasetVars('model');
+  if (!v) return [];
+  var out = [];
+  for (var i = 0; i < v.header.length; i++) {
+    if (v.coordIdx[i]) continue;
+    var isNum = v.colTypes[i] === 'numeric';
+    if ((kind === 'num') === isNum) out.push(v.header[i]);
+  }
+  return out;
+}
+
+function showTreePopover(row) {
+  var ds = row.dataset.ds, name = row.dataset.name, kind = row.dataset.kind;
+  _treePopTarget = { ds: ds, name: name, kind: kind, idx: row.dataset.idx !== undefined ? parseInt(row.dataset.idx) : null };
+  renderTreePopover();
+  var $p = treePopoverEl();
+  var r = row.getBoundingClientRect();
+  $p.style.top = Math.min(r.bottom + 4, window.innerHeight - 320) + 'px';
+  $p.style.left = Math.min(r.left + 12, window.innerWidth - 260) + 'px';
+  $p.classList.add('open');
+}
+
+function renderTreePopover() {
+  var t = _treePopTarget;
+  var $p = treePopoverEl();
+  if (!t || !$p) return;
+  var ds = t.ds, name = t.name;
+  var html = '<div class="tree-pop-head">' + esc(ds === 'model' ? 'Model' : (auxPrefix || 'aux')) + ':' + esc(name) + '</div>';
+
+  if (t.kind === 'num') {
+    // Series color — explicit override or "auto" (palette / pair-inherited)
+    var rec = catVarPeek(ds, name);
+    var cur = rec && rec.color ? rec.color : '';
+    html += '<div class="tree-pop-label">Series color</div><div class="cat-color-grid">';
+    for (var i = 0; i < STATSCAT_PALETTE.length; i++) {
+      var c = STATSCAT_PALETTE[i];
+      html += '<div class="cat-color-swatch' + (c.toLowerCase() === cur.toLowerCase() ? ' selected' : '') +
+        '" style="background:' + c + '" data-treecolor="' + c + '"></div>';
+    }
+    html += '</div><div class="tree-pop-row">' +
+      '<input type="text" class="cat-hex-input" id="treePopHex" placeholder="#hex" value="' + esc(cur) + '">' +
+      '<button class="tree-pop-btn" id="treePopColorAuto" title="clear override — palette / paired color">auto</button></div>';
+
+    // Unit (one per variable — D2)
+    var u = catUnit(ds, name);
+    html += '<div class="tree-pop-label">Unit</div><select class="tree-pop-select" id="treePopUnit">';
+    for (var ui = 0; ui < GRADE_UNITS.length; ui++) {
+      html += '<option value="' + ui + '"' + (ui === u ? ' selected' : '') + '>' + esc(GRADE_UNITS[ui].label) + '</option>';
+    }
+    html += '</select>';
+
+    // Roles
+    html += '<div class="tree-pop-label">Roles</div><div class="tree-pop-row">';
+    html += '<button class="tree-pop-btn' + (catRole(ds, 'weight') === name ? ' active' : '') +
+      '" data-treerole="weight" title="support weight (Statistics/Swath)">Weight</button>';
+    if (ds === 'model') {
+      html += '<button class="tree-pop-btn' + (catRole('model', 'density') === name ? ' active' : '') +
+        '" data-treerole="density" title="density (GT tonnage)">Density</button>';
+      html += '<button class="tree-pop-btn' + (catRole('model', 'tonnageFactor') === name ? ' active' : '') +
+        '" data-treerole="tonnageFactor" title="tonnage factor (GT)">TF</button>';
+    }
+    html += '</div>';
+  }
+
+  if (t.kind === 'cat' && ds === 'model') {
+    html += '<div class="tree-pop-label">Values</div>' +
+      '<button class="tree-pop-btn" id="treePopCatTab">edit colors & order in Categories →</button>';
+  }
+
+  if (ds === 'aux') {
+    var p = catPair(name);
+    var targets = treePairTargets(t.kind);
+    html += '<div class="tree-pop-label">Paired with (model)</div><select class="tree-pop-select" id="treePopPair">';
+    html += '<option value=""' + (p === null ? ' selected' : '') + '>— unpaired</option>';
+    for (var pi = 0; pi < targets.length; pi++) {
+      html += '<option value="' + esc(targets[pi]) + '"' + (targets[pi] === p ? ' selected' : '') + '>' + esc(targets[pi]) + '</option>';
+    }
+    html += '</select>';
+  }
+
+  $p.innerHTML = html;
+}
+
+// After a pairing edit, nudge the consumers a user might be looking at —
+// everything else resolves pairs lazily at its next render
+function treePairChanged() {
+  if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
+  if (lastCompleteData && auxCompleteData && typeof renderStatsTable === 'function') {
+    if (typeof renderStatsSidebar === 'function') renderStatsSidebar();
+    renderStatsTable();
+  }
+  if (typeof renderCatMain === 'function' && catFocusedCol !== null && typeof _catData !== 'undefined' && _catData) renderCatMain();
+}
+
+function treeSetColor(color) {
+  var t = _treePopTarget;
+  if (!t) return;
+  // applySwathColor owns the write + swath swatch/chart refresh + autosave
+  applySwathColor(t.ds === 'aux' ? 'aux:' + t.name : t.name, color);
+  renderTreePopover();
+}
+
 (function() {
   var $btn = document.getElementById('treeToggle');
   if ($btn) $btn.addEventListener('click', toggleCatalogTree);
+
+  var $tree = document.getElementById('catalogTree');
+  if ($tree) {
+    $tree.addEventListener('click', function(e) {
+      var row = e.target.closest('.tree-row--edit');
+      if (!row) return;
+      showTreePopover(row);
+    });
+    // an edit may re-render rows under an open popover; scrolling drifts it
+    $tree.addEventListener('scroll', hideTreePopover);
+  }
+
+  var $p = treePopoverEl();
+  if ($p) {
+    $p.addEventListener('click', function(e) {
+      var t = _treePopTarget;
+      if (!t) return;
+      var sw = e.target.closest('[data-treecolor]');
+      if (sw) { treeSetColor(sw.dataset.treecolor); return; }
+      if (e.target.id === 'treePopColorAuto') {
+        var rec = catVarPeek(t.ds, t.name);
+        if (rec) delete rec.color;
+        if (lastSwathData) renderSwathOutput();
+        autoSaveProject();
+        renderTreePopover();
+        return;
+      }
+      if (e.target.id === 'treePopCatTab') {
+        if (t.idx !== null) { catFocusedCol = t.idx; }
+        hideTreePopover();
+        switchTab('categories');
+        if (typeof renderCatSidebar === 'function') { renderCatSidebar(); renderCatMain(); }
+        return;
+      }
+      var roleBtn = e.target.closest('[data-treerole]');
+      if (roleBtn) {
+        var role = roleBtn.dataset.treerole;
+        var active = catRole(t.ds, role) === t.name;
+        catSetRole(t.ds, role, active ? null : t.name);
+        var newVal = active ? '' : t.name;
+        if (role === 'weight') {
+          if (t.ds === 'model') {
+            var $ssel = document.getElementById('statsWeightSel');
+            var $swsel = document.getElementById('swathWeight');
+            if ($ssel) $ssel.value = newVal;
+            if ($swsel) $swsel.value = newVal;
+            markAnalysisStale();
+          } else {
+            var $asel = document.getElementById('auxWeightSel');
+            if ($asel) $asel.value = newVal;
+            markAuxStale();
+          }
+        } else {
+          // density / tonnageFactor mirror into the GT selects (GT stays the
+          // owner of its analysis params — the role is the shared record)
+          var gtSel = document.getElementById(role === 'density' ? 'gtDensityCol' : 'gtWeightCol');
+          if (gtSel) {
+            var found = '-1';
+            for (var oi = 0; oi < gtSel.options.length; oi++) {
+              if (gtSel.options[oi].textContent === newVal) { found = gtSel.options[oi].value; break; }
+            }
+            gtSel.value = newVal ? found : '-1';
+          }
+        }
+        autoSaveProject();
+        renderTreePopover();
+        return;
+      }
+    });
+    $p.addEventListener('change', function(e) {
+      var t = _treePopTarget;
+      if (!t) return;
+      if (e.target.id === 'treePopUnit') {
+        catSetUnit(t.ds, t.name, parseInt(e.target.value));
+        catRefreshUnitSelects();
+        if (lastSwathData) renderSwathOutput();
+        if (lastGtData) renderGtOutput();
+        autoSaveProject();
+        renderTreePopover();
+      } else if (e.target.id === 'treePopPair') {
+        catalog.pairs[t.name] = e.target.value || null;
+        treePairChanged();
+        autoSaveProject();
+        renderTreePopover();
+      } else if (e.target.id === 'treePopHex') {
+        var v = e.target.value.trim();
+        if (/^#[0-9a-fA-F]{3,8}$/.test(v)) treeSetColor(v);
+      }
+    });
+  }
+
+  // Dismiss: outside pointerdown or Escape
+  document.addEventListener('pointerdown', function(e) {
+    var $pop = treePopoverEl();
+    if (!$pop || !$pop.classList.contains('open')) return;
+    if ($pop.contains(e.target) || e.target.closest('.tree-row--edit')) return;
+    hideTreePopover();
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') hideTreePopover();
+  });
 })();

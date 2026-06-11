@@ -4004,3 +4004,43 @@ table.stats tr.stats-delta-row td:first-child {
   }
   .results-main { position: relative; }
 }
+
+/* tree row editor popover */
+.tree-popover {
+  display: none;
+  position: fixed;
+  z-index: 200;
+  width: 232px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  padding: 0.5rem 0.55rem 0.6rem;
+  font-size: 0.68rem;
+}
+.tree-popover.open { display: block; }
+.tree-pop-head {
+  color: var(--amber); font-weight: 600; font-size: 0.66rem;
+  letter-spacing: 0.04em; padding-bottom: 0.3rem; margin-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tree-pop-label {
+  color: var(--fg-dim); font-size: 0.6rem; text-transform: uppercase;
+  letter-spacing: 0.06em; margin: 0.45rem 0 0.2rem;
+}
+.tree-pop-row { display: flex; gap: 0.3rem; align-items: center; margin-top: 0.25rem; }
+.tree-pop-btn {
+  background: var(--bg1); border: 1px solid var(--border); border-radius: 3px;
+  color: var(--fg-dim); font-family: var(--mono); font-size: 0.62rem;
+  padding: 0.2rem 0.45rem; cursor: pointer;
+}
+.tree-pop-btn:hover { color: var(--fg); border-color: var(--fg-dim); }
+.tree-pop-btn.active { color: var(--amber); border-color: var(--amber); }
+.tree-pop-select {
+  width: 100%;
+  background: var(--bg1); border: 1px solid var(--border); border-radius: 3px;
+  color: var(--fg); font-family: var(--mono); font-size: 0.66rem;
+  padding: 0.2rem 0.3rem;
+}
+.tree-pop-select:focus { outline: none; border-color: var(--amber); }
