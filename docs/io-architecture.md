@@ -1,8 +1,8 @@
 # I/O Architecture — Row Sources, Sidecar Index, Fixed-Width
 
-Design note, 2026-06. Status: **planned, not implemented**. Captures the
-direction agreed after profiling the .dm path; none of this is built yet
-except where marked.
+Design note, 2026-06. Status: **§1 row-source split implemented 2026-06-11**
+(see §1 status note); §2–§3 planned. Captures the direction agreed after
+profiling the .dm path.
 
 ## Problem
 
@@ -36,13 +36,31 @@ that, the virtual stream awaits one `file.slice(off, off+2048).arrayBuffer()`
 Cheap, contained, can land anytime:
 
 1. **Batch page reads** — slice ~2 MB (≈1000 SP pages) per pull instead of
-   one page. Kills the 500k-await problem.
+   one page. Kills the 500k-await problem. ✅ **DONE 2026-06-11** (with the
+   B1 split; verified bit-identical incl. multi-batch and truncated-page
+   cases in `experiments/b1-differential.js`).
 2. **Stringify at float32 precision** — `toPrecision(7)`-style shortest
    output instead of `String(v)`. Float32 carries ~7.2 significant digits;
    the other 10 are promotion noise. Shrinks the virtual CSV ~3× and
-   speeds both stringify and re-parse.
+   speeds both stringify and re-parse. **Deliberately NOT landed with B1**:
+   it changes the parsed doubles (`String→Number` round-trips exactly;
+   `toPrecision(7)` does not), so it breaks bit-identity — needs its own
+   accuracy decision.
 
 ## 1. Row-source split (prerequisite)
+
+> **Status: implemented 2026-06-11 (B1).** `makeRowSource()` /
+> `streamCsvLines()` / `forEachRow()` in `src/worker.js` own container
+> extraction (zip/.dm), delimiter+header sniff, row-variable choice, calcol
+> compilation, `buildRow`, and the line loop incl. the unterminated-tail
+> handling; all seven passes consume it. Passes kept their filter ordering,
+> the weight-ordinal contract, and accumulators verbatim. Verified
+> bit-identical against the pre-split worker over all modes
+> (`experiments/b1-differential.js`, 29 cases). **Not yet done:** the
+> binary `DmRowSource` below — .dm still flows through the synthesized-CSV
+> text pipeline (now with batched page reads). Going binary changes
+> observable outputs (decimal-precision detection reads field strings), so
+> it rides on a later step where passes stop re-parsing raw fields.
 
 Separate *format decoding* from *statistics*. A source owns everything up
 to and including producing a row object; passes own everything after.
@@ -131,8 +149,9 @@ sorted column.
 
 ## Sequencing
 
-1. Row-source split — prerequisite, fixes .dm (~10×+), deletes duplicated
-   code.
+1. Row-source split — prerequisite, deletes duplicated code. ✅ DONE
+   2026-06-11 (text pipeline; the binary `DmRowSource` decode that buys the
+   ~10×+ on .dm is still ahead — see §1 status note).
 2. Sidecar index — speeds every format including existing CSVs; enables
    predicate skipping and parallel scans.
 3. Fixed-width conversion — optional last; with the index in place,

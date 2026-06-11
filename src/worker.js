@@ -422,6 +422,154 @@ function tdQuantile(td, q) {
 
 const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi),isnum:(v)=>Number.isFinite(v),ifnum:(v,d)=>Number.isFinite(v)?v:(d!==undefined?d:NaN)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;const isnum=fn.isnum;const ifnum=fn.ifnum;';
 
+// ─── Row source: shared format-decoding pipeline ──────────────────────
+// A row source owns everything between the raw File and a row object:
+// container extraction (ZIP entry / Datamine .dm → CSV stream), delimiter
+// and header sniffing, row-variable choice, calcol compilation, and the
+// line-streaming loop with its comment/header/tail handling. Passes own
+// everything after the row: filter ordering, the weight-ordinal contract,
+// and their accumulators. Future binary sources (.dm direct, parquet)
+// slot in behind the same surface.
+
+function pickRowVarName(header, rowVarOverride) {
+  if (rowVarOverride) return rowVarOverride;
+  const colSet = new Set(header);
+  for (const c of ['r', 'd', 'row', '_r', '_d']) {
+    if (!colSet.has(c)) return c;
+  }
+  return 'r';
+}
+
+function buildExtHeader(header, calcolMeta) {
+  const ext = [...header];
+  if (calcolMeta) { for (const cm of calcolMeta) ext.push(cm.name); }
+  return ext;
+}
+
+// Compile the calcol code block; a failed compile disables calcols silently
+function compileCalcolFn(rowVarName, calcolCode, calcolMeta) {
+  if (!calcolCode || !calcolMeta || calcolMeta.length === 0) return null;
+  try { return new Function(rowVarName, MATH_PREAMBLE + calcolCode); }
+  catch (e) { return null; }
+}
+
+// Compile a filter expression: per-row runtime errors return false,
+// compile errors throw (callers decide whether to abort or continue)
+function compileFilterFn(rowVarName, expr) {
+  return new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + expr + '); } catch(e) { return false; }');
+}
+
+// makeRowSource(file, opts) → source. Throws on extraction/sniff failure
+// (callers post {type:'error'}). opts:
+//   zipEntry, dmEndianness, dmFormat — container config
+//   emptyMessage — error text for an empty/headers-only file
+//   rowVarOverride — caller-fixed row variable (e.g. 'aux')
+//   resolvedTypes — colTypes from a prior analyze; omitted for analyze
+//     itself, which assigns source.colTypes once detection resolves
+//   calcolCode, calcolMeta — calcol block, compiled here
+async function makeRowSource(file, opts) {
+  opts = opts || {};
+  let csvFile = file, zipName = null;
+  if (isZipFile(file)) {
+    csvFile = await extractCSVFromZip(file, opts.zipEntry);
+    zipName = csvFile.name;
+  } else if (isDmFile(file)) {
+    csvFile = await extractCSVFromDM(file, opts.dmEndianness || 'little', opts.dmFormat || 'sp');
+  }
+
+  // Tiny sample for delimiter + header only
+  const sampleLines = await readSample(csvFile, 50);
+  if (sampleLines.length < 2) throw new Error(opts.emptyMessage || 'File appears empty.');
+  const delimiter = detectDelimiter(sampleLines.slice(0, 20));
+  const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
+  const rowVarName = pickRowVarName(header, opts.rowVarOverride);
+
+  const source = {
+    csvFile, zipName, delimiter, header,
+    nCols: header.length,
+    rowVarName,
+    colTypes: opts.resolvedTypes || null,
+    calcolFn: compileCalcolFn(rowVarName, opts.calcolCode, opts.calcolMeta),
+    extHeader: buildExtHeader(header, opts.calcolMeta)
+  };
+  source.buildRow = makeBuildRow(source);
+  source.stream = (handlers) => streamCsvLines(csvFile, handlers);
+  source.forEachRow = (handlers) => forEachSourceRow(source, handlers);
+  return source;
+}
+
+// Row objects carry named properties because filters and calcols are user
+// JS (r.Fe > 30). colTypes/calcolFn are read off the source per call —
+// analyze assigns colTypes mid-stream once type detection resolves.
+function makeBuildRow(source) {
+  const header = source.header, nCols = source.nCols;
+  return function buildRow(fields) {
+    const colTypes = source.colTypes;
+    const obj = {};
+    for (let i = 0; i < nCols; i++) {
+      const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+    }
+    // Evaluate calcol code block — mutates obj, adding new properties
+    if (source.calcolFn) {
+      obj.META = { cat: [], num: [] };
+      try { source.calcolFn(obj); } catch (e) { /* calcol runtime error — skip */ }
+      delete obj.META;
+    }
+    return obj;
+  };
+}
+
+// The one streaming loop: chunk decode, line split, \r strip, comment and
+// header-line skipping, and the final unterminated-line tail. handlers:
+//   line(line, totalChars) — every data line, INCLUDING the tail
+//   comment() — '#' lines in the main loop (a tail comment is skipped
+//     silently, matching the historical per-pass loops)
+//   chunk(totalChars) — after each decoded chunk's lines (progress hooks)
+async function streamCsvLines(csvFile, handlers) {
+  const stream = csvFile.stream().pipeThrough(new TextDecoderStream());
+  const reader = stream.getReader();
+  let buffer = '', isFirstLine = true, totalChars = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalChars += value.length;
+    buffer += value;
+    const parts = buffer.split('\n');
+    buffer = parts.pop();
+    for (const raw of parts) {
+      const line = raw.replace(/\r$/, '');
+      if (line.startsWith('#')) { if (handlers.comment) handlers.comment(); continue; }
+      if (isFirstLine) { isFirstLine = false; continue; }
+      if (!line) continue;
+      handlers.line(line, totalChars);
+    }
+    if (handlers.chunk) handlers.chunk(totalChars);
+  }
+  // Process last buffer line
+  if (buffer) {
+    const line = buffer.replace(/\r$/, '');
+    if (line && !line.startsWith('#') && !isFirstLine) handlers.line(line, totalChars);
+  }
+}
+
+// Field-split + row build + global filter, delivering only accepted rows.
+// Weight ordinals downstream count on handler invocation — i.e. at
+// GLOBAL-filter acceptance, before any local filter (the declus row space).
+function forEachSourceRow(source, handlers) {
+  const globalFn = handlers.globalFn || null;
+  const buildRow = source.buildRow, delimiter = source.delimiter;
+  return streamCsvLines(source.csvFile, {
+    chunk: handlers.chunk,
+    line(line, totalChars) {
+      const fields = line.split(delimiter);
+      const row = buildRow(fields);
+      if (globalFn && !globalFn(row)) return;
+      handlers.row(row, fields, totalChars);
+    }
+  });
+}
+
 async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName, weightArray, weightArrayLabel) {
   const startTime = performance.now();
   let weightName = null;      // resolved weight column (raw or calcol), null = unweighted
@@ -432,48 +580,27 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   const wArr = weightArray || null;
   let wOrd = 0;
 
-  // ZIP / DM extraction
-  let csvFile = file;
-  let zipName = null;
-  if (isZipFile(file)) {
-    try {
-      csvFile = await extractCSVFromZip(file, zipEntry);
-      zipName = csvFile.name;
-    } catch(e) {
-      self.postMessage({ type: 'error', message: e.message });
-      return;
-    }
-  } else if (isDmFile(file)) {
-    try {
-      csvFile = await extractCSVFromDM(file, dmEndianness || 'little', dmFormat || 'sp');
-    } catch(e2) {
-      self.postMessage({ type: 'error', message: e2.message });
-      return;
-    }
-  }
-
-  // Tiny sample for delimiter + header only
-  const sampleLines = await readSample(csvFile, 50);
-  if (sampleLines.length < 2) {
-    self.postMessage({ type: 'error', message: 'File appears empty or has no data rows.' });
+  // Row source: container extraction + delimiter/header sniff + calcol
+  // compile. colTypes stays unset — this pass detects them mid-stream and
+  // assigns src.colTypes once resolved (buildRow reads it live).
+  let src;
+  try {
+    src = await makeRowSource(file, {
+      zipEntry, dmEndianness, dmFormat, rowVarOverride, calcolCode, calcolMeta,
+      emptyMessage: 'File appears empty or has no data rows.'
+    });
+  } catch (e) {
+    self.postMessage({ type: 'error', message: e.message });
     return;
   }
-
-  const delimiter = detectDelimiter(sampleLines.slice(0, 20));
-  const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
-  const nCols = header.length;
-
-  // Pick a row variable name that doesn't collide with a column name
-  // (or use the caller-fixed handle, e.g. 'aux' for the aux dataset pass)
-  let rowVarName = 'r';
-  if (rowVarOverride) {
-    rowVarName = rowVarOverride;
-  } else {
-    const colSet = new Set(header);
-    for (const candidate of ['r', 'd', 'row', '_r', '_d']) {
-      if (!colSet.has(candidate)) { rowVarName = candidate; break; }
-    }
-  }
+  const csvFile = src.csvFile;
+  const zipName = src.zipName;
+  const delimiter = src.delimiter;
+  const header = src.header;
+  const nCols = src.nCols;
+  const rowVarName = src.rowVarName;
+  const calcolFn = src.calcolFn;
+  const buildRow = src.buildRow;
 
   // ── Per-column type detection state ──
   const TYPE_MIN_NONNULL = 20;
@@ -569,8 +696,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   let groupStats = {};
   let groupCategories = {};
 
-  // ── Calcol compiled function ──
-  let calcolFn = null;
+  // ── Calcol column registration (the code itself compiles in the source) ──
   let calcolNumCols = [];
   let calcolCatCols = [];
 
@@ -593,16 +719,11 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     catOverflow = new Set();
     for (const i of catCols) catCounts[i] = {};
 
-    // Compile calcol code block
-    calcolFn = null;
+    // Register calcol columns — even when the code block failed to compile
+    // the columns exist (and stay empty), matching historical behavior
     calcolNumCols = [];
     calcolCatCols = [];
     if (calcolCode && calcolMeta && calcolMeta.length > 0) {
-      try {
-        calcolFn = new Function(rowVarName, MATH_PREAMBLE + calcolCode);
-      } catch(e) {
-        calcolFn = null; // compilation failed — skip calcols silently
-      }
       for (let ci = 0; ci < calcolMeta.length; ci++) {
         const cm = calcolMeta[ci];
         const idx = nCols + ci;
@@ -646,38 +767,19 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     const filterExpr = filter ? filter.expression : null;
     if (filterExpr) {
       try {
-        filterFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + filterExpr + '); } catch(e) { return false; }');
+        filterFn = compileFilterFn(rowVarName, filterExpr);
       } catch(e) {
         self.postMessage({ type: 'error', message: 'Filter expression error: ' + e.message });
       }
     }
 
-    // Build extended header/types for calcols
-    const extHeader = [...header];
+    // Extended types for calcols (the extended header comes from the source)
     const extTypes = [...colTypes];
     if (calcolMeta) {
-      for (const cm of calcolMeta) {
-        extHeader.push(cm.name);
-        extTypes.push(cm.type);
-      }
+      for (const cm of calcolMeta) extTypes.push(cm.type);
     }
 
-    self.postMessage({ type: 'header', header: extHeader, delimiter, colTypes: extTypes, xyzGuess, rowVarName, calcolCount: calcolMeta ? calcolMeta.length : 0, origColCount: nCols });
-  }
-
-  function buildRow(fields) {
-    const obj = {};
-    for (let i = 0; i < nCols; i++) {
-      const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
-    }
-    // Evaluate calcol code block — mutates obj, adding new properties
-    if (calcolFn) {
-      obj.META = { cat: [], num: [] };
-      try { calcolFn(obj); } catch(e) { /* calcol runtime error — skip */ }
-      delete obj.META;
-    }
-    return obj;
+    self.postMessage({ type: 'header', header: src.extHeader, delimiter, colTypes: extTypes, xyzGuess, rowVarName, calcolCount: calcolMeta ? calcolMeta.length : 0, origColCount: nCols });
   }
 
   // Weighted one-pass moments: merge the accumulator with a single point of
@@ -873,31 +975,17 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   // sample files.
   if (forced.size >= nCols) {
     typesResolved = true;
-    colTypes = resolveTypes();
+    colTypes = src.colTypes = resolveTypes();
     initStatsPhase();
   }
 
   // ── Single-pass stream ──
-  const stream = csvFile.stream().pipeThrough(new TextDecoderStream());
-  const reader = stream.getReader();
-  let buffer = '', isFirstLine = true, rowCount = 0, totalRowCount = 0, totalChars = 0, commentCount = 0;
+  let rowCount = 0, totalRowCount = 0, commentCount = 0;
   let lastProgress = 0;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    totalChars += value.length;
-    buffer += value;
-
-    const parts = buffer.split('\n');
-    buffer = parts.pop();
-
-    for (const raw of parts) {
-      const line = raw.replace(/\r$/, '');
-      if (line.startsWith('#')) { commentCount++; continue; }
-      if (isFirstLine) { isFirstLine = false; continue; }
-      if (!line) continue;
-
+  await src.stream({
+    comment() { commentCount++; },
+    line(line, totalChars) {
       const fields = line.split(delimiter);
 
       // Geometry — always, unfiltered
@@ -917,10 +1005,10 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         }
         if (checkAllResolved() || detectRowCount >= TYPE_MAX_ROWS) {
           typesResolved = true;
-          colTypes = resolveTypes();
+          colTypes = src.colTypes = resolveTypes();
           initStatsPhase();
         }
-        continue; // skip stats during detection — negligible row loss
+        return; // skip stats during detection — negligible row loss
       }
 
       // ── Stats phase (filter + accumulate) ──
@@ -929,16 +1017,16 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       let row = null;
       if (needsRow) row = buildRow(fields);
       if (filterFn) {
-        if (!filterFn(row)) continue;
+        if (!filterFn(row)) return;
       }
       let rowW = 1;
       if (wArr) {
         const wv = wArr[wOrd++];
-        if (!(wv > 0) || !isFinite(wv)) { weightExcluded++; continue; }
+        if (!(wv > 0) || !isFinite(wv)) { weightExcluded++; return; }
         rowW = wv;
       } else if (weightName) {
         const wv = row[weightName];
-        if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) { weightExcluded++; continue; }
+        if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) { weightExcluded++; return; }
         rowW = wv;
       }
       rowCount++;
@@ -951,58 +1039,12 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         self.postMessage({ type: 'progress', percent: (totalChars / csvFile.size) * 100, rowCount: totalRowCount });
       }
     }
-  }
-
-  // Process last buffer line
-  if (buffer) {
-    const line = buffer.replace(/\r$/, '');
-    if (line && !line.startsWith('#') && !isFirstLine) {
-      const fields = line.split(delimiter);
-      processRowGeometry(fields);
-      totalRowCount++;
-      if (!typesResolved) {
-        for (let col = 0; col < nCols && col < fields.length; col++) {
-          if (forced.has(col)) continue;
-          const v = (fields[col] || '').trim().replace(/^["']|["']$/g, '');
-          if (NULL_SENTINELS.has(v)) continue;
-          if (!isNaN(Number(v))) detect_num[col]++;
-          else detect_nonNum[col]++;
-        }
-        typesResolved = true;
-        colTypes = resolveTypes();
-        initStatsPhase();
-      } else {
-        const hasCalcols2 = calcolFn !== null;
-        const needsRow2 = hasCalcols2 || filterFn || (groupByCol !== null && groupByCol >= nCols) || weightName !== null;
-        let row2 = null;
-        if (needsRow2) row2 = buildRow(fields);
-        let passFilter = true;
-        if (filterFn) passFilter = filterFn(row2);
-        if (passFilter) {
-          let w2 = 1, w2ok = true;
-          if (wArr) {
-            const wv2 = wArr[wOrd++];
-            if (!(wv2 > 0) || !isFinite(wv2)) { weightExcluded++; w2ok = false; }
-            else w2 = wv2;
-          } else if (weightName) {
-            const wv2 = row2[weightName];
-            if (typeof wv2 !== 'number' || !isFinite(wv2) || wv2 <= 0) { weightExcluded++; w2ok = false; }
-            else w2 = wv2;
-          }
-          if (w2ok) {
-            rowCount++;
-            processRowStats(fields, row2, w2);
-            if (hasCalcols2) processCalcolStats(row2, w2);
-          }
-        }
-      }
-    }
-  }
+  });
 
   // Edge case: file was so small that detection never triggered
   if (!typesResolved) {
     typesResolved = true;
-    colTypes = resolveTypes();
+    colTypes = src.colTypes = resolveTypes();
     initStatsPhase();
   }
 
@@ -1070,14 +1112,10 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     finalCats[i] = { counts: cc, overflow: catOverflow.has(i) };
   }
 
-  // Build extended header/types for complete message
-  const extHeaderFinal = [...header];
+  // Extended types for the complete message (header comes from the source)
   const extTypesFinal = [...colTypes];
   if (calcolMeta) {
-    for (const cm of calcolMeta) {
-      extHeaderFinal.push(cm.name);
-      extTypesFinal.push(cm.type);
-    }
+    for (const cm of calcolMeta) extTypesFinal.push(cm.type);
   }
 
   const elapsed = performance.now() - startTime;
@@ -1100,7 +1138,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     // filter-surviving rows; a mismatch means file/filter drifted since the
     // weights were computed
     weightArrayMismatch: wArr && wOrd !== wArr.length ? { expected: wArr.length, got: wOrd } : null,
-    header: extHeaderFinal,
+    header: src.extHeader,
     colTypes: extTypesFinal,
     xyzGuess,
     zipName,
@@ -1125,46 +1163,25 @@ async function exportCSV(data) {
   const decimalSep = data.decimalSep || '.';
   const startTime = performance.now();
 
-  let csvFile = file;
-  if (isZipFile(file)) {
-    try { csvFile = await extractCSVFromZip(file, zipEntry); }
-    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
-  } else if (isDmFile(file)) {
-    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
-    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
-  }
-
-  const sampleLines = await readSample(csvFile, 50);
-  if (sampleLines.length < 2) {
-    self.postMessage({ type: 'error', message: 'File appears empty or has no data rows.' });
+  let src;
+  try {
+    src = await makeRowSource(file, {
+      zipEntry, dmEndianness: data.dmEndianness, dmFormat: data.dmFormat,
+      resolvedTypes, calcolCode, calcolMeta,
+      emptyMessage: 'File appears empty or has no data rows.'
+    });
+  } catch(e) {
+    self.postMessage({ type: 'error', message: e.message });
     return;
   }
-
-  const delimiter = detectDelimiter(sampleLines.slice(0, 20));
-  const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
-  const nCols = header.length;
-
-  let rowVarName = 'r';
-  const colSet = new Set(header);
-  for (const candidate of ['r', 'd', 'row', '_r', '_d']) {
-    if (!colSet.has(candidate)) { rowVarName = candidate; break; }
-  }
-
-  const colTypes = resolvedTypes;
-
-  // Compile calcol code block
-  let calcolFn = null;
-  if (calcolCode && calcolMeta && calcolMeta.length > 0) {
-    try { calcolFn = new Function(rowVarName, MATH_PREAMBLE + calcolCode); }
-    catch(e) { calcolFn = null; }
-  }
+  const csvFile = src.csvFile;
 
   // Compile filter
   let filterFn = null;
   const filterExpr = filter ? filter.expression : null;
   if (filterExpr) {
     try {
-      filterFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + filterExpr + '); } catch(e) { return false; }');
+      filterFn = compileFilterFn(src.rowVarName, filterExpr);
     } catch(e) {
       self.postMessage({ type: 'error', message: 'Filter expression error: ' + e.message });
       return;
@@ -1175,16 +1192,6 @@ async function exportCSV(data) {
   var qcEscRe = null;
   if (quoteChar) {
     qcEscRe = new RegExp(quoteChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
-  }
-
-  function buildRow(fields) {
-    const obj = {};
-    for (let i = 0; i < nCols; i++) {
-      const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
-    }
-    if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) { /* skip */ } delete obj.META; }
-    return obj;
   }
 
   function csvEscape(v) {
@@ -1214,10 +1221,7 @@ async function exportCSV(data) {
     self.postMessage({ type: 'export-chunk', csv: headerLine });
   }
 
-  const stream = csvFile.stream().pipeThrough(new TextDecoderStream());
-  const reader = stream.getReader();
-  let buffer = '', isFirstLine = true, rowCount = 0, totalChars = 0;
-  let lastProgress = 0;
+  let rowCount = 0;
   let chunkLines = [];
   const CHUNK_SIZE = 5000;
 
@@ -1227,48 +1231,18 @@ async function exportCSV(data) {
     chunkLines = [];
   }
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    totalChars += value.length;
-    buffer += value;
-
-    const parts = buffer.split('\n');
-    buffer = parts.pop();
-
-    for (const raw of parts) {
-      const line = raw.replace(/\r$/, '');
-      if (line.startsWith('#')) continue;
-      if (isFirstLine) { isFirstLine = false; continue; }
-      if (!line) continue;
-
-      const fields = line.split(delimiter);
-      const row = buildRow(fields);
-      if (filterFn && !filterFn(row)) continue;
-
+  await src.forEachRow({
+    globalFn: filterFn,
+    row(row, fields, totalChars) {
       rowCount++;
-      const csvLine = exportCols.map(c => csvEscape(row[c.name])).join(outDelim) + lineEnding;
-      chunkLines.push(csvLine);
+      chunkLines.push(exportCols.map(c => csvEscape(row[c.name])).join(outDelim) + lineEnding);
 
       if (chunkLines.length >= CHUNK_SIZE) {
         flushChunk();
         self.postMessage({ type: 'export-progress', percent: (totalChars / csvFile.size) * 100, rowCount });
       }
     }
-  }
-
-  // Last buffer line
-  if (buffer) {
-    const line = buffer.replace(/\r$/, '');
-    if (line && !line.startsWith('#') && !isFirstLine) {
-      const fields = line.split(delimiter);
-      const row = buildRow(fields);
-      if (!filterFn || filterFn(row)) {
-        rowCount++;
-        chunkLines.push(exportCols.map(c => csvEscape(row[c.name])).join(outDelim) + lineEnding);
-      }
-    }
-  }
+  });
   flushChunk();
 
   const elapsed = performance.now() - startTime;
@@ -1277,58 +1251,29 @@ async function exportCSV(data) {
 
 async function swathAnalysis(data) {
   const { file, zipEntry, globalFilter, localFilter, calcolCode, calcolMeta, resolvedTypes,
-          xyzCols, dxyzCols, varCols, directions } = data;
+          xyzCols, varCols, directions } = data;
   const startTime = performance.now();
 
-  let csvFile = file;
-  if (isZipFile(file)) {
-    try { csvFile = await extractCSVFromZip(file, zipEntry); }
-    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
-  } else if (isDmFile(file)) {
-    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
-    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  let src;
+  try {
+    src = await makeRowSource(file, {
+      zipEntry, dmEndianness: data.dmEndianness, dmFormat: data.dmFormat,
+      rowVarOverride: data.rowVarOverride, resolvedTypes, calcolCode, calcolMeta
+    });
+  } catch(e) {
+    self.postMessage({ type: 'error', message: e.message });
+    return;
   }
-
-  const sampleLines = await readSample(csvFile, 50);
-  if (sampleLines.length < 2) { self.postMessage({ type: 'error', message: 'File appears empty.' }); return; }
-
-  const delimiter = detectDelimiter(sampleLines.slice(0, 20));
-  const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
-  const nCols = header.length;
-  let rowVarName = 'r';
-  if (data.rowVarOverride) {
-    rowVarName = data.rowVarOverride;
-  } else {
-    const colSet = new Set(header);
-    for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
-  }
-
-  const colTypes = resolvedTypes;
-
-  let calcolFn = null;
-  if (calcolCode && calcolMeta && calcolMeta.length > 0) {
-    try { calcolFn = new Function(rowVarName, MATH_PREAMBLE + calcolCode); }
-    catch(e) { calcolFn = null; }
-  }
+  const csvFile = src.csvFile, header = src.header;
 
   let globalFn = null, localFn = null;
   if (globalFilter) {
-    try { globalFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + globalFilter.expression + '); } catch(e) { return false; }'); }
+    try { globalFn = compileFilterFn(src.rowVarName, globalFilter.expression); }
     catch(e) { self.postMessage({ type: 'error', message: 'Global filter error: ' + e.message }); return; }
   }
   if (localFilter) {
-    try { localFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + localFilter + '); } catch(e) { return false; }'); }
+    try { localFn = compileFilterFn(src.rowVarName, localFilter); }
     catch(e) { self.postMessage({ type: 'error', message: 'Local filter error: ' + e.message }); return; }
-  }
-
-  function buildRow(fields) {
-    const obj = {};
-    for (let i = 0; i < nCols; i++) {
-      const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
-    }
-    if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) { /* skip */ } delete obj.META; }
-    return obj;
   }
 
   // Directions: [{ key, axis: 0|1|2|null, dir: [dx,dy,dz]|null, binWidth }].
@@ -1347,15 +1292,13 @@ async function swathAnalysis(data) {
   });
 
   // Resolve variable column names against the extended header — calcol
-  // indices live past the raw columns, and calcolFn sets them on the row
-  // by name inside buildRow
-  const extHeader = [...header];
-  if (calcolMeta) { for (const cm of calcolMeta) extHeader.push(cm.name); }
-  const varNames = varCols.map(vi => extHeader[vi]);
+  // indices live past the raw columns, and the calcol code sets them on
+  // the row by name inside the source's buildRow
+  const varNames = varCols.map(vi => src.extHeader[vi]);
 
   // Optional row weight (raw column or calcol, by name)
   let weightName = null;
-  if (data.weightColName && extHeader.indexOf(data.weightColName) >= 0) weightName = data.weightColName;
+  if (data.weightColName && src.extHeader.indexOf(data.weightColName) >= 0) weightName = data.weightColName;
   // Or computed weights by global-filter-surviving ordinal (declustering) —
   // counted at global acceptance, BEFORE the local filter, to match the
   // declus pass's row space
@@ -1409,37 +1352,22 @@ async function swathAnalysis(data) {
     }
   }
 
-  const stream = csvFile.stream().pipeThrough(new TextDecoderStream());
-  const reader = stream.getReader();
-  let buffer = '', isFirstLine = true, totalChars = 0, lastProgress = 0;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    totalChars += value.length;
-    buffer += value;
-    const parts = buffer.split('\n');
-    buffer = parts.pop();
-
-    for (const raw of parts) {
-      const line = raw.replace(/\r$/, '');
-      if (line.startsWith('#')) continue;
-      if (isFirstLine) { isFirstLine = false; continue; }
-      if (!line) continue;
-
-      const fields = line.split(delimiter);
-      const row = buildRow(fields);
-      if (globalFn && !globalFn(row)) continue;
+  let lastProgress = 0;
+  await src.forEachRow({
+    globalFn,
+    row(row, fields, totalChars) {
+      // Weight ordinal is consumed at GLOBAL acceptance, before the local
+      // filter, to match the declus pass's row space
       let awv = null;
       if (wArr) awv = wArr[wOrd++];
-      if (localFn && !localFn(row)) continue;
+      if (localFn && !localFn(row)) return;
       let rw = 1;
       if (wArr) {
-        if (!(awv > 0) || !isFinite(awv)) continue;
+        if (!(awv > 0) || !isFinite(awv)) return;
         rw = awv;
       } else if (weightName) {
         const wv = row[weightName];
-        if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) continue;
+        if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) return;
         rw = wv;
       }
       processRow(row, rw);
@@ -1449,30 +1377,7 @@ async function swathAnalysis(data) {
         self.postMessage({ type: 'swath-progress', percent: (totalChars / csvFile.size) * 100 });
       }
     }
-  }
-  if (buffer) {
-    const line = buffer.replace(/\r$/, '');
-    if (line && !line.startsWith('#') && !isFirstLine) {
-      const fields = line.split(delimiter);
-      const row = buildRow(fields);
-      if (!globalFn || globalFn(row)) {
-        let awvL = null;
-        if (wArr) awvL = wArr[wOrd++];
-        if (!localFn || localFn(row)) {
-          let rwL = 1, rwOk = true;
-          if (wArr) {
-            if (!(awvL > 0) || !isFinite(awvL)) rwOk = false;
-            else rwL = awvL;
-          } else if (weightName) {
-            const wvL = row[weightName];
-            if (typeof wvL !== 'number' || !isFinite(wvL) || wvL <= 0) rwOk = false;
-            else rwL = wvL;
-          }
-          if (rwOk) processRow(row, rwL);
-        }
-      }
-    }
-  }
+  });
 
   // Finalize: per-direction, per-variable bin arrays
   const results = {};
@@ -1523,101 +1428,54 @@ async function declusAnalysis(data) {
   const { file, zipEntry, globalFilter, calcolCode, calcolMeta, resolvedTypes, xyzCols, varColName } = data;
   const startTime = performance.now();
 
-  let csvFile = file;
-  if (isZipFile(file)) {
-    try { csvFile = await extractCSVFromZip(file, zipEntry); }
-    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
-  } else if (isDmFile(file)) {
-    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
-    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  let src;
+  try {
+    src = await makeRowSource(file, {
+      zipEntry, dmEndianness: data.dmEndianness, dmFormat: data.dmFormat,
+      rowVarOverride: data.rowVarOverride, resolvedTypes, calcolCode, calcolMeta
+    });
+  } catch(e) {
+    self.postMessage({ type: 'error', message: e.message });
+    return;
   }
+  const csvFile = src.csvFile, header = src.header;
 
-  const sampleLines = await readSample(csvFile, 50);
-  if (sampleLines.length < 2) { self.postMessage({ type: 'error', message: 'File appears empty.' }); return; }
-  const delimiter = detectDelimiter(sampleLines.slice(0, 20));
-  const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
-  const nCols = header.length;
-  let rowVarName = 'r';
-  if (data.rowVarOverride) {
-    rowVarName = data.rowVarOverride;
-  } else {
-    const colSet = new Set(header);
-    for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
-  }
-  const colTypes = resolvedTypes;
-
-  let calcolFn = null;
-  if (calcolCode && calcolMeta && calcolMeta.length > 0) {
-    try { calcolFn = new Function(rowVarName, MATH_PREAMBLE + calcolCode); }
-    catch(e) { calcolFn = null; }
-  }
   let globalFn = null;
   if (globalFilter) {
-    try { globalFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + globalFilter.expression + '); } catch(e) { return false; }'); }
+    try { globalFn = compileFilterFn(src.rowVarName, globalFilter.expression); }
     catch(e) { self.postMessage({ type: 'error', message: 'Global filter error: ' + e.message }); return; }
-  }
-
-  function buildRow(fields) {
-    const obj = {};
-    for (let i = 0; i < nCols; i++) {
-      const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
-    }
-    if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) { /* skip */ } delete obj.META; }
-    return obj;
   }
 
   const xName = header[xyzCols[0]], yName = header[xyzCols[1]];
   const zName = xyzCols[2] >= 0 ? header[xyzCols[2]] : null; // 2D allowed: z = 0 (declus.for iz<=0)
-  const extHeader = [...header];
-  if (calcolMeta) { for (const cm of calcolMeta) extHeader.push(cm.name); }
-  if (extHeader.indexOf(varColName) < 0) {
+  if (src.extHeader.indexOf(varColName) < 0) {
     self.postMessage({ type: 'error', message: 'Declustering variable not found: ' + varColName });
     return;
   }
 
   // Collect located rows; n counts every filter-surviving row (the ordinal space)
   const xs = [], ys = [], zs = [], vs = [], ord = [];
-  let n = 0;
-  const reader = csvFile.stream().pipeThrough(new TextDecoderStream()).getReader();
-  let buffer = '', isFirstLine = true, totalChars = 0, lastProgress = 0;
+  let n = 0, lastProgress = 0;
 
-  function collectRow(fields) {
-    const row = buildRow(fields);
-    if (globalFn && !globalFn(row)) return;
-    const o = n++;
-    const xv = row[xName], yv = row[yName];
-    const zv = zName ? row[zName] : 0;
-    const vv = row[varColName];
-    if (typeof xv === 'number' && isFinite(xv) && typeof yv === 'number' && isFinite(yv) &&
-        typeof zv === 'number' && isFinite(zv) && typeof vv === 'number' && isFinite(vv)) {
-      xs.push(xv); ys.push(yv); zs.push(zv); vs.push(vv); ord.push(o);
+  await src.forEachRow({
+    globalFn,
+    row(row) {
+      const o = n++;
+      const xv = row[xName], yv = row[yName];
+      const zv = zName ? row[zName] : 0;
+      const vv = row[varColName];
+      if (typeof xv === 'number' && isFinite(xv) && typeof yv === 'number' && isFinite(yv) &&
+          typeof zv === 'number' && isFinite(zv) && typeof vv === 'number' && isFinite(vv)) {
+        xs.push(xv); ys.push(yv); zs.push(zv); vs.push(vv); ord.push(o);
+      }
+    },
+    chunk(totalChars) {
+      if (totalChars - lastProgress >= 500000) {
+        lastProgress = totalChars;
+        self.postMessage({ type: 'declus-progress', percent: (totalChars / csvFile.size) * 50 });
+      }
     }
-  }
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    totalChars += value.length;
-    buffer += value;
-    const parts = buffer.split('\n');
-    buffer = parts.pop();
-    for (const raw of parts) {
-      const line = raw.replace(/\r$/, '');
-      if (line.startsWith('#')) continue;
-      if (isFirstLine) { isFirstLine = false; continue; }
-      if (!line) continue;
-      collectRow(line.split(delimiter));
-    }
-    if (totalChars - lastProgress >= 500000) {
-      lastProgress = totalChars;
-      self.postMessage({ type: 'declus-progress', percent: (totalChars / csvFile.size) * 50 });
-    }
-  }
-  if (buffer) {
-    const line = buffer.replace(/\r$/, '');
-    if (line && !line.startsWith('#') && !isFirstLine) collectRow(line.split(delimiter));
-  }
+  });
 
   const nd = xs.length;
   if (nd < 2) {
@@ -1768,53 +1626,25 @@ async function colValuesAnalysis(data) {
   const { file, zipEntry, globalFilter, calcolCode, calcolMeta, resolvedTypes, varColName } = data;
   const startTime = performance.now();
 
-  let csvFile = file;
-  if (isZipFile(file)) {
-    try { csvFile = await extractCSVFromZip(file, zipEntry); }
-    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
-  } else if (isDmFile(file)) {
-    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
-    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  let src;
+  try {
+    src = await makeRowSource(file, {
+      zipEntry, dmEndianness: data.dmEndianness, dmFormat: data.dmFormat,
+      rowVarOverride: data.rowVarOverride, resolvedTypes, calcolCode, calcolMeta
+    });
+  } catch(e) {
+    self.postMessage({ type: 'error', message: e.message });
+    return;
   }
+  const csvFile = src.csvFile;
 
-  const sampleLines = await readSample(csvFile, 50);
-  if (sampleLines.length < 2) { self.postMessage({ type: 'error', message: 'File appears empty.' }); return; }
-  const delimiter = detectDelimiter(sampleLines.slice(0, 20));
-  const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
-  const nCols = header.length;
-  let rowVarName = 'r';
-  if (data.rowVarOverride) {
-    rowVarName = data.rowVarOverride;
-  } else {
-    const colSet = new Set(header);
-    for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
-  }
-  const colTypes = resolvedTypes;
-
-  let calcolFn = null;
-  if (calcolCode && calcolMeta && calcolMeta.length > 0) {
-    try { calcolFn = new Function(rowVarName, MATH_PREAMBLE + calcolCode); }
-    catch(e) { calcolFn = null; }
-  }
   let globalFn = null;
   if (globalFilter) {
-    try { globalFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + globalFilter.expression + '); } catch(e) { return false; }'); }
+    try { globalFn = compileFilterFn(src.rowVarName, globalFilter.expression); }
     catch(e) { self.postMessage({ type: 'error', message: 'Global filter error: ' + e.message }); return; }
   }
 
-  function buildRow(fields) {
-    const obj = {};
-    for (let i = 0; i < nCols; i++) {
-      const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
-    }
-    if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) { /* skip */ } delete obj.META; }
-    return obj;
-  }
-
-  const extHeader = [...header];
-  if (calcolMeta) { for (const cm of calcolMeta) extHeader.push(cm.name); }
-  if (extHeader.indexOf(varColName) < 0) {
+  if (src.extHeader.indexOf(varColName) < 0) {
     self.postMessage({ type: 'error', message: 'Variable not found: ' + varColName });
     return;
   }
@@ -1823,60 +1653,41 @@ async function colValuesAnalysis(data) {
   // global-filter-surviving ordinal (declustering weights) — same contract
   // as analyze/swath. Invalid weights exclude the row, counted.
   let weightName = null;
-  if (data.weightColName && extHeader.indexOf(data.weightColName) >= 0) weightName = data.weightColName;
+  if (data.weightColName && src.extHeader.indexOf(data.weightColName) >= 0) weightName = data.weightColName;
   const wArr = data.weightArray || null;
   let weightExcluded = 0;
 
   const vals = [], wts = [];
   const weighted = !!(weightName || wArr);
-  let n = 0;
-  const reader = csvFile.stream().pipeThrough(new TextDecoderStream()).getReader();
-  let buffer = '', isFirstLine = true, totalChars = 0, lastProgress = 0;
+  let n = 0, lastProgress = 0;
 
-  function collectRow(fields) {
-    const row = buildRow(fields);
-    if (globalFn && !globalFn(row)) return;
-    const ord = n++;
-    let w = 1;
-    if (wArr) {
-      const wv = wArr[ord];
-      if (!(wv > 0) || !isFinite(wv)) { weightExcluded++; return; }
-      w = wv;
-    } else if (weightName) {
-      const wv = row[weightName];
-      if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) { weightExcluded++; return; }
-      w = wv;
+  await src.forEachRow({
+    globalFn,
+    row(row) {
+      const ord = n++;
+      let w = 1;
+      if (wArr) {
+        const wv = wArr[ord];
+        if (!(wv > 0) || !isFinite(wv)) { weightExcluded++; return; }
+        w = wv;
+      } else if (weightName) {
+        const wv = row[weightName];
+        if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) { weightExcluded++; return; }
+        w = wv;
+      }
+      const v = row[varColName];
+      if (typeof v === 'number' && isFinite(v)) {
+        vals.push(v);
+        if (weighted) wts.push(w);
+      }
+    },
+    chunk(totalChars) {
+      if (totalChars - lastProgress >= 500000) {
+        lastProgress = totalChars;
+        self.postMessage({ type: 'colvalues-progress', percent: (totalChars / csvFile.size) * 90 });
+      }
     }
-    const v = row[varColName];
-    if (typeof v === 'number' && isFinite(v)) {
-      vals.push(v);
-      if (weighted) wts.push(w);
-    }
-  }
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    totalChars += value.length;
-    buffer += value;
-    const parts = buffer.split('\n');
-    buffer = parts.pop();
-    for (const raw of parts) {
-      const line = raw.replace(/\r$/, '');
-      if (line.startsWith('#')) continue;
-      if (isFirstLine) { isFirstLine = false; continue; }
-      if (!line) continue;
-      collectRow(line.split(delimiter));
-    }
-    if (totalChars - lastProgress >= 500000) {
-      lastProgress = totalChars;
-      self.postMessage({ type: 'colvalues-progress', percent: (totalChars / csvFile.size) * 90 });
-    }
-  }
-  if (buffer) {
-    const line = buffer.replace(/\r$/, '');
-    if (line && !line.startsWith('#') && !isFirstLine) collectRow(line.split(delimiter));
-  }
+  });
 
   let values, weights = null;
   if (weighted) {
@@ -1904,55 +1715,26 @@ async function sectionAnalysis(data) {
           xyzCols, dxyzCols, normalAxis, slicePos, tolerance, varCol } = data;
   const startTime = performance.now();
 
-  let csvFile = file;
-  if (isZipFile(file)) {
-    try { csvFile = await extractCSVFromZip(file, zipEntry); }
-    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
-  } else if (isDmFile(file)) {
-    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
-    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  let src;
+  try {
+    src = await makeRowSource(file, {
+      zipEntry, dmEndianness: data.dmEndianness, dmFormat: data.dmFormat,
+      rowVarOverride: data.rowVarOverride, resolvedTypes, calcolCode, calcolMeta
+    });
+  } catch(e) {
+    self.postMessage({ type: 'error', message: e.message });
+    return;
   }
-
-  const sampleLines = await readSample(csvFile, 50);
-  if (sampleLines.length < 2) { self.postMessage({ type: 'error', message: 'File appears empty.' }); return; }
-
-  const delimiter = detectDelimiter(sampleLines.slice(0, 20));
-  const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
-  const nCols = header.length;
-  let rowVarName = 'r';
-  if (data.rowVarOverride) {
-    rowVarName = data.rowVarOverride;
-  } else {
-    const colSet = new Set(header);
-    for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
-  }
-
-  const colTypes = resolvedTypes;
-
-  let calcolFn = null;
-  if (calcolCode && calcolMeta && calcolMeta.length > 0) {
-    try { calcolFn = new Function(rowVarName, MATH_PREAMBLE + calcolCode); }
-    catch(e) { calcolFn = null; }
-  }
+  const csvFile = src.csvFile, header = src.header;
 
   let globalFn = null, localFn = null;
   if (globalFilter) {
-    try { globalFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + globalFilter.expression + '); } catch(e) { return false; }'); }
+    try { globalFn = compileFilterFn(src.rowVarName, globalFilter.expression); }
     catch(e) { self.postMessage({ type: 'error', message: 'Global filter error: ' + e.message }); return; }
   }
   if (localFilter) {
-    try { localFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + localFilter + '); } catch(e) { return false; }'); }
+    try { localFn = compileFilterFn(src.rowVarName, localFilter); }
     catch(e) { self.postMessage({ type: 'error', message: 'Local filter error: ' + e.message }); return; }
-  }
-
-  function buildRow(fields) {
-    const obj = {};
-    for (let i = 0; i < nCols; i++) {
-      const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
-    }
-    if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) { /* skip */ } delete obj.META; }
-    return obj;
   }
 
   // Map normalAxis from int (0/1/2) to string key
@@ -1985,37 +1767,20 @@ async function sectionAnalysis(data) {
 
   const halfTol = tolerance / 2;
   const blocks = [];
+  let lastProgress = 0;
 
-  const stream = csvFile.stream().pipeThrough(new TextDecoderStream());
-  const reader = stream.getReader();
-  let buf = '', isFirstLine = true, totalChars = 0, lastProgress = 0;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    totalChars += value.length;
-    buf += value;
-    const parts = buf.split('\n');
-    buf = parts.pop();
-
-    for (const raw of parts) {
-      const line = raw.replace(/\r$/, '');
-      if (line.startsWith('#')) continue;
-      if (isFirstLine) { isFirstLine = false; continue; }
-      if (!line) continue;
-
-      const fields = line.split(delimiter);
-      const row = buildRow(fields);
-      if (globalFn && !globalFn(row)) continue;
-      if (localFn && !localFn(row)) continue;
+  await src.forEachRow({
+    globalFn,
+    row(row, fields, totalChars) {
+      if (localFn && !localFn(row)) return;
 
       const nv = row[normalName];
-      if (nv == null || isNaN(nv)) continue;
-      if (nv < slicePos - halfTol || nv > slicePos + halfTol) continue;
+      if (nv == null || isNaN(nv)) return;
+      if (nv < slicePos - halfTol || nv > slicePos + halfTol) return;
 
       const h = row[hName];
       const v = row[vName];
-      if (h == null || !isFinite(h) || v == null || !isFinite(v)) continue;
+      if (h == null || !isFinite(h) || v == null || !isFinite(v)) return;
 
       const val = row[varName];
       const dh = dhName ? row[dhName] : 0;
@@ -2033,32 +1798,7 @@ async function sectionAnalysis(data) {
         self.postMessage({ type: 'section-progress', percent: (totalChars / csvFile.size) * 100 });
       }
     }
-  }
-  // Last buffer line
-  if (buf) {
-    const line = buf.replace(/\r$/, '');
-    if (line && !line.startsWith('#') && !isFirstLine) {
-      const fields = line.split(delimiter);
-      const row = buildRow(fields);
-      if ((!globalFn || globalFn(row)) && (!localFn || localFn(row))) {
-        const nv = row[normalName];
-        if (nv != null && !isNaN(nv) && nv >= slicePos - halfTol && nv <= slicePos + halfTol) {
-          const h = row[hName]; const v = row[vName];
-          if (h != null && isFinite(h) && v != null && isFinite(v)) {
-            const val = row[varName];
-            const dh = dhName ? row[dhName] : 0;
-            const dv = dvName ? row[dvName] : 0;
-            blocks.push({
-              h, v,
-              dh: (typeof dh === 'number' && !isNaN(dh)) ? dh : 0,
-              dv: (typeof dv === 'number' && !isNaN(dv)) ? dv : 0,
-              val: (typeof val === 'number' && !isNaN(val)) ? val : null
-            });
-          }
-        }
-      }
-    }
-  }
+  });
 
   const elapsed = performance.now() - startTime;
   self.postMessage({
@@ -2086,54 +1826,28 @@ async function gtAnalysis(data) {
   // Constant density (t/m3) — takes precedence over a density column
   var densityConst = (data.densityConst != null && data.densityConst > 0) ? data.densityConst : null;
 
-  var csvFile = file;
-  if (isZipFile(file)) {
-    try { csvFile = await extractCSVFromZip(file, zipEntry); }
-    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
-  } else if (isDmFile(file)) {
-    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
-    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  var src;
+  try {
+    src = await makeRowSource(file, {
+      zipEntry, dmEndianness: data.dmEndianness, dmFormat: data.dmFormat,
+      resolvedTypes: resolvedTypes, calcolCode: calcolCode, calcolMeta: calcolMeta
+    });
+  } catch(e) {
+    self.postMessage({ type: 'error', message: e.message });
+    return;
   }
-
-  var sampleLines = await readSample(csvFile, 50);
-  if (sampleLines.length < 2) { self.postMessage({ type: 'error', message: 'File appears empty.' }); return; }
-
-  var delimiter = detectDelimiter(sampleLines.slice(0, 20));
-  var header = sampleLines[0].split(delimiter).map(function(h) { return h.trim().replace(/^["']|["']$/g, ''); });
-  var nCols = header.length;
-  var rowVarName = 'r';
-  var colSet = new Set(header);
-  for (var ci = 0; ci < ['r','d','row','_r','_d'].length; ci++) {
-    var cand = ['r','d','row','_r','_d'][ci];
-    if (!colSet.has(cand)) { rowVarName = cand; break; }
-  }
-
-  var colTypes = resolvedTypes;
-
-  var calcolFn = null;
-  if (calcolCode && calcolMeta && calcolMeta.length > 0) {
-    try { calcolFn = new Function(rowVarName, MATH_PREAMBLE + calcolCode); }
-    catch(e) { calcolFn = null; }
-  }
+  var csvFile = src.csvFile;
+  var header = src.header;
+  var nCols = src.nCols;
 
   var globalFn = null, localFn = null;
   if (globalFilter) {
-    try { globalFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + globalFilter.expression + '); } catch(e) { return false; }'); }
+    try { globalFn = compileFilterFn(src.rowVarName, globalFilter.expression); }
     catch(e) { self.postMessage({ type: 'error', message: 'Global filter error: ' + e.message }); return; }
   }
   if (localFilter) {
-    try { localFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + localFilter + '); } catch(e) { return false; }'); }
+    try { localFn = compileFilterFn(src.rowVarName, localFilter); }
     catch(e) { self.postMessage({ type: 'error', message: 'Local filter error: ' + e.message }); return; }
-  }
-
-  function buildRow(fields) {
-    var obj = {};
-    for (var i = 0; i < nCols; i++) {
-      var raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
-      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
-    }
-    if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) {} delete obj.META; }
-    return obj;
   }
 
   // Resolve column names
@@ -2206,28 +1920,11 @@ async function gtAnalysis(data) {
     }
   }
 
-  var stream = csvFile.stream().pipeThrough(new TextDecoderStream());
-  var reader = stream.getReader();
-  var buffer = '', isFirstLine = true, totalChars = 0, lastProgress = 0;
-
-  while (true) {
-    var res = await reader.read();
-    if (res.done) break;
-    totalChars += res.value.length;
-    buffer += res.value;
-    var parts = buffer.split('\n');
-    buffer = parts.pop();
-
-    for (var pi = 0; pi < parts.length; pi++) {
-      var line = parts[pi].replace(/\r$/, '');
-      if (line.startsWith('#')) continue;
-      if (isFirstLine) { isFirstLine = false; continue; }
-      if (!line) continue;
-
-      var fields = line.split(delimiter);
-      var row = buildRow(fields);
-      if (globalFn && !globalFn(row)) continue;
-      if (localFn && !localFn(row)) continue;
+  var lastProgress = 0;
+  await src.forEachRow({
+    globalFn: globalFn,
+    row: function(row, fields, totalChars) {
+      if (localFn && !localFn(row)) return;
 
       // Compute tonnage for this block
       var volume = 1;
@@ -2259,33 +1956,7 @@ async function gtAnalysis(data) {
         self.postMessage({ type: 'gt-progress', percent: (totalChars / csvFile.size) * 100 });
       }
     }
-  }
-  // Last buffer line
-  if (buffer) {
-    var lastLine = buffer.replace(/\r$/, '');
-    if (lastLine && !lastLine.startsWith('#') && !isFirstLine) {
-      var lastFields = lastLine.split(delimiter);
-      var lastRow = buildRow(lastFields);
-      if ((!globalFn || globalFn(lastRow)) && (!localFn || localFn(lastRow))) {
-        var lVol = 1;
-        if (dxyzNames) {
-          var ldx = lastRow[dxyzNames[0]], ldy = lastRow[dxyzNames[1]], ldz = lastRow[dxyzNames[2]];
-          if (typeof ldx === 'number' && typeof ldy === 'number' && typeof ldz === 'number' && isFinite(ldx) && isFinite(ldy) && isFinite(ldz)) {
-            lVol = Math.abs(ldx) * Math.abs(ldy) * Math.abs(ldz);
-          }
-        } else if (blockVolume > 0) {
-          lVol = blockVolume;
-        }
-        var lDen = 1;
-        if (densityConst != null) lDen = densityConst;
-        else if (densityColName) { var ldv = lastRow[densityColName]; if (typeof ldv === 'number' && isFinite(ldv) && ldv > 0) lDen = ldv; }
-        var lWt = 1;
-        if (weightColName) { var lwv = lastRow[weightColName]; if (typeof lwv === 'number' && isFinite(lwv) && lwv > 0) lWt = lwv; }
-        var lTon = lVol * lDen * lWt;
-        processRowGt(lastRow, lTon);
-      }
-    }
-  }
+  });
 
   // Post-process: cumulative sums for each grade variable and group
   function buildResults(tonnageBins, metalBins, gradeMin, binWidth) {
@@ -2487,6 +2158,11 @@ function extractCSVFromDM(file, endianness, fmt) {
 
     var estSize = totalRecords * columns.length * 10;
 
+    // Batched page reads: one ~2MB slice (≈1000 SP pages) per pull instead
+    // of one page — a per-page slice().arrayBuffer() costs ~524k async
+    // round-trips per GB. The synthesized CSV bytes are unchanged.
+    var PAGES_PER_BATCH = Math.max(1, Math.floor((2 * 1024 * 1024) / pageSize));
+
     // stream() factory — creates a fresh ReadableStream each call
     function makeStream() {
       var curPage = 2;
@@ -2500,46 +2176,52 @@ function extractCSVFromDM(file, endianness, fmt) {
             controller.close();
             return;
           }
-          var pgIdx = curPage;
-          curPage++;
-          var offset = (pgIdx - 1) * pageSize;
-          return file.slice(offset, offset + pageSize).arrayBuffer().then(function(pageBuf) {
-            var dv = new DataView(pageBuf);
-            var recsThisPage = (pgIdx === lastPage) ? lastRecInLast : recsPerPage;
+          var batchStart = curPage;
+          var batchEnd = Math.min(lastPage, batchStart + PAGES_PER_BATCH - 1);
+          curPage = batchEnd + 1;
+          var offset = (batchStart - 1) * pageSize;
+          return file.slice(offset, batchEnd * pageSize).arrayBuffer().then(function(batchBuf) {
+            var dv = new DataView(batchBuf);
             var lines = '';
-            for (var ri = 0; ri < recsThisPage; ri++) {
-              var recStart = ri * maxLen * ws;
-              var fields = [];
-              for (var ci = 0; ci < columns.length; ci++) {
-                var col = columns[ci];
-                if (col.isConstant) {
-                  var cv = col.constantValue || '';
-                  if (cv.indexOf(',') >= 0) cv = '"' + cv + '"';
-                  fields.push(cv);
-                  continue;
-                }
-                if (col.type === 'numeric') {
-                  var nOff = recStart + (col.swPositions[0] - 1) * ws;
-                  if (nOff + ws > pageBuf.byteLength) { fields.push(''); continue; }
-                  var v = readNumFn(dv, nOff);
-                  if (Math.abs(v) > 9.9e29) fields.push('');
-                  else fields.push(String(v));
-                } else {
-                  var text = '';
-                  for (var si = 0; si < col.swPositions.length; si++) {
-                    var aOff = recStart + (col.swPositions[si] - 1) * ws;
-                    if (aOff + 4 > pageBuf.byteLength) continue;
-                    for (var b = 0; b < 4; b++) {
-                      var ch = dv.getUint8(aOff + b);
-                      if (ch >= 32 && ch < 127) text += String.fromCharCode(ch);
-                    }
+            for (var pgIdx = batchStart; pgIdx <= batchEnd; pgIdx++) {
+              var pageBase = (pgIdx - batchStart) * pageSize;
+              // a truncated final page bounds its own records, as before
+              var pageEnd = Math.min(batchBuf.byteLength, pageBase + pageSize);
+              var recsThisPage = (pgIdx === lastPage) ? lastRecInLast : recsPerPage;
+              for (var ri = 0; ri < recsThisPage; ri++) {
+                var recStart = pageBase + ri * maxLen * ws;
+                var fields = [];
+                for (var ci = 0; ci < columns.length; ci++) {
+                  var col = columns[ci];
+                  if (col.isConstant) {
+                    var cv = col.constantValue || '';
+                    if (cv.indexOf(',') >= 0) cv = '"' + cv + '"';
+                    fields.push(cv);
+                    continue;
                   }
-                  text = text.trim();
-                  if (text.indexOf(',') >= 0) text = '"' + text + '"';
-                  fields.push(text);
+                  if (col.type === 'numeric') {
+                    var nOff = recStart + (col.swPositions[0] - 1) * ws;
+                    if (nOff + ws > pageEnd) { fields.push(''); continue; }
+                    var v = readNumFn(dv, nOff);
+                    if (Math.abs(v) > 9.9e29) fields.push('');
+                    else fields.push(String(v));
+                  } else {
+                    var text = '';
+                    for (var si = 0; si < col.swPositions.length; si++) {
+                      var aOff = recStart + (col.swPositions[si] - 1) * ws;
+                      if (aOff + 4 > pageEnd) continue;
+                      for (var b = 0; b < 4; b++) {
+                        var ch = dv.getUint8(aOff + b);
+                        if (ch >= 32 && ch < 127) text += String.fromCharCode(ch);
+                      }
+                    }
+                    text = text.trim();
+                    if (text.indexOf(',') >= 0) text = '"' + text + '"';
+                    fields.push(text);
+                  }
                 }
+                lines += fields.join(',') + '\n';
               }
-              lines += fields.join(',') + '\n';
             }
             var enc = new TextEncoder();
             controller.enqueue(enc.encode(lines));

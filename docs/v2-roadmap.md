@@ -49,7 +49,7 @@ A7 provides.
 | # | Phase | Size | Depends | Notes |
 |---|-------|------|---------|-------|
 | B0 | **Verify hyparquet claims** | S | — | ✅ **DONE 2026-06-12** (`experiments/hyparquet-verify.mjs`; hyparquet + hyparquet-writer as devDeps). **Confirmed**: `rowGroupSize` array → exact group boundaries (the chunk-aligned gate); kvMetadata round-trips; per-group min/max stats; projection 5–8×; 100-row seek ~12 ms. **Corrected**: `parquetReadObjects` penalty is ~1.8× at both 1M and 5M rows, not the spec's claimed 7× (columnar path still prescribed). **Design note**: rowGroupSize's *last size repeats* — the .bma writer must pass the complete per-chunk array |
-| B1 | **Row-source split** (+ near-term .dm patches anytime: batched page reads, `toPrecision(7)` stringify) | L | — | `CsvRowSource` / `DmRowSource` / zip composition; extracts the ~80%-shared streaming boilerplate from worker passes; fixes .dm ~30× text-round-trip. Bit-identical outputs per pass = the test |
+| B1 | **Row-source split** (+ near-term .dm patches anytime: batched page reads, `toPrecision(7)` stringify) | L | — | ✅ **DONE 2026-06-11** — `makeRowSource()`/`streamCsvLines()`/`forEachRow()` in worker.js own extraction/sniff/calcol-compile/buildRow/line-loop; all 7 passes converted, filter ordering + weight-ordinal contract preserved verbatim; batched .dm page reads landed (~2MB/pull). Verified bit-identical vs pre-split worker: `experiments/b1-differential.js` (29 cases, all modes, incl. synthetic .dm fixtures) + full harness suite; perf neutral. **Remaining (→ B2/B4 era)**: binary `DmRowSource` decode (changes outputs — decimal detection reads field strings; needs passes to stop re-parsing raw fields) and `toPrecision(7)` stringify (not bit-identical, own accuracy decision) |
 | B2 | **Parquet adapter** | M | B0 | Vendor hyparquet (+snappy; zstd decision per spec §8.1); `PAR1` sniff; columnar `onChunk` → row adapter (never `parquetReadObjects`); preflight read-only schema mode; Model + Aux both |
 | B3 | **VFS + .bma writer** | L | B0, B2 | Vendor @gcu/vfs (core/opfs/idb/fsaa); `ScratchBackend` w/ positional writes; zip-as-folder backend consolidates the three ad-hoc zip flows; `.bma` = valid parquet + KV metadata (`bma:*` keys per spec §1.5) + chunk-aligned row groups (§1.6); Export target; project paths via mounts |
 | B4 | **Block index + RowAccess** | M | B1 | Per-block min/max/nulls during analysis; pushdown on filtered re-analysis; `CsvBlockIndexAccess` / `ParquetAccess` (footer stats) / `DmAccess` (arithmetic seek) |
@@ -68,16 +68,16 @@ A7 provides.
 
 ## Suggested order
 
-*(A1–A5, A6a, B0 done as of 2026-06-12.)*
+*(A1–A5, A6a, B0, B1 done.)*
 
-**B1 → C1a → C1b → A7 → A6b → B2 → B3 → B4 → B5 → B6 → B7.**
+**B1 ✅ → C1a → C1b → A7 → A6b → B2 → B3 → B4 → B5 → B6 → B7.**
 
-B1 goes first (decided 2026-06-12): it's invisible to testers, the worker
-harness suite is at peak coverage for its bit-identical discipline, and A7's
-new readers should be born on row sources rather than migrated to them.
-Then the workspace generation (C1a property catalog → C1b rails), with A7
-and A6b landing in the new home; the platform phases follow, with B5/B7
-arriving as dockable panels because C1b came first.
+B1 went first (landed 2026-06-11): invisible to
+testers, the worker harness suite was at peak coverage for its bit-identical
+discipline, and A7's new readers will be born on row sources rather than
+migrated to them. **Next: C1a.** Then the workspace generation (C1a property
+catalog → C1b rails), with A7 and A6b landing in the new home; the platform
+phases follow, with B5/B7 arriving as dockable panels because C1b came first.
 
 ## Housekeeping (standing)
 
