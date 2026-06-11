@@ -450,7 +450,8 @@ header .logo-mark {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .pf-sidebar-section {
   padding: 0.5rem 0.7rem;
