@@ -341,7 +341,9 @@ function serializeProject() {
       filter: auxFilter ? auxFilter.expression : '',
       weight: auxWeightName,
       calcolCode: auxCalcolCode,
-      calcolMeta: auxCalcolMeta
+      calcolMeta: auxCalcolMeta,
+      // Declus params only — weights are recomputed, never stored
+      declus: (auxDeclus && auxDeclus.params) ? { params: auxDeclus.params } : null
     } : null,
     calcolCode: currentCalcolCode,
     calcolMeta: currentCalcolMeta,

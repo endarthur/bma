@@ -727,7 +727,17 @@ function runSwath() {
     };
   }
 
-  if (auxVarCols.length > 0) {
+  // Declustered aux weights ride along only when fresh and aligned —
+  // otherwise the aux series soft-fails into the warning banner rather
+  // than silently rendering unweighted
+  var swathDeclusWeights = null, swathDeclusBlocked = null;
+  if (auxVarCols.length > 0 && auxWeightName === AUX_DECLUS_WEIGHT) {
+    if (typeof auxDeclusFresh === 'function' && auxDeclusFresh()) swathDeclusWeights = auxDeclus.weights;
+    else swathDeclusBlocked = 'aux series skipped: declustered weights missing or stale — re-run Declustering on the Aux tab';
+  }
+  if (swathDeclusBlocked) {
+    out.auxError = swathDeclusBlocked;
+  } else if (auxVarCols.length > 0) {
     pending++;
     swathAuxWorker = new Worker(workerUrl);
     swathAuxWorker.postMessage({
@@ -744,7 +754,8 @@ function runSwath() {
       directions: workerDirs,
       varCols: auxVarCols,
       rowVarOverride: AUX_ROW_VAR,
-      weightColName: auxWeightName,
+      weightColName: swathDeclusWeights ? null : auxWeightName,
+      weightArray: swathDeclusWeights,
       dmEndianness: auxPreflightData.dmEndianness || null,
       dmFormat: auxPreflightData.dmFormat || null
     });

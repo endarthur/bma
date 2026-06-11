@@ -67,8 +67,9 @@ function renderAuxConfig() {
     '<div class="pf-sidebar-section">' +
       '<div class="pf-sidebar-section-title">Weight (optional)</div>' +
       '<select class="aux-select" id="auxWeightSel">' + auxWeightOptions() + '</select>' +
-      '<div class="aux-hint">e.g. declustering weights — applied to all aux statistics (Statistics, CDF, Swath). Rows with missing or ≤0 weight are excluded.</div>' +
+      '<div class="aux-hint">A weight column, or the computed declustering weights from below — applied to all aux statistics (Statistics, CDF, Swath). Rows with missing or ≤0 weight are excluded.</div>' +
     '</div>' +
+    renderAuxDeclusSection() +
     '<div class="pf-sidebar-section">' +
       '<div class="pf-sidebar-section-title">Analysis</div>' +
       '<button class="swath-generate" id="auxAnalyzeBtn">Analyze</button>' +
@@ -106,6 +107,14 @@ function runAuxAnalysis() {
   for (var ti = 0; ti < auxPreflightData.autoTypes.length; ti++) {
     auxTypeOverrides[ti] = auxPreflightData.autoTypes[ti];
   }
+  // Declustered weights: computed array, gated on a fresh fingerprint so the
+  // row ordinals are guaranteed to align with this pass's filter
+  var declusWeights = null;
+  if (auxWeightName === AUX_DECLUS_WEIGHT) {
+    if (!auxDeclus || !auxDeclus.weights) { fail('Run Declustering first — no weights computed.'); return; }
+    if (auxDeclus.fingerprint !== auxDeclusFingerprintNow()) { fail('Aux config changed since declustering — re-run Declustering.'); return; }
+    declusWeights = auxDeclus.weights;
+  }
   auxWorker.postMessage({
     file: auxFile,
     xyzOverride: xyz.x >= 0 && xyz.y >= 0 && xyz.z >= 0 ? xyz : null,
@@ -122,7 +131,9 @@ function runAuxAnalysis() {
     dmEndianness: auxPreflightData.dmEndianness || null,
     dmFormat: auxPreflightData.dmFormat || null,
     rowVarOverride: AUX_ROW_VAR,
-    weightColName: auxWeightName
+    weightColName: declusWeights ? null : auxWeightName,
+    weightArray: declusWeights,
+    weightArrayLabel: declusWeights ? 'declustered (cell ' + formatNum(auxDeclus.optCellSize) + ')' : null
   });
 
   auxWorker.onerror = function(e) { fail(e.message || 'unknown error'); };
@@ -131,6 +142,10 @@ function runAuxAnalysis() {
     if (m.type === 'progress') {
       if ($status) $status.textContent = Math.min(99, m.percent).toFixed(0) + '%';
     } else if (m.type === 'complete') {
+      if (m.weightArrayMismatch) {
+        fail('Declustered weights misaligned (' + m.weightArrayMismatch.expected + ' vs ' + m.weightArrayMismatch.got + ' rows) — re-run Declustering.');
+        return;
+      }
       auxCompleteData = { header: m.header, colTypes: m.colTypes, stats: m.stats, categories: m.categories, rowCount: m.rowCount };
       auxStale = false;
       if ($btn) $btn.disabled = false;
@@ -155,6 +170,7 @@ function runAuxAnalysis() {
 function auxWeightOptions() {
   var opts = '<option value="">— none</option>';
   if (!auxPreflightData) return opts;
+  opts += '<option value="' + AUX_DECLUS_WEIGHT + '"' + (auxWeightName === AUX_DECLUS_WEIGHT ? ' selected' : '') + '>(declustered weights)</option>';
   for (var i = 0; i < auxPreflightData.header.length; i++) {
     if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
     var n = auxPreflightData.header[i];
@@ -184,8 +200,16 @@ function renderAuxPreview() {
   $auxPreview.innerHTML = '<table class="aux-preview-table"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table>';
 }
 
-function onAuxConfigChange() {
+function onAuxConfigChange(e) {
   if (!auxPreflightData) return;
+  // Declustering params only gate the (separately fingerprinted) declus run —
+  // they don't invalidate the aux analysis config
+  if (e && e.target && e.target.id && e.target.id.indexOf('auxDeclus') === 0) {
+    auxDeclus = auxDeclus || {};
+    auxDeclus.params = auxDeclusParamsFromUI();
+    if (typeof autoSaveProject === 'function') autoSaveProject();
+    return;
+  }
   var p = document.getElementById('auxPrefixInput');
   if (p) auxPrefix = p.value.trim() || 'aux';
   var x = document.getElementById('auxX'), y = document.getElementById('auxY'), z = document.getElementById('auxZ');
@@ -212,10 +236,220 @@ function markAuxStale() {
   if ($st) { $st.textContent = 'Config changed — re-run Analyze'; $st.style.color = 'var(--amber)'; }
 }
 
+// ─── Cell declustering (GSLIB DECLUS in the worker) ────────────────────
+// Weights are computed against the CURRENT aux row space (file, zip entry,
+// filter, calcols, XYZ); this fingerprint gates their reuse so ordinals
+// can never silently misalign.
+function auxDeclusFingerprintNow() {
+  if (!auxFile || !auxPreflightData) return null;
+  var xyz = auxPreflightData.xyz || {};
+  return JSON.stringify({
+    f: auxFile.name + '|' + auxFile.size,
+    z: auxPreflightData.selectedZipEntry || null,
+    flt: auxFilter ? auxFilter.expression : '',
+    cc: auxCalcolCode || '',
+    xyz: [xyz.x, xyz.y, xyz.z]
+  });
+}
+
+function auxDeclusFresh() {
+  return !!(auxDeclus && auxDeclus.weights && auxDeclus.fingerprint === auxDeclusFingerprintNow());
+}
+
+function auxDeclusParamsFromUI() {
+  function num(id) {
+    var el = document.getElementById(id);
+    if (!el || el.value === '') return null;
+    var v = parseFloat(el.value);
+    return isFinite(v) ? v : null;
+  }
+  var sel = document.getElementById('auxDeclusVar');
+  var crit = document.getElementById('auxDeclusCrit');
+  var prev = (auxDeclus && auxDeclus.params) || {};
+  return {
+    varName: sel ? sel.value : (prev.varName || null),
+    cellMin: num('auxDeclusCellMin'),
+    cellMax: num('auxDeclusCellMax'),
+    ncell: num('auxDeclusNCell') || 24,
+    noff: num('auxDeclusNoff') || 8,
+    anisy: num('auxDeclusAnisY') || 1,
+    anisz: num('auxDeclusAnisZ') || 1,
+    criterion: crit ? crit.value : (prev.criterion || 'min')
+  };
+}
+
+function renderAuxDeclusSection() {
+  if (!auxPreflightData) return '';
+  var p = (auxDeclus && auxDeclus.params) || {};
+  var varOpts = '', firstNum = null;
+  for (var i = 0; i < auxPreflightData.header.length; i++) {
+    if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
+    var n = auxPreflightData.header[i];
+    if (firstNum === null) firstNum = n;
+    varOpts += '<option value="' + esc(n) + '"' + (n === p.varName ? ' selected' : '') + '>' + esc(n) + '</option>';
+  }
+  for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
+    if (auxCalcolMeta[ci].type !== 'numeric') continue;
+    var cn = auxCalcolMeta[ci].name;
+    varOpts += '<option value="' + esc(cn) + '"' + (cn === p.varName ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
+  }
+  function numVal(v) { return (v === null || v === undefined) ? '' : String(v); }
+  return '<div class="pf-sidebar-section">' +
+    '<div class="pf-sidebar-section-title">Declustering</div>' +
+    '<div class="aux-xyz-row"><label>Var</label><select class="aux-select" id="auxDeclusVar">' + varOpts + '</select></div>' +
+    '<div class="aux-xyz-row"><label>Cell</label>' +
+      '<input type="text" class="aux-input" id="auxDeclusCellMin" value="' + numVal(p.cellMin) + '" placeholder="min (auto)" spellcheck="false">' +
+      '<input type="text" class="aux-input" id="auxDeclusCellMax" value="' + numVal(p.cellMax) + '" placeholder="max (auto)" spellcheck="false">' +
+    '</div>' +
+    '<div class="aux-xyz-row"><label>Sweep</label>' +
+      '<input type="text" class="aux-input" id="auxDeclusNCell" value="' + numVal(p.ncell) + '" placeholder="24 sizes" spellcheck="false" title="number of cell sizes">' +
+      '<input type="text" class="aux-input" id="auxDeclusNoff" value="' + numVal(p.noff) + '" placeholder="8 offsets" spellcheck="false" title="origin offsets">' +
+    '</div>' +
+    '<div class="aux-xyz-row"><label>Anis</label>' +
+      '<input type="text" class="aux-input" id="auxDeclusAnisY" value="' + numVal(p.anisy) + '" placeholder="Y 1" spellcheck="false" title="Y cell anisotropy (Ysize = size × YAnis)">' +
+      '<input type="text" class="aux-input" id="auxDeclusAnisZ" value="' + numVal(p.anisz) + '" placeholder="Z 1" spellcheck="false" title="Z cell anisotropy (Zsize = size × ZAnis)">' +
+    '</div>' +
+    '<div class="aux-xyz-row"><label>Find</label><select class="aux-select" id="auxDeclusCrit">' +
+      '<option value="min"' + (p.criterion !== 'max' ? ' selected' : '') + '>minimum declustered mean</option>' +
+      '<option value="max"' + (p.criterion === 'max' ? ' selected' : '') + '>maximum declustered mean</option>' +
+    '</select></div>' +
+    '<div class="aux-hint">GSLIB cell declustering: sweeps cell sizes, weights ∝ 1/(samples per cell), averaged over origin offsets. Use min for data clustered in high grades, max for low.</div>' +
+    '<button class="swath-generate" id="auxDeclusRunBtn">Run declustering</button>' +
+    '<div class="aux-hint aux-analyze-status" id="auxDeclusStatus"></div>' +
+    renderAuxDeclusResults() +
+  '</div>';
+}
+
+function renderAuxDeclusResults() {
+  if (!auxDeclus || !auxDeclus.curve) return '';
+  var d = auxDeclus;
+  var fresh = auxDeclusFresh();
+  var html = '<div class="aux-declus-results">';
+  if (!fresh) {
+    html += '<div class="aux-hint" style="color:var(--amber)">' +
+      (d.weights ? 'Aux config changed since this run — re-run to refresh the weights.' : 'Restored params — run to compute the weights.') + '</div>';
+  }
+  if (d.naiveMean !== undefined) {
+    var delta = d.naiveMean !== 0 ? ((d.declusteredMean - d.naiveMean) / Math.abs(d.naiveMean) * 100) : null;
+    html += '<div class="aux-declus-stat">mean ' + formatNum(d.naiveMean) + ' → <strong>' + formatNum(d.declusteredMean) + '</strong>' +
+      (delta !== null ? ' (' + (delta >= 0 ? '+' : '−') + Math.abs(delta).toFixed(1) + '%)' : '') + '</div>';
+    if (d.optCellSize > 0) {
+      html += '<div class="aux-declus-stat">cell <strong>' + formatNum(d.optCellSize) + '</strong> · w ' + formatNum(d.wtMin) + '–' + formatNum(d.wtMax) +
+        ' · n ' + d.located.toLocaleString() + (d.n > d.located ? ' <span title="rows without valid XYZ + variable get no weight and are excluded">(+' + (d.n - d.located) + ' unlocated)</span>' : '') + '</div>';
+    } else {
+      html += '<div class="aux-declus-stat" style="color:var(--amber)">No cell size beat the naive mean — weights stay 1. Data may not be clustered (or try the other criterion).</div>';
+    }
+    html += auxDeclusCurveSvg(d);
+  }
+  if (auxWeightName === AUX_DECLUS_WEIGHT) html += '<div class="aux-hint">In use as the aux weight.</div>';
+  else if (fresh) html += '<button class="aux-from-main-btn" id="auxDeclusUseBtn" style="margin-top:0.3rem">Use as aux weight</button>';
+  return html + '</div>';
+}
+
+// Declustered-mean vs cell-size curve — the honest surface for the cell-size
+// choice: you see why the optimum won, and can override it via the Cell range
+function auxDeclusCurveSvg(d) {
+  if (!d.curve || d.curve.length < 2) return '';
+  var W = 224, H = 88, padL = 8, padR = 8, padT = 8, padB = 16;
+  var xmax = 0, ymin = Infinity, ymax = -Infinity;
+  for (var i = 0; i < d.curve.length; i++) {
+    var pt = d.curve[i];
+    if (pt[0] > xmax) xmax = pt[0];
+    if (pt[1] < ymin) ymin = pt[1];
+    if (pt[1] > ymax) ymax = pt[1];
+  }
+  if (!(xmax > 0)) return '';
+  if (ymax === ymin) { ymax += 1; ymin -= 1; }
+  var yr = ymax - ymin;
+  ymin -= yr * 0.08; ymax += yr * 0.08;
+  function sx(x) { return padL + (x / xmax) * (W - padL - padR); }
+  function sy(y) { return padT + (1 - (y - ymin) / (ymax - ymin)) * (H - padT - padB); }
+  var poly = '';
+  for (var j = 0; j < d.curve.length; j++) {
+    poly += (j ? ' ' : '') + sx(d.curve[j][0]).toFixed(1) + ',' + sy(d.curve[j][1]).toFixed(1);
+  }
+  var svg = '<svg class="aux-declus-curve" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '">' +
+    '<line x1="' + padL + '" y1="' + sy(d.naiveMean).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + sy(d.naiveMean).toFixed(1) + '" stroke="var(--fg-dim)" stroke-dasharray="3,3" stroke-width="0.75"><title>naive mean</title></line>' +
+    '<polyline points="' + poly + '" fill="none" stroke="var(--amber)" stroke-width="1.3"/>';
+  if (d.optCellSize > 0) {
+    svg += '<circle cx="' + sx(d.optCellSize).toFixed(1) + '" cy="' + sy(d.declusteredMean).toFixed(1) + '" r="3" fill="var(--amber)"><title>optimum: cell ' + formatNum(d.optCellSize) + ', mean ' + formatNum(d.declusteredMean) + '</title></circle>';
+  }
+  svg += '<text x="' + padL + '" y="' + (H - 4) + '" fill="var(--fg-dim)" font-size="8">0</text>' +
+    '<text x="' + (W - padR) + '" y="' + (H - 4) + '" text-anchor="end" fill="var(--fg-dim)" font-size="8">cell ' + formatNum(xmax) + '</text>' +
+  '</svg>';
+  return svg;
+}
+
+function runAuxDeclus() {
+  if (!auxFile || !auxPreflightData) return;
+  var $st = document.getElementById('auxDeclusStatus');
+  var $runBtn = document.getElementById('auxDeclusRunBtn');
+  function dfail(msg) {
+    if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
+    if ($runBtn) $runBtn.disabled = false;
+    if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
+  }
+  var xyz = auxPreflightData.xyz || { x: -1, y: -1, z: -1 };
+  if (xyz.x < 0 || xyz.y < 0) { dfail('Assign X and Y coordinates first (Z optional).'); return; }
+  var params = auxDeclusParamsFromUI();
+  if (!params.varName) { dfail('No numeric variable to decluster on.'); return; }
+  if (params.cellMin !== null && params.cellMax !== null && params.cellMax < params.cellMin) { dfail('Cell max must be ≥ cell min.'); return; }
+
+  if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} }
+  auxDeclusWorker = new Worker(workerUrl);
+  if ($st) { $st.textContent = '0%'; $st.style.color = ''; }
+  if ($runBtn) $runBtn.disabled = true;
+
+  auxDeclusWorker.postMessage({
+    mode: 'declus',
+    file: auxFile,
+    zipEntry: auxPreflightData.selectedZipEntry || null,
+    globalFilter: auxFilter ? { expression: auxFilter.expression } : null,
+    calcolCode: auxCalcolCode || null,
+    calcolMeta: auxCalcolMeta.length > 0 ? auxCalcolMeta : null,
+    resolvedTypes: auxPreflightData.autoTypes,
+    xyzCols: [xyz.x, xyz.y, xyz.z],
+    varColName: params.varName,
+    cellMin: params.cellMin, cellMax: params.cellMax,
+    ncell: params.ncell, noff: params.noff,
+    anisy: params.anisy, anisz: params.anisz,
+    iminmax: params.criterion === 'max' ? 1 : 0,
+    rowVarOverride: AUX_ROW_VAR,
+    dmEndianness: auxPreflightData.dmEndianness || null,
+    dmFormat: auxPreflightData.dmFormat || null
+  });
+  auxDeclusWorker.onerror = function(e) { dfail(e.message || 'unknown error'); };
+  auxDeclusWorker.onmessage = function(e) {
+    var m = e.data;
+    if (m.type === 'declus-progress') {
+      if ($st) $st.textContent = Math.min(99, m.percent).toFixed(0) + '%';
+    } else if (m.type === 'error') {
+      dfail(m.message);
+    } else if (m.type === 'declus-complete') {
+      auxDeclusWorker.terminate();
+      auxDeclusWorker = null;
+      auxDeclus = {
+        params: params,
+        weights: m.weights, n: m.n, located: m.located,
+        curve: m.curve, optCellSize: m.optCellSize,
+        declusteredMean: m.declusteredMean, naiveMean: m.naiveMean,
+        wtMin: m.wtMin, wtMax: m.wtMax, usedRange: m.usedRange,
+        fingerprint: auxDeclusFingerprintNow()
+      };
+      // Fresh weights change the analysis result if they're the active weight
+      if (auxWeightName === AUX_DECLUS_WEIGHT) markAuxStale();
+      renderAuxConfig();
+      if (typeof autoSaveProject === 'function') autoSaveProject();
+    }
+  };
+}
+
 function applyAuxRestore(saved) {
   auxPrefix = saved.prefix || 'aux';
   auxFilter = saved.filter ? { expression: saved.filter } : null;
   auxWeightName = saved.weight || null;
+  // Declus params restore; weights are never persisted — re-run to compute
+  auxDeclus = (saved.declus && saved.declus.params) ? { params: saved.declus.params, weights: null } : null;
   if (saved.xyz && auxPreflightData) auxPreflightData.xyz = saved.xyz;
   auxCalcolCode = saved.calcolCode || '';
   auxCalcolMeta = saved.calcolMeta || [];
@@ -301,6 +535,8 @@ function clearAux() {
   auxCalcolCode = '';
   auxCalcolMeta = [];
   auxWeightName = null;
+  auxDeclus = null;
+  if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
   if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
   $auxConfig.style.display = 'none';
@@ -362,7 +598,15 @@ if ($auxDropzone) {
     $auxSidebar.addEventListener('input', onAuxConfigChange);
     $auxSidebar.addEventListener('change', onAuxConfigChange);
     $auxSidebar.addEventListener('click', function(e) {
-      if (e.target && e.target.id === 'auxAnalyzeBtn') runAuxAnalysis();
+      if (!e.target) return;
+      if (e.target.id === 'auxAnalyzeBtn') runAuxAnalysis();
+      else if (e.target.id === 'auxDeclusRunBtn') runAuxDeclus();
+      else if (e.target.id === 'auxDeclusUseBtn') {
+        auxWeightName = AUX_DECLUS_WEIGHT;
+        markAuxStale();
+        renderAuxConfig();
+        if (typeof autoSaveProject === 'function') autoSaveProject();
+      }
     });
     // Zip entry switch — re-read header/types/xyz from the chosen entry
     $auxSidebar.addEventListener('change', async function(e) {

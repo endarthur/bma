@@ -422,10 +422,15 @@ function tdQuantile(td, q) {
 
 const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi),isnum:(v)=>Number.isFinite(v),ifnum:(v,d)=>Number.isFinite(v)?v:(d!==undefined?d:NaN)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;const isnum=fn.isnum;const ifnum=fn.ifnum;';
 
-async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName) {
+async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName, weightArray, weightArrayLabel) {
   const startTime = performance.now();
   let weightName = null;      // resolved weight column (raw or calcol), null = unweighted
   let weightExcluded = 0;     // rows dropped for missing/non-positive weight
+  // Computed weights by filter-surviving row ordinal (e.g. declustering) —
+  // the array must come from a pass with the SAME file and filter, so the
+  // ordinals line up. NaN/invalid entries exclude the row like any bad weight.
+  const wArr = weightArray || null;
+  let wOrd = 0;
 
   // ZIP / DM extraction
   let csvFile = file;
@@ -714,7 +719,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   function finalizeAcc(s) {
     const n = s.count;
     let variance, std = null, skewness = null, kurtosis = null;
-    if (weightName) {
+    if (weightName || wArr) {
       // Weighted run: population-form estimators — count-based small-sample
       // bias corrections don't apply to arbitrary-scale weights
       const W = s.sumW;
@@ -927,7 +932,11 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         if (!filterFn(row)) continue;
       }
       let rowW = 1;
-      if (weightName) {
+      if (wArr) {
+        const wv = wArr[wOrd++];
+        if (!(wv > 0) || !isFinite(wv)) { weightExcluded++; continue; }
+        rowW = wv;
+      } else if (weightName) {
         const wv = row[weightName];
         if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) { weightExcluded++; continue; }
         rowW = wv;
@@ -971,7 +980,11 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         if (filterFn) passFilter = filterFn(row2);
         if (passFilter) {
           let w2 = 1, w2ok = true;
-          if (weightName) {
+          if (wArr) {
+            const wv2 = wArr[wOrd++];
+            if (!(wv2 > 0) || !isFinite(wv2)) { weightExcluded++; w2ok = false; }
+            else w2 = wv2;
+          } else if (weightName) {
             const wv2 = row2[weightName];
             if (typeof wv2 !== 'number' || !isFinite(wv2) || wv2 <= 0) { weightExcluded++; w2ok = false; }
             else w2 = wv2;
@@ -1081,8 +1094,12 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     commentCount,
     elapsed,
     rowVarName,
-    weightApplied: weightName,
+    weightApplied: wArr ? (weightArrayLabel || '(weights)') : weightName,
     weightExcluded,
+    // Ordinal misalignment guard: the weight array must cover exactly the
+    // filter-surviving rows; a mismatch means file/filter drifted since the
+    // weights were computed
+    weightArrayMismatch: wArr && wOrd !== wArr.length ? { expected: wArr.length, got: wOrd } : null,
     header: extHeaderFinal,
     colTypes: extTypesFinal,
     xyzGuess,
@@ -1339,6 +1356,11 @@ async function swathAnalysis(data) {
   // Optional row weight (raw column or calcol, by name)
   let weightName = null;
   if (data.weightColName && extHeader.indexOf(data.weightColName) >= 0) weightName = data.weightColName;
+  // Or computed weights by global-filter-surviving ordinal (declustering) —
+  // counted at global acceptance, BEFORE the local filter, to match the
+  // declus pass's row space
+  const wArr = data.weightArray || null;
+  let wOrd = 0;
 
   // Per-direction, per-variable bins: Map<binIdx, {vars: {varIdx: {count,sum,sumSq,td}}, center}>
   function getBin(cfg, coord) {
@@ -1408,9 +1430,14 @@ async function swathAnalysis(data) {
       const fields = line.split(delimiter);
       const row = buildRow(fields);
       if (globalFn && !globalFn(row)) continue;
+      let awv = null;
+      if (wArr) awv = wArr[wOrd++];
       if (localFn && !localFn(row)) continue;
       let rw = 1;
-      if (weightName) {
+      if (wArr) {
+        if (!(awv > 0) || !isFinite(awv)) continue;
+        rw = awv;
+      } else if (weightName) {
         const wv = row[weightName];
         if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) continue;
         rw = wv;
@@ -1428,14 +1455,21 @@ async function swathAnalysis(data) {
     if (line && !line.startsWith('#') && !isFirstLine) {
       const fields = line.split(delimiter);
       const row = buildRow(fields);
-      if ((!globalFn || globalFn(row)) && (!localFn || localFn(row))) {
-        let rwL = 1, rwOk = true;
-        if (weightName) {
-          const wvL = row[weightName];
-          if (typeof wvL !== 'number' || !isFinite(wvL) || wvL <= 0) rwOk = false;
-          else rwL = wvL;
+      if (!globalFn || globalFn(row)) {
+        let awvL = null;
+        if (wArr) awvL = wArr[wOrd++];
+        if (!localFn || localFn(row)) {
+          let rwL = 1, rwOk = true;
+          if (wArr) {
+            if (!(awvL > 0) || !isFinite(awvL)) rwOk = false;
+            else rwL = awvL;
+          } else if (weightName) {
+            const wvL = row[weightName];
+            if (typeof wvL !== 'number' || !isFinite(wvL) || wvL <= 0) rwOk = false;
+            else rwL = wvL;
+          }
+          if (rwOk) processRow(row, rwL);
         }
-        if (rwOk) processRow(row, rwL);
       }
     }
   }
@@ -1453,7 +1487,7 @@ async function swathAnalysis(data) {
         const mean = vb.sum / vb.wsum;
         // Weighted runs use population variance; unweighted keeps the original
         // sample formula (wsum === count there, so sums are unchanged)
-        const variance = weightName
+        const variance = (weightName || wArr)
           ? (vb.wsum > 0 ? Math.max(0, vb.sumSq / vb.wsum - mean * mean) : 0)
           : (vb.count > 1 ? (vb.sumSq - vb.sum * vb.sum / vb.count) / (vb.count - 1) : 0);
         arr.push({
@@ -1470,6 +1504,222 @@ async function swathAnalysis(data) {
 
   const elapsed = performance.now() - startTime;
   self.postMessage({ type: 'swath-complete', results, elapsed });
+}
+
+// ─── Cell declustering (GSLIB DECLUS) ─────────────────────────────────
+// Faithful port of declus.for (Deutsch & Journel; the Fortran is the spec,
+// f64 throughout): sweep ncell+1 cell sizes from cellMin to cellMax, average
+// inverse-cell-count weights over noff diagonal origin offsets, pick the
+// size whose declustered mean is lowest (or highest, per criterion). The
+// naive mean is the incumbent — if no size beats it, weights stay 1 and
+// optCellSize is 0.
+//
+// Output weights are aligned to FILTER-SURVIVING row ordinals (the same
+// rows an aux analyze/swath pass with the same global filter accepts), so
+// they can be applied by position in later passes. Rows without finite
+// XYZ + variable get NaN (excluded + counted downstream, like any invalid
+// weight).
+async function declusAnalysis(data) {
+  const { file, zipEntry, globalFilter, calcolCode, calcolMeta, resolvedTypes, xyzCols, varColName } = data;
+  const startTime = performance.now();
+
+  let csvFile = file;
+  if (isZipFile(file)) {
+    try { csvFile = await extractCSVFromZip(file, zipEntry); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  } else if (isDmFile(file)) {
+    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  }
+
+  const sampleLines = await readSample(csvFile, 50);
+  if (sampleLines.length < 2) { self.postMessage({ type: 'error', message: 'File appears empty.' }); return; }
+  const delimiter = detectDelimiter(sampleLines.slice(0, 20));
+  const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
+  const nCols = header.length;
+  let rowVarName = 'r';
+  if (data.rowVarOverride) {
+    rowVarName = data.rowVarOverride;
+  } else {
+    const colSet = new Set(header);
+    for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
+  }
+  const colTypes = resolvedTypes;
+
+  let calcolFn = null;
+  if (calcolCode && calcolMeta && calcolMeta.length > 0) {
+    try { calcolFn = new Function(rowVarName, MATH_PREAMBLE + calcolCode); }
+    catch(e) { calcolFn = null; }
+  }
+  let globalFn = null;
+  if (globalFilter) {
+    try { globalFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + globalFilter.expression + '); } catch(e) { return false; }'); }
+    catch(e) { self.postMessage({ type: 'error', message: 'Global filter error: ' + e.message }); return; }
+  }
+
+  function buildRow(fields) {
+    const obj = {};
+    for (let i = 0; i < nCols; i++) {
+      const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+    }
+    if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) { /* skip */ } delete obj.META; }
+    return obj;
+  }
+
+  const xName = header[xyzCols[0]], yName = header[xyzCols[1]];
+  const zName = xyzCols[2] >= 0 ? header[xyzCols[2]] : null; // 2D allowed: z = 0 (declus.for iz<=0)
+  const extHeader = [...header];
+  if (calcolMeta) { for (const cm of calcolMeta) extHeader.push(cm.name); }
+  if (extHeader.indexOf(varColName) < 0) {
+    self.postMessage({ type: 'error', message: 'Declustering variable not found: ' + varColName });
+    return;
+  }
+
+  // Collect located rows; n counts every filter-surviving row (the ordinal space)
+  const xs = [], ys = [], zs = [], vs = [], ord = [];
+  let n = 0;
+  const reader = csvFile.stream().pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '', isFirstLine = true, totalChars = 0, lastProgress = 0;
+
+  function collectRow(fields) {
+    const row = buildRow(fields);
+    if (globalFn && !globalFn(row)) return;
+    const o = n++;
+    const xv = row[xName], yv = row[yName];
+    const zv = zName ? row[zName] : 0;
+    const vv = row[varColName];
+    if (typeof xv === 'number' && isFinite(xv) && typeof yv === 'number' && isFinite(yv) &&
+        typeof zv === 'number' && isFinite(zv) && typeof vv === 'number' && isFinite(vv)) {
+      xs.push(xv); ys.push(yv); zs.push(zv); vs.push(vv); ord.push(o);
+    }
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalChars += value.length;
+    buffer += value;
+    const parts = buffer.split('\n');
+    buffer = parts.pop();
+    for (const raw of parts) {
+      const line = raw.replace(/\r$/, '');
+      if (line.startsWith('#')) continue;
+      if (isFirstLine) { isFirstLine = false; continue; }
+      if (!line) continue;
+      collectRow(line.split(delimiter));
+    }
+    if (totalChars - lastProgress >= 500000) {
+      lastProgress = totalChars;
+      self.postMessage({ type: 'declus-progress', percent: (totalChars / csvFile.size) * 50 });
+    }
+  }
+  if (buffer) {
+    const line = buffer.replace(/\r$/, '');
+    if (line && !line.startsWith('#') && !isFirstLine) collectRow(line.split(delimiter));
+  }
+
+  const nd = xs.length;
+  if (nd < 2) {
+    self.postMessage({ type: 'error', message: 'Not enough located rows to decluster (need at least 2 with valid coordinates and variable).' });
+    return;
+  }
+
+  // Extents and naive mean (declus.for lines 312-323)
+  let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity, zmin = Infinity, zmax = -Infinity;
+  let vrav = 0;
+  for (let i = 0; i < nd; i++) {
+    vrav += vs[i];
+    if (xs[i] < xmin) xmin = xs[i]; if (xs[i] > xmax) xmax = xs[i];
+    if (ys[i] < ymin) ymin = ys[i]; if (ys[i] > ymax) ymax = ys[i];
+    if (zs[i] < zmin) zmin = zs[i]; if (zs[i] > zmax) zmax = zs[i];
+  }
+  vrav /= nd;
+
+  // Auto cell-size range when unset: span/100 .. span/2 of the largest extent
+  const L = Math.max(xmax - xmin, ymax - ymin, zmax - zmin) || 1;
+  let cmin = data.cellMin, cmax = data.cellMax;
+  if (!(cmin > 0)) cmin = L / 100;
+  if (!(cmax > 0)) cmax = L / 2;
+  if (cmax < cmin) { const t = cmin; cmin = cmax; cmax = t; }
+  let ncell = (data.ncell > 0) ? Math.floor(data.ncell) : 24;
+  const noff = (data.noff > 0) ? Math.floor(data.noff) : 8;
+  const anisy = (data.anisy > 0) ? data.anisy : 1;
+  const anisz = (data.anisz > 0) ? data.anisz : 1;
+  const wantMin = data.iminmax !== 1;
+  if (ncell === 1) cmax = cmin; // declus.for: single-size mode
+
+  const wtopt = new Float64Array(nd).fill(1);
+  const wt = new Float64Array(nd);
+  const cellIdx = new Int32Array(nd);
+  let vrop = vrav, best = 0;
+  const curve = [[0, vrav]];
+
+  const xo1 = xmin - 0.01, yo1 = ymin - 0.01, zo1 = zmin - 0.01;
+  const xinc = (cmax - cmin) / ncell;
+  const yinc = anisy * xinc, zinc = anisz * xinc;
+  let xcs = cmin - xinc, ycs = cmin * anisy - yinc, zcs = cmin * anisz - zinc;
+  const roff = noff;
+
+  for (let lp = 1; lp <= ncell + 1; lp++) {
+    xcs += xinc; ycs += yinc; zcs += zinc;
+    wt.fill(0);
+    const ncellx = Math.floor((xmax - (xo1 - xcs)) / xcs) + 1;
+    const ncelly = Math.floor((ymax - (yo1 - ycs)) / ycs) + 1;
+    const xfac = Math.min(xcs / roff, 0.5 * (xmax - xmin));
+    const yfac = Math.min(ycs / roff, 0.5 * (ymax - ymin));
+    const zfac = Math.min(zcs / roff, 0.5 * (zmax - zmin));
+    for (let kp = 1; kp <= noff; kp++) {
+      const xo = xo1 - (kp - 1) * xfac;
+      const yo = yo1 - (kp - 1) * yfac;
+      const zo = zo1 - (kp - 1) * zfac;
+      const cellwt = new Map();
+      for (let i = 0; i < nd; i++) {
+        const icellx = Math.floor((xs[i] - xo) / xcs) + 1;
+        const icelly = Math.floor((ys[i] - yo) / ycs) + 1;
+        const icellz = Math.floor((zs[i] - zo) / zcs) + 1;
+        const icell = icellx + (icelly - 1) * ncellx + (icellz - 1) * ncelly * ncellx;
+        cellIdx[i] = icell;
+        cellwt.set(icell, (cellwt.get(icell) || 0) + 1);
+      }
+      let sumw = 0;
+      for (let i = 0; i < nd; i++) sumw += 1 / cellwt.get(cellIdx[i]);
+      sumw = 1 / sumw;
+      for (let i = 0; i < nd; i++) wt[i] += (1 / cellwt.get(cellIdx[i])) * sumw;
+    }
+    let sumw = 0, sumwg = 0;
+    for (let i = 0; i < nd; i++) { sumw += wt[i]; sumwg += wt[i] * vs[i]; }
+    const vrcr = sumwg / sumw;
+    curve.push([xcs, vrcr]);
+    if ((wantMin && vrcr < vrop) || (!wantMin && vrcr > vrop) || ncell === 1) {
+      best = xcs; vrop = vrcr;
+      wtopt.set(wt);
+    }
+    self.postMessage({ type: 'declus-progress', percent: 50 + 50 * lp / (ncell + 1) });
+  }
+
+  // Normalize optimal weights to mean 1 (facto = nd/sumw)
+  let sumo = 0;
+  for (let i = 0; i < nd; i++) sumo += wtopt[i];
+  const facto = nd / sumo;
+  let wtMin = Infinity, wtMax = -Infinity;
+  for (let i = 0; i < nd; i++) {
+    wtopt[i] *= facto;
+    if (wtopt[i] < wtMin) wtMin = wtopt[i];
+    if (wtopt[i] > wtMax) wtMax = wtopt[i];
+  }
+
+  // Weights by filter-surviving ordinal; unlocated rows NaN
+  const weights = new Float64Array(n).fill(NaN);
+  for (let i = 0; i < nd; i++) weights[ord[i]] = wtopt[i];
+
+  const elapsed = performance.now() - startTime;
+  self.postMessage({
+    type: 'declus-complete',
+    weights, n, located: nd,
+    curve, optCellSize: best, declusteredMean: vrop, naiveMean: vrav,
+    usedRange: [cmin, cmax, ncell, noff], wtMin, wtMax, elapsed
+  }, [weights.buffer]);
 }
 
 async function sectionAnalysis(data) {
@@ -2192,12 +2442,14 @@ self.onmessage = (e) => {
     preparePack(e.data);
   } else if (e.data.mode === 'swath') {
     swathAnalysis(e.data);
+  } else if (e.data.mode === 'declus') {
+    declusAnalysis(e.data);
   } else if (e.data.mode === 'section') {
     sectionAnalysis(e.data);
   } else if (e.data.mode === 'gt') {
     gtAnalysis(e.data);
   } else {
-    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName } = e.data;
-    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName);
+    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName, weightArray, weightArrayLabel } = e.data;
+    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName, weightArray, weightArrayLabel);
   }
 };

@@ -3837,6 +3837,17 @@ table.cat-values tr.cat-aux-only td { background: rgba(184,115,51,0.05); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .stats-var-item--aux .var-name { opacity: 0.85; font-style: italic; }
+.aux-declus-results {
+  margin-top: 0.4rem; padding-top: 0.35rem;
+  border-top: 1px dashed var(--border);
+}
+.aux-declus-stat {
+  font: 0.66rem var(--mono); color: var(--fg-dim);
+  padding: 0.1rem 0;
+}
+.aux-declus-stat strong { color: var(--fg-bright); font-weight: 500; }
+.aux-declus-curve { display: block; margin: 0.3rem 0 0.1rem; }
+.aux-xyz-row input.aux-input { min-width: 0; flex: 1; }
 table.stats tr.stats-aux-row td {
   background: rgba(184,115,51,0.05);
   font-style: italic;

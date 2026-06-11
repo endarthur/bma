@@ -3850,6 +3850,17 @@ table.cat-values tr.cat-aux-only td { background: rgba(184,115,51,0.05); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .stats-var-item--aux .var-name { opacity: 0.85; font-style: italic; }
+.aux-declus-results {
+  margin-top: 0.4rem; padding-top: 0.35rem;
+  border-top: 1px dashed var(--border);
+}
+.aux-declus-stat {
+  font: 0.66rem var(--mono); color: var(--fg-dim);
+  padding: 0.1rem 0;
+}
+.aux-declus-stat strong { color: var(--fg-bright); font-weight: 500; }
+.aux-declus-curve { display: block; margin: 0.3rem 0 0.1rem; }
+.aux-xyz-row input.aux-input { min-width: 0; flex: 1; }
 table.stats tr.stats-aux-row td {
   background: rgba(184,115,51,0.05);
   font-style: italic;
@@ -4450,7 +4461,7 @@ table.stats tr.stats-delta-row td:first-child {
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 5ec9523 — click to check for updates">5ec9523</div>
+<div class="build-badge" id="buildBadge" title="build f88440f — click to check for updates">f88440f</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -4908,10 +4919,15 @@ function tdQuantile(td, q) {
 
 const MATH_PREAMBLE = 'const {abs,sqrt,pow,log,log2,log10,exp,min,max,round,floor,ceil,sign,trunc,hypot,sin,cos,tan,asin,acos,atan,atan2,PI,E}=Math;const fn={cap:(v,lo,hi)=>v==null?null:hi===undefined?Math.min(v,lo):Math.min(Math.max(v,lo),hi),ifnull:(v,d)=>(v==null||v!==v)?d:v,between:(v,lo,hi)=>v!=null&&v>=lo&&v<=hi,remap:(v,m,d)=>m.hasOwnProperty(v)?m[v]:(d!==undefined?d:null),round:(v,n)=>{const f=Math.pow(10,n||0);return Math.round(v*f)/f;},clamp:(v,lo,hi)=>Math.min(Math.max(v,lo),hi),isnum:(v)=>Number.isFinite(v),ifnum:(v,d)=>Number.isFinite(v)?v:(d!==undefined?d:NaN)};const clamp=fn.clamp;const cap=fn.cap;const ifnull=fn.ifnull;const between=fn.between;const remap=fn.remap;const isnum=fn.isnum;const ifnum=fn.ifnum;';
 
-async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName) {
+async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName, weightArray, weightArrayLabel) {
   const startTime = performance.now();
   let weightName = null;      // resolved weight column (raw or calcol), null = unweighted
   let weightExcluded = 0;     // rows dropped for missing/non-positive weight
+  // Computed weights by filter-surviving row ordinal (e.g. declustering) —
+  // the array must come from a pass with the SAME file and filter, so the
+  // ordinals line up. NaN/invalid entries exclude the row like any bad weight.
+  const wArr = weightArray || null;
+  let wOrd = 0;
 
   // ZIP / DM extraction
   let csvFile = file;
@@ -5200,7 +5216,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   function finalizeAcc(s) {
     const n = s.count;
     let variance, std = null, skewness = null, kurtosis = null;
-    if (weightName) {
+    if (weightName || wArr) {
       // Weighted run: population-form estimators — count-based small-sample
       // bias corrections don't apply to arbitrary-scale weights
       const W = s.sumW;
@@ -5413,7 +5429,11 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         if (!filterFn(row)) continue;
       }
       let rowW = 1;
-      if (weightName) {
+      if (wArr) {
+        const wv = wArr[wOrd++];
+        if (!(wv > 0) || !isFinite(wv)) { weightExcluded++; continue; }
+        rowW = wv;
+      } else if (weightName) {
         const wv = row[weightName];
         if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) { weightExcluded++; continue; }
         rowW = wv;
@@ -5457,7 +5477,11 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         if (filterFn) passFilter = filterFn(row2);
         if (passFilter) {
           let w2 = 1, w2ok = true;
-          if (weightName) {
+          if (wArr) {
+            const wv2 = wArr[wOrd++];
+            if (!(wv2 > 0) || !isFinite(wv2)) { weightExcluded++; w2ok = false; }
+            else w2 = wv2;
+          } else if (weightName) {
             const wv2 = row2[weightName];
             if (typeof wv2 !== 'number' || !isFinite(wv2) || wv2 <= 0) { weightExcluded++; w2ok = false; }
             else w2 = wv2;
@@ -5567,8 +5591,12 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     commentCount,
     elapsed,
     rowVarName,
-    weightApplied: weightName,
+    weightApplied: wArr ? (weightArrayLabel || '(weights)') : weightName,
     weightExcluded,
+    // Ordinal misalignment guard: the weight array must cover exactly the
+    // filter-surviving rows; a mismatch means file/filter drifted since the
+    // weights were computed
+    weightArrayMismatch: wArr && wOrd !== wArr.length ? { expected: wArr.length, got: wOrd } : null,
     header: extHeaderFinal,
     colTypes: extTypesFinal,
     xyzGuess,
@@ -5825,6 +5853,11 @@ async function swathAnalysis(data) {
   // Optional row weight (raw column or calcol, by name)
   let weightName = null;
   if (data.weightColName && extHeader.indexOf(data.weightColName) >= 0) weightName = data.weightColName;
+  // Or computed weights by global-filter-surviving ordinal (declustering) —
+  // counted at global acceptance, BEFORE the local filter, to match the
+  // declus pass's row space
+  const wArr = data.weightArray || null;
+  let wOrd = 0;
 
   // Per-direction, per-variable bins: Map<binIdx, {vars: {varIdx: {count,sum,sumSq,td}}, center}>
   function getBin(cfg, coord) {
@@ -5894,9 +5927,14 @@ async function swathAnalysis(data) {
       const fields = line.split(delimiter);
       const row = buildRow(fields);
       if (globalFn && !globalFn(row)) continue;
+      let awv = null;
+      if (wArr) awv = wArr[wOrd++];
       if (localFn && !localFn(row)) continue;
       let rw = 1;
-      if (weightName) {
+      if (wArr) {
+        if (!(awv > 0) || !isFinite(awv)) continue;
+        rw = awv;
+      } else if (weightName) {
         const wv = row[weightName];
         if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) continue;
         rw = wv;
@@ -5914,14 +5952,21 @@ async function swathAnalysis(data) {
     if (line && !line.startsWith('#') && !isFirstLine) {
       const fields = line.split(delimiter);
       const row = buildRow(fields);
-      if ((!globalFn || globalFn(row)) && (!localFn || localFn(row))) {
-        let rwL = 1, rwOk = true;
-        if (weightName) {
-          const wvL = row[weightName];
-          if (typeof wvL !== 'number' || !isFinite(wvL) || wvL <= 0) rwOk = false;
-          else rwL = wvL;
+      if (!globalFn || globalFn(row)) {
+        let awvL = null;
+        if (wArr) awvL = wArr[wOrd++];
+        if (!localFn || localFn(row)) {
+          let rwL = 1, rwOk = true;
+          if (wArr) {
+            if (!(awvL > 0) || !isFinite(awvL)) rwOk = false;
+            else rwL = awvL;
+          } else if (weightName) {
+            const wvL = row[weightName];
+            if (typeof wvL !== 'number' || !isFinite(wvL) || wvL <= 0) rwOk = false;
+            else rwL = wvL;
+          }
+          if (rwOk) processRow(row, rwL);
         }
-        if (rwOk) processRow(row, rwL);
       }
     }
   }
@@ -5939,7 +5984,7 @@ async function swathAnalysis(data) {
         const mean = vb.sum / vb.wsum;
         // Weighted runs use population variance; unweighted keeps the original
         // sample formula (wsum === count there, so sums are unchanged)
-        const variance = weightName
+        const variance = (weightName || wArr)
           ? (vb.wsum > 0 ? Math.max(0, vb.sumSq / vb.wsum - mean * mean) : 0)
           : (vb.count > 1 ? (vb.sumSq - vb.sum * vb.sum / vb.count) / (vb.count - 1) : 0);
         arr.push({
@@ -5956,6 +6001,222 @@ async function swathAnalysis(data) {
 
   const elapsed = performance.now() - startTime;
   self.postMessage({ type: 'swath-complete', results, elapsed });
+}
+
+// ─── Cell declustering (GSLIB DECLUS) ─────────────────────────────────
+// Faithful port of declus.for (Deutsch & Journel; the Fortran is the spec,
+// f64 throughout): sweep ncell+1 cell sizes from cellMin to cellMax, average
+// inverse-cell-count weights over noff diagonal origin offsets, pick the
+// size whose declustered mean is lowest (or highest, per criterion). The
+// naive mean is the incumbent — if no size beats it, weights stay 1 and
+// optCellSize is 0.
+//
+// Output weights are aligned to FILTER-SURVIVING row ordinals (the same
+// rows an aux analyze/swath pass with the same global filter accepts), so
+// they can be applied by position in later passes. Rows without finite
+// XYZ + variable get NaN (excluded + counted downstream, like any invalid
+// weight).
+async function declusAnalysis(data) {
+  const { file, zipEntry, globalFilter, calcolCode, calcolMeta, resolvedTypes, xyzCols, varColName } = data;
+  const startTime = performance.now();
+
+  let csvFile = file;
+  if (isZipFile(file)) {
+    try { csvFile = await extractCSVFromZip(file, zipEntry); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  } else if (isDmFile(file)) {
+    try { csvFile = await extractCSVFromDM(file, data.dmEndianness || 'little', data.dmFormat || 'sp'); }
+    catch(e) { self.postMessage({ type: 'error', message: e.message }); return; }
+  }
+
+  const sampleLines = await readSample(csvFile, 50);
+  if (sampleLines.length < 2) { self.postMessage({ type: 'error', message: 'File appears empty.' }); return; }
+  const delimiter = detectDelimiter(sampleLines.slice(0, 20));
+  const header = sampleLines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
+  const nCols = header.length;
+  let rowVarName = 'r';
+  if (data.rowVarOverride) {
+    rowVarName = data.rowVarOverride;
+  } else {
+    const colSet = new Set(header);
+    for (const c of ['r','d','row','_r','_d']) { if (!colSet.has(c)) { rowVarName = c; break; } }
+  }
+  const colTypes = resolvedTypes;
+
+  let calcolFn = null;
+  if (calcolCode && calcolMeta && calcolMeta.length > 0) {
+    try { calcolFn = new Function(rowVarName, MATH_PREAMBLE + calcolCode); }
+    catch(e) { calcolFn = null; }
+  }
+  let globalFn = null;
+  if (globalFilter) {
+    try { globalFn = new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + globalFilter.expression + '); } catch(e) { return false; }'); }
+    catch(e) { self.postMessage({ type: 'error', message: 'Global filter error: ' + e.message }); return; }
+  }
+
+  function buildRow(fields) {
+    const obj = {};
+    for (let i = 0; i < nCols; i++) {
+      const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
+      obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+    }
+    if (calcolFn) { obj.META = { cat: [], num: [] }; try { calcolFn(obj); } catch(e) { /* skip */ } delete obj.META; }
+    return obj;
+  }
+
+  const xName = header[xyzCols[0]], yName = header[xyzCols[1]];
+  const zName = xyzCols[2] >= 0 ? header[xyzCols[2]] : null; // 2D allowed: z = 0 (declus.for iz<=0)
+  const extHeader = [...header];
+  if (calcolMeta) { for (const cm of calcolMeta) extHeader.push(cm.name); }
+  if (extHeader.indexOf(varColName) < 0) {
+    self.postMessage({ type: 'error', message: 'Declustering variable not found: ' + varColName });
+    return;
+  }
+
+  // Collect located rows; n counts every filter-surviving row (the ordinal space)
+  const xs = [], ys = [], zs = [], vs = [], ord = [];
+  let n = 0;
+  const reader = csvFile.stream().pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '', isFirstLine = true, totalChars = 0, lastProgress = 0;
+
+  function collectRow(fields) {
+    const row = buildRow(fields);
+    if (globalFn && !globalFn(row)) return;
+    const o = n++;
+    const xv = row[xName], yv = row[yName];
+    const zv = zName ? row[zName] : 0;
+    const vv = row[varColName];
+    if (typeof xv === 'number' && isFinite(xv) && typeof yv === 'number' && isFinite(yv) &&
+        typeof zv === 'number' && isFinite(zv) && typeof vv === 'number' && isFinite(vv)) {
+      xs.push(xv); ys.push(yv); zs.push(zv); vs.push(vv); ord.push(o);
+    }
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalChars += value.length;
+    buffer += value;
+    const parts = buffer.split('\\n');
+    buffer = parts.pop();
+    for (const raw of parts) {
+      const line = raw.replace(/\\r$/, '');
+      if (line.startsWith('#')) continue;
+      if (isFirstLine) { isFirstLine = false; continue; }
+      if (!line) continue;
+      collectRow(line.split(delimiter));
+    }
+    if (totalChars - lastProgress >= 500000) {
+      lastProgress = totalChars;
+      self.postMessage({ type: 'declus-progress', percent: (totalChars / csvFile.size) * 50 });
+    }
+  }
+  if (buffer) {
+    const line = buffer.replace(/\\r$/, '');
+    if (line && !line.startsWith('#') && !isFirstLine) collectRow(line.split(delimiter));
+  }
+
+  const nd = xs.length;
+  if (nd < 2) {
+    self.postMessage({ type: 'error', message: 'Not enough located rows to decluster (need at least 2 with valid coordinates and variable).' });
+    return;
+  }
+
+  // Extents and naive mean (declus.for lines 312-323)
+  let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity, zmin = Infinity, zmax = -Infinity;
+  let vrav = 0;
+  for (let i = 0; i < nd; i++) {
+    vrav += vs[i];
+    if (xs[i] < xmin) xmin = xs[i]; if (xs[i] > xmax) xmax = xs[i];
+    if (ys[i] < ymin) ymin = ys[i]; if (ys[i] > ymax) ymax = ys[i];
+    if (zs[i] < zmin) zmin = zs[i]; if (zs[i] > zmax) zmax = zs[i];
+  }
+  vrav /= nd;
+
+  // Auto cell-size range when unset: span/100 .. span/2 of the largest extent
+  const L = Math.max(xmax - xmin, ymax - ymin, zmax - zmin) || 1;
+  let cmin = data.cellMin, cmax = data.cellMax;
+  if (!(cmin > 0)) cmin = L / 100;
+  if (!(cmax > 0)) cmax = L / 2;
+  if (cmax < cmin) { const t = cmin; cmin = cmax; cmax = t; }
+  let ncell = (data.ncell > 0) ? Math.floor(data.ncell) : 24;
+  const noff = (data.noff > 0) ? Math.floor(data.noff) : 8;
+  const anisy = (data.anisy > 0) ? data.anisy : 1;
+  const anisz = (data.anisz > 0) ? data.anisz : 1;
+  const wantMin = data.iminmax !== 1;
+  if (ncell === 1) cmax = cmin; // declus.for: single-size mode
+
+  const wtopt = new Float64Array(nd).fill(1);
+  const wt = new Float64Array(nd);
+  const cellIdx = new Int32Array(nd);
+  let vrop = vrav, best = 0;
+  const curve = [[0, vrav]];
+
+  const xo1 = xmin - 0.01, yo1 = ymin - 0.01, zo1 = zmin - 0.01;
+  const xinc = (cmax - cmin) / ncell;
+  const yinc = anisy * xinc, zinc = anisz * xinc;
+  let xcs = cmin - xinc, ycs = cmin * anisy - yinc, zcs = cmin * anisz - zinc;
+  const roff = noff;
+
+  for (let lp = 1; lp <= ncell + 1; lp++) {
+    xcs += xinc; ycs += yinc; zcs += zinc;
+    wt.fill(0);
+    const ncellx = Math.floor((xmax - (xo1 - xcs)) / xcs) + 1;
+    const ncelly = Math.floor((ymax - (yo1 - ycs)) / ycs) + 1;
+    const xfac = Math.min(xcs / roff, 0.5 * (xmax - xmin));
+    const yfac = Math.min(ycs / roff, 0.5 * (ymax - ymin));
+    const zfac = Math.min(zcs / roff, 0.5 * (zmax - zmin));
+    for (let kp = 1; kp <= noff; kp++) {
+      const xo = xo1 - (kp - 1) * xfac;
+      const yo = yo1 - (kp - 1) * yfac;
+      const zo = zo1 - (kp - 1) * zfac;
+      const cellwt = new Map();
+      for (let i = 0; i < nd; i++) {
+        const icellx = Math.floor((xs[i] - xo) / xcs) + 1;
+        const icelly = Math.floor((ys[i] - yo) / ycs) + 1;
+        const icellz = Math.floor((zs[i] - zo) / zcs) + 1;
+        const icell = icellx + (icelly - 1) * ncellx + (icellz - 1) * ncelly * ncellx;
+        cellIdx[i] = icell;
+        cellwt.set(icell, (cellwt.get(icell) || 0) + 1);
+      }
+      let sumw = 0;
+      for (let i = 0; i < nd; i++) sumw += 1 / cellwt.get(cellIdx[i]);
+      sumw = 1 / sumw;
+      for (let i = 0; i < nd; i++) wt[i] += (1 / cellwt.get(cellIdx[i])) * sumw;
+    }
+    let sumw = 0, sumwg = 0;
+    for (let i = 0; i < nd; i++) { sumw += wt[i]; sumwg += wt[i] * vs[i]; }
+    const vrcr = sumwg / sumw;
+    curve.push([xcs, vrcr]);
+    if ((wantMin && vrcr < vrop) || (!wantMin && vrcr > vrop) || ncell === 1) {
+      best = xcs; vrop = vrcr;
+      wtopt.set(wt);
+    }
+    self.postMessage({ type: 'declus-progress', percent: 50 + 50 * lp / (ncell + 1) });
+  }
+
+  // Normalize optimal weights to mean 1 (facto = nd/sumw)
+  let sumo = 0;
+  for (let i = 0; i < nd; i++) sumo += wtopt[i];
+  const facto = nd / sumo;
+  let wtMin = Infinity, wtMax = -Infinity;
+  for (let i = 0; i < nd; i++) {
+    wtopt[i] *= facto;
+    if (wtopt[i] < wtMin) wtMin = wtopt[i];
+    if (wtopt[i] > wtMax) wtMax = wtopt[i];
+  }
+
+  // Weights by filter-surviving ordinal; unlocated rows NaN
+  const weights = new Float64Array(n).fill(NaN);
+  for (let i = 0; i < nd; i++) weights[ord[i]] = wtopt[i];
+
+  const elapsed = performance.now() - startTime;
+  self.postMessage({
+    type: 'declus-complete',
+    weights, n, located: nd,
+    curve, optCellSize: best, declusteredMean: vrop, naiveMean: vrav,
+    usedRange: [cmin, cmax, ncell, noff], wtMin, wtMax, elapsed
+  }, [weights.buffer]);
 }
 
 async function sectionAnalysis(data) {
@@ -6678,13 +6939,15 @@ self.onmessage = (e) => {
     preparePack(e.data);
   } else if (e.data.mode === 'swath') {
     swathAnalysis(e.data);
+  } else if (e.data.mode === 'declus') {
+    declusAnalysis(e.data);
   } else if (e.data.mode === 'section') {
     sectionAnalysis(e.data);
   } else if (e.data.mode === 'gt') {
     gtAnalysis(e.data);
   } else {
-    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName } = e.data;
-    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName);
+    const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName, weightArray, weightArrayLabel } = e.data;
+    analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName, weightArray, weightArrayLabel);
   }
 };
 `;
@@ -6722,6 +6985,11 @@ let projectTitle = null;           // optional project title (pack dialog) — d
 let statsCdfMode = 'cdf';          // CDF panel mode: 'cdf' | 'qq'
 let currentWeightName = null;      // weight column (by name, raw or calcol) for the primary analysis
 let auxWeightName = null;          // weight column (by name) for the aux passes — set on the Aux tab
+const AUX_DECLUS_WEIGHT = '__declus__'; // auxWeightName sentinel: use computed declustering weights
+let auxDeclus = null;              // cell-declustering state: { params, weights (Float64Array|null),
+                                   //   curve, optCellSize, declusteredMean, naiveMean, n, located,
+                                   //   wtMin, wtMax, usedRange, fingerprint } — weights NOT persisted
+let auxDeclusWorker = null;        // worker handle for the declustering pass
 let statsAuxSelected = null;       // Set of aux col indices shown in the stats table (null = defaults)
 let statsCdfAuxSelected = new Set(); // aux col indices with CDF curves
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes
@@ -7014,7 +7282,8 @@ var _helpTabs = {
       '<div class="help-row"><span><strong>Aux filter</strong> — pre-filter aux rows. Reference aux columns as <code>aux.</code>… regardless of the display prefix.</span></div>' +
       '<div class="help-row"><span><strong>Weight</strong> — e.g. declustering weights (a column or an aux calcol). Applied to every aux statistic: Statistics rows, CDF overlay, and the swath series. Rows with missing/≤0 weight are excluded.</span></div>' +
       '<div class="help-row"><span><strong>Analyze</strong> — run the full aux statistics pass. Required for the Statistics-tab comparison and CDF overlay; the Swath overlay runs its own pass and does not need it.</span></div>' +
-      '<div class="help-row"><span><strong>Aux calcols</strong> — switch the Calc tab to <strong>Aux</strong> to define calculated columns on the aux rows (<code>aux.</code> syntax); they join the comparisons and the weight list.</span></div></div>' +
+      '<div class="help-row"><span><strong>Aux calcols</strong> — switch the Calc tab to <strong>Aux</strong> to define calculated columns on the aux rows (<code>aux.</code> syntax); they join the comparisons and the weight list.</span></div>' +
+      '<div class="help-row"><span><strong>Declustering</strong> — GSLIB cell declustering (DECLUS): weights each sample by 1/(samples per cell), averaged over origin offsets, sweeping cell sizes to find the minimum (or maximum) declustered mean. The curve shows the sweep — the optimum is marked, and you can pin a size by setting Cell min = max. <em>Use as aux weight</em> feeds the weights into every aux statistic, so Q–Q, CDF and swath comparisons run against declustered samples. Weights are tied to the current filter/calcol config and ask for a re-run when it drifts.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Scope</div>' +
       '<div class="help-row"><span>Comparison is statistical/spatial — aux is a separate set of rows, not extra columns. No geometry, export, or per-row joins.</span></div></div>'
   },
@@ -8489,8 +8758,9 @@ function renderAuxConfig() {
     '<div class="pf-sidebar-section">' +
       '<div class="pf-sidebar-section-title">Weight (optional)</div>' +
       '<select class="aux-select" id="auxWeightSel">' + auxWeightOptions() + '</select>' +
-      '<div class="aux-hint">e.g. declustering weights — applied to all aux statistics (Statistics, CDF, Swath). Rows with missing or ≤0 weight are excluded.</div>' +
+      '<div class="aux-hint">A weight column, or the computed declustering weights from below — applied to all aux statistics (Statistics, CDF, Swath). Rows with missing or ≤0 weight are excluded.</div>' +
     '</div>' +
+    renderAuxDeclusSection() +
     '<div class="pf-sidebar-section">' +
       '<div class="pf-sidebar-section-title">Analysis</div>' +
       '<button class="swath-generate" id="auxAnalyzeBtn">Analyze</button>' +
@@ -8528,6 +8798,14 @@ function runAuxAnalysis() {
   for (var ti = 0; ti < auxPreflightData.autoTypes.length; ti++) {
     auxTypeOverrides[ti] = auxPreflightData.autoTypes[ti];
   }
+  // Declustered weights: computed array, gated on a fresh fingerprint so the
+  // row ordinals are guaranteed to align with this pass's filter
+  var declusWeights = null;
+  if (auxWeightName === AUX_DECLUS_WEIGHT) {
+    if (!auxDeclus || !auxDeclus.weights) { fail('Run Declustering first — no weights computed.'); return; }
+    if (auxDeclus.fingerprint !== auxDeclusFingerprintNow()) { fail('Aux config changed since declustering — re-run Declustering.'); return; }
+    declusWeights = auxDeclus.weights;
+  }
   auxWorker.postMessage({
     file: auxFile,
     xyzOverride: xyz.x >= 0 && xyz.y >= 0 && xyz.z >= 0 ? xyz : null,
@@ -8544,7 +8822,9 @@ function runAuxAnalysis() {
     dmEndianness: auxPreflightData.dmEndianness || null,
     dmFormat: auxPreflightData.dmFormat || null,
     rowVarOverride: AUX_ROW_VAR,
-    weightColName: auxWeightName
+    weightColName: declusWeights ? null : auxWeightName,
+    weightArray: declusWeights,
+    weightArrayLabel: declusWeights ? 'declustered (cell ' + formatNum(auxDeclus.optCellSize) + ')' : null
   });
 
   auxWorker.onerror = function(e) { fail(e.message || 'unknown error'); };
@@ -8553,6 +8833,10 @@ function runAuxAnalysis() {
     if (m.type === 'progress') {
       if ($status) $status.textContent = Math.min(99, m.percent).toFixed(0) + '%';
     } else if (m.type === 'complete') {
+      if (m.weightArrayMismatch) {
+        fail('Declustered weights misaligned (' + m.weightArrayMismatch.expected + ' vs ' + m.weightArrayMismatch.got + ' rows) — re-run Declustering.');
+        return;
+      }
       auxCompleteData = { header: m.header, colTypes: m.colTypes, stats: m.stats, categories: m.categories, rowCount: m.rowCount };
       auxStale = false;
       if ($btn) $btn.disabled = false;
@@ -8577,6 +8861,7 @@ function runAuxAnalysis() {
 function auxWeightOptions() {
   var opts = '<option value="">— none</option>';
   if (!auxPreflightData) return opts;
+  opts += '<option value="' + AUX_DECLUS_WEIGHT + '"' + (auxWeightName === AUX_DECLUS_WEIGHT ? ' selected' : '') + '>(declustered weights)</option>';
   for (var i = 0; i < auxPreflightData.header.length; i++) {
     if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
     var n = auxPreflightData.header[i];
@@ -8606,8 +8891,16 @@ function renderAuxPreview() {
   $auxPreview.innerHTML = '<table class="aux-preview-table"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table>';
 }
 
-function onAuxConfigChange() {
+function onAuxConfigChange(e) {
   if (!auxPreflightData) return;
+  // Declustering params only gate the (separately fingerprinted) declus run —
+  // they don't invalidate the aux analysis config
+  if (e && e.target && e.target.id && e.target.id.indexOf('auxDeclus') === 0) {
+    auxDeclus = auxDeclus || {};
+    auxDeclus.params = auxDeclusParamsFromUI();
+    if (typeof autoSaveProject === 'function') autoSaveProject();
+    return;
+  }
   var p = document.getElementById('auxPrefixInput');
   if (p) auxPrefix = p.value.trim() || 'aux';
   var x = document.getElementById('auxX'), y = document.getElementById('auxY'), z = document.getElementById('auxZ');
@@ -8634,10 +8927,220 @@ function markAuxStale() {
   if ($st) { $st.textContent = 'Config changed — re-run Analyze'; $st.style.color = 'var(--amber)'; }
 }
 
+// ─── Cell declustering (GSLIB DECLUS in the worker) ────────────────────
+// Weights are computed against the CURRENT aux row space (file, zip entry,
+// filter, calcols, XYZ); this fingerprint gates their reuse so ordinals
+// can never silently misalign.
+function auxDeclusFingerprintNow() {
+  if (!auxFile || !auxPreflightData) return null;
+  var xyz = auxPreflightData.xyz || {};
+  return JSON.stringify({
+    f: auxFile.name + '|' + auxFile.size,
+    z: auxPreflightData.selectedZipEntry || null,
+    flt: auxFilter ? auxFilter.expression : '',
+    cc: auxCalcolCode || '',
+    xyz: [xyz.x, xyz.y, xyz.z]
+  });
+}
+
+function auxDeclusFresh() {
+  return !!(auxDeclus && auxDeclus.weights && auxDeclus.fingerprint === auxDeclusFingerprintNow());
+}
+
+function auxDeclusParamsFromUI() {
+  function num(id) {
+    var el = document.getElementById(id);
+    if (!el || el.value === '') return null;
+    var v = parseFloat(el.value);
+    return isFinite(v) ? v : null;
+  }
+  var sel = document.getElementById('auxDeclusVar');
+  var crit = document.getElementById('auxDeclusCrit');
+  var prev = (auxDeclus && auxDeclus.params) || {};
+  return {
+    varName: sel ? sel.value : (prev.varName || null),
+    cellMin: num('auxDeclusCellMin'),
+    cellMax: num('auxDeclusCellMax'),
+    ncell: num('auxDeclusNCell') || 24,
+    noff: num('auxDeclusNoff') || 8,
+    anisy: num('auxDeclusAnisY') || 1,
+    anisz: num('auxDeclusAnisZ') || 1,
+    criterion: crit ? crit.value : (prev.criterion || 'min')
+  };
+}
+
+function renderAuxDeclusSection() {
+  if (!auxPreflightData) return '';
+  var p = (auxDeclus && auxDeclus.params) || {};
+  var varOpts = '', firstNum = null;
+  for (var i = 0; i < auxPreflightData.header.length; i++) {
+    if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
+    var n = auxPreflightData.header[i];
+    if (firstNum === null) firstNum = n;
+    varOpts += '<option value="' + esc(n) + '"' + (n === p.varName ? ' selected' : '') + '>' + esc(n) + '</option>';
+  }
+  for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
+    if (auxCalcolMeta[ci].type !== 'numeric') continue;
+    var cn = auxCalcolMeta[ci].name;
+    varOpts += '<option value="' + esc(cn) + '"' + (cn === p.varName ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
+  }
+  function numVal(v) { return (v === null || v === undefined) ? '' : String(v); }
+  return '<div class="pf-sidebar-section">' +
+    '<div class="pf-sidebar-section-title">Declustering</div>' +
+    '<div class="aux-xyz-row"><label>Var</label><select class="aux-select" id="auxDeclusVar">' + varOpts + '</select></div>' +
+    '<div class="aux-xyz-row"><label>Cell</label>' +
+      '<input type="text" class="aux-input" id="auxDeclusCellMin" value="' + numVal(p.cellMin) + '" placeholder="min (auto)" spellcheck="false">' +
+      '<input type="text" class="aux-input" id="auxDeclusCellMax" value="' + numVal(p.cellMax) + '" placeholder="max (auto)" spellcheck="false">' +
+    '</div>' +
+    '<div class="aux-xyz-row"><label>Sweep</label>' +
+      '<input type="text" class="aux-input" id="auxDeclusNCell" value="' + numVal(p.ncell) + '" placeholder="24 sizes" spellcheck="false" title="number of cell sizes">' +
+      '<input type="text" class="aux-input" id="auxDeclusNoff" value="' + numVal(p.noff) + '" placeholder="8 offsets" spellcheck="false" title="origin offsets">' +
+    '</div>' +
+    '<div class="aux-xyz-row"><label>Anis</label>' +
+      '<input type="text" class="aux-input" id="auxDeclusAnisY" value="' + numVal(p.anisy) + '" placeholder="Y 1" spellcheck="false" title="Y cell anisotropy (Ysize = size × YAnis)">' +
+      '<input type="text" class="aux-input" id="auxDeclusAnisZ" value="' + numVal(p.anisz) + '" placeholder="Z 1" spellcheck="false" title="Z cell anisotropy (Zsize = size × ZAnis)">' +
+    '</div>' +
+    '<div class="aux-xyz-row"><label>Find</label><select class="aux-select" id="auxDeclusCrit">' +
+      '<option value="min"' + (p.criterion !== 'max' ? ' selected' : '') + '>minimum declustered mean</option>' +
+      '<option value="max"' + (p.criterion === 'max' ? ' selected' : '') + '>maximum declustered mean</option>' +
+    '</select></div>' +
+    '<div class="aux-hint">GSLIB cell declustering: sweeps cell sizes, weights ∝ 1/(samples per cell), averaged over origin offsets. Use min for data clustered in high grades, max for low.</div>' +
+    '<button class="swath-generate" id="auxDeclusRunBtn">Run declustering</button>' +
+    '<div class="aux-hint aux-analyze-status" id="auxDeclusStatus"></div>' +
+    renderAuxDeclusResults() +
+  '</div>';
+}
+
+function renderAuxDeclusResults() {
+  if (!auxDeclus || !auxDeclus.curve) return '';
+  var d = auxDeclus;
+  var fresh = auxDeclusFresh();
+  var html = '<div class="aux-declus-results">';
+  if (!fresh) {
+    html += '<div class="aux-hint" style="color:var(--amber)">' +
+      (d.weights ? 'Aux config changed since this run — re-run to refresh the weights.' : 'Restored params — run to compute the weights.') + '</div>';
+  }
+  if (d.naiveMean !== undefined) {
+    var delta = d.naiveMean !== 0 ? ((d.declusteredMean - d.naiveMean) / Math.abs(d.naiveMean) * 100) : null;
+    html += '<div class="aux-declus-stat">mean ' + formatNum(d.naiveMean) + ' → <strong>' + formatNum(d.declusteredMean) + '</strong>' +
+      (delta !== null ? ' (' + (delta >= 0 ? '+' : '−') + Math.abs(delta).toFixed(1) + '%)' : '') + '</div>';
+    if (d.optCellSize > 0) {
+      html += '<div class="aux-declus-stat">cell <strong>' + formatNum(d.optCellSize) + '</strong> · w ' + formatNum(d.wtMin) + '–' + formatNum(d.wtMax) +
+        ' · n ' + d.located.toLocaleString() + (d.n > d.located ? ' <span title="rows without valid XYZ + variable get no weight and are excluded">(+' + (d.n - d.located) + ' unlocated)</span>' : '') + '</div>';
+    } else {
+      html += '<div class="aux-declus-stat" style="color:var(--amber)">No cell size beat the naive mean — weights stay 1. Data may not be clustered (or try the other criterion).</div>';
+    }
+    html += auxDeclusCurveSvg(d);
+  }
+  if (auxWeightName === AUX_DECLUS_WEIGHT) html += '<div class="aux-hint">In use as the aux weight.</div>';
+  else if (fresh) html += '<button class="aux-from-main-btn" id="auxDeclusUseBtn" style="margin-top:0.3rem">Use as aux weight</button>';
+  return html + '</div>';
+}
+
+// Declustered-mean vs cell-size curve — the honest surface for the cell-size
+// choice: you see why the optimum won, and can override it via the Cell range
+function auxDeclusCurveSvg(d) {
+  if (!d.curve || d.curve.length < 2) return '';
+  var W = 224, H = 88, padL = 8, padR = 8, padT = 8, padB = 16;
+  var xmax = 0, ymin = Infinity, ymax = -Infinity;
+  for (var i = 0; i < d.curve.length; i++) {
+    var pt = d.curve[i];
+    if (pt[0] > xmax) xmax = pt[0];
+    if (pt[1] < ymin) ymin = pt[1];
+    if (pt[1] > ymax) ymax = pt[1];
+  }
+  if (!(xmax > 0)) return '';
+  if (ymax === ymin) { ymax += 1; ymin -= 1; }
+  var yr = ymax - ymin;
+  ymin -= yr * 0.08; ymax += yr * 0.08;
+  function sx(x) { return padL + (x / xmax) * (W - padL - padR); }
+  function sy(y) { return padT + (1 - (y - ymin) / (ymax - ymin)) * (H - padT - padB); }
+  var poly = '';
+  for (var j = 0; j < d.curve.length; j++) {
+    poly += (j ? ' ' : '') + sx(d.curve[j][0]).toFixed(1) + ',' + sy(d.curve[j][1]).toFixed(1);
+  }
+  var svg = '<svg class="aux-declus-curve" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '">' +
+    '<line x1="' + padL + '" y1="' + sy(d.naiveMean).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + sy(d.naiveMean).toFixed(1) + '" stroke="var(--fg-dim)" stroke-dasharray="3,3" stroke-width="0.75"><title>naive mean</title></line>' +
+    '<polyline points="' + poly + '" fill="none" stroke="var(--amber)" stroke-width="1.3"/>';
+  if (d.optCellSize > 0) {
+    svg += '<circle cx="' + sx(d.optCellSize).toFixed(1) + '" cy="' + sy(d.declusteredMean).toFixed(1) + '" r="3" fill="var(--amber)"><title>optimum: cell ' + formatNum(d.optCellSize) + ', mean ' + formatNum(d.declusteredMean) + '</title></circle>';
+  }
+  svg += '<text x="' + padL + '" y="' + (H - 4) + '" fill="var(--fg-dim)" font-size="8">0</text>' +
+    '<text x="' + (W - padR) + '" y="' + (H - 4) + '" text-anchor="end" fill="var(--fg-dim)" font-size="8">cell ' + formatNum(xmax) + '</text>' +
+  '</svg>';
+  return svg;
+}
+
+function runAuxDeclus() {
+  if (!auxFile || !auxPreflightData) return;
+  var $st = document.getElementById('auxDeclusStatus');
+  var $runBtn = document.getElementById('auxDeclusRunBtn');
+  function dfail(msg) {
+    if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
+    if ($runBtn) $runBtn.disabled = false;
+    if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
+  }
+  var xyz = auxPreflightData.xyz || { x: -1, y: -1, z: -1 };
+  if (xyz.x < 0 || xyz.y < 0) { dfail('Assign X and Y coordinates first (Z optional).'); return; }
+  var params = auxDeclusParamsFromUI();
+  if (!params.varName) { dfail('No numeric variable to decluster on.'); return; }
+  if (params.cellMin !== null && params.cellMax !== null && params.cellMax < params.cellMin) { dfail('Cell max must be ≥ cell min.'); return; }
+
+  if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} }
+  auxDeclusWorker = new Worker(workerUrl);
+  if ($st) { $st.textContent = '0%'; $st.style.color = ''; }
+  if ($runBtn) $runBtn.disabled = true;
+
+  auxDeclusWorker.postMessage({
+    mode: 'declus',
+    file: auxFile,
+    zipEntry: auxPreflightData.selectedZipEntry || null,
+    globalFilter: auxFilter ? { expression: auxFilter.expression } : null,
+    calcolCode: auxCalcolCode || null,
+    calcolMeta: auxCalcolMeta.length > 0 ? auxCalcolMeta : null,
+    resolvedTypes: auxPreflightData.autoTypes,
+    xyzCols: [xyz.x, xyz.y, xyz.z],
+    varColName: params.varName,
+    cellMin: params.cellMin, cellMax: params.cellMax,
+    ncell: params.ncell, noff: params.noff,
+    anisy: params.anisy, anisz: params.anisz,
+    iminmax: params.criterion === 'max' ? 1 : 0,
+    rowVarOverride: AUX_ROW_VAR,
+    dmEndianness: auxPreflightData.dmEndianness || null,
+    dmFormat: auxPreflightData.dmFormat || null
+  });
+  auxDeclusWorker.onerror = function(e) { dfail(e.message || 'unknown error'); };
+  auxDeclusWorker.onmessage = function(e) {
+    var m = e.data;
+    if (m.type === 'declus-progress') {
+      if ($st) $st.textContent = Math.min(99, m.percent).toFixed(0) + '%';
+    } else if (m.type === 'error') {
+      dfail(m.message);
+    } else if (m.type === 'declus-complete') {
+      auxDeclusWorker.terminate();
+      auxDeclusWorker = null;
+      auxDeclus = {
+        params: params,
+        weights: m.weights, n: m.n, located: m.located,
+        curve: m.curve, optCellSize: m.optCellSize,
+        declusteredMean: m.declusteredMean, naiveMean: m.naiveMean,
+        wtMin: m.wtMin, wtMax: m.wtMax, usedRange: m.usedRange,
+        fingerprint: auxDeclusFingerprintNow()
+      };
+      // Fresh weights change the analysis result if they're the active weight
+      if (auxWeightName === AUX_DECLUS_WEIGHT) markAuxStale();
+      renderAuxConfig();
+      if (typeof autoSaveProject === 'function') autoSaveProject();
+    }
+  };
+}
+
 function applyAuxRestore(saved) {
   auxPrefix = saved.prefix || 'aux';
   auxFilter = saved.filter ? { expression: saved.filter } : null;
   auxWeightName = saved.weight || null;
+  // Declus params restore; weights are never persisted — re-run to compute
+  auxDeclus = (saved.declus && saved.declus.params) ? { params: saved.declus.params, weights: null } : null;
   if (saved.xyz && auxPreflightData) auxPreflightData.xyz = saved.xyz;
   auxCalcolCode = saved.calcolCode || '';
   auxCalcolMeta = saved.calcolMeta || [];
@@ -8723,6 +9226,8 @@ function clearAux() {
   auxCalcolCode = '';
   auxCalcolMeta = [];
   auxWeightName = null;
+  auxDeclus = null;
+  if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
   if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
   $auxConfig.style.display = 'none';
@@ -8784,7 +9289,15 @@ if ($auxDropzone) {
     $auxSidebar.addEventListener('input', onAuxConfigChange);
     $auxSidebar.addEventListener('change', onAuxConfigChange);
     $auxSidebar.addEventListener('click', function(e) {
-      if (e.target && e.target.id === 'auxAnalyzeBtn') runAuxAnalysis();
+      if (!e.target) return;
+      if (e.target.id === 'auxAnalyzeBtn') runAuxAnalysis();
+      else if (e.target.id === 'auxDeclusRunBtn') runAuxDeclus();
+      else if (e.target.id === 'auxDeclusUseBtn') {
+        auxWeightName = AUX_DECLUS_WEIGHT;
+        markAuxStale();
+        renderAuxConfig();
+        if (typeof autoSaveProject === 'function') autoSaveProject();
+      }
     });
     // Zip entry switch — re-read header/types/xyz from the chosen entry
     $auxSidebar.addEventListener('change', async function(e) {
@@ -9147,7 +9660,9 @@ function serializeProject() {
       filter: auxFilter ? auxFilter.expression : '',
       weight: auxWeightName,
       calcolCode: auxCalcolCode,
-      calcolMeta: auxCalcolMeta
+      calcolMeta: auxCalcolMeta,
+      // Declus params only — weights are recomputed, never stored
+      declus: (auxDeclus && auxDeclus.params) ? { params: auxDeclus.params } : null
     } : null,
     calcolCode: currentCalcolCode,
     calcolMeta: currentCalcolMeta,
@@ -13927,7 +14442,17 @@ function runSwath() {
     };
   }
 
-  if (auxVarCols.length > 0) {
+  // Declustered aux weights ride along only when fresh and aligned —
+  // otherwise the aux series soft-fails into the warning banner rather
+  // than silently rendering unweighted
+  var swathDeclusWeights = null, swathDeclusBlocked = null;
+  if (auxVarCols.length > 0 && auxWeightName === AUX_DECLUS_WEIGHT) {
+    if (typeof auxDeclusFresh === 'function' && auxDeclusFresh()) swathDeclusWeights = auxDeclus.weights;
+    else swathDeclusBlocked = 'aux series skipped: declustered weights missing or stale — re-run Declustering on the Aux tab';
+  }
+  if (swathDeclusBlocked) {
+    out.auxError = swathDeclusBlocked;
+  } else if (auxVarCols.length > 0) {
     pending++;
     swathAuxWorker = new Worker(workerUrl);
     swathAuxWorker.postMessage({
@@ -13944,7 +14469,8 @@ function runSwath() {
       directions: workerDirs,
       varCols: auxVarCols,
       rowVarOverride: AUX_ROW_VAR,
-      weightColName: auxWeightName,
+      weightColName: swathDeclusWeights ? null : auxWeightName,
+      weightArray: swathDeclusWeights,
       dmEndianness: auxPreflightData.dmEndianness || null,
       dmFormat: auxPreflightData.dmFormat || null
     });

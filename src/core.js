@@ -31,6 +31,11 @@ let projectTitle = null;           // optional project title (pack dialog) — d
 let statsCdfMode = 'cdf';          // CDF panel mode: 'cdf' | 'qq'
 let currentWeightName = null;      // weight column (by name, raw or calcol) for the primary analysis
 let auxWeightName = null;          // weight column (by name) for the aux passes — set on the Aux tab
+const AUX_DECLUS_WEIGHT = '__declus__'; // auxWeightName sentinel: use computed declustering weights
+let auxDeclus = null;              // cell-declustering state: { params, weights (Float64Array|null),
+                                   //   curve, optCellSize, declusteredMean, naiveMean, n, located,
+                                   //   wtMin, wtMax, usedRange, fingerprint } — weights NOT persisted
+let auxDeclusWorker = null;        // worker handle for the declustering pass
 let statsAuxSelected = null;       // Set of aux col indices shown in the stats table (null = defaults)
 let statsCdfAuxSelected = new Set(); // aux col indices with CDF curves
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes
@@ -323,7 +328,8 @@ var _helpTabs = {
       '<div class="help-row"><span><strong>Aux filter</strong> — pre-filter aux rows. Reference aux columns as <code>aux.</code>… regardless of the display prefix.</span></div>' +
       '<div class="help-row"><span><strong>Weight</strong> — e.g. declustering weights (a column or an aux calcol). Applied to every aux statistic: Statistics rows, CDF overlay, and the swath series. Rows with missing/≤0 weight are excluded.</span></div>' +
       '<div class="help-row"><span><strong>Analyze</strong> — run the full aux statistics pass. Required for the Statistics-tab comparison and CDF overlay; the Swath overlay runs its own pass and does not need it.</span></div>' +
-      '<div class="help-row"><span><strong>Aux calcols</strong> — switch the Calc tab to <strong>Aux</strong> to define calculated columns on the aux rows (<code>aux.</code> syntax); they join the comparisons and the weight list.</span></div></div>' +
+      '<div class="help-row"><span><strong>Aux calcols</strong> — switch the Calc tab to <strong>Aux</strong> to define calculated columns on the aux rows (<code>aux.</code> syntax); they join the comparisons and the weight list.</span></div>' +
+      '<div class="help-row"><span><strong>Declustering</strong> — GSLIB cell declustering (DECLUS): weights each sample by 1/(samples per cell), averaged over origin offsets, sweeping cell sizes to find the minimum (or maximum) declustered mean. The curve shows the sweep — the optimum is marked, and you can pin a size by setting Cell min = max. <em>Use as aux weight</em> feeds the weights into every aux statistic, so Q–Q, CDF and swath comparisons run against declustered samples. Weights are tied to the current filter/calcol config and ask for a re-run when it drifts.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Scope</div>' +
       '<div class="help-row"><span>Comparison is statistical/spatial — aux is a separate set of rows, not extra columns. No geometry, export, or per-row joins.</span></div></div>'
   },
