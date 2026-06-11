@@ -274,15 +274,22 @@ function treePairTargets(kind) {
   return out;
 }
 
-function showTreePopover(row) {
-  var ds = row.dataset.ds, name = row.dataset.name, kind = row.dataset.kind;
-  _treePopTarget = { ds: ds, name: name, kind: kind, idx: row.dataset.idx !== undefined ? parseInt(row.dataset.idx) : null };
+// Open the variable editor for any surface (works with the tree closed —
+// the context menu uses it from stats/swath/GT/categories rows too)
+function openTreeEditor(ds, name, kind, idx, x, y) {
+  _treePopTarget = { ds: ds, name: name, kind: kind, idx: idx != null ? idx : null };
   renderTreePopover();
   var $p = treePopoverEl();
-  var r = row.getBoundingClientRect();
-  $p.style.top = Math.min(r.bottom + 4, window.innerHeight - 320) + 'px';
-  $p.style.left = Math.min(r.left + 12, window.innerWidth - 260) + 'px';
+  $p.style.top = Math.max(4, Math.min(y, window.innerHeight - 320)) + 'px';
+  $p.style.left = Math.max(4, Math.min(x, window.innerWidth - 260)) + 'px';
   $p.classList.add('open');
+}
+
+function showTreePopover(row) {
+  var r = row.getBoundingClientRect();
+  openTreeEditor(row.dataset.ds, row.dataset.name, row.dataset.kind,
+    row.dataset.idx !== undefined ? parseInt(row.dataset.idx) : null,
+    r.left + 12, r.bottom + 4);
 }
 
 function renderTreePopover() {
@@ -365,6 +372,39 @@ function treeSetColor(color) {
   renderTreePopover();
 }
 
+// Toggle a role on/off for a variable, syncing the selects that view it —
+// shared by the popover role buttons and the context menu
+function treeToggleRole(t, role) {
+  var active = catRole(t.ds, role) === t.name;
+  catSetRole(t.ds, role, active ? null : t.name);
+  var newVal = active ? '' : t.name;
+  if (role === 'weight') {
+    if (t.ds === 'model') {
+      var $ssel = document.getElementById('statsWeightSel');
+      var $swsel = document.getElementById('swathWeight');
+      if ($ssel) $ssel.value = newVal;
+      if ($swsel) $swsel.value = newVal;
+      markAnalysisStale();
+    } else {
+      var $asel = document.getElementById('auxWeightSel');
+      if ($asel) $asel.value = newVal;
+      markAuxStale();
+    }
+  } else {
+    // density / tonnageFactor mirror into the GT selects (GT stays the
+    // owner of its analysis params — the role is the shared record)
+    var gtSel = document.getElementById(role === 'density' ? 'gtDensityCol' : 'gtWeightCol');
+    if (gtSel) {
+      var found = '-1';
+      for (var oi = 0; oi < gtSel.options.length; oi++) {
+        if (gtSel.options[oi].textContent === newVal) { found = gtSel.options[oi].value; break; }
+      }
+      gtSel.value = newVal ? found : '-1';
+    }
+  }
+  autoSaveProject();
+}
+
 (function() {
   var $btn = document.getElementById('treeToggle');
   if ($btn) $btn.addEventListener('click', toggleCatalogTree);
@@ -404,35 +444,7 @@ function treeSetColor(color) {
       }
       var roleBtn = e.target.closest('[data-treerole]');
       if (roleBtn) {
-        var role = roleBtn.dataset.treerole;
-        var active = catRole(t.ds, role) === t.name;
-        catSetRole(t.ds, role, active ? null : t.name);
-        var newVal = active ? '' : t.name;
-        if (role === 'weight') {
-          if (t.ds === 'model') {
-            var $ssel = document.getElementById('statsWeightSel');
-            var $swsel = document.getElementById('swathWeight');
-            if ($ssel) $ssel.value = newVal;
-            if ($swsel) $swsel.value = newVal;
-            markAnalysisStale();
-          } else {
-            var $asel = document.getElementById('auxWeightSel');
-            if ($asel) $asel.value = newVal;
-            markAuxStale();
-          }
-        } else {
-          // density / tonnageFactor mirror into the GT selects (GT stays the
-          // owner of its analysis params — the role is the shared record)
-          var gtSel = document.getElementById(role === 'density' ? 'gtDensityCol' : 'gtWeightCol');
-          if (gtSel) {
-            var found = '-1';
-            for (var oi = 0; oi < gtSel.options.length; oi++) {
-              if (gtSel.options[oi].textContent === newVal) { found = gtSel.options[oi].value; break; }
-            }
-            gtSel.value = newVal ? found : '-1';
-          }
-        }
-        autoSaveProject();
+        treeToggleRole(t, roleBtn.dataset.treerole);
         renderTreePopover();
         return;
       }

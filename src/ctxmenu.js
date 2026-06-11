@@ -1,0 +1,226 @@
+// ─── Context menus ────────────────────────────────────────────────────
+// One generic right-click menu, fed by providers that inspect the event
+// target and contribute items. No items → the native browser menu passes
+// through (and Ctrl+right-click always does, as an escape hatch).
+//
+// The variable provider recognizes every surface that renders a variable
+// (tree rows, Statistics sidebar/table, Swath and GT var lists, Categories
+// columns) and offers the shared actions: Properties… (the tree editor
+// popover), role toggles, pairing, CDF curves. Contextual providers add
+// "Copy table" and chart exports where those affordances already exist.
+
+var CTX_PROVIDERS = [];
+
+function ctxMenuEl() {
+  var el = document.getElementById('bmaCtxMenu');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'bmaCtxMenu';
+    el.className = 'ctx-menu';
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function hideCtxMenu() {
+  var el = document.getElementById('bmaCtxMenu');
+  if (el) el.classList.remove('open');
+}
+
+function showCtxMenu(items, x, y) {
+  var el = ctxMenuEl();
+  var html = '';
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    if (it.sep) { html += '<div class="ctx-sep"></div>'; continue; }
+    if (it.head) { html += '<div class="ctx-head">' + esc(it.label) + '</div>'; continue; }
+    html += '<button class="ctx-item" data-ctx="' + i + '"' + (it.disabled ? ' disabled' : '') + '>' + esc(it.label) + '</button>';
+  }
+  el.innerHTML = html;
+  el._items = items;
+  el.style.left = '0px'; el.style.top = '0px';
+  el.classList.add('open');
+  // measure, then clamp into the viewport
+  var w = el.offsetWidth, h = el.offsetHeight;
+  el.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 8)) + 'px';
+  el.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 8)) + 'px';
+}
+
+// ── Variable resolution across surfaces ──
+// → { ds, name, kind: 'num'|'cat', idx } | null
+function ctxResolveVariable(e) {
+  var t = e.target;
+
+  var row = t.closest && t.closest('.tree-row--edit');
+  if (row) {
+    return { ds: row.dataset.ds, name: row.dataset.name, kind: row.dataset.kind,
+             idx: row.dataset.idx !== undefined ? parseInt(row.dataset.idx) : null };
+  }
+  if (!lastCompleteData) return null;
+
+  function modelVar(ci) {
+    var name = lastCompleteData.header[ci];
+    if (name === undefined) return null;
+    return { ds: 'model', name: name, kind: lastCompleteData.colTypes[ci] === 'numeric' ? 'num' : 'cat', idx: ci };
+  }
+  function auxVar(ai) {
+    if (!auxPreflightData) return null;
+    var header = auxPreflightData.header.concat(auxCalcolMeta.map(function(m) { return m.name; }));
+    var types = (auxPreflightData.autoTypes || []).concat(auxCalcolMeta.map(function(m) { return m.type; }));
+    if (header[ai] === undefined) return null;
+    return { ds: 'aux', name: header[ai], kind: types[ai] === 'numeric' ? 'num' : 'cat', idx: ai };
+  }
+
+  // Statistics sidebar + table (model and aux entries carry data attrs)
+  var sEl = t.closest && t.closest('#panelStatistics [data-aux-col], #panelStatistics [data-col]');
+  if (sEl) {
+    if (sEl.dataset.auxCol !== undefined) return auxVar(parseInt(sEl.dataset.auxCol));
+    return modelVar(parseInt(sEl.dataset.col));
+  }
+
+  // Swath variable list
+  var swItem = t.closest && t.closest('#swathVarList .swath-var-item');
+  if (swItem) {
+    var swCb = swItem.querySelector('input[type="checkbox"]');
+    if (swCb && swCb.dataset.aux === '1') {
+      return swCb.dataset.name ? { ds: 'aux', name: swCb.dataset.name, kind: 'num', idx: parseInt(swCb.value) } : null;
+    }
+    if (swCb) return modelVar(parseInt(swCb.value));
+  }
+
+  // GT grade variable list (NOT the group-value list, which reuses the class)
+  var gtItem = t.closest && t.closest('#gtVarList .gt-var-item');
+  if (gtItem) {
+    var gtCb = gtItem.querySelector('input[type="checkbox"]');
+    if (gtCb) return modelVar(parseInt(gtCb.value));
+  }
+
+  // Categories sidebar columns
+  var catItem = t.closest && t.closest('.cat-col-item[data-col]');
+  if (catItem) return modelVar(parseInt(catItem.dataset.col));
+
+  return null;
+}
+
+// ── Providers ──
+
+CTX_PROVIDERS.push(function variableProvider(e) {
+  var v = ctxResolveVariable(e);
+  if (!v || !v.name) return null;
+  var x = e.clientX, y = e.clientY;
+  var items = [{ head: true, label: (v.ds === 'model' ? 'Model' : (auxPrefix || 'aux')) + ':' + v.name }];
+
+  items.push({ label: 'Properties…', action: function() { openTreeEditor(v.ds, v.name, v.kind, v.idx, x, y); } });
+
+  if (v.kind === 'num') {
+    var isW = catRole(v.ds, 'weight') === v.name;
+    items.push({ label: isW ? 'Clear weight role' : 'Set as weight', action: function() { treeToggleRole(v, 'weight'); } });
+    if (v.ds === 'model') {
+      var isD = catRole('model', 'density') === v.name;
+      var isT = catRole('model', 'tonnageFactor') === v.name;
+      items.push({ label: isD ? 'Clear density role' : 'Set as density (GT)', action: function() { treeToggleRole(v, 'density'); } });
+      items.push({ label: isT ? 'Clear tonnage factor' : 'Set as tonnage factor (GT)', action: function() { treeToggleRole(v, 'tonnageFactor'); } });
+      // CDF curve toggle (Statistics panel state, usable from anywhere)
+      if (lastCompleteData && typeof statsCdfSelected !== 'undefined' && v.idx !== null) {
+        var on = statsCdfSelected.has(v.idx);
+        items.push({ label: on ? 'Remove CDF curve' : 'Add CDF curve', action: function() {
+          if (on) statsCdfSelected.delete(v.idx); else statsCdfSelected.add(v.idx);
+          if (typeof renderStatsCdfPanel === 'function') renderStatsCdfPanel();
+          if (typeof renderStatsTable === 'function') renderStatsTable();
+          autoSaveProject();
+        } });
+      }
+    }
+  }
+
+  if (v.ds === 'aux') {
+    var p = catPair(v.name);
+    if (p) items.push({ label: 'Unpair from ' + p, action: function() {
+      catalog.pairs[v.name] = null;
+      treePairChanged();
+      autoSaveProject();
+    } });
+    items.push({ label: p ? 'Change pairing…' : 'Pair with model variable…', action: function() { openTreeEditor(v.ds, v.name, v.kind, v.idx, x, y); } });
+  }
+
+  if (v.kind === 'cat' && v.ds === 'model' && v.idx !== null) {
+    items.push({ label: 'Focus in Categories', action: function() {
+      catFocusedCol = v.idx;
+      switchTab('categories');
+      if (typeof renderCatSidebar === 'function') { renderCatSidebar(); renderCatMain(); }
+      autoSaveProject();
+    } });
+  }
+  return items;
+});
+
+// Categories value rows: jump straight to the value color picker
+CTX_PROVIDERS.push(function catValueProvider(e) {
+  var tr = e.target.closest && e.target.closest('#catValueTable tr[data-val]');
+  if (!tr || catFocusedCol === null || typeof _catData === 'undefined' || !_catData) return null;
+  var colName = _catData.header[catFocusedCol];
+  var val = tr.dataset.val;
+  var swatch = tr.querySelector('.cat-swatch, [data-val]');
+  return [
+    { head: true, label: colName + ' = ' + val },
+    { label: 'Set color…', action: function() { showCatColorPicker(colName, val, swatch || tr); } }
+  ];
+});
+
+// Tables that already have a copy affordance
+CTX_PROVIDERS.push(function copyTableProvider(e) {
+  var scope = e.target.closest && e.target.closest('.section, .stats-table-area, .cat-main');
+  if (!scope) return null;
+  var btn = scope.querySelector('.copy-table-btn, .stats-copy-btn');
+  if (!btn || btn.offsetParent === null) return null;
+  return [{ label: 'Copy table', action: function() { btn.click(); } }];
+});
+
+// CDF/Prob/Q-Q chart exports (buttons already exist on the panel)
+CTX_PROVIDERS.push(function cdfExportProvider(e) {
+  if (!e.target.closest || !e.target.closest('#statsCdfPanel')) return null;
+  var svgBtn = document.getElementById('statsDownloadSvg');
+  var pngBtn = document.getElementById('statsDownloadPng');
+  if (!svgBtn) return null;
+  return [
+    { label: 'Download chart SVG', action: function() { svgBtn.click(); } },
+    { label: 'Download chart PNG', action: function() { if (pngBtn) pngBtn.click(); } }
+  ];
+});
+
+// ── Wiring ──
+(function() {
+  document.addEventListener('contextmenu', function(e) {
+    if (e.ctrlKey) return; // escape hatch: native menu
+    hideCtxMenu();
+    var items = [];
+    for (var i = 0; i < CTX_PROVIDERS.length; i++) {
+      var got;
+      try { got = CTX_PROVIDERS[i](e); } catch (err) { got = null; }
+      if (got && got.length) {
+        if (items.length > 0) items.push({ sep: true });
+        items = items.concat(got);
+      }
+    }
+    if (items.length === 0) return;
+    e.preventDefault();
+    showCtxMenu(items, e.clientX, e.clientY);
+  });
+
+  document.addEventListener('pointerdown', function(e) {
+    var el = document.getElementById('bmaCtxMenu');
+    if (el && el.classList.contains('open') && !el.contains(e.target)) hideCtxMenu();
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') hideCtxMenu();
+  });
+  document.addEventListener('click', function(e) {
+    var item = e.target.closest && e.target.closest('#bmaCtxMenu .ctx-item');
+    if (!item) return;
+    var el = document.getElementById('bmaCtxMenu');
+    var entry = el._items && el._items[parseInt(item.dataset.ctx)];
+    hideCtxMenu();
+    if (entry && entry.action) entry.action();
+  });
+  window.addEventListener('blur', hideCtxMenu);
+})();

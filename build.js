@@ -29,6 +29,7 @@ const APP_MODULES = [
   'settings.js',
   'categories.js',
   'tree.js',
+  'ctxmenu.js',
   'cdf.js',
   'example.js',
   'pwa.js',
