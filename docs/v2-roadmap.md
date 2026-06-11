@@ -68,12 +68,16 @@ A7 provides.
 
 ## Suggested order
 
-A1+A2 (one sitting) → A3 → B0 (cheap, gates platform design) → A4 → A5 →
-C1a → C1b → B1 → B2 → A6 → B3 → B4 → B5 → B6 → B7.
-Track A through A5 is shippable continuously; A6 can ride alongside early B work.
-C1a can slide earlier if the color/unit scatter starts hurting during Track A.
-A7 (drillhole ingestion) slots best around C1a — buildable before it with the
-three-slot UI, but the tree is its natural home; A6b and B0 come first regardless.
+*(A1–A5, A6a, B0 done as of 2026-06-12.)*
+
+**B1 → C1a → C1b → A7 → A6b → B2 → B3 → B4 → B5 → B6 → B7.**
+
+B1 goes first (decided 2026-06-12): it's invisible to testers, the worker
+harness suite is at peak coverage for its bit-identical discipline, and A7's
+new readers should be born on row sources rather than migrated to them.
+Then the workspace generation (C1a property catalog → C1b rails), with A7
+and A6b landing in the new home; the platform phases follow, with B5/B7
+arriving as dockable panels because C1b came first.
 
 ## Housekeeping (standing)
 
