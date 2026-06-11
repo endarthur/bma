@@ -195,7 +195,7 @@ function renderCatBarChart() {
   var maxShare = total > 0 ? maxCount / total : 0;
   var auxLegendH = auxCat ? 16 : 0;
   var chartH = showEntries.length * (barH + gap) + 30 + auxLegendH; // +30 for Pareto line clearance
-  var chartW = 600;
+  var chartW = chartHostWidth(document.getElementById('catChart'), 600);
   var barAreaW = chartW - labelW - rightPad;
 
   var svg = '<svg viewBox="0 0 ' + chartW + ' ' + chartH + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)">';

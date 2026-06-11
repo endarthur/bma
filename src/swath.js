@@ -958,7 +958,7 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
 
   // Dimensions — extra right axes for 3+ scale groups
   var extraAxes = Math.max(0, numGroups - 2);
-  var W = 720 + extraAxes * 55;
+  var W = chartHostWidth(document.getElementById('swathContent'), 720 + extraAxes * 55, 560 + extraAxes * 55, 34);
   var padRight = 55 + extraAxes * 55;
   var pad = { top: 30, right: padRight, bottom: 70, left: 65 };
   var plotW = W - pad.left - pad.right;
@@ -1231,7 +1231,7 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
   var refBins = refEntry.bins;
 
   // Dimensions
-  var W = 720;
+  var W = chartHostWidth(document.getElementById('swathContent'), 720, 560, 34);
   var pad = { top: 20, right: 20, bottom: 40, left: 65 };
   var plotW = W - pad.left - pad.right;
   var subH = 150; // height per sub-chart

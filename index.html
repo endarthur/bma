@@ -1082,7 +1082,9 @@ header .logo-mark {
   z-index: 10;
   white-space: nowrap;
 }
-.stats-cdf-chart svg { width: 100%; height: auto; max-height: 340px; }
+/* no max-height: charts draw at container width (1 unit = 1px) and their
+   logical height (~430-490) must display unscaled or text shrinks */
+.stats-cdf-chart svg { width: 100%; height: auto; }
 .stats-cdf-hint {
   color: var(--fg-dim);
   font-size: 0.72rem;
@@ -2668,7 +2670,7 @@ table.cat-values td.cat-pct-cell {
 .statscat-cdf-plot svg {
   width: 100%;
   height: auto;
-  max-height: 450px;
+  max-height: 520px;
 }
 .statscat-var-item .var-type-tag {
   font-size: 0.55rem;
@@ -4688,7 +4690,7 @@ table.stats tr.stats-delta-row td:first-child {
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 9fd19a2 — click to check for updates">9fd19a2</div>
+<div class="build-badge" id="buildBadge" title="build a25cd7a — click to check for updates">a25cd7a</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -7483,6 +7485,58 @@ const GRADE_UNITS = [
   { label: 'oz/t',   symbol: 'oz/t', factor: 3.11035e-5 }
 ];
 // (per-variable units live in the catalog — catUnit/catSetUnit)
+
+// ─── Container-width charts (C1b-0) ────────────────────────────────────
+// Chart renderers draw their SVG at a logical width equal to the host's
+// pixel width (1 viewBox unit = 1px → crisp text, no letterboxing); the
+// viewBox keeps them scalable as a fallback. chartHostWidth reads the
+// host at render time; observeChartWidth triggers the cheap cached-data
+// re-render when the settled width changes (tree toggle, window resize,
+// and the C1b rails panels later).
+function chartHostWidth(el, fallback, min, pad) {
+  var w = el ? el.clientWidth : 0;
+  if (!w || w < 60) return fallback;   // hidden/unmounted → legacy constant
+  return Math.max(min || 560, Math.floor(w - (pad || 0)));
+}
+
+function observeChartWidth(el, render) {
+  if (!el || typeof ResizeObserver === 'undefined') return function() {};
+  var lastW = el.clientWidth, timer = null;
+  var ro = new ResizeObserver(function() {
+    var w = el.clientWidth;
+    if (Math.abs(w - lastW) < 8) return;          // jitter
+    clearTimeout(timer);
+    timer = setTimeout(function() {
+      var w2 = el.clientWidth;
+      if (Math.abs(w2 - lastW) < 8) return;
+      lastW = w2;
+      if (w2 < 60) return;                        // hidden — re-render on re-show
+      requestAnimationFrame(render);
+    }, 150);
+  });
+  ro.observe(el);
+  return function() { ro.disconnect(); clearTimeout(timer); };
+}
+
+// Static chart hosts — one observer each, re-rendering from cached data
+// (guards keep them no-ops before any analysis)
+(function() {
+  observeChartWidth(document.getElementById('statsCdfChart'), function() {
+    if (lastCompleteData) renderStatsCdfPanel();
+  });
+  observeChartWidth(document.getElementById('statsCatContent'), function() {
+    if (lastCompleteData && currentGroupBy !== null) renderStatsCatContent();
+  });
+  observeChartWidth(document.getElementById('gtContent'), function() {
+    if (lastGtData) renderGtOutput();
+  });
+  observeChartWidth(document.getElementById('swathContent'), function() {
+    if (lastSwathData) renderSwathOutput();
+  });
+  observeChartWidth(document.getElementById('catChart'), function() {
+    if (_catData && catFocusedCol !== null) renderCatBarChart();
+  });
+})();
 
 // Calcol editor DOM refs
 const $calcolBadge = document.getElementById('calcolBadge');
@@ -12561,7 +12615,7 @@ function renderOverlaidCDF(entries, varName) {
   if (plotEntries.length === 0) return '';
 
   const isLog = statsCatCdfScale === 'log';
-  const W = 700, plotBaseH = 380;
+  const W = chartHostWidth(document.getElementById('statsCatContent'), 700, 560, 40), plotBaseH = 380;
   const pad = { top: 20, right: 30, bottom: 50, left: 60 };
   const plotW = W - pad.left - pad.right;
   const plotH = plotBaseH - pad.top - pad.bottom;
@@ -13286,7 +13340,7 @@ function renderStatsCdfPanel() {
 // the CDF overlay.
 function renderStatsQqSvg(entries) {
   var isLog = statsCdfScale === 'log';
-  var W = 700, plotBaseH = 420;
+  var W = chartHostWidth(document.getElementById('statsCdfChart'), 700), plotBaseH = 420;
   var pad = { top: 20, right: 30, bottom: 64, left: 70 };
   var plotW = W - pad.left - pad.right;
   var plotH = plotBaseH - pad.top - pad.bottom;
@@ -13417,7 +13471,7 @@ var STATS_LOGPROB_TICKS = [0.002, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0
 function renderStatsCdfSvg(entries) {
   var isLog = statsCdfScale === 'log';
   var probScale = statsCdfMode === 'logprob';
-  var W = 700, plotBaseH = 380;
+  var W = chartHostWidth(document.getElementById('statsCdfChart'), 700), plotBaseH = 380;
   var pad = { top: 20, right: 30, bottom: 50, left: 60 };
   var plotW = W - pad.left - pad.right;
   var plotH = plotBaseH - pad.top - pad.bottom;
@@ -15619,7 +15673,7 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
 
   // Dimensions — extra right axes for 3+ scale groups
   var extraAxes = Math.max(0, numGroups - 2);
-  var W = 720 + extraAxes * 55;
+  var W = chartHostWidth(document.getElementById('swathContent'), 720 + extraAxes * 55, 560 + extraAxes * 55, 34);
   var padRight = 55 + extraAxes * 55;
   var pad = { top: 30, right: padRight, bottom: 70, left: 65 };
   var plotW = W - pad.left - pad.right;
@@ -15892,7 +15946,7 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
   var refBins = refEntry.bins;
 
   // Dimensions
-  var W = 720;
+  var W = chartHostWidth(document.getElementById('swathContent'), 720, 560, 34);
   var pad = { top: 20, right: 20, bottom: 40, left: 65 };
   var plotW = W - pad.left - pad.right;
   var subH = 150; // height per sub-chart
@@ -17323,7 +17377,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
     return { cutoff: c, tonnage: p.tonnage / td, grade: p.grade, metal: p.metal * gf / md };
   });
 
-  var W = 720, H = 380;
+  var W = chartHostWidth(document.getElementById('gtContent'), 720, 560, 34), H = 380;
   var pad = { top: 30, right: 75, bottom: 50, left: 75 };
   var plotW = W - pad.left - pad.right;
   var plotH = H - pad.top - pad.bottom;
@@ -20441,7 +20495,7 @@ function renderCatBarChart() {
   var maxShare = total > 0 ? maxCount / total : 0;
   var auxLegendH = auxCat ? 16 : 0;
   var chartH = showEntries.length * (barH + gap) + 30 + auxLegendH; // +30 for Pareto line clearance
-  var chartW = 600;
+  var chartW = chartHostWidth(document.getElementById('catChart'), 600);
   var barAreaW = chartW - labelW - rightPad;
 
   var svg = '<svg viewBox="0 0 ' + chartW + ' ' + chartH + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)">';

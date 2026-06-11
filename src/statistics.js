@@ -430,7 +430,7 @@ function renderStatsCdfPanel() {
 // the CDF overlay.
 function renderStatsQqSvg(entries) {
   var isLog = statsCdfScale === 'log';
-  var W = 700, plotBaseH = 420;
+  var W = chartHostWidth(document.getElementById('statsCdfChart'), 700), plotBaseH = 420;
   var pad = { top: 20, right: 30, bottom: 64, left: 70 };
   var plotW = W - pad.left - pad.right;
   var plotH = plotBaseH - pad.top - pad.bottom;
@@ -561,7 +561,7 @@ var STATS_LOGPROB_TICKS = [0.002, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0
 function renderStatsCdfSvg(entries) {
   var isLog = statsCdfScale === 'log';
   var probScale = statsCdfMode === 'logprob';
-  var W = 700, plotBaseH = 380;
+  var W = chartHostWidth(document.getElementById('statsCdfChart'), 700), plotBaseH = 380;
   var pad = { top: 20, right: 30, bottom: 50, left: 60 };
   var plotW = W - pad.left - pad.right;
   var plotH = plotBaseH - pad.top - pad.bottom;

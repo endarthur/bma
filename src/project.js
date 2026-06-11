@@ -2341,7 +2341,7 @@ function renderOverlaidCDF(entries, varName) {
   if (plotEntries.length === 0) return '';
 
   const isLog = statsCatCdfScale === 'log';
-  const W = 700, plotBaseH = 380;
+  const W = chartHostWidth(document.getElementById('statsCatContent'), 700, 560, 40), plotBaseH = 380;
   const pad = { top: 20, right: 30, bottom: 50, left: 60 };
   const plotW = W - pad.left - pad.right;
   const plotH = plotBaseH - pad.top - pad.bottom;

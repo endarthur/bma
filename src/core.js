@@ -407,6 +407,58 @@ const GRADE_UNITS = [
 ];
 // (per-variable units live in the catalog — catUnit/catSetUnit)
 
+// ─── Container-width charts (C1b-0) ────────────────────────────────────
+// Chart renderers draw their SVG at a logical width equal to the host's
+// pixel width (1 viewBox unit = 1px → crisp text, no letterboxing); the
+// viewBox keeps them scalable as a fallback. chartHostWidth reads the
+// host at render time; observeChartWidth triggers the cheap cached-data
+// re-render when the settled width changes (tree toggle, window resize,
+// and the C1b rails panels later).
+function chartHostWidth(el, fallback, min, pad) {
+  var w = el ? el.clientWidth : 0;
+  if (!w || w < 60) return fallback;   // hidden/unmounted → legacy constant
+  return Math.max(min || 560, Math.floor(w - (pad || 0)));
+}
+
+function observeChartWidth(el, render) {
+  if (!el || typeof ResizeObserver === 'undefined') return function() {};
+  var lastW = el.clientWidth, timer = null;
+  var ro = new ResizeObserver(function() {
+    var w = el.clientWidth;
+    if (Math.abs(w - lastW) < 8) return;          // jitter
+    clearTimeout(timer);
+    timer = setTimeout(function() {
+      var w2 = el.clientWidth;
+      if (Math.abs(w2 - lastW) < 8) return;
+      lastW = w2;
+      if (w2 < 60) return;                        // hidden — re-render on re-show
+      requestAnimationFrame(render);
+    }, 150);
+  });
+  ro.observe(el);
+  return function() { ro.disconnect(); clearTimeout(timer); };
+}
+
+// Static chart hosts — one observer each, re-rendering from cached data
+// (guards keep them no-ops before any analysis)
+(function() {
+  observeChartWidth(document.getElementById('statsCdfChart'), function() {
+    if (lastCompleteData) renderStatsCdfPanel();
+  });
+  observeChartWidth(document.getElementById('statsCatContent'), function() {
+    if (lastCompleteData && currentGroupBy !== null) renderStatsCatContent();
+  });
+  observeChartWidth(document.getElementById('gtContent'), function() {
+    if (lastGtData) renderGtOutput();
+  });
+  observeChartWidth(document.getElementById('swathContent'), function() {
+    if (lastSwathData) renderSwathOutput();
+  });
+  observeChartWidth(document.getElementById('catChart'), function() {
+    if (_catData && catFocusedCol !== null) renderCatBarChart();
+  });
+})();
+
 // Calcol editor DOM refs
 const $calcolBadge = document.getElementById('calcolBadge');
 const $calcolCodeArea = document.getElementById('calcolCodeArea');

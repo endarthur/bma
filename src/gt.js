@@ -937,7 +937,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
     return { cutoff: c, tonnage: p.tonnage / td, grade: p.grade, metal: p.metal * gf / md };
   });
 
-  var W = 720, H = 380;
+  var W = chartHostWidth(document.getElementById('gtContent'), 720, 560, 34), H = 380;
   var pad = { top: 30, right: 75, bottom: 50, left: 75 };
   var plotW = W - pad.left - pad.right;
   var plotH = H - pad.top - pad.bottom;

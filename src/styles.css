@@ -1069,7 +1069,9 @@ header .logo-mark {
   z-index: 10;
   white-space: nowrap;
 }
-.stats-cdf-chart svg { width: 100%; height: auto; max-height: 340px; }
+/* no max-height: charts draw at container width (1 unit = 1px) and their
+   logical height (~430-490) must display unscaled or text shrinks */
+.stats-cdf-chart svg { width: 100%; height: auto; }
 .stats-cdf-hint {
   color: var(--fg-dim);
   font-size: 0.72rem;
@@ -2655,7 +2657,7 @@ table.cat-values td.cat-pct-cell {
 .statscat-cdf-plot svg {
   width: 100%;
   height: auto;
-  max-height: 450px;
+  max-height: 520px;
 }
 .statscat-var-item .var-type-tag {
   font-size: 0.55rem;
