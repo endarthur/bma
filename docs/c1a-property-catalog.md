@@ -203,6 +203,10 @@ Categories tab affordances or just deep-linking to that tab — see D5).
    The redundant "Sync units" buttons (swath, GT) were removed with D2.
 2. **Tree panel, read-only** — datasets, groups, chips, badges, pairing
    indicators, orphans, stale entries.
+   ✅ **DONE 2026-06-11 (00b8e5d)** — `src/tree.js`, toggle in the tab bar,
+   `tree.open` project key, proto-sheet overlay <700px, smoke
+   `experiments/tree-smoke.js`. Paired aux chips inherit the primary's
+   *effective* color (palette included), matching the swath rule.
 3. **Editing affordances** (color/unit/role/pairing) + stale-mark
    integration + `autoSaveProject()` wiring (new-tab checklist applies).
 4. **New smoke**: `experiments/tree-smoke.js` — load example pack, assert
