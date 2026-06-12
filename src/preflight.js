@@ -696,6 +696,14 @@ function renderPreflightSidebar(data) {
     }
     return bad;
   });
+  // A9 F8: ragged sample rows — the field-count mismatch that quoted
+  // delimiters or a wrong delimiter produce; misaligned values analyze
+  // into the wrong columns
+  const raggedSample = (!data.isDm && data.sampleRows)
+    ? data.sampleRows.filter(r => r.length !== header.length).length : 0;
+  if (raggedSample > 0) {
+    html += `<div class="swath-aux-warn" style="margin:0 0 0.4rem;">${raggedSample} of ${data.sampleRows.length} sampled rows have a different field count than the header — check delimiter and quoting.</div>`;
+  }
   html += '<div class="pf-col-list" id="pfColList">';
   for (let i = 0; i < header.length; i++) {
     const currentType = typeOverrides[i] || autoTypes[i];

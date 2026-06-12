@@ -2241,6 +2241,14 @@ function renderStatsCatContent() {
   }
 }
 
+// A9 F7: the analyze pass caps grouped accumulators at 500 distinct group
+// values — say so instead of quietly truncating the breakdown
+function statsCatOverflowNote(data) {
+  return data && data.groupStatsOverflow
+    ? '<div class="swath-aux-warn">Group cap reached (500) — rows beyond the first 500 group values are not in this breakdown. Filter the data or group by a lower-cardinality column.</div>'
+    : '';
+}
+
 function renderStatsCatNumeric(data, varName, isCalcol) {
   const gs = data.groupStats[currentStatsCatVar];
   if (!gs) {
@@ -2254,7 +2262,8 @@ function renderStatsCatNumeric(data, varName, isCalcol) {
   );
 
   // Header with copy button
-  let html = '<div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.5rem;">';
+  let html = statsCatOverflowNote(data);
+  html += '<div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.5rem;">';
   html += '<span style="font-size:0.82rem;font-weight:600;color:var(--fg-bright);">' + esc(varName) + (isCalcol ? ' <span class="calcol-tag">CALC</span>' : '') + '</span>';
   html += '<button class="statscat-copy-btn" id="statsCatCopyBtn">Copy table</button>';
   html += '</div>';
@@ -2325,7 +2334,8 @@ function renderStatsCatCrossTab(data, varName, isCalcol) {
   const valList = Array.from(allVals).sort();
 
   // Header
-  let html = '<div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.5rem;">';
+  let html = statsCatOverflowNote(data);
+  html += '<div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.5rem;">';
   html += '<span style="font-size:0.82rem;font-weight:600;color:var(--fg-bright);">' + esc(varName) + (isCalcol ? ' <span class="calcol-tag">CALC</span>' : '') + '</span>';
   html += '<button class="statscat-copy-btn" id="statsCatCopyBtn">Copy table</button>';
   html += '</div>';

@@ -442,6 +442,9 @@ function workerErrNote(msg, label) {
   if (msg.calcolErrors) {
     parts.push('calc errors on ' + msg.calcolErrors.count.toLocaleString() + ' row' + (msg.calcolErrors.count === 1 ? '' : 's') + ' — first: ' + msg.calcolErrors.message);
   }
+  if (msg.raggedRows > 0) {
+    parts.push(msg.raggedRows.toLocaleString() + ' row' + (msg.raggedRows === 1 ? '' : 's') + ' with unexpected field count (check delimiter/quoting — misaligned values land in the wrong columns)');
+  }
   if (parts.length === 0) return '';
   return '<div class="swath-aux-warn">' + (label ? esc(label) + ': ' : '') + esc(parts.join(' · ')) + '</div>';
 }

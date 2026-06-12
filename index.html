@@ -5502,7 +5502,7 @@ table.stats tr.stats-delta-row td:first-child {
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build da22d95 — click to check for updates">da22d95</div>
+<div class="build-badge" id="buildBadge" title="build 590d68e — click to check for updates">590d68e</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -6419,10 +6419,11 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     return { count: 0, sumW: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, parseFails: 0, td: newTDigest() };
   }
 
+  let groupStatsOverflow = false; // A9 F7: cap reached — surfaced, not silent
   function getGroupAcc(map, gv) {
     let acc = map.get(gv);
     if (acc) return acc;
-    if (map.size >= MAX_GROUPS) return null;
+    if (map.size >= MAX_GROUPS) { groupStatsOverflow = true; return null; }
     acc = newAcc();
     map.set(gv, acc);
     return acc;
@@ -6595,7 +6596,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   }
 
   // ── Single-pass stream ──
-  let rowCount = 0, totalRowCount = 0, commentCount = 0;
+  let rowCount = 0, totalRowCount = 0, commentCount = 0, raggedRows = 0;
   let lastProgress = 0;
 
   // ── Stats phase (filter + accumulate) — one data line ──
@@ -6626,6 +6627,11 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     comment() { commentCount++; },
     line(line, totalChars) {
       const fields = line.split(delimiter);
+
+      // A9 F8: lines whose field count differs from the header misparse
+      // silently (quoted delimiters shift fields; short rows null-pad) —
+      // counted so the UI can warn instead
+      if (fields.length !== nCols) raggedRows++;
 
       // Geometry — always, unfiltered
       processRowGeometry(fields);
@@ -6768,6 +6774,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     filterErrors: filterErrPayload(filterFn, null),
     calcolErrors: calcolErrPayload(src),
     coordInvalidCells,
+    raggedRows,
     header: src.extHeader,
     colTypes: extTypesFinal,
     xyzGuess,
@@ -6775,6 +6782,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     calcolCount: calcolMeta ? calcolMeta.length : 0,
     origColCount: nCols,
     groupStats: groupByCol !== null ? finalGroupStats : null,
+    groupStatsOverflow: groupStatsOverflow || null,
     groupCategories: groupByCol !== null ? finalGroupCategories : null,
     groupBy: groupByCol,
     dxyzGuess
@@ -7522,10 +7530,11 @@ async function gtAnalysis(data) {
     };
   }
 
+  var gtGroupOverflow = false; // A9 F7: cap reached — surfaced, not silent
   function getGroupBins(gInfo, gv) {
     var bins = gInfo.groups[gv];
     if (bins) return bins;
-    if (Object.keys(gInfo.groups).length >= GT_MAX_GROUPS + 1) return null; // +1 for __all__
+    if (Object.keys(gInfo.groups).length >= GT_MAX_GROUPS + 1) { gtGroupOverflow = true; return null; } // +1 for __all__
     bins = { tonnageBins: new Float64Array(N_BINS), metalBins: new Float64Array(N_BINS) };
     gInfo.groups[gv] = bins;
     return bins;
@@ -7662,6 +7671,7 @@ async function gtAnalysis(data) {
     groupByColName: groupByColName,
     elapsed: elapsed,
     excluded: (gtExcluded.volume || gtExcluded.density || gtExcluded.weight) ? gtExcluded : null,
+    groupOverflow: gtGroupOverflow || null,
     filterErrors: filterErrPayload(globalFn, localFn),
     calcolErrors: calcolErrPayload(src)
   });
@@ -8409,6 +8419,9 @@ function workerErrNote(msg, label) {
   }
   if (msg.calcolErrors) {
     parts.push('calc errors on ' + msg.calcolErrors.count.toLocaleString() + ' row' + (msg.calcolErrors.count === 1 ? '' : 's') + ' — first: ' + msg.calcolErrors.message);
+  }
+  if (msg.raggedRows > 0) {
+    parts.push(msg.raggedRows.toLocaleString() + ' row' + (msg.raggedRows === 1 ? '' : 's') + ' with unexpected field count (check delimiter/quoting — misaligned values land in the wrong columns)');
   }
   if (parts.length === 0) return '';
   return '<div class="swath-aux-warn">' + (label ? esc(label) + ': ' : '') + esc(parts.join(' · ')) + '</div>';
@@ -13461,6 +13474,14 @@ function renderPreflightSidebar(data) {
     }
     return bad;
   });
+  // A9 F8: ragged sample rows — the field-count mismatch that quoted
+  // delimiters or a wrong delimiter produce; misaligned values analyze
+  // into the wrong columns
+  const raggedSample = (!data.isDm && data.sampleRows)
+    ? data.sampleRows.filter(r => r.length !== header.length).length : 0;
+  if (raggedSample > 0) {
+    html += `<div class="swath-aux-warn" style="margin:0 0 0.4rem;">${raggedSample} of ${data.sampleRows.length} sampled rows have a different field count than the header — check delimiter and quoting.</div>`;
+  }
   html += '<div class="pf-col-list" id="pfColList">';
   for (let i = 0; i < header.length; i++) {
     const currentType = typeOverrides[i] || autoTypes[i];
@@ -18112,6 +18133,14 @@ function renderStatsCatContent() {
   }
 }
 
+// A9 F7: the analyze pass caps grouped accumulators at 500 distinct group
+// values — say so instead of quietly truncating the breakdown
+function statsCatOverflowNote(data) {
+  return data && data.groupStatsOverflow
+    ? '<div class="swath-aux-warn">Group cap reached (500) — rows beyond the first 500 group values are not in this breakdown. Filter the data or group by a lower-cardinality column.</div>'
+    : '';
+}
+
 function renderStatsCatNumeric(data, varName, isCalcol) {
   const gs = data.groupStats[currentStatsCatVar];
   if (!gs) {
@@ -18125,7 +18154,8 @@ function renderStatsCatNumeric(data, varName, isCalcol) {
   );
 
   // Header with copy button
-  let html = '<div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.5rem;">';
+  let html = statsCatOverflowNote(data);
+  html += '<div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.5rem;">';
   html += '<span style="font-size:0.82rem;font-weight:600;color:var(--fg-bright);">' + esc(varName) + (isCalcol ? ' <span class="calcol-tag">CALC</span>' : '') + '</span>';
   html += '<button class="statscat-copy-btn" id="statsCatCopyBtn">Copy table</button>';
   html += '</div>';
@@ -18196,7 +18226,8 @@ function renderStatsCatCrossTab(data, varName, isCalcol) {
   const valList = Array.from(allVals).sort();
 
   // Header
-  let html = '<div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.5rem;">';
+  let html = statsCatOverflowNote(data);
+  html += '<div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.5rem;">';
   html += '<span style="font-size:0.82rem;font-weight:600;color:var(--fg-bright);">' + esc(varName) + (isCalcol ? ' <span class="calcol-tag">CALC</span>' : '') + '</span>';
   html += '<button class="statscat-copy-btn" id="statsCatCopyBtn">Copy table</button>';
   html += '</div>';
@@ -22799,6 +22830,10 @@ function renderGtOutput() {
     var exTotal = ex.volume + ex.density + ex.weight;
     html += '<div class="swath-aux-warn">' + exTotal.toLocaleString() + ' row' + (exTotal === 1 ? '' : 's') +
       ' excluded from GT (' + exParts.join(', ') + ').</div>';
+  }
+  // A9 F7: GT group cap
+  if (lastGtData.groupOverflow) {
+    html += '<div class="swath-aux-warn">Group cap reached (200) — groups beyond the first 200 values are missing from the group curves (totals are unaffected).</div>';
   }
   html += '<div class="gt-toolbar"><span class="gt-elapsed">' + (lastGtData.elapsed / 1000).toFixed(1) + 's</span></div>';
 

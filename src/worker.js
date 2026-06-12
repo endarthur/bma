@@ -881,10 +881,11 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     return { count: 0, sumW: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, parseFails: 0, td: newTDigest() };
   }
 
+  let groupStatsOverflow = false; // A9 F7: cap reached — surfaced, not silent
   function getGroupAcc(map, gv) {
     let acc = map.get(gv);
     if (acc) return acc;
-    if (map.size >= MAX_GROUPS) return null;
+    if (map.size >= MAX_GROUPS) { groupStatsOverflow = true; return null; }
     acc = newAcc();
     map.set(gv, acc);
     return acc;
@@ -1057,7 +1058,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   }
 
   // ── Single-pass stream ──
-  let rowCount = 0, totalRowCount = 0, commentCount = 0;
+  let rowCount = 0, totalRowCount = 0, commentCount = 0, raggedRows = 0;
   let lastProgress = 0;
 
   // ── Stats phase (filter + accumulate) — one data line ──
@@ -1088,6 +1089,11 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     comment() { commentCount++; },
     line(line, totalChars) {
       const fields = line.split(delimiter);
+
+      // A9 F8: lines whose field count differs from the header misparse
+      // silently (quoted delimiters shift fields; short rows null-pad) —
+      // counted so the UI can warn instead
+      if (fields.length !== nCols) raggedRows++;
 
       // Geometry — always, unfiltered
       processRowGeometry(fields);
@@ -1230,6 +1236,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     filterErrors: filterErrPayload(filterFn, null),
     calcolErrors: calcolErrPayload(src),
     coordInvalidCells,
+    raggedRows,
     header: src.extHeader,
     colTypes: extTypesFinal,
     xyzGuess,
@@ -1237,6 +1244,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     calcolCount: calcolMeta ? calcolMeta.length : 0,
     origColCount: nCols,
     groupStats: groupByCol !== null ? finalGroupStats : null,
+    groupStatsOverflow: groupStatsOverflow || null,
     groupCategories: groupByCol !== null ? finalGroupCategories : null,
     groupBy: groupByCol,
     dxyzGuess
@@ -1984,10 +1992,11 @@ async function gtAnalysis(data) {
     };
   }
 
+  var gtGroupOverflow = false; // A9 F7: cap reached — surfaced, not silent
   function getGroupBins(gInfo, gv) {
     var bins = gInfo.groups[gv];
     if (bins) return bins;
-    if (Object.keys(gInfo.groups).length >= GT_MAX_GROUPS + 1) return null; // +1 for __all__
+    if (Object.keys(gInfo.groups).length >= GT_MAX_GROUPS + 1) { gtGroupOverflow = true; return null; } // +1 for __all__
     bins = { tonnageBins: new Float64Array(N_BINS), metalBins: new Float64Array(N_BINS) };
     gInfo.groups[gv] = bins;
     return bins;
@@ -2124,6 +2133,7 @@ async function gtAnalysis(data) {
     groupByColName: groupByColName,
     elapsed: elapsed,
     excluded: (gtExcluded.volume || gtExcluded.density || gtExcluded.weight) ? gtExcluded : null,
+    groupOverflow: gtGroupOverflow || null,
     filterErrors: filterErrPayload(globalFn, localFn),
     calcolErrors: calcolErrPayload(src)
   });

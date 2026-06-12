@@ -632,6 +632,10 @@ function renderGtOutput() {
     html += '<div class="swath-aux-warn">' + exTotal.toLocaleString() + ' row' + (exTotal === 1 ? '' : 's') +
       ' excluded from GT (' + exParts.join(', ') + ').</div>';
   }
+  // A9 F7: GT group cap
+  if (lastGtData.groupOverflow) {
+    html += '<div class="swath-aux-warn">Group cap reached (200) — groups beyond the first 200 values are missing from the group curves (totals are unaffected).</div>';
+  }
   html += '<div class="gt-toolbar"><span class="gt-elapsed">' + (lastGtData.elapsed / 1000).toFixed(1) + 's</span></div>';
 
   // Theoretical overlay: kick a (re)load when enabled but not covered/fresh;
