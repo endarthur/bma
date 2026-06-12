@@ -101,8 +101,8 @@ function renderRecentFiles() {
     var html = '<div class="recent-files-title">Recent Files</div>';
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
-      var hasProj = false;
-      try { hasProj = localStorage.getItem(it._key) !== null; } catch(e) {}
+      var hasProj = !!it.packed;
+      try { hasProj = hasProj || localStorage.getItem(it._key) !== null; } catch(e) {}
       html += '<div class="recent-item" data-key="' + esc(it._key) + '">';
       html += '<span class="recent-item-name">' + esc(it.name) + '</span>';
       html += '<span class="recent-item-size">' + formatBytes(it.size) + '</span>';
@@ -192,12 +192,13 @@ function promptReselect(name) {
   }
 }
 
-function saveToRecents(file, handle) {
+function saveToRecents(file, handle, isPacked) {
   var key = recentKey(file);
   var entry = {
     name: file.name,
     size: file.size,
     handle: handle || null,
+    packed: !!isPacked, // packed project archive — carries its own config
     lastOpened: Date.now()
   };
   recentPut(key, entry).catch(function() { /* silent */ });
@@ -988,7 +989,7 @@ async function tryPackedProject(file) {
   return { project: project, modelFile: modelFile, auxFile: auxF, dhTrio: dhTrio };
 }
 
-async function handleFile(file, handle) {
+async function handleFile(file, handle, skipRecents) {
   if (!file) return;
 
   // Bare project file: stash it and ask for its data file
@@ -1015,13 +1016,17 @@ async function handleFile(file, handle) {
       pendingDroppedProject = packed.project;
       pendingDroppedAuxFile = packed.auxFile;
       pendingDroppedDhTrio = packed.dhTrio;
-      handleFile(packed.modelFile, null);
+      // Recents records the archive the user actually opened (re-openable
+      // via its handle) — not the extracted inner CSV, which used to land
+      // in the list under a name nobody dropped and could never re-open
+      saveToRecents(file, handle, true);
+      handleFile(packed.modelFile, null, true);
       return;
     }
   }
 
   currentFile = file;
-  saveToRecents(file, handle);
+  if (!skipRecents) saveToRecents(file, handle);
   currentFilter = null;
   currentGroupBy = null;
   currentStatsCatVar = null;
