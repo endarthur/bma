@@ -431,14 +431,14 @@ function wireSectionInteraction() {
   }, { passive: false });
 
   let dragging = false, dragStartX = 0, dragStartY = 0, dragOX = 0, dragOY = 0;
-  canvas.addEventListener('mousedown', (e) => {
+  canvas.addEventListener('pointerdown', (e) => {
     if (!sectionTransform) return;
     dragging = true;
     dragStartX = e.clientX; dragStartY = e.clientY;
     dragOX = sectionTransform.offsetX; dragOY = sectionTransform.offsetY;
     canvas.style.cursor = 'grabbing';
   });
-  window.addEventListener('mousemove', (e) => {
+  window.addEventListener('pointermove', (e) => {
     if (dragging && sectionTransform) {
       sectionTransform.offsetX = dragOX + (e.clientX - dragStartX);
       sectionTransform.offsetY = dragOY + (e.clientY - dragStartY);
@@ -480,7 +480,7 @@ function wireSectionInteraction() {
       }
     }
   });
-  window.addEventListener('mouseup', () => {
+  window.addEventListener('pointerup', () => {
     dragging = false;
     canvas.style.cursor = 'crosshair';
   });

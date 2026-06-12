@@ -1545,8 +1545,8 @@ function wireSwathCrosshair() {
     ttGroup.setAttribute('opacity', '0');
   }
 
-  area.addEventListener('mousemove', onMove);
-  area.addEventListener('mouseleave', onLeave);
+  area.addEventListener('pointermove', onMove);
+  area.addEventListener('pointerleave', onLeave);
 }
 
 function renderSwathTable(varEntries, swathData, stat) {

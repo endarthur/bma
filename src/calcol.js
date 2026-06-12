@@ -305,7 +305,7 @@ function calcolAcRender() {
       '</div>';
   }).join('');
   $calcolAc.querySelectorAll('.ac-item').forEach(function(el) {
-    el.addEventListener('mousedown', function(e) {
+    el.addEventListener('pointerdown', function(e) {
       e.preventDefault();
       calcolAcAccept(parseInt(el.dataset.idx));
     });
@@ -915,7 +915,7 @@ function createExprInput(element, options) {
         '</div>';
     }).join('');
     dropdown.querySelectorAll('.ac-item').forEach(function(el) {
-      el.addEventListener('mousedown', function(e) {
+      el.addEventListener('pointerdown', function(e) {
         e.preventDefault();
         acceptAc(parseInt(el.dataset.idx));
       });

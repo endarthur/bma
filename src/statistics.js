@@ -769,7 +769,7 @@ function wireStatsCdfTooltip() {
     return p.pad.top + (1 - cdf) * p.plotH;
   }
 
-  overlay.addEventListener('mousemove', function(e) {
+  overlay.addEventListener('pointermove', function(e) {
     var svgX = svgXFromMouse(e);
     var value = valueFromSvgX(svgX);
 
@@ -813,7 +813,7 @@ function wireStatsCdfTooltip() {
     tip.style.top = (mouseYInChart - 20) + 'px';
   });
 
-  overlay.addEventListener('mouseleave', function() {
+  overlay.addEventListener('pointerleave', function() {
     crosshair.setAttribute('visibility', 'hidden');
     for (var i = 0; i < dots.length; i++) dots[i].setAttribute('visibility', 'hidden');
     tip.style.display = 'none';

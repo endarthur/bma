@@ -400,7 +400,7 @@ function auxDeclusCurveSvg(d) {
   } else if (d.optCellSize > 0) {
     svg += '<circle cx="' + sx(d.optCellSize).toFixed(1) + '" cy="' + sy(d.declusteredMean).toFixed(1) + '" r="3.2" fill="var(--amber)"/>';
   }
-  // Hover cursor (positioned by the delegated mousemove handler)
+  // Hover cursor (positioned by the delegated pointermove handler)
   svg += '<g id="auxDeclusCursor" style="display:none">' +
     '<line y1="' + padT + '" y2="' + (H - padB) + '" stroke="var(--fg-dim)" stroke-width="0.6"/>' +
     '<circle r="2.6" fill="none" stroke="var(--fg-bright)" stroke-width="1"/>' +
@@ -701,13 +701,13 @@ if ($auxDropzone) {
       }
     });
     // Curve scrubbing: crosshair with cell size, declustered mean and Δ%
-    $auxSidebar.addEventListener('mousemove', function(e) {
+    $auxSidebar.addEventListener('pointermove', function(e) {
       var svg = e.target && e.target.closest ? e.target.closest('#auxDeclusCurveSvg') : null;
       var anySvg = document.getElementById('auxDeclusCurveSvg');
       if (!svg) { if (anySvg) auxDeclusUpdateCursor(anySvg, null); return; }
       auxDeclusUpdateCursor(svg, auxDeclusNearestPt(svg, e));
     });
-    $auxSidebar.addEventListener('mouseleave', function() {
+    $auxSidebar.addEventListener('pointerleave', function() {
       var svg = document.getElementById('auxDeclusCurveSvg');
       if (svg) auxDeclusUpdateCursor(svg, null);
     });

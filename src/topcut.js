@@ -507,9 +507,9 @@ if ($auxTopcut) {
       if (isFinite(c)) auxTopcutSetCap(c, true);
     }
   });
-  // Cap drag across any plot — the svg is captured at mousedown so the drag
+  // Cap drag across any plot — the svg is captured at pointerdown so the drag
   // keeps tracking even when the pointer leaves it
-  $auxTopcut.addEventListener('mousedown', function(e) {
+  $auxTopcut.addEventListener('pointerdown', function(e) {
     var svg = e.target.closest ? e.target.closest('.tc-svg') : null;
     if (!svg || !auxTopcut || !auxTopcut.values) return;
     var P = TC_PLOT;
@@ -525,11 +525,11 @@ if ($auxTopcut) {
     e.preventDefault();
     function onMove(ev) { auxTopcutSetCap(capFrom(ev), false); }
     function onUp() {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
       auxTopcutSetCap(auxTopcut.cap, true); // settle + autosave
     }
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
   });
 }

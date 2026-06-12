@@ -1248,8 +1248,8 @@ function wireGtCrosshair(grData, cutoffs, units, chartIdx) {
     ttGroup.setAttribute('opacity', '0');
   }
 
-  area.addEventListener('mousemove', onMove);
-  area.addEventListener('mouseleave', onLeave);
+  area.addEventListener('pointermove', onMove);
+  area.addEventListener('pointerleave', onLeave);
 }
 
 function renderGtTable(grData, cutoffs, units, isGrouped, tableIdx, selectedGroups, showTotal) {

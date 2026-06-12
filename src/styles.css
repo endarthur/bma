@@ -3425,7 +3425,7 @@ table.cat-values td.cat-pct-cell {
   position: relative; flex: 1; min-height: 300px; background: var(--bg);
   overflow: hidden;
 }
-.section-canvas-wrap canvas { display: block; width: 100%; height: 100%; }
+.section-canvas-wrap canvas { display: block; width: 100%; height: 100%; touch-action: none; /* pan drag (C1c pre-work) */ }
 .section-colorbar {
   position: absolute; right: 12px; top: 12px; width: 20px; height: 180px;
   border: 1px solid var(--border); border-radius: 2px; pointer-events: none;
@@ -3885,6 +3885,7 @@ table.cat-values tr.cat-aux-only td { background: rgba(184,115,51,0.05); }
   display: block; width: 100%; height: auto;
   border: 1px solid var(--bg2); border-radius: 3px;
   cursor: col-resize;
+  touch-action: none; /* cap drag is a pointer drag — don't scroll (C1c pre-work) */
 }
 .gt-theo-status {
   font: 0.6rem var(--mono); color: var(--fg-dim);

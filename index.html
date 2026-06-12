@@ -3438,7 +3438,7 @@ table.cat-values td.cat-pct-cell {
   position: relative; flex: 1; min-height: 300px; background: var(--bg);
   overflow: hidden;
 }
-.section-canvas-wrap canvas { display: block; width: 100%; height: 100%; }
+.section-canvas-wrap canvas { display: block; width: 100%; height: 100%; touch-action: none; /* pan drag (C1c pre-work) */ }
 .section-colorbar {
   position: absolute; right: 12px; top: 12px; width: 20px; height: 180px;
   border: 1px solid var(--border); border-radius: 2px; pointer-events: none;
@@ -3898,6 +3898,7 @@ table.cat-values tr.cat-aux-only td { background: rgba(184,115,51,0.05); }
   display: block; width: 100%; height: auto;
   border: 1px solid var(--bg2); border-radius: 3px;
   cursor: col-resize;
+  touch-action: none; /* cap drag is a pointer drag — don't scroll (C1c pre-work) */
 }
 .gt-theo-status {
   font: 0.6rem var(--mono); color: var(--fg-dim);
@@ -5479,7 +5480,7 @@ table.stats tr.stats-delta-row td:first-child {
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 8f3a6a4 — click to check for updates">8f3a6a4</div>
+<div class="build-badge" id="buildBadge" title="build 47aca17 — click to check for updates">47aca17</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -14155,7 +14156,7 @@ function auxDeclusCurveSvg(d) {
   } else if (d.optCellSize > 0) {
     svg += '<circle cx="' + sx(d.optCellSize).toFixed(1) + '" cy="' + sy(d.declusteredMean).toFixed(1) + '" r="3.2" fill="var(--amber)"/>';
   }
-  // Hover cursor (positioned by the delegated mousemove handler)
+  // Hover cursor (positioned by the delegated pointermove handler)
   svg += '<g id="auxDeclusCursor" style="display:none">' +
     '<line y1="' + padT + '" y2="' + (H - padB) + '" stroke="var(--fg-dim)" stroke-width="0.6"/>' +
     '<circle r="2.6" fill="none" stroke="var(--fg-bright)" stroke-width="1"/>' +
@@ -14456,13 +14457,13 @@ if ($auxDropzone) {
       }
     });
     // Curve scrubbing: crosshair with cell size, declustered mean and Δ%
-    $auxSidebar.addEventListener('mousemove', function(e) {
+    $auxSidebar.addEventListener('pointermove', function(e) {
       var svg = e.target && e.target.closest ? e.target.closest('#auxDeclusCurveSvg') : null;
       var anySvg = document.getElementById('auxDeclusCurveSvg');
       if (!svg) { if (anySvg) auxDeclusUpdateCursor(anySvg, null); return; }
       auxDeclusUpdateCursor(svg, auxDeclusNearestPt(svg, e));
     });
-    $auxSidebar.addEventListener('mouseleave', function() {
+    $auxSidebar.addEventListener('pointerleave', function() {
       var svg = document.getElementById('auxDeclusCurveSvg');
       if (svg) auxDeclusUpdateCursor(svg, null);
     });
@@ -15677,9 +15678,9 @@ if ($auxTopcut) {
       if (isFinite(c)) auxTopcutSetCap(c, true);
     }
   });
-  // Cap drag across any plot — the svg is captured at mousedown so the drag
+  // Cap drag across any plot — the svg is captured at pointerdown so the drag
   // keeps tracking even when the pointer leaves it
-  $auxTopcut.addEventListener('mousedown', function(e) {
+  $auxTopcut.addEventListener('pointerdown', function(e) {
     var svg = e.target.closest ? e.target.closest('.tc-svg') : null;
     if (!svg || !auxTopcut || !auxTopcut.values) return;
     var P = TC_PLOT;
@@ -15695,12 +15696,12 @@ if ($auxTopcut) {
     e.preventDefault();
     function onMove(ev) { auxTopcutSetCap(capFrom(ev), false); }
     function onUp() {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
       auxTopcutSetCap(auxTopcut.cap, true); // settle + autosave
     }
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
   });
 }
 
@@ -19169,7 +19170,7 @@ function wireStatsCdfTooltip() {
     return p.pad.top + (1 - cdf) * p.plotH;
   }
 
-  overlay.addEventListener('mousemove', function(e) {
+  overlay.addEventListener('pointermove', function(e) {
     var svgX = svgXFromMouse(e);
     var value = valueFromSvgX(svgX);
 
@@ -19213,7 +19214,7 @@ function wireStatsCdfTooltip() {
     tip.style.top = (mouseYInChart - 20) + 'px';
   });
 
-  overlay.addEventListener('mouseleave', function() {
+  overlay.addEventListener('pointerleave', function() {
     crosshair.setAttribute('visibility', 'hidden');
     for (var i = 0; i < dots.length; i++) dots[i].setAttribute('visibility', 'hidden');
     tip.style.display = 'none';
@@ -21750,8 +21751,8 @@ function wireSwathCrosshair() {
     ttGroup.setAttribute('opacity', '0');
   }
 
-  area.addEventListener('mousemove', onMove);
-  area.addEventListener('mouseleave', onLeave);
+  area.addEventListener('pointermove', onMove);
+  area.addEventListener('pointerleave', onLeave);
 }
 
 function renderSwathTable(varEntries, swathData, stat) {
@@ -23177,8 +23178,8 @@ function wireGtCrosshair(grData, cutoffs, units, chartIdx) {
     ttGroup.setAttribute('opacity', '0');
   }
 
-  area.addEventListener('mousemove', onMove);
-  area.addEventListener('mouseleave', onLeave);
+  area.addEventListener('pointermove', onMove);
+  area.addEventListener('pointerleave', onLeave);
 }
 
 function renderGtTable(grData, cutoffs, units, isGrouped, tableIdx, selectedGroups, showTotal) {
@@ -23712,14 +23713,14 @@ function wireSectionInteraction() {
   }, { passive: false });
 
   let dragging = false, dragStartX = 0, dragStartY = 0, dragOX = 0, dragOY = 0;
-  canvas.addEventListener('mousedown', (e) => {
+  canvas.addEventListener('pointerdown', (e) => {
     if (!sectionTransform) return;
     dragging = true;
     dragStartX = e.clientX; dragStartY = e.clientY;
     dragOX = sectionTransform.offsetX; dragOY = sectionTransform.offsetY;
     canvas.style.cursor = 'grabbing';
   });
-  window.addEventListener('mousemove', (e) => {
+  window.addEventListener('pointermove', (e) => {
     if (dragging && sectionTransform) {
       sectionTransform.offsetX = dragOX + (e.clientX - dragStartX);
       sectionTransform.offsetY = dragOY + (e.clientY - dragStartY);
@@ -23761,7 +23762,7 @@ function wireSectionInteraction() {
       }
     }
   });
-  window.addEventListener('mouseup', () => {
+  window.addEventListener('pointerup', () => {
     dragging = false;
     canvas.style.cursor = 'crosshair';
   });
@@ -24184,7 +24185,7 @@ function calcolAcRender() {
       '</div>';
   }).join('');
   $calcolAc.querySelectorAll('.ac-item').forEach(function(el) {
-    el.addEventListener('mousedown', function(e) {
+    el.addEventListener('pointerdown', function(e) {
       e.preventDefault();
       calcolAcAccept(parseInt(el.dataset.idx));
     });
@@ -24794,7 +24795,7 @@ function createExprInput(element, options) {
         '</div>';
     }).join('');
     dropdown.querySelectorAll('.ac-item').forEach(function(el) {
-      el.addEventListener('mousedown', function(e) {
+      el.addEventListener('pointerdown', function(e) {
         e.preventDefault();
         acceptAc(parseInt(el.dataset.idx));
       });
