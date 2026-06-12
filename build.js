@@ -8,8 +8,23 @@ const read = (f) => fs.readFileSync(f, 'utf-8');
 
 // Read source files (trimEnd to avoid extra blank lines at injection boundaries)
 const template = read(src('template.html'));
-const css = read(src('styles.css')).trimEnd();
+let css = read(src('styles.css')).trimEnd();
 const workerRaw = read(src('worker.js')).trimEnd();
+
+// C6-1b (D2): embed the Switchboard font subsets as base64 @font-face.
+// Files are COPIES from auditable/ext/switchboard/fonts/ (OFL.txt alongside) —
+// re-copy from upstream to update, don't edit. ~78KB raw → ~105KB base64.
+const FONTS = [
+  ['Barlow', 400, 'barlow-400.woff2'],
+  ['Barlow', 600, 'barlow-600.woff2'],
+  ['Space Mono', 400, 'space-mono-400.woff2'],
+  ['Space Mono', 700, 'space-mono-700.woff2'],
+];
+const fontCss = FONTS.map(([family, weight, file]) => {
+  const b64 = fs.readFileSync(src('fonts', file)).toString('base64');
+  return `@font-face { font-family: '${family}'; font-style: normal; font-weight: ${weight}; font-display: swap; src: url(data:font/woff2;base64,${b64}) format('woff2'); }`;
+}).join('\n');
+css = css.replace('/* __INJECT_FONTS__ */', () => fontCss);
 
 // App modules — concatenated in order (core must be first, cdf/events last)
 const APP_MODULES = [

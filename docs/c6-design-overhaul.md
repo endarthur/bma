@@ -91,24 +91,57 @@ serializes/applies layouts, a preset is canned JSON.
 
 ## Phase log
 
+- **C6-1b ✅ (2026-06-12)** — the three C6-1a leftovers landed:
+  - **Accent triage (D1)**: ~160 styles.css sites + 10 non-chart JS inline
+    sites split off the interim all-amber binding. The mapping: primary
+    buttons / input `:focus` borders / progress fills / hover affordances /
+    grab handles / caret → **action**; active tabs (legacy + rails accent) /
+    selected toggles+presets / sidebar selections / checkbox+radio
+    `accent-color` / drop-target indicators / menu checkmarks →
+    **selected**; ✱ mixed tags, CONST badges, tree concern badges, weight
+    notes, stale/config-changed notices, export precision warn, dh
+    dip-convention box, sub-blocked notice (was hardcoded `rgba(255,180,0)`)
+    → **warn**; wordmark, toolbar title, GCU logo, build badge, landing
+    bullets → **brand** (`--brand: var(--sw-amber)`, deliberately
+    swatch-level — identity, not caution); panel/modal headers de-ambered to
+    `--fg`; count badges / axis labels (X·Y·Z, dh slot roles) / links /
+    update banner / completeness bars → **info**; copied-states → **go**;
+    categorical type toggle → **go** (matches cv-type.cat). Aux-row tints
+    + the `var(--red, #hex)` fallbacks + dark-only hardcodes (`#1a1e22`,
+    `#2d333b`, white-alpha tints) converted to tokens/`color-mix`.
+    `--amber/-dim/-glow` survive as documented **chart-interim** tokens
+    (JS SVG strokes) until the C6-1c chart pass; custom theme slots now
+    emit `--action`/`--brand` from their accent. Migration scripts kept:
+    `experiments/c6-1b-triage.js` (exact-literal pairs, occurrence-count
+    asserted, zero-residue check) + `c6-1b-typography.js`.
+  - **Font embed (D2)**: `src/fonts/` = barlow-400/600 + space-mono-400/700
+    woff2 + OFL.txt copied from switchboard upstream; build.js inlines them
+    as base64 `@font-face` via the `__INJECT_FONTS__` marker (~105KB,
+    index.html now 1.28MB); Google Fonts `<link>` + the sw.js fonts route
+    removed (app is now fully offline-self-contained); `--mono` →
+    `--au-font-mono` (Space Mono), `--sans` added. Mono weights 500/600
+    resolve to the 400/700 cuts by CSS font-matching — accepted.
+  - **Typography (SPEC §5)**: Barlow on prose surfaces (about, landing
+    sub/footer, dropzone labels, empty-state hints, modal prose, pack
+    notes, help rows, aux hints, tree notes) with sizes bumped ~0.75–1.05rem;
+    landing h1 1.25rem, about h2 a real 1.05rem heading; font-size floor
+    raised two-tier (≤0.55rem → 0.62, 0.58–0.62 → 0.65) in `font-size:`/
+    `font:` declarations only (paddings untouched), styles.css + app JS
+    inline styles (SVG chart text excluded). Control panels stay mono.
+  - Suite 18/18 green (c6-smoke flaked on browser launch in the batch run,
+    passes standalone); both modes eyeballed via `c6-theme-shots.js`.
+    Worker untouched (b1-differential 29/29 bit-identical).
 - **C6-1a ✅ ea5ed3e (2026-06-12)** — Switchboard tokens vendored (pinned
   eff8abb) into the styles.css head; BMA tokens = app layer over `--au-*`
   (documented deltas: fg-bright==fg, amber→action interim, mono unchanged);
   Light/Dark/System with live OS-follow + first-paint head snippet; legacy
   themes culled with stored-name migration; custom slots ride the dark
   base. Both modes eyeballed (`experiments/c6-theme-shots.js`); suite green
-  — smokes now exercise LIGHT by default (headless). Remaining C6-1 slices:
-  **C6-1b** accent triage (per-usage split of the interim all-amber→action
-  binding into action / caution / selected / brand — judgment work across
-  ~hundreds of `--amber` sites in styles.css) + font embed (COPY the woff2
-  subsets INTO this repo from `../auditable/ext/switchboard/fonts/` —
-  Barlow 400/600 + Space Mono 400/700, ~95KB, plus OFL.txt — then build.js
-  inlines them as base64 @font-face; don't build against the sibling repo
-  path) + typography scale (real heading sizes, raise the 0.55rem floor to
-  ~0.65, Barlow for prose surfaces per SPEC §5); **C6-1c** chart tokens +
-  light-safe palette (bring Arthur candidates rendered on BOTH surfaces
-  before committing) + theme-change re-render hook (reuse the chart-width
-  observers' cached re-render entries); UI scale setting.
+  — smokes now exercise LIGHT by default (headless). Remaining C6-1 slice:
+  **C6-1c** chart tokens + light-safe palette (bring Arthur candidates
+  rendered on BOTH surfaces before committing) + theme-change re-render
+  hook (reuse the chart-width observers' cached re-render entries) +
+  retire the `--amber` chart-interim tokens; UI scale setting.
 - **C6-0 ✅ fd4456a (2026-06-12)** — collapse state in module state
   (`gtTableCollapsed` by column name / `swathTableCollapsed`), renders
   state-driven; coord rows resolve in the context menu (axis header,

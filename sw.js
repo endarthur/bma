@@ -5,10 +5,10 @@
 // carries the build hash, so every deploy auto-busts old caches — no manual
 // version bumps to forget.
 //
-// This file is a BUILD INPUT: build.js substitutes 92130d4 and writes
+// This file is a BUILD INPUT: build.js substitutes cd52d5b and writes
 // the root sw.js. Don't edit the root copy.
 
-const CACHE = 'bma-shell-92130d4';
+const CACHE = 'bma-shell-cd52d5b';
 const SHELL = [
   './',
   './index.html',
@@ -43,19 +43,7 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Google Fonts: serve cached, refresh in background (offline support)
-  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
-    event.respondWith(
-      caches.match(req).then((cached) => {
-        const fresh = fetch(req).then((resp) => {
-          if (resp && resp.ok) caches.open(CACHE).then((c) => c.put(req, resp.clone())).catch(() => {});
-          return resp;
-        }).catch(() => cached);
-        return cached || fresh;
-      })
-    );
-    return;
-  }
+  // (Google Fonts route removed in C6-1b — fonts are embedded in index.html)
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(handle(req));

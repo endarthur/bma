@@ -43,19 +43,7 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Google Fonts: serve cached, refresh in background (offline support)
-  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
-    event.respondWith(
-      caches.match(req).then((cached) => {
-        const fresh = fetch(req).then((resp) => {
-          if (resp && resp.ok) caches.open(CACHE).then((c) => c.put(req, resp.clone())).catch(() => {});
-          return resp;
-        }).catch(() => cached);
-        return cached || fresh;
-      })
-    );
-    return;
-  }
+  // (Google Fonts route removed in C6-1b — fonts are embedded in index.html)
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(handle(req));

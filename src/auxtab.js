@@ -239,7 +239,7 @@ function markAuxStale() {
   if (!auxCompleteData || auxStale) return;
   auxStale = true;
   var $st = document.getElementById('auxAnalyzeStatus');
-  if ($st) { $st.textContent = 'Config changed — re-run Analyze'; $st.style.color = 'var(--amber)'; }
+  if ($st) { $st.textContent = 'Config changed — re-run Analyze'; $st.style.color = 'var(--warn)'; }
 }
 
 // ─── Cell declustering (GSLIB DECLUS in the worker) ────────────────────
@@ -333,7 +333,7 @@ function renderAuxDeclusResults() {
   var fresh = auxDeclusFresh();
   var html = '<div class="aux-declus-results">';
   if (!fresh) {
-    html += '<div class="aux-hint" style="color:var(--amber)">' +
+    html += '<div class="aux-hint" style="color:var(--warn)">' +
       (d.weights ? 'Aux config changed since this run — re-run to refresh the weights.' : 'Restored params — run to compute the weights.') + '</div>';
   }
   if (d.naiveMean !== undefined) {
@@ -346,7 +346,7 @@ function renderAuxDeclusResults() {
         ' · w ' + formatNum(d.wtMin) + '–' + formatNum(d.wtMax) +
         ' · n ' + d.located.toLocaleString() + (d.n > d.located ? ' <span title="rows without valid XYZ + variable get no weight and are excluded">(+' + (d.n - d.located) + ' unlocated)</span>' : '') + '</div>';
     } else {
-      html += '<div class="aux-declus-stat" style="color:var(--amber)">No cell size beat the naive mean — weights stay 1. Data may not be clustered (or try the other criterion, or click the curve to pin a size).</div>';
+      html += '<div class="aux-declus-stat" style="color:var(--warn)">No cell size beat the naive mean — weights stay 1. Data may not be clustered (or try the other criterion, or click the curve to pin a size).</div>';
     }
     html += auxDeclusCurveSvg(d);
   }

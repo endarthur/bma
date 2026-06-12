@@ -713,7 +713,7 @@ function renderPreflightSidebar(data) {
     const filterable = isFilterableCol(header, i, autoTypes, typeOverrides, data.xyz, skipCols);
     const hideCls = filterable ? '' : ' pf-filter-hidden';
     const isDmConst = dmCols && dmCols[i] && dmCols[i].isConstant;
-    const constStyle = isDmConst ? ' style="border-left:2px solid var(--amber-dim,rgba(184,115,51,0.4))"' : '';
+    const constStyle = isDmConst ? ' style="border-left:2px solid var(--warn)"' : '';
     const constTooltip = isDmConst ? ' title="File constant \u2014 same value for all records: ' + esc(String(dmCols[i].constantValue || '')) + '"' : '';
     html += `<div class="pf-col-item${isSkipped ? ' skipped' : ''}" data-col="${i}" data-name="${esc(header[i]).toLowerCase()}"${constStyle}>
       <span class="col-idx">${i}</span>

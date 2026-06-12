@@ -296,7 +296,7 @@ function renderDhMapping() {
     '<div class="dh-map-row"><label>BHID</label>' + dhColSelect('intervals', 'bhid', dhMap.intervals.bhid) + '</div>' +
     '<div class="dh-map-row"><label>From</label>' + dhColSelect('intervals', 'from', dhMap.intervals.from) + '</div>' +
     '<div class="dh-map-row"><label>To</label>' + dhColSelect('intervals', 'to', dhMap.intervals.to) + '</div>' +
-    '<div class="dh-map-row" style="color:var(--fg-dim);font-size:0.62rem">every other column rides along (composited)</div></div>';
+    '<div class="dh-map-row" style="color:var(--fg-dim);font-size:0.65rem">every other column rides along (composited)</div></div>';
   html += '</div>';
 
   // dip convention — the deliberately loud row (D1)

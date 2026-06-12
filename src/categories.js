@@ -154,7 +154,7 @@ function renderCatToolbar() {
 
   // Meta badges
   var auxCat = getCatAuxCounts(colName);
-  html += '<span style="font-size:0.62rem;color:var(--fg-dim)">' + uniqueCount + ' unique';
+  html += '<span style="font-size:0.65rem;color:var(--fg-dim)">' + uniqueCount + ' unique';
   if (nullCount > 0) html += ' \u00B7 ' + nullCount.toLocaleString() + ' null';
   if (maxEntropy > 0) html += ' \u00B7 H=' + entropy.toFixed(2) + ' (' + normPct + '%)';
   if (auxCat) html += ' \u00B7 vs ' + esc((auxPrefix || 'aux') + ':' + colName) + ' (' + auxCat.total.toLocaleString() + (auxCat.overflow ? '+' : '') + ')';

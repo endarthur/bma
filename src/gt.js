@@ -125,7 +125,7 @@ function renderGtConfig(data) {
       '<select class="gt-select" id="gtDensityCol">' + densityOpts + '</select>' +
       '<div id="gtDensityConstWrap" style="display:none;margin-top:0.3rem;align-items:center;gap:0.3rem">' +
         '<input type="number" class="gt-input" id="gtDensityConst" value="2.7" min="0" step="any" placeholder="2.7">' +
-        '<span style="font-size:0.55rem;color:var(--fg-dim);white-space:nowrap">t/m³</span>' +
+        '<span style="font-size:0.62rem;color:var(--fg-dim);white-space:nowrap">t/m³</span>' +
       '</div>' +
     '</div>' +
     '<div class="gt-sidebar-section">' +
@@ -144,7 +144,7 @@ function renderGtConfig(data) {
       '<div class="gt-sidebar-title">Block Volume</div>' +
       '<div class="gt-vol-display" id="gtVolDisplay">' + volDisplay + '</div>' +
       '<div style="display:flex;gap:0.3rem;align-items:center;margin-top:0.2rem">' +
-        '<span style="font-size:0.55rem;color:var(--fg-dim);white-space:nowrap">Override (m\u00b3)</span>' +
+        '<span style="font-size:0.62rem;color:var(--fg-dim);white-space:nowrap">Override (m\u00b3)</span>' +
         '<input type="number" class="gt-input" id="gtVolOverride" value="' + volValue + '" min="0" step="any" placeholder="auto">' +
       '</div>' +
     '</div>' +
@@ -174,9 +174,9 @@ function renderGtConfig(data) {
       '</div>' +
       '<div id="gtCutoffRange">' +
         '<div style="display:flex;gap:0.3rem">' +
-          '<label style="flex:1;display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.55rem;color:var(--fg-dim)">Min</span><input type="number" class="gt-input" id="gtCutoffMin" value="' + defMin + '" step="any"></label>' +
-          '<label style="flex:1;display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.55rem;color:var(--fg-dim)">Max</span><input type="number" class="gt-input" id="gtCutoffMax" value="' + defMax + '" step="any"></label>' +
-          '<label style="flex:1;display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.55rem;color:var(--fg-dim)">Step</span><input type="number" class="gt-input" id="gtCutoffStep" value="' + defStep + '" step="any" min="0"></label>' +
+          '<label style="flex:1;display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.62rem;color:var(--fg-dim)">Min</span><input type="number" class="gt-input" id="gtCutoffMin" value="' + defMin + '" step="any"></label>' +
+          '<label style="flex:1;display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.62rem;color:var(--fg-dim)">Max</span><input type="number" class="gt-input" id="gtCutoffMax" value="' + defMax + '" step="any"></label>' +
+          '<label style="flex:1;display:flex;flex-direction:column;gap:0.1rem"><span style="font-size:0.62rem;color:var(--fg-dim)">Step</span><input type="number" class="gt-input" id="gtCutoffStep" value="' + defStep + '" step="any" min="0"></label>' +
         '</div>' +
         '<select class="gt-select" id="gtRangeFrom" style="margin-top:0.3rem" title="Set Min/Max/Step from a variable’s data range">' +
           '<option value="">↧ copy range from variable…</option>' + numColOpts +
@@ -198,7 +198,7 @@ function renderGtConfig(data) {
         '<option value="dgm" disabled>DGM (Hermite) — next</option>' +
       '</select>' +
       '<div style="display:flex;gap:0.3rem;align-items:center;margin-top:0.3rem">' +
-        '<span style="font-size:0.55rem;color:var(--fg-dim);white-space:nowrap" title="variance reduction factor: Var(blocks)/Var(samples). From your estimation work, or explore — never derived from the model (circular)">f</span>' +
+        '<span style="font-size:0.62rem;color:var(--fg-dim);white-space:nowrap" title="variance reduction factor: Var(blocks)/Var(samples). From your estimation work, or explore — never derived from the model (circular)">f</span>' +
         '<input type="range" id="gtTheoF" min="0.05" max="1" step="0.01" value="0.6" style="flex:1">' +
         '<input type="number" class="gt-input" id="gtTheoFNum" value="0.6" min="0.05" max="1" step="0.01" style="width:52px">' +
       '</div>' +
@@ -1323,7 +1323,7 @@ function renderGtTable(grData, cutoffs, units, isGrouped, tableIdx, selectedGrou
         var metal = p.metal * gf / md;
         var pctTotal = totalTonnage > 0 ? (p.tonnage / totalTonnage * 100) : 0;
         html += '<tr>';
-        if (ti === 0) html += '<td rowspan="' + cutoffs.length + '" style="color:var(--amber);font-weight:600">Total</td>';
+        if (ti === 0) html += '<td rowspan="' + cutoffs.length + '" style="color:var(--fg-bright);font-weight:600">Total</td>';
         html += '<td>' + gtFmt(c, units.gradeDp) + '</td>';
         html += '<td>' + gtFmt(tonnage, units.tonnageDp) + '</td>';
         html += '<td>' + gtFmt(grade, units.gradeDp) + '</td>';

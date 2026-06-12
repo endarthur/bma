@@ -1524,7 +1524,7 @@ function displayResults(data) {
       <div style="margin-top:0.8rem; font-size:0.75rem; color:var(--fg-dim)">
         Parent grid cells: <strong style="color:var(--fg)">${totalGrid.toLocaleString()}</strong> &nbsp;|&nbsp;
         Total blocks: <strong style="color:var(--fg)">${totalRowCount.toLocaleString()}</strong>
-        ${!anySubBlocked ? `&nbsp;|&nbsp; Fill ratio: <strong style="color:var(--amber)">${fillPct.toFixed(1)}%</strong>` : ''}
+        ${!anySubBlocked ? `&nbsp;|&nbsp; Fill ratio: <strong style="color:var(--fg-bright)">${fillPct.toFixed(1)}%</strong>` : ''}
       </div>
       ${subDetail}
       ${coordOrder ? `<div style="margin-top:0.5rem; font-size:0.75rem; color:var(--fg-dim)">
@@ -1534,7 +1534,7 @@ function displayResults(data) {
       ${maxDecimals ? `<div style="margin-top:0.5rem; font-size:0.75rem; color:var(--fg-dim)">
         Rounding: X=${maxDecimals.x}dp, Y=${maxDecimals.y}dp, Z=${maxDecimals.z}dp <span style="opacity:0.5">(detected from data)</span>
       </div>` : ''}
-      ${anySubBlocked && currentDXYZ.dx < 0 && currentDXYZ.dy < 0 && currentDXYZ.dz < 0 ? `<div style="margin-top:0.5rem; padding:0.4rem 0.6rem; border-radius:4px; background:rgba(255,180,0,0.12); border:1px solid rgba(255,180,0,0.3); font-size:0.75rem; color:#e5a800;">
+      ${anySubBlocked && currentDXYZ.dx < 0 && currentDXYZ.dy < 0 && currentDXYZ.dz < 0 ? `<div style="margin-top:0.5rem; padding:0.4rem 0.6rem; border-radius:4px; background:var(--warn-soft); border:1px solid var(--warn); font-size:0.75rem; color:var(--warn);">
         ⚠ This model appears sub-blocked. Assign DX/DY/DZ columns in Preflight for accurate block sizes.
       </div>` : ''}
       ${data.coordInvalidCells > 0 ? `<div class="warn-note" style="margin-top:0.5rem;">

@@ -104,6 +104,11 @@ function applyTheme(name) {
       css += '  --amber: ' + ct.accent + ';\n';
       css += '  --amber-dim: ' + ct.accentDim + ';\n';
       css += '  --amber-glow: ' + ct.accent + '30;\n';
+      // C6-1b: post-triage the custom accent drives action + brand too
+      // (sel/warn/info/go/fault stay on the Switchboard dark base)
+      css += '  --action: ' + ct.accent + ';\n';
+      css += '  --action-soft: ' + ct.accent + '30;\n';
+      css += '  --brand: ' + ct.accent + ';\n';
       css += '  --border: ' + ct.border + ';\n';
       css += '}\n';
       if (!customStyle) {

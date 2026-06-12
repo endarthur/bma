@@ -945,7 +945,7 @@ function createExprInput(element, options) {
     } else if (result.warnings.length) {
       errEl.textContent = result.warnings.join('; ');
       errEl.classList.add('active');
-      errEl.style.color = 'var(--amber-dim)';
+      errEl.style.color = 'var(--warn)';
     } else {
       errEl.textContent = '';
       errEl.classList.remove('active');

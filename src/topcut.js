@@ -102,7 +102,7 @@ function renderAuxTopcut() {
     if (t && t.varName && !t.values) {
       html += '<div class="tc-empty">Restored top-cut config (' + esc(t.varName) + (t.cap != null ? ', cap ' + formatNum(t.cap) : '') + ') — load the distribution to continue.</div>';
     } else if (t && t.values) {
-      html += '<div class="tc-empty" style="color:var(--amber)">Aux config changed since this distribution was loaded — reload.</div>';
+      html += '<div class="tc-empty" style="color:var(--warn)">Aux config changed since this distribution was loaded — reload.</div>';
     } else {
       html += '<div class="tc-empty">Load a variable’s sample distribution to analyse top cuts: histogram, log-probability, mean & CV vs cap, and metal above cap, with a draggable cap line across all four.</div>';
     }
