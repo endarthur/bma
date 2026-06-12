@@ -11,6 +11,14 @@ Principle (same as A7's consistency report and A8): **inference and loss must
 be visible**. Dropping a row or nulling a value can be correct behavior —
 doing it without a counter or badge is not.
 
+**Standing rule (Arthur, 2026-06-11):** no silent "acceptable losses"
+anywhere in BMA. If a loss or limitation seems genuinely necessary, it gets
+confirmed explicitly before landing and registered here (the "Accepted
+limitations" section below) or in `worker-protocol.md` — a code comment
+alone is not documentation. Context: a comment-buried "acceptable
+limitation" caused serious damage in the auditable project (May 2026), and
+the worker's own "negligible row loss" comment hid the A8 bug.
+
 ## Findings
 
 ### F1 — Detection-phase row loss (model analyze) — the A8 trigger, partially fixed
@@ -115,17 +123,32 @@ doing it without a counter or badge is not.
   quote-aware splitting at B2 (the parquet adapter era) if surfaced counts
   show it matters in practice.
 
-### Noted, no action
-- Swath rows with invalid coordinates skip that direction (defensible —
-  binning needs the coordinate); becomes visible via F4's counters if the
-  weight contract work adds a shared "rows skipped" note.
-- Comment lines: counted (`commentCount` in complete) — displayable any time.
-- t-digest quantile approximation: documented accuracy contract
-  (worker-protocol.md), deliberate.
-- declus invalid-coordinate exclusion: by design, mismatch-guarded via
+### Accepted limitations (the registry — additions require explicit sign-off)
+Per the standing rule above, this list is the **only** place a deliberate
+loss/limitation may live; each entry says what is lost, why it's accepted,
+and what makes it visible.
+
+- **Swath rows with invalid coordinates** skip that direction (binning
+  needs the coordinate; the value itself is intact in other views). Becomes
+  countable via F4's counters when the weight contract work lands.
+- **Comment lines** are excluded from analysis — counted (`commentCount`
+  in the complete message), displayable any time.
+- **t-digest quantiles are approximations** — deliberate streaming design,
+  accuracy contract documented in worker-protocol.md (exact below 20k
+  distinct values, ≤0.05% rel error p01–p99 continuous).
+- **declus excludes invalid-coordinate rows** from weight computation — by
+  design (cell declustering needs positions), mismatch-guarded via
   `weightArrayMismatch`.
-- Calcol compile failure → null calcolFn: the editor validates before
-  apply; restore paths carry editor-validated code.
+- **Calcol compile failure → calcols absent** — guarded upstream: the
+  editor validates before apply; restore paths carry editor-validated code.
+- **>100k-row files with an unresolvable column** lose the first 100k rows
+  to type detection (TYPE_MAX_ROWS cap) — documented in worker-protocol.md;
+  eliminated for all app flows once Phase 1 lands (full preflight types
+  skip detection entirely).
+- **Quote-aware field splitting deferred to ~B2** (F8): the hot-loop cost
+  is real and most mining exports are unquoted; the Phase 4 ragged-row
+  counters make the failure mode visible rather than silent, which is the
+  A9 bar. Revisit if surfaced counts show real-world hits.
 
 ## Phasing
 
