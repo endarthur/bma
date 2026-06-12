@@ -683,6 +683,19 @@ function renderPreflightSidebar(data) {
     if (!data.sampleRows || data.sampleRows.length === 0) return false;
     return data.sampleRows.every(row => NULL_SENTINELS_MAIN.has(i < row.length ? row[i].trim() : ''));
   });
+  // A9 F2: non-numeric values in the sample — shown when the column's
+  // effective type is numeric (those values analyze to nulls). Computed
+  // type-independently; the badge hides/shows on type toggle.
+  const sampleMixed = header.map((_, i) => {
+    if (!data.sampleRows || data.sampleRows.length === 0) return 0;
+    let bad = 0;
+    for (const row of data.sampleRows) {
+      const v = i < row.length ? row[i].trim() : '';
+      if (NULL_SENTINELS_MAIN.has(v)) continue;
+      if (isNaN(Number(v))) bad++;
+    }
+    return bad;
+  });
   html += '<div class="pf-col-list" id="pfColList">';
   for (let i = 0; i < header.length; i++) {
     const currentType = typeOverrides[i] || autoTypes[i];
@@ -701,6 +714,7 @@ function renderPreflightSidebar(data) {
       <div class="pf-col-controls">
         ${isDmConst ? '<span class="pf-const-badge" title="File constant">CONST</span>' : ''}
         ${sampleEmpty[i] && !isDmConst ? `<span class="pf-const-badge pf-empty-badge" title="No values in the first ${data.sampleRows.length} sampled rows — column appears empty">EMPTY</span>` : ''}
+        ${sampleMixed[i] > 0 && !isDmConst ? `<span class="pf-const-badge pf-mixed-badge" data-col="${i}" title="${sampleMixed[i]} of ${data.sampleRows.length} sampled values aren't numeric — as NUM they become nulls; toggle to CAT if this is a category column"${currentType !== 'numeric' ? ' style="display:none"' : ''}>MIXED</span>` : ''}
         <button class="pf-filter-btn${cf.skipNeg ? ' active' : ''}${hideCls}" data-col="${i}" data-filter="skipNeg" title="Exclude negatives">≥0</button>
         <button class="pf-filter-btn${cf.skipZeros ? ' active' : ''}${hideCls}" data-col="${i}" data-filter="skipZeros" title="Exclude zeros">≠0</button>
         <button class="type-toggle" data-col="${i}" data-type="${currentType}">${label}</button>
@@ -886,6 +900,9 @@ function handlePfTypeToggle(btn, data) {
   // Update button text and data attribute
   btn.dataset.type = next;
   btn.textContent = next === 'numeric' ? 'NUM' : 'CAT';
+  // MIXED badge only applies while the column is numeric (A9 F2)
+  const mixedBadge = btn.closest('.pf-col-item').querySelector('.pf-mixed-badge');
+  if (mixedBadge) mixedBadge.style.display = next === 'numeric' ? '' : 'none';
   // Update filter button visibility for this item
   updateItemFilterability(btn.closest('.pf-col-item'), col, data);
   rebuildPfXyz(data);

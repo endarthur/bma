@@ -10,6 +10,7 @@ const STATS_ALL_METRICS = [
   { key: 'count', label: 'Count' },
   { key: 'sumw', label: 'ΣW' },
   { key: 'nulls', label: 'Nulls' },
+  { key: 'parsefails', label: 'NoParse' },
   { key: 'zeros', label: 'Zeros' },
   { key: 'min', label: 'Min' },
   // percentile metrics injected dynamically
@@ -123,6 +124,7 @@ function getStatValue(s, metric) {
     case 'count': return s.count;
     case 'sumw': return s.sumW != null ? s.sumW : null;
     case 'nulls': return s.nulls;
+    case 'parsefails': return s.parseFails || 0;
     case 'zeros': return s.zeros;
     case 'min': return s.min;
     case 'max': return s.max;
@@ -137,7 +139,7 @@ function getStatValue(s, metric) {
 
 function formatStatValue(val, metric) {
   if (val === null || val === undefined) return '\u2014';
-  if (metric.key === 'count' || metric.key === 'nulls' || metric.key === 'zeros') {
+  if (metric.key === 'count' || metric.key === 'nulls' || metric.key === 'zeros' || metric.key === 'parsefails') {
     return val > 0 ? val.toLocaleString() : '\u2014';
   }
   if (metric.key === 'cv') return val.toFixed(1);
@@ -147,7 +149,7 @@ function formatStatValue(val, metric) {
 
 // Metrics where a relative % difference is meaningless (dataset-size counts)
 // or unstable (moments with near-zero reference values)
-var STATS_DELTA_SKIP = new Set(['count', 'sumw', 'nulls', 'zeros', 'skew', 'kurt']);
+var STATS_DELTA_SKIP = new Set(['count', 'sumw', 'nulls', 'parsefails', 'zeros', 'skew', 'kurt']);
 
 function formatDeltaPct(p, a, metric) {
   if (STATS_DELTA_SKIP.has(metric.key)) return '—';
@@ -161,6 +163,13 @@ function formatDeltaPct(p, a, metric) {
 function statsEmptyTag(ds, idx) {
   if (!colIsEmpty(ds, idx)) return '';
   return '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>';
+}
+
+// A9 F2: ✱ tag for numeric variables with unparseable values (mixed-type)
+function statsMixedTag(ds, idx) {
+  var n = colParseFails(ds, idx);
+  if (n === 0) return '';
+  return '<span class="empty-tag mixed-tag" title="' + esc(mixedColTitle(n)) + '">✱</span>';
 }
 
 function isMetricVisible(key) {
@@ -266,7 +275,7 @@ function renderStatsSidebar() {
     html += '<input type="checkbox"' + checkedAttr + ' data-col="' + ci + '">';
     html += '<span class="var-name">' + esc(name) + '</span>';
     if (isCalcol) html += '<span class="calcol-tag">CALC</span>';
-    html += statsEmptyTag('model', ci);
+    html += statsEmptyTag('model', ci) + statsMixedTag('model', ci);
     html += '</div>';
   }
 
@@ -283,7 +292,7 @@ function renderStatsSidebar() {
       html += '<div class="stats-var-item stats-var-item--aux' + (auxSel ? '' : ' unchecked') + '" data-aux-col="' + ac.idx + '">';
       html += '<input type="checkbox"' + (auxSel ? ' checked' : '') + ' data-aux-col="' + ac.idx + '">';
       html += '<span class="var-name">' + esc(dispName) + '</span>';
-      html += statsEmptyTag('aux', ac.idx);
+      html += statsEmptyTag('aux', ac.idx) + statsMixedTag('aux', ac.idx);
       html += '</div>';
     }
   }
@@ -317,7 +326,7 @@ function renderStatsTable() {
     var as = auxCompleteData.stats[ac.idx];
     var aCdfActive = statsCdfAuxSelected.has(ac.idx);
     var aNameClass = aCdfActive ? 'cdf-link cdf-active' : 'cdf-link';
-    var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-aux-col="' + ac.idx + '" href="#">' + esc(auxLabel + ':' + ac.name) + '</a>' + statsEmptyTag('aux', ac.idx) + '</td>';
+    var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-aux-col="' + ac.idx + '" href="#">' + esc(auxLabel + ':' + ac.name) + '</a>' + statsEmptyTag('aux', ac.idx) + statsMixedTag('aux', ac.idx) + '</td>';
     for (var m of metrics) rowHtml += '<td>' + formatStatValue(getStatValue(as, m), m) + '</td>';
     return rowHtml + '</tr>' + deltaRowHtml(ac);
   }
@@ -340,7 +349,9 @@ function renderStatsTable() {
     return;
   }
 
-  var html = '<table class="stats"><thead><tr><th>Column</th>';
+  // A9 F3: per-row filter/calcol errors from the model and aux analyses
+  var html = workerErrNote(lastCompleteData) + workerErrNote(auxCompleteData, auxLabel);
+  html += '<table class="stats"><thead><tr><th>Column</th>';
   for (var m of metrics) html += '<th>' + esc(m.label) + '</th>';
   html += '</tr></thead><tbody>';
 
@@ -351,7 +362,7 @@ function renderStatsTable() {
     var nameClass = cdfActive ? 'cdf-link cdf-active' : 'cdf-link';
     var nameHtml = '<a class="' + nameClass + '" data-col="' + ci + '" href="#">' + esc(header[ci]) + '</a>';
     if (isCalcol) nameHtml += '<span class="calcol-tag">CALC</span>';
-    nameHtml += statsEmptyTag('model', ci);
+    nameHtml += statsEmptyTag('model', ci) + statsMixedTag('model', ci);
 
     html += '<tr' + (isCalcol ? ' class="calcol-row"' : '') + '><td>' + nameHtml + '</td>';
     for (var m of metrics) {

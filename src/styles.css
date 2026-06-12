@@ -578,6 +578,10 @@ header .logo-mark {
   opacity: 0.65;
   cursor: help;
 }
+.pf-mixed-badge {
+  opacity: 0.75;
+  cursor: help;
+}
 .pf-filter-btn {
   font-size: 0.5rem;
   padding: 0.06rem 0.2rem;
@@ -1492,6 +1496,8 @@ header .logo-mark {
   margin-left: 0.3rem;
   cursor: help;
 }
+/* A9: ✱ markers for mixed-type columns (parse failures) */
+.mixed-tag { color: var(--amber); }
 
 /* Expression autocomplete (generic — used by filter) */
 .expr-ac-wrap { position: relative; }

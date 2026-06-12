@@ -591,6 +591,10 @@ header .logo-mark {
   opacity: 0.65;
   cursor: help;
 }
+.pf-mixed-badge {
+  opacity: 0.75;
+  cursor: help;
+}
 .pf-filter-btn {
   font-size: 0.5rem;
   padding: 0.06rem 0.2rem;
@@ -1505,6 +1509,8 @@ header .logo-mark {
   margin-left: 0.3rem;
   cursor: help;
 }
+/* A9: ✱ markers for mixed-type columns (parse failures) */
+.mixed-tag { color: var(--amber); }
 
 /* Expression autocomplete (generic — used by filter) */
 .expr-ac-wrap { position: relative; }
@@ -5496,7 +5502,7 @@ table.stats tr.stats-delta-row td:first-child {
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build a8e8b76 — click to check for updates">a8e8b76</div>
+<div class="build-badge" id="buildBadge" title="build 05881c3 — click to check for updates">05881c3</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -6020,10 +6026,36 @@ function compileCalcolFn(rowVarName, calcolCode, calcolMeta) {
   catch (e) { return null; }
 }
 
-// Compile a filter expression: per-row runtime errors return false,
-// compile errors throw (callers decide whether to abort or continue)
+// Compile a filter expression: per-row runtime errors return false but are
+// COUNTED on the returned function (fn.errCount / fn.firstErr) so passes can
+// report excluded rows instead of dropping them silently (A9 F3). Compile
+// errors throw (callers decide whether to abort or continue).
 function compileFilterFn(rowVarName, expr) {
-  return new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + expr + '); } catch(e) { return false; }');
+  const raw = new Function(rowVarName, MATH_PREAMBLE + 'return !!(' + expr + ');');
+  const fn = function(row) {
+    try { return raw(row); }
+    catch (e) {
+      fn.errCount++;
+      if (fn.errCount === 1) fn.firstErr = e.message;
+      return false;
+    }
+  };
+  fn.errCount = 0;
+  fn.firstErr = null;
+  return fn;
+}
+
+// A9 F3 payloads — null when nothing went wrong, so messages without
+// problems are unchanged
+function filterErrPayload(globalFn, localFn) {
+  const g = globalFn ? globalFn.errCount : 0;
+  const l = localFn ? localFn.errCount : 0;
+  if (!g && !l) return null;
+  return { global: g, local: l, message: (g ? globalFn.firstErr : localFn.firstErr) || '' };
+}
+function calcolErrPayload(src) {
+  if (!src || !src.calcolErrCount) return null;
+  return { count: src.calcolErrCount, message: src.calcolFirstErr || '' };
 }
 
 // makeRowSource(file, opts) → source. Throws on extraction/sniff failure
@@ -6057,7 +6089,9 @@ async function makeRowSource(file, opts) {
     rowVarName,
     colTypes: opts.resolvedTypes || null,
     calcolFn: compileCalcolFn(rowVarName, opts.calcolCode, opts.calcolMeta),
-    extHeader: buildExtHeader(header, opts.calcolMeta)
+    extHeader: buildExtHeader(header, opts.calcolMeta),
+    calcolErrCount: 0,
+    calcolFirstErr: null
   };
   source.buildRow = makeBuildRow(source);
   source.stream = (handlers) => streamCsvLines(csvFile, handlers);
@@ -6077,10 +6111,16 @@ function makeBuildRow(source) {
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
       obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
     }
-    // Evaluate calcol code block — mutates obj, adding new properties
+    // Evaluate calcol code block — mutates obj, adding new properties.
+    // Runtime errors skip the row's calcols but are counted on the source
+    // (A9 F3) — passes report them via calcolErrPayload
     if (source.calcolFn) {
       obj.META = { cat: [], num: [] };
-      try { source.calcolFn(obj); } catch (e) { /* calcol runtime error — skip */ }
+      try { source.calcolFn(obj); }
+      catch (e) {
+        source.calcolErrCount++;
+        if (source.calcolErrCount === 1) source.calcolFirstErr = e.message;
+      }
       delete obj.META;
     }
     return obj;
@@ -6373,7 +6413,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   }
 
   function newAcc() {
-    return { count: 0, sumW: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, td: newTDigest() };
+    return { count: 0, sumW: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, parseFails: 0, td: newTDigest() };
   }
 
   function getGroupAcc(map, gv) {
@@ -6422,7 +6462,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       centroids = s.td.centroids.map(c => [c.mean, c.count]);
     }
     return {
-      count: n, sumW: s.sumW, nulls: s.nulls, zeros: s.zeros,
+      count: n, sumW: s.sumW, nulls: s.nulls, zeros: s.zeros, parseFails: s.parseFails,
       min: n > 0 ? s.min : null, max: n > 0 ? s.max : null,
       mean: n > 0 ? s.m1 : null, std, skewness, kurtosis, quantiles, centroids
     };
@@ -6472,7 +6512,9 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
       if (NULL_SENTINELS.has(raw)) { stats[i].nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
       const v = Number(raw);
-      if (!isFinite(v)) { stats[i].nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
+      // Non-sentinel value that fails to parse as a number — counted apart
+      // from nulls (A9 F2): the column may be mixed-type, surfaced as a badge
+      if (!isFinite(v)) { stats[i].nulls++; stats[i].parseFails++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) { ga.nulls++; ga.parseFails++; } } continue; }
       const s = stats[i];
       // Per-column value filters
       const cf = colFilters ? colFilters[i] : null;
@@ -6717,6 +6759,8 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     // filter-surviving rows; a mismatch means file/filter drifted since the
     // weights were computed
     weightArrayMismatch: wArr && wOrd !== wArr.length ? { expected: wArr.length, got: wOrd } : null,
+    filterErrors: filterErrPayload(filterFn, null),
+    calcolErrors: calcolErrPayload(src),
     header: src.extHeader,
     colTypes: extTypesFinal,
     xyzGuess,
@@ -6825,7 +6869,7 @@ async function exportCSV(data) {
   flushChunk();
 
   const elapsed = performance.now() - startTime;
-  self.postMessage({ type: 'export-complete', rowCount, elapsed });
+  self.postMessage({ type: 'export-complete', rowCount, elapsed, filterErrors: filterErrPayload(filterFn, null), calcolErrors: calcolErrPayload(src) });
 }
 
 async function swathAnalysis(data) {
@@ -6987,7 +7031,7 @@ async function swathAnalysis(data) {
   }
 
   const elapsed = performance.now() - startTime;
-  self.postMessage({ type: 'swath-complete', results, elapsed });
+  self.postMessage({ type: 'swath-complete', results, elapsed, filterErrors: filterErrPayload(globalFn, localFn), calcolErrors: calcolErrPayload(src) });
 }
 
 // ─── Cell declustering (GSLIB DECLUS) ─────────────────────────────────
@@ -7193,7 +7237,8 @@ async function declusAnalysis(data) {
     weights, n, located: nd,
     curve, optCellSize: best, declusteredMean: vrop, naiveMean: vrav,
     pinned: !!pinnedCell,
-    usedRange: [cmin, cmax, ncell, noff], wtMin, wtMax, elapsed
+    usedRange: [cmin, cmax, ncell, noff], wtMin, wtMax, elapsed,
+    filterErrors: filterErrPayload(globalFn, null), calcolErrors: calcolErrPayload(src)
   }, [weights.buffer]);
 }
 
@@ -7285,7 +7330,8 @@ async function colValuesAnalysis(data) {
   if (weights) transfers.push(weights.buffer);
   self.postMessage({
     type: 'colvalues-complete',
-    values, weights, n, finite: values.length, weightExcluded, elapsed
+    values, weights, n, finite: values.length, weightExcluded, elapsed,
+    filterErrors: filterErrPayload(globalFn, null), calcolErrors: calcolErrPayload(src)
   }, transfers);
 }
 
@@ -7385,7 +7431,9 @@ async function sectionAnalysis(data) {
     blocks,
     hAxis, vAxis, normalAxis, slicePos,
     blockCount: blocks.length,
-    elapsed
+    elapsed,
+    filterErrors: filterErrPayload(globalFn, localFn),
+    calcolErrors: calcolErrPayload(src)
   });
 }
 
@@ -7592,7 +7640,9 @@ async function gtAnalysis(data) {
     gradeResults: gradeResults,
     grouped: groupByColName !== null,
     groupByColName: groupByColName,
-    elapsed: elapsed
+    elapsed: elapsed,
+    filterErrors: filterErrPayload(globalFn, localFn),
+    calcolErrors: calcolErrPayload(src)
   });
 }
 
@@ -8312,6 +8362,35 @@ function colIsEmpty(ds, idx) {
   if (!d || !d.stats || idx == null) return false;
   const s = d.stats[idx];
   return !!s && s.count === 0;
+}
+
+// A9 F2: values in a numeric column that failed to parse as numbers in the
+// last analysis (counted apart from sentinel nulls) — mixed-type signal
+function colParseFails(ds, idx) {
+  const d = ds === 'aux' ? auxCompleteData : lastCompleteData;
+  if (!d || !d.stats || idx == null) return 0;
+  const s = d.stats[idx];
+  return s && s.parseFails ? s.parseFails : 0;
+}
+function mixedColTitle(n) {
+  return n.toLocaleString() + ' value' + (n === 1 ? '' : 's') + ' failed to parse as numbers (treated as nulls) — mixed-type column? Toggle it to CAT in Preflight if it\'s a category';
+}
+
+// A9 F3: one-line warning for per-row filter/calcol errors carried on a
+// worker complete message; '' when clean. Optional label prefixes the note
+// (e.g. the aux dataset).
+function workerErrNote(msg, label) {
+  if (!msg) return '';
+  const parts = [];
+  if (msg.filterErrors) {
+    const n = (msg.filterErrors.global || 0) + (msg.filterErrors.local || 0);
+    parts.push(n.toLocaleString() + ' row' + (n === 1 ? '' : 's') + ' excluded by filter errors — first: ' + msg.filterErrors.message);
+  }
+  if (msg.calcolErrors) {
+    parts.push('calc errors on ' + msg.calcolErrors.count.toLocaleString() + ' row' + (msg.calcolErrors.count === 1 ? '' : 's') + ' — first: ' + msg.calcolErrors.message);
+  }
+  if (parts.length === 0) return '';
+  return '<div class="swath-aux-warn">' + (label ? esc(label) + ': ' : '') + esc(parts.join(' · ')) + '</div>';
 }
 
 // ─── Container-width charts (C1b-0) ────────────────────────────────────
@@ -13348,6 +13427,19 @@ function renderPreflightSidebar(data) {
     if (!data.sampleRows || data.sampleRows.length === 0) return false;
     return data.sampleRows.every(row => NULL_SENTINELS_MAIN.has(i < row.length ? row[i].trim() : ''));
   });
+  // A9 F2: non-numeric values in the sample — shown when the column's
+  // effective type is numeric (those values analyze to nulls). Computed
+  // type-independently; the badge hides/shows on type toggle.
+  const sampleMixed = header.map((_, i) => {
+    if (!data.sampleRows || data.sampleRows.length === 0) return 0;
+    let bad = 0;
+    for (const row of data.sampleRows) {
+      const v = i < row.length ? row[i].trim() : '';
+      if (NULL_SENTINELS_MAIN.has(v)) continue;
+      if (isNaN(Number(v))) bad++;
+    }
+    return bad;
+  });
   html += '<div class="pf-col-list" id="pfColList">';
   for (let i = 0; i < header.length; i++) {
     const currentType = typeOverrides[i] || autoTypes[i];
@@ -13366,6 +13458,7 @@ function renderPreflightSidebar(data) {
       <div class="pf-col-controls">
         ${isDmConst ? '<span class="pf-const-badge" title="File constant">CONST</span>' : ''}
         ${sampleEmpty[i] && !isDmConst ? `<span class="pf-const-badge pf-empty-badge" title="No values in the first ${data.sampleRows.length} sampled rows — column appears empty">EMPTY</span>` : ''}
+        ${sampleMixed[i] > 0 && !isDmConst ? `<span class="pf-const-badge pf-mixed-badge" data-col="${i}" title="${sampleMixed[i]} of ${data.sampleRows.length} sampled values aren't numeric — as NUM they become nulls; toggle to CAT if this is a category column"${currentType !== 'numeric' ? ' style="display:none"' : ''}>MIXED</span>` : ''}
         <button class="pf-filter-btn${cf.skipNeg ? ' active' : ''}${hideCls}" data-col="${i}" data-filter="skipNeg" title="Exclude negatives">≥0</button>
         <button class="pf-filter-btn${cf.skipZeros ? ' active' : ''}${hideCls}" data-col="${i}" data-filter="skipZeros" title="Exclude zeros">≠0</button>
         <button class="type-toggle" data-col="${i}" data-type="${currentType}">${label}</button>
@@ -13551,6 +13644,9 @@ function handlePfTypeToggle(btn, data) {
   // Update button text and data attribute
   btn.dataset.type = next;
   btn.textContent = next === 'numeric' ? 'NUM' : 'CAT';
+  // MIXED badge only applies while the column is numeric (A9 F2)
+  const mixedBadge = btn.closest('.pf-col-item').querySelector('.pf-mixed-badge');
+  if (mixedBadge) mixedBadge.style.display = next === 'numeric' ? '' : 'none';
   // Update filter button visibility for this item
   updateItemFilterability(btn.closest('.pf-col-item'), col, data);
   rebuildPfXyz(data);
@@ -13877,7 +13973,8 @@ function renderAuxConfig() {
       '<button class="swath-generate" id="auxAnalyzeBtn">Analyze</button>' +
       '<div class="aux-hint aux-analyze-status" id="auxAnalyzeStatus">' +
         (auxCompleteData
-          ? (auxStale ? 'Config changed — re-run Analyze' : auxCompleteData.rowCount.toLocaleString() + ' rows analyzed')
+          ? (auxStale ? 'Config changed — re-run Analyze' : auxCompleteData.rowCount.toLocaleString() + ' rows analyzed' +
+              (auxCompleteData.filterErrors || auxCompleteData.calcolErrors ? ' · ⚠ filter/calc row errors — see Statistics' : ''))
           : 'Run to compare aux statistics on the Statistics tab') +
       '</div>' +
     '</div>';
@@ -18471,6 +18568,7 @@ const STATS_ALL_METRICS = [
   { key: 'count', label: 'Count' },
   { key: 'sumw', label: 'ΣW' },
   { key: 'nulls', label: 'Nulls' },
+  { key: 'parsefails', label: 'NoParse' },
   { key: 'zeros', label: 'Zeros' },
   { key: 'min', label: 'Min' },
   // percentile metrics injected dynamically
@@ -18584,6 +18682,7 @@ function getStatValue(s, metric) {
     case 'count': return s.count;
     case 'sumw': return s.sumW != null ? s.sumW : null;
     case 'nulls': return s.nulls;
+    case 'parsefails': return s.parseFails || 0;
     case 'zeros': return s.zeros;
     case 'min': return s.min;
     case 'max': return s.max;
@@ -18598,7 +18697,7 @@ function getStatValue(s, metric) {
 
 function formatStatValue(val, metric) {
   if (val === null || val === undefined) return '\u2014';
-  if (metric.key === 'count' || metric.key === 'nulls' || metric.key === 'zeros') {
+  if (metric.key === 'count' || metric.key === 'nulls' || metric.key === 'zeros' || metric.key === 'parsefails') {
     return val > 0 ? val.toLocaleString() : '\u2014';
   }
   if (metric.key === 'cv') return val.toFixed(1);
@@ -18608,7 +18707,7 @@ function formatStatValue(val, metric) {
 
 // Metrics where a relative % difference is meaningless (dataset-size counts)
 // or unstable (moments with near-zero reference values)
-var STATS_DELTA_SKIP = new Set(['count', 'sumw', 'nulls', 'zeros', 'skew', 'kurt']);
+var STATS_DELTA_SKIP = new Set(['count', 'sumw', 'nulls', 'parsefails', 'zeros', 'skew', 'kurt']);
 
 function formatDeltaPct(p, a, metric) {
   if (STATS_DELTA_SKIP.has(metric.key)) return '—';
@@ -18622,6 +18721,13 @@ function formatDeltaPct(p, a, metric) {
 function statsEmptyTag(ds, idx) {
   if (!colIsEmpty(ds, idx)) return '';
   return '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>';
+}
+
+// A9 F2: ✱ tag for numeric variables with unparseable values (mixed-type)
+function statsMixedTag(ds, idx) {
+  var n = colParseFails(ds, idx);
+  if (n === 0) return '';
+  return '<span class="empty-tag mixed-tag" title="' + esc(mixedColTitle(n)) + '">✱</span>';
 }
 
 function isMetricVisible(key) {
@@ -18727,7 +18833,7 @@ function renderStatsSidebar() {
     html += '<input type="checkbox"' + checkedAttr + ' data-col="' + ci + '">';
     html += '<span class="var-name">' + esc(name) + '</span>';
     if (isCalcol) html += '<span class="calcol-tag">CALC</span>';
-    html += statsEmptyTag('model', ci);
+    html += statsEmptyTag('model', ci) + statsMixedTag('model', ci);
     html += '</div>';
   }
 
@@ -18744,7 +18850,7 @@ function renderStatsSidebar() {
       html += '<div class="stats-var-item stats-var-item--aux' + (auxSel ? '' : ' unchecked') + '" data-aux-col="' + ac.idx + '">';
       html += '<input type="checkbox"' + (auxSel ? ' checked' : '') + ' data-aux-col="' + ac.idx + '">';
       html += '<span class="var-name">' + esc(dispName) + '</span>';
-      html += statsEmptyTag('aux', ac.idx);
+      html += statsEmptyTag('aux', ac.idx) + statsMixedTag('aux', ac.idx);
       html += '</div>';
     }
   }
@@ -18778,7 +18884,7 @@ function renderStatsTable() {
     var as = auxCompleteData.stats[ac.idx];
     var aCdfActive = statsCdfAuxSelected.has(ac.idx);
     var aNameClass = aCdfActive ? 'cdf-link cdf-active' : 'cdf-link';
-    var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-aux-col="' + ac.idx + '" href="#">' + esc(auxLabel + ':' + ac.name) + '</a>' + statsEmptyTag('aux', ac.idx) + '</td>';
+    var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-aux-col="' + ac.idx + '" href="#">' + esc(auxLabel + ':' + ac.name) + '</a>' + statsEmptyTag('aux', ac.idx) + statsMixedTag('aux', ac.idx) + '</td>';
     for (var m of metrics) rowHtml += '<td>' + formatStatValue(getStatValue(as, m), m) + '</td>';
     return rowHtml + '</tr>' + deltaRowHtml(ac);
   }
@@ -18801,7 +18907,9 @@ function renderStatsTable() {
     return;
   }
 
-  var html = '<table class="stats"><thead><tr><th>Column</th>';
+  // A9 F3: per-row filter/calcol errors from the model and aux analyses
+  var html = workerErrNote(lastCompleteData) + workerErrNote(auxCompleteData, auxLabel);
+  html += '<table class="stats"><thead><tr><th>Column</th>';
   for (var m of metrics) html += '<th>' + esc(m.label) + '</th>';
   html += '</tr></thead><tbody>';
 
@@ -18812,7 +18920,7 @@ function renderStatsTable() {
     var nameClass = cdfActive ? 'cdf-link cdf-active' : 'cdf-link';
     var nameHtml = '<a class="' + nameClass + '" data-col="' + ci + '" href="#">' + esc(header[ci]) + '</a>';
     if (isCalcol) nameHtml += '<span class="calcol-tag">CALC</span>';
-    nameHtml += statsEmptyTag('model', ci);
+    nameHtml += statsEmptyTag('model', ci) + statsMixedTag('model', ci);
 
     html += '<tr' + (isCalcol ? ' class="calcol-row"' : '') + '><td>' + nameHtml + '</td>';
     for (var m of metrics) {
@@ -20468,7 +20576,8 @@ function renderSwathOutput(stat) {
   var keys = sd.directions.map(function(d) { return d.key; });
   if (!sd.activeKey || keys.indexOf(sd.activeKey) < 0) sd.activeKey = keys[0];
 
-  var html = '';
+  var html = workerErrNote(sd) +
+    workerErrNote({ filterErrors: sd.auxFilterErrors, calcolErrors: sd.auxCalcolErrors }, auxPrefix || 'aux');
   if (sd.directions.length > 1) {
     html += '<div class="swath-dir-tabs">' + sd.directions.map(function(d) {
       var title = d.dir ? 'Az ' + Math.round(d.azimuth) + '\u00b0 / Pl ' + Math.round(d.plunge) + '\u00b0' : d.key.toUpperCase() + ' axis';
@@ -20946,6 +21055,8 @@ function runSwath() {
       varCols: varCols, auxVarCols: auxVarCols, elapsed: out.elapsed,
       auxHeader: auxReady ? auxPreflightData.header.concat(auxCalcolMeta.map(function(m) { return m.name; })) : null,
       auxError: out.auxError,
+      filterErrors: out.filterErrors || null, calcolErrors: out.calcolErrors || null,
+      auxFilterErrors: out.auxFilterErrors || null, auxCalcolErrors: out.auxCalcolErrors || null,
       activeKey: dcfg.dirs.some(function(d) { return d.key === prevKey; }) ? prevKey : dcfg.dirs[0].key
     };
     renderSwathOutput(stat);
@@ -21005,6 +21116,8 @@ function runSwath() {
       } else if (m.type === 'swath-complete') {
         out.results = m.results;
         out.elapsed = m.elapsed;
+        out.filterErrors = m.filterErrors || null;
+        out.calcolErrors = m.calcolErrors || null;
         swathWorker.terminate();
         swathWorker = null;
         pending--;
@@ -21064,6 +21177,8 @@ function runSwath() {
         }
       } else if (m.type === 'swath-complete') {
         out.auxResults = m.results;
+        out.auxFilterErrors = m.filterErrors || null;
+        out.auxCalcolErrors = m.calcolErrors || null;
         swathAuxWorker.terminate();
         swathAuxWorker = null;
         pending--;
@@ -22640,7 +22755,8 @@ function renderGtOutput() {
   }
 
   var gradeResults = lastGtData.gradeResults;
-  var html = '<div class="gt-toolbar"><span class="gt-elapsed">' + (lastGtData.elapsed / 1000).toFixed(1) + 's</span></div>';
+  var html = workerErrNote(lastGtData) +
+    '<div class="gt-toolbar"><span class="gt-elapsed">' + (lastGtData.elapsed / 1000).toFixed(1) + 's</span></div>';
 
   // Theoretical overlay: kick a (re)load when enabled but not covered/fresh;
   // the load completion re-renders. Grouped charts skip the overlay.
@@ -26586,6 +26702,12 @@ function treeEmptyBadge(ds, idx) {
   return '<span class="tree-badge tree-badge--empty" title="' + EMPTY_COL_TITLE + '">∅</span>';
 }
 
+function treeMixedBadge(ds, idx) {
+  var n = colParseFails(ds, idx);
+  if (n === 0) return '';
+  return '<span class="tree-badge" title="' + esc(mixedColTitle(n)) + '">✱</span>';
+}
+
 function treeUnitChip(ds, name) {
   var u = catUnit(ds, name);
   if (!u || !GRADE_UNITS[u] || !GRADE_UNITS[u].symbol) return '';
@@ -26672,7 +26794,7 @@ function treeDatasetHtml(ds, openState) {
     return '<div class="tree-row tree-row--edit"' + rowAttrs(e, 'num') + ' title="click to edit">' +
       '<span class="tree-chip" style="background:' + color + '"></span>' +
       '<span class="tree-name">' + esc(e.name) + '</span>' +
-      treeUnitChip(ds, e.name) + treeRoleBadges(ds, e.name) + treeEmptyBadge(ds, e.idx) +
+      treeUnitChip(ds, e.name) + treeRoleBadges(ds, e.name) + treeEmptyBadge(ds, e.idx) + treeMixedBadge(ds, e.idx) +
       (ds === 'aux' ? treePairChip(e.name) : '') +
       '</div>';
   }

@@ -181,7 +181,8 @@ function renderSwathOutput(stat) {
   var keys = sd.directions.map(function(d) { return d.key; });
   if (!sd.activeKey || keys.indexOf(sd.activeKey) < 0) sd.activeKey = keys[0];
 
-  var html = '';
+  var html = workerErrNote(sd) +
+    workerErrNote({ filterErrors: sd.auxFilterErrors, calcolErrors: sd.auxCalcolErrors }, auxPrefix || 'aux');
   if (sd.directions.length > 1) {
     html += '<div class="swath-dir-tabs">' + sd.directions.map(function(d) {
       var title = d.dir ? 'Az ' + Math.round(d.azimuth) + '\u00b0 / Pl ' + Math.round(d.plunge) + '\u00b0' : d.key.toUpperCase() + ' axis';
@@ -659,6 +660,8 @@ function runSwath() {
       varCols: varCols, auxVarCols: auxVarCols, elapsed: out.elapsed,
       auxHeader: auxReady ? auxPreflightData.header.concat(auxCalcolMeta.map(function(m) { return m.name; })) : null,
       auxError: out.auxError,
+      filterErrors: out.filterErrors || null, calcolErrors: out.calcolErrors || null,
+      auxFilterErrors: out.auxFilterErrors || null, auxCalcolErrors: out.auxCalcolErrors || null,
       activeKey: dcfg.dirs.some(function(d) { return d.key === prevKey; }) ? prevKey : dcfg.dirs[0].key
     };
     renderSwathOutput(stat);
@@ -718,6 +721,8 @@ function runSwath() {
       } else if (m.type === 'swath-complete') {
         out.results = m.results;
         out.elapsed = m.elapsed;
+        out.filterErrors = m.filterErrors || null;
+        out.calcolErrors = m.calcolErrors || null;
         swathWorker.terminate();
         swathWorker = null;
         pending--;
@@ -777,6 +782,8 @@ function runSwath() {
         }
       } else if (m.type === 'swath-complete') {
         out.auxResults = m.results;
+        out.auxFilterErrors = m.filterErrors || null;
+        out.auxCalcolErrors = m.calcolErrors || null;
         swathAuxWorker.terminate();
         swathAuxWorker = null;
         pending--;

@@ -488,10 +488,36 @@ function compileCalcolFn(rowVarName, calcolCode, calcolMeta) {
   catch (e) { return null; }
 }
 
-// Compile a filter expression: per-row runtime errors return false,
-// compile errors throw (callers decide whether to abort or continue)
+// Compile a filter expression: per-row runtime errors return false but are
+// COUNTED on the returned function (fn.errCount / fn.firstErr) so passes can
+// report excluded rows instead of dropping them silently (A9 F3). Compile
+// errors throw (callers decide whether to abort or continue).
 function compileFilterFn(rowVarName, expr) {
-  return new Function(rowVarName, MATH_PREAMBLE + 'try { return !!(' + expr + '); } catch(e) { return false; }');
+  const raw = new Function(rowVarName, MATH_PREAMBLE + 'return !!(' + expr + ');');
+  const fn = function(row) {
+    try { return raw(row); }
+    catch (e) {
+      fn.errCount++;
+      if (fn.errCount === 1) fn.firstErr = e.message;
+      return false;
+    }
+  };
+  fn.errCount = 0;
+  fn.firstErr = null;
+  return fn;
+}
+
+// A9 F3 payloads — null when nothing went wrong, so messages without
+// problems are unchanged
+function filterErrPayload(globalFn, localFn) {
+  const g = globalFn ? globalFn.errCount : 0;
+  const l = localFn ? localFn.errCount : 0;
+  if (!g && !l) return null;
+  return { global: g, local: l, message: (g ? globalFn.firstErr : localFn.firstErr) || '' };
+}
+function calcolErrPayload(src) {
+  if (!src || !src.calcolErrCount) return null;
+  return { count: src.calcolErrCount, message: src.calcolFirstErr || '' };
 }
 
 // makeRowSource(file, opts) → source. Throws on extraction/sniff failure
@@ -525,7 +551,9 @@ async function makeRowSource(file, opts) {
     rowVarName,
     colTypes: opts.resolvedTypes || null,
     calcolFn: compileCalcolFn(rowVarName, opts.calcolCode, opts.calcolMeta),
-    extHeader: buildExtHeader(header, opts.calcolMeta)
+    extHeader: buildExtHeader(header, opts.calcolMeta),
+    calcolErrCount: 0,
+    calcolFirstErr: null
   };
   source.buildRow = makeBuildRow(source);
   source.stream = (handlers) => streamCsvLines(csvFile, handlers);
@@ -545,10 +573,16 @@ function makeBuildRow(source) {
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
       obj[header[i]] = colTypes[i] === 'numeric' ? (NULL_SENTINELS.has(raw) ? NaN : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
     }
-    // Evaluate calcol code block — mutates obj, adding new properties
+    // Evaluate calcol code block — mutates obj, adding new properties.
+    // Runtime errors skip the row's calcols but are counted on the source
+    // (A9 F3) — passes report them via calcolErrPayload
     if (source.calcolFn) {
       obj.META = { cat: [], num: [] };
-      try { source.calcolFn(obj); } catch (e) { /* calcol runtime error — skip */ }
+      try { source.calcolFn(obj); }
+      catch (e) {
+        source.calcolErrCount++;
+        if (source.calcolErrCount === 1) source.calcolFirstErr = e.message;
+      }
       delete obj.META;
     }
     return obj;
@@ -841,7 +875,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   }
 
   function newAcc() {
-    return { count: 0, sumW: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, td: newTDigest() };
+    return { count: 0, sumW: 0, min: Infinity, max: -Infinity, m1: 0, m2: 0, m3: 0, m4: 0, nulls: 0, zeros: 0, parseFails: 0, td: newTDigest() };
   }
 
   function getGroupAcc(map, gv) {
@@ -890,7 +924,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       centroids = s.td.centroids.map(c => [c.mean, c.count]);
     }
     return {
-      count: n, sumW: s.sumW, nulls: s.nulls, zeros: s.zeros,
+      count: n, sumW: s.sumW, nulls: s.nulls, zeros: s.zeros, parseFails: s.parseFails,
       min: n > 0 ? s.min : null, max: n > 0 ? s.max : null,
       mean: n > 0 ? s.m1 : null, std, skewness, kurtosis, quantiles, centroids
     };
@@ -940,7 +974,9 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
       const raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
       if (NULL_SENTINELS.has(raw)) { stats[i].nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
       const v = Number(raw);
-      if (!isFinite(v)) { stats[i].nulls++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) ga.nulls++; } continue; }
+      // Non-sentinel value that fails to parse as a number — counted apart
+      // from nulls (A9 F2): the column may be mixed-type, surfaced as a badge
+      if (!isFinite(v)) { stats[i].nulls++; stats[i].parseFails++; if (gv !== null && groupStats[i]) { const ga = getGroupAcc(groupStats[i], gv); if (ga) { ga.nulls++; ga.parseFails++; } } continue; }
       const s = stats[i];
       // Per-column value filters
       const cf = colFilters ? colFilters[i] : null;
@@ -1185,6 +1221,8 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     // filter-surviving rows; a mismatch means file/filter drifted since the
     // weights were computed
     weightArrayMismatch: wArr && wOrd !== wArr.length ? { expected: wArr.length, got: wOrd } : null,
+    filterErrors: filterErrPayload(filterFn, null),
+    calcolErrors: calcolErrPayload(src),
     header: src.extHeader,
     colTypes: extTypesFinal,
     xyzGuess,
@@ -1293,7 +1331,7 @@ async function exportCSV(data) {
   flushChunk();
 
   const elapsed = performance.now() - startTime;
-  self.postMessage({ type: 'export-complete', rowCount, elapsed });
+  self.postMessage({ type: 'export-complete', rowCount, elapsed, filterErrors: filterErrPayload(filterFn, null), calcolErrors: calcolErrPayload(src) });
 }
 
 async function swathAnalysis(data) {
@@ -1455,7 +1493,7 @@ async function swathAnalysis(data) {
   }
 
   const elapsed = performance.now() - startTime;
-  self.postMessage({ type: 'swath-complete', results, elapsed });
+  self.postMessage({ type: 'swath-complete', results, elapsed, filterErrors: filterErrPayload(globalFn, localFn), calcolErrors: calcolErrPayload(src) });
 }
 
 // ─── Cell declustering (GSLIB DECLUS) ─────────────────────────────────
@@ -1661,7 +1699,8 @@ async function declusAnalysis(data) {
     weights, n, located: nd,
     curve, optCellSize: best, declusteredMean: vrop, naiveMean: vrav,
     pinned: !!pinnedCell,
-    usedRange: [cmin, cmax, ncell, noff], wtMin, wtMax, elapsed
+    usedRange: [cmin, cmax, ncell, noff], wtMin, wtMax, elapsed,
+    filterErrors: filterErrPayload(globalFn, null), calcolErrors: calcolErrPayload(src)
   }, [weights.buffer]);
 }
 
@@ -1753,7 +1792,8 @@ async function colValuesAnalysis(data) {
   if (weights) transfers.push(weights.buffer);
   self.postMessage({
     type: 'colvalues-complete',
-    values, weights, n, finite: values.length, weightExcluded, elapsed
+    values, weights, n, finite: values.length, weightExcluded, elapsed,
+    filterErrors: filterErrPayload(globalFn, null), calcolErrors: calcolErrPayload(src)
   }, transfers);
 }
 
@@ -1853,7 +1893,9 @@ async function sectionAnalysis(data) {
     blocks,
     hAxis, vAxis, normalAxis, slicePos,
     blockCount: blocks.length,
-    elapsed
+    elapsed,
+    filterErrors: filterErrPayload(globalFn, localFn),
+    calcolErrors: calcolErrPayload(src)
   });
 }
 
@@ -2060,7 +2102,9 @@ async function gtAnalysis(data) {
     gradeResults: gradeResults,
     grouped: groupByColName !== null,
     groupByColName: groupByColName,
-    elapsed: elapsed
+    elapsed: elapsed,
+    filterErrors: filterErrPayload(globalFn, localFn),
+    calcolErrors: calcolErrPayload(src)
   });
 }
 

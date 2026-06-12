@@ -75,7 +75,8 @@ function renderAuxConfig() {
       '<button class="swath-generate" id="auxAnalyzeBtn">Analyze</button>' +
       '<div class="aux-hint aux-analyze-status" id="auxAnalyzeStatus">' +
         (auxCompleteData
-          ? (auxStale ? 'Config changed — re-run Analyze' : auxCompleteData.rowCount.toLocaleString() + ' rows analyzed')
+          ? (auxStale ? 'Config changed — re-run Analyze' : auxCompleteData.rowCount.toLocaleString() + ' rows analyzed' +
+              (auxCompleteData.filterErrors || auxCompleteData.calcolErrors ? ' · ⚠ filter/calc row errors — see Statistics' : ''))
           : 'Run to compare aux statistics on the Statistics tab') +
       '</div>' +
     '</div>';

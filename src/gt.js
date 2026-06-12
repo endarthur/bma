@@ -620,7 +620,8 @@ function renderGtOutput() {
   }
 
   var gradeResults = lastGtData.gradeResults;
-  var html = '<div class="gt-toolbar"><span class="gt-elapsed">' + (lastGtData.elapsed / 1000).toFixed(1) + 's</span></div>';
+  var html = workerErrNote(lastGtData) +
+    '<div class="gt-toolbar"><span class="gt-elapsed">' + (lastGtData.elapsed / 1000).toFixed(1) + 's</span></div>';
 
   // Theoretical overlay: kick a (re)load when enabled but not covered/fresh;
   // the load completion re-renders. Grouped charts skip the overlay.

@@ -417,6 +417,35 @@ function colIsEmpty(ds, idx) {
   return !!s && s.count === 0;
 }
 
+// A9 F2: values in a numeric column that failed to parse as numbers in the
+// last analysis (counted apart from sentinel nulls) — mixed-type signal
+function colParseFails(ds, idx) {
+  const d = ds === 'aux' ? auxCompleteData : lastCompleteData;
+  if (!d || !d.stats || idx == null) return 0;
+  const s = d.stats[idx];
+  return s && s.parseFails ? s.parseFails : 0;
+}
+function mixedColTitle(n) {
+  return n.toLocaleString() + ' value' + (n === 1 ? '' : 's') + ' failed to parse as numbers (treated as nulls) — mixed-type column? Toggle it to CAT in Preflight if it\'s a category';
+}
+
+// A9 F3: one-line warning for per-row filter/calcol errors carried on a
+// worker complete message; '' when clean. Optional label prefixes the note
+// (e.g. the aux dataset).
+function workerErrNote(msg, label) {
+  if (!msg) return '';
+  const parts = [];
+  if (msg.filterErrors) {
+    const n = (msg.filterErrors.global || 0) + (msg.filterErrors.local || 0);
+    parts.push(n.toLocaleString() + ' row' + (n === 1 ? '' : 's') + ' excluded by filter errors — first: ' + msg.filterErrors.message);
+  }
+  if (msg.calcolErrors) {
+    parts.push('calc errors on ' + msg.calcolErrors.count.toLocaleString() + ' row' + (msg.calcolErrors.count === 1 ? '' : 's') + ' — first: ' + msg.calcolErrors.message);
+  }
+  if (parts.length === 0) return '';
+  return '<div class="swath-aux-warn">' + (label ? esc(label) + ': ' : '') + esc(parts.join(' · ')) + '</div>';
+}
+
 // ─── Container-width charts (C1b-0) ────────────────────────────────────
 // Chart renderers draw their SVG at a logical width equal to the host's
 // pixel width (1 viewBox unit = 1px → crisp text, no letterboxing); the
