@@ -116,6 +116,10 @@ scope (no use case until someone shows one).
   folder per dataset (raw files + recipe for drillhole-derived, per D8).
 - IDB cache: per-dataset fingerprints (today's aux fingerprint pattern,
   keyed by dataset id).
+- **C8 alignment (2026-06-12)**: the registry serialization IS the heart of
+  the C8 project object — write it into that shape from day one
+  (`{datasets, referenceId, …}` under a named, id-keyed project) so the
+  project system doesn't re-serialize. See the C8 roadmap row.
 
 ## Phasing
 

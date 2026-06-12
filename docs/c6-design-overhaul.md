@@ -143,6 +143,11 @@ serializes/applies layouts, a preset is canned JSON.
   (multi-table drillholes), A12 (contact analysis), **C7 validation report
   export** — the convergence point C6's light theme + tokenized charts
   exists to serve (print-ready figures).
+- **C8 project system** (2026-06-12) shapes two C6 surfaces: the C6-2 File
+  menu is project lifecycle (New / Open recent ▸ / Rename / Save as… /
+  Pack / Export config), and the C6-3 landing redesign is the project
+  home — drop-a-file hero + named project cards (absorbing file-recents).
+  Design both with C8's object model in mind; implement C8 after.
 
 ## Constraints
 
