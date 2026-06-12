@@ -5496,7 +5496,7 @@ table.stats tr.stats-delta-row td:first-child {
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 95591b6 — click to check for updates">95591b6</div>
+<div class="build-badge" id="buildBadge" title="build a8e8b76 — click to check for updates">a8e8b76</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -6536,10 +6536,10 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     if (precisionSampleCount < PRECISION_SAMPLE) precisionSampleCount++;
   }
 
-  // When every column's type is forced (e.g. the aux stats pass sends its
-  // preflight types), skip the detection phase entirely. Detection rows are
-  // excluded from stats — negligible on block models, a real loss on small
-  // sample files.
+  // When every column's type is forced, skip the detection phase entirely —
+  // zero row loss. Both the model and aux passes send their full preflight
+  // types (A9-1); detection below remains as a fallback for direct worker
+  // use without preflight, and its rows are excluded from stats.
   if (forced.size >= nCols) {
     typesResolved = true;
     colTypes = src.colTypes = resolveTypes();
@@ -15989,9 +15989,23 @@ function cacheDelete(key) {
   });
 }
 
+// A9-1: force every column's type from the preflight sample (+ user
+// overrides) — the worker then skips its detection warmup entirely, so no
+// row is excluded from stats (zero row loss; the aux pass has worked this
+// way from the start). Falls back to user overrides alone when preflight
+// sampling is unavailable (worker detection + replay still covers that).
+function fullTypeOverrides() {
+  if (!preflightData || !preflightData.autoTypes) return currentTypeOverrides || null;
+  var full = {};
+  for (var i = 0; i < preflightData.autoTypes.length; i++) full[i] = preflightData.autoTypes[i];
+  if (currentTypeOverrides) for (var k in currentTypeOverrides) full[k] = currentTypeOverrides[k];
+  return full;
+}
+
 function analysisFingerprint() {
   return JSON.stringify({
     filter: currentFilter,
+    typesFrom: 'preflight', // A9-1 marker — invalidates pre-zero-row-loss caches once
     typeOverrides: currentTypeOverrides || null,
     skipCols: currentSkipCols || null,
     colFilters: currentColFilters || null,
@@ -17138,7 +17152,7 @@ function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerpr
     xyzOverride: xyzOverride || null,
     dxyzOverride: dxyzOverride || null,
     filter: filterPayload,
-    typeOverrides: currentTypeOverrides || null,
+    typeOverrides: fullTypeOverrides(),
     zipEntry: currentZipEntry || null,
     skipCols: currentSkipCols || null,
     colFilters: currentColFilters || null,

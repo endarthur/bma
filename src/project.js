@@ -236,9 +236,23 @@ function cacheDelete(key) {
   });
 }
 
+// A9-1: force every column's type from the preflight sample (+ user
+// overrides) — the worker then skips its detection warmup entirely, so no
+// row is excluded from stats (zero row loss; the aux pass has worked this
+// way from the start). Falls back to user overrides alone when preflight
+// sampling is unavailable (worker detection + replay still covers that).
+function fullTypeOverrides() {
+  if (!preflightData || !preflightData.autoTypes) return currentTypeOverrides || null;
+  var full = {};
+  for (var i = 0; i < preflightData.autoTypes.length; i++) full[i] = preflightData.autoTypes[i];
+  if (currentTypeOverrides) for (var k in currentTypeOverrides) full[k] = currentTypeOverrides[k];
+  return full;
+}
+
 function analysisFingerprint() {
   return JSON.stringify({
     filter: currentFilter,
+    typesFrom: 'preflight', // A9-1 marker — invalidates pre-zero-row-loss caches once
     typeOverrides: currentTypeOverrides || null,
     skipCols: currentSkipCols || null,
     colFilters: currentColFilters || null,
@@ -1385,7 +1399,7 @@ function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerpr
     xyzOverride: xyzOverride || null,
     dxyzOverride: dxyzOverride || null,
     filter: filterPayload,
-    typeOverrides: currentTypeOverrides || null,
+    typeOverrides: fullTypeOverrides(),
     zipEntry: currentZipEntry || null,
     skipCols: currentSkipCols || null,
     colFilters: currentColFilters || null,

@@ -1004,10 +1004,10 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     if (precisionSampleCount < PRECISION_SAMPLE) precisionSampleCount++;
   }
 
-  // When every column's type is forced (e.g. the aux stats pass sends its
-  // preflight types), skip the detection phase entirely. Detection rows are
-  // excluded from stats — negligible on block models, a real loss on small
-  // sample files.
+  // When every column's type is forced, skip the detection phase entirely —
+  // zero row loss. Both the model and aux passes send their full preflight
+  // types (A9-1); detection below remains as a fallback for direct worker
+  // use without preflight, and its rows are excluded from stats.
   if (forced.size >= nCols) {
     typesResolved = true;
     colTypes = src.colTypes = resolveTypes();
