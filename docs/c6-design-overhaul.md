@@ -98,24 +98,40 @@ serializes/applies layouts, a preset is canned JSON.
   app-wide (12 JS sites + shared CSS block). New smoke
   `experiments/c6-smoke.js` (7 asserts — grows with each C6 phase).
 
-## Decisions needed (Arthur)
+## Decisions — ALL DECIDED (Arthur, 2026-06-12: "I agree with all Ds")
 
-- **D1 — accent identity.** Full Switchboard semantics: Generate/active
-  become orange (#D4672E dark), amber reserved for warnings? Or keep
-  amber-as-action as a documented BMA delta (`--au-action: amber`)? Canon
-  recommendation: take orange; amber's new caution role is exactly what A9
-  needs, and BMA stops fighting the family look.
-- **D2 — fonts.** Embed Barlow+Space Mono subsets at build (+~130KB base64,
-  single-file stays sovereign) vs system-stack fallback only (0KB, look
-  varies by machine)? Recommendation: embed.
-- **D3 — default theme.** First paint from `prefers-color-scheme` (auditable
-  behavior) vs dark default with light opt-in? Recommendation: OS-follow.
-- **D4 — legacy accent themes.** Cull `teal/blue/mocha/cream/bm77` (settings
-  grid becomes Light / Dark / scale) vs port them as accent overrides?
-  Recommendation: cull at C6-1, re-add by request — they were exploration,
-  Switchboard is the decision.
-- **D5 — menubar scope.** File/View/Data/Help as listed, or minimal
-  File/View/Help? Any items Arthur wants that aren't listed?
+- **D1 ✓ — full Switchboard accent semantics.** Orange = action
+  (Generate/Apply/primary buttons), amber = caution (warnings, badges of
+  concern), red = fault, teal = info, green = go, indigo = selected. Brand
+  amber survives where brand belongs (header/identity moments), not on
+  actions. The triage of today's ~all-amber usage sites is the bulk of the
+  C6-1 accent pass.
+- **D2 ✓ — embed fonts.** Barlow 400/600 + Space Mono 400/700 subsets,
+  base64 at build (~130KB on a 1.2MB file).
+- **D3 ✓ — follow `prefers-color-scheme`**, user override persisted
+  (Light / Dark / System).
+- **D4 ✓ — cull the legacy accent themes** (`teal/blue/mocha/cream/bm77` +
+  the fake `light`). Stored `bmaSettings.theme` migrates: light/cream →
+  light, default → system, others → dark. Settings becomes
+  Light / Dark / System + UI scale.
+- **D5 ✓ — File / View / Data / Help**, plus the amendment from the design
+  review: the toolbar's SAVE/PACK/LOAD/CLEAR button row folds into the File
+  menu — the toolbar slims to filename + stats + filter, which also
+  de-ambers the header.
+
+## Strategy amendments (2026-06-12, the "where is this all going" session)
+
+- **C6-3 is redesigned in place**: not "make the aux empty state pretty"
+  but **design the Add-dataset surface** — a dataset list (card per
+  dataset: name, source, rows, stale, ★ reference, remove) + one Add flow
+  with two peer paths (point data / drillhole set), room for the 3rd and
+  4th datasets. Designed against [`a10-n-datasets.md`](a10-n-datasets.md)
+  so the surface is architecturally right on arrival even while the
+  registry refactor lands later.
+- Downstream rows minted on the same arc: A10 (N datasets), A11
+  (multi-table drillholes), A12 (contact analysis), **C7 validation report
+  export** — the convergence point C6's light theme + tokenized charts
+  exists to serve (print-ready figures).
 
 ## Constraints
 
