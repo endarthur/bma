@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BMA — Block Model Atelier</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='8' fill='%232d2d2d'/%3E%3Ccircle cx='32' cy='32' r='27' stroke='%23a0a0a0' fill='none' opacity='.4' transform='rotate(15,32,32)'/%3E%3Ctext x='32' y='43' font-family='Georgia,serif' font-size='24' font-weight='bold' fill='%23b87333' text-anchor='middle'%3EBMA%3C/text%3E%3C/svg%3E">
-<meta name="theme-color" content="#08090a">
+<meta name="theme-color" content="#15171A">
 <meta name="description" content="Client-side CSV block model analyzer for mining and geostatistics">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -13,7 +13,8 @@
 <style>
 /* __INJECT_CSS__ */
 </style>
-<script>try{var t=JSON.parse(localStorage.getItem('bma:settings')||'{}').theme;if(t&&t!=='default')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+<script>/* C6-1a first paint: same resolution as settings.js applyTheme (Switchboard theme.js semantics, inlined for head timing) */
+try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light':'light','cream':'light','bm77':'dark'};var t=JSON.parse(localStorage.getItem('bma:settings')||'{}').theme||'system';t=m[t]||t;if(t.indexOf('custom-')===0)t='dark';if(t==='system')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
 </head>
 <body>
 <div class="app">

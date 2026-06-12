@@ -5,28 +5,127 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BMA — Block Model Atelier</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='8' fill='%232d2d2d'/%3E%3Ccircle cx='32' cy='32' r='27' stroke='%23a0a0a0' fill='none' opacity='.4' transform='rotate(15,32,32)'/%3E%3Ctext x='32' y='43' font-family='Georgia,serif' font-size='24' font-weight='bold' fill='%23b87333' text-anchor='middle'%3EBMA%3C/text%3E%3C/svg%3E">
-<meta name="theme-color" content="#08090a">
+<meta name="theme-color" content="#15171A">
 <meta name="description" content="Client-side CSV block model analyzer for mining and geostatistics">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
+/* ─── @gcu/switchboard 0.1.0 — canonical GCU design tokens (C6-1a) ──────
+   Vendored verbatim from ../auditable/ext/switchboard/switchboard.css at
+   upstream eff8abb (2026-06-04). Layer 1 --sw-* swatches + Layer 2 --au-*
+   semantic API; light = :root (equipment gray), dark = [data-theme="dark"]
+   (basalt). Do not hand-edit — re-vendor from upstream. */
 :root {
-  --bg: #08090a;
-  --bg1: #0f1114;
-  --bg2: #161a1e;
-  --bg3: #1e2328;
-  --fg: #c8cdd3;
-  --fg-dim: #6b7280;
-  --fg-bright: #e8ecf0;
-  --amber: #e8a317;
-  --amber-dim: #b07a0e;
-  --amber-glow: #e8a31730;
-  --blue: #4a9eff;
-  --green: #34d399;
-  --red: #f87171;
-  --border: #252a30;
+  --sw-bg-deep:     #C2C1BE;
+  --sw-bg:          #D2D1CE;
+  --sw-bg-raised:   #E4E3E1;
+  --sw-bg-bright:   #EDECEB;
+  --sw-text:        #232322;
+  --sw-text-mid:    #504F4C;
+  --sw-text-soft:   #7A7875;
+  --sw-border:      #B3B1AD;
+  --sw-border-soft: #C6C4C1;
+  --sw-rule:        #A5A3A0;
+  --sw-orange:      #B54E1A;  --sw-orange-soft: #E8D8CF;
+  --sw-teal:        #1B6B72;  --sw-teal-soft:   #CEE2E4;
+  --sw-green:       #3D7340;  --sw-green-soft:  #D2E4D4;
+  --sw-amber:       #8E6518;  --sw-amber-soft:  #E4DCCC;
+  --sw-red:         #A8312A;  --sw-red-soft:    #E8D6D4;
+  --sw-indigo:      #4E5580;  --sw-indigo-soft: #D8D9E2;
+  --sw-mono:        'Space Mono', 'JetBrains Mono', 'Consolas', monospace;
+  --sw-sans:        'Barlow', system-ui, sans-serif;
+  --sw-radius:      3px;
+  --sw-radius-lg:   4px;
+
+  --au-surface-deep:   var(--sw-bg-deep);
+  --au-surface:        var(--sw-bg);
+  --au-surface-raised: var(--sw-bg-raised);
+  --au-surface-bright: var(--sw-bg-bright);
+
+  --au-fg:             var(--sw-text);
+  --au-fg-muted:       var(--sw-text-mid);
+  --au-fg-soft:        var(--sw-text-soft);
+
+  --au-border:         var(--sw-border);
+  --au-border-soft:    var(--sw-border-soft);
+  --au-rule:           var(--sw-rule);
+
+  --au-action:         var(--sw-orange);
+  --au-action-soft:    var(--sw-orange-soft);
+  --au-info:           var(--sw-teal);
+  --au-info-soft:      var(--sw-teal-soft);
+  --au-success:        var(--sw-green);
+  --au-success-soft:   var(--sw-green-soft);
+  --au-warn:           var(--sw-amber);
+  --au-warn-soft:      var(--sw-amber-soft);
+  --au-error:          var(--sw-red);
+  --au-error-soft:     var(--sw-red-soft);
+  --au-selected:       var(--sw-indigo);
+  --au-selected-soft:  var(--sw-indigo-soft);
+
+  --au-font-mono:      var(--sw-mono);
+  --au-font-sans:      var(--sw-sans);
+  --au-radius:         var(--sw-radius);
+  --au-radius-lg:      var(--sw-radius-lg);
+}
+
+[data-theme="dark"] {
+  --sw-bg-deep:     #0E1012;
+  --sw-bg:          #15171A;
+  --sw-bg-raised:   #1D2024;
+  --sw-bg-bright:   #25282D;
+  --sw-text:        #DDDCDA;
+  --sw-text-mid:    #9E9C98;
+  --sw-text-soft:   #6E6C68;
+  --sw-border:      #2F3338;
+  --sw-border-soft: #24272B;
+  --sw-rule:        #3A3E44;
+  --sw-orange:      #D4672E;  --sw-orange-soft: #2E1F18;
+  --sw-teal:        #3A9BA3;  --sw-teal-soft:   #16272A;
+  --sw-green:       #5A9B5E;  --sw-green-soft:  #18261A;
+  --sw-amber:       #C49540;  --sw-amber-soft:  #2A2316;
+  --sw-red:         #D05048;  --sw-red-soft:    #2C1A18;
+  --sw-indigo:      #7E86B8;  --sw-indigo-soft: #1E2030;
+}
+
+/* ─── BMA app layer — historical tokens bound to the semantic API ───────
+   The body of this stylesheet reads the BMA tokens below; since C6-1a they
+   are an app layer over --au-*, so light/dark resolve automatically.
+   Documented deltas (see docs/c6-design-overhaul.md):
+   - --fg-bright == --fg: BMA's three text levels map onto fg/muted; the
+     "bright" emphasis is carried by weight until the C6-1b typography pass
+   - --amber → ACTION is a C6-1a interim binding: every legacy amber use
+     reads as action-colored until the C6-1b accent triage splits them into
+     action / caution / selected / brand
+   - --mono stays IBM Plex until the C6-1b font embed (Space Mono) */
+:root {
+  --bg: var(--au-surface-deep);
+  --bg1: var(--au-surface);
+  --bg2: var(--au-surface-raised);
+  --bg3: var(--au-surface-bright);
+  --fg: var(--au-fg);
+  --fg-dim: var(--au-fg-muted);
+  --fg-bright: var(--au-fg);
+  --amber: var(--au-action);
+  --amber-dim: var(--au-action);
+  --amber-glow: var(--au-action-soft);
+  --blue: var(--au-info);
+  --green: var(--au-success);
+  --red: var(--au-error);
+  --border: var(--au-border);
   --mono: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  /* syntax highlight — light set (from the retired light theme) */
+  --hl-keyword: #a626a4;
+  --hl-string: #50a14f;
+  --hl-number: #c76b29;
+  --hl-comment: #a0a1a7;
+  --hl-function: #2563eb;
+  --hl-operator: #0184bc;
+  --hl-punct: #5a5a5a;
+}
+[data-theme="dark"] {
+  /* syntax highlight — dark set (the historical values) */
   --hl-keyword: #c678dd;
   --hl-string: #98c379;
   --hl-number: #d19a66;
@@ -35,121 +134,6 @@
   --hl-operator: #56b6c2;
   --hl-punct: #abb2bf;
 }
-
-/* ─── Built-in Themes ─────────────────────────────────────────────── */
-[data-theme="teal"] {
-  --bg: #070b0c; --bg1: #0c1315; --bg2: #13191d; --bg3: #1a2226;
-  --fg: #c2d1d6; --fg-dim: #5f7a80; --fg-bright: #e0eff4;
-  --amber: #2dd4bf; --amber-dim: #14b8a6; --amber-glow: #2dd4bf30;
-  --border: #1e2e32;
-}
-[data-theme="blue"] {
-  --bg: #080a0f; --bg1: #0c1019; --bg2: #131825; --bg3: #1a2130;
-  --fg: #c4ccdb; --fg-dim: #6878a0; --fg-bright: #e2e8f5;
-  --amber: #4a9eff; --amber-dim: #2d7ad4; --amber-glow: #4a9eff30;
-  --border: #202840;
-}
-[data-theme="mocha"] {
-  --bg: #1e1e2e; --bg1: #181825; --bg2: #252540; --bg3: #313244;
-  --fg: #cdd6f4; --fg-dim: #6c7086; --fg-bright: #f5e0dc;
-  --amber: #f9e2af; --amber-dim: #e2c88c; --amber-glow: #f9e2af30;
-  --border: #45475a;
-  --hl-keyword: #cba6f7; --hl-string: #a6e3a1; --hl-number: #fab387;
-  --hl-comment: #6c7086; --hl-function: #89b4fa; --hl-operator: #94e2d5; --hl-punct: #9399b2;
-}
-[data-theme="light"] {
-  --bg: #f5f5f0; --bg1: #eaeae5; --bg2: #ddddd8; --bg3: #d0d0cb;
-  --fg: #2c2c2c; --fg-dim: #808080; --fg-bright: #1a1a1a;
-  --amber: #c07800; --amber-dim: #996000; --amber-glow: #c0780020;
-  --border: #c8c8c0; --blue: #2563eb; --green: #059669; --red: #dc2626;
-  --hl-keyword: #a626a4; --hl-string: #50a14f; --hl-number: #c76b29;
-  --hl-comment: #a0a1a7; --hl-function: #2563eb; --hl-operator: #0184bc; --hl-punct: #5a5a5a;
-}
-[data-theme="cream"] {
-  --bg: #ece8e0; --bg1: #e2ded6; --bg2: #d8d4cc; --bg3: #cecac2;
-  --fg: #3a3530; --fg-dim: #8a8278; --fg-bright: #22201c;
-  --amber: #9a7320; --amber-dim: #7a5b18; --amber-glow: #9a732025;
-  --border: #c4bfb5; --blue: #2d6abf; --green: #1a7a52; --red: #c43030;
-  --hl-keyword: #8b5e1a; --hl-string: #3a7a3a; --hl-number: #a85d20;
-  --hl-comment: #9a9590; --hl-function: #2d6abf; --hl-operator: #1a7a52; --hl-punct: #6a6560;
-}
-[data-theme="bm77"] {
-  --bg: #262335; --bg1: #2a2139; --bg2: #34294f; --bg3: #3e3357;
-  --fg: #b6b1c4; --fg-dim: #6d5f8a; --fg-bright: #f0e8ff;
-  --amber: #ff7edb; --amber-dim: #d66bb5; --amber-glow: #ff7edb30;
-  --border: #463b5e; --blue: #36f9f6; --green: #72f1b8; --red: #fe4450;
-  --hl-keyword: #fede5d; --hl-string: #72f1b8; --hl-number: #f97e72;
-  --hl-comment: #6d5f8a; --hl-function: #36f9f6; --hl-operator: #ff7edb; --hl-punct: #8a7eaa;
-}
-/* BM77 neon glow effects */
-[data-theme="bm77"] header h1 {
-  text-shadow: 0 0 10px #ff7edb80, 0 0 25px #ff7edb40, 0 0 50px #ff7edb20;
-}
-[data-theme="bm77"] .results-tab.active {
-  text-shadow: 0 0 8px #ff7edb90, 0 0 20px #ff7edb40;
-}
-[data-theme="bm77"] .section-head {
-  text-shadow: 0 0 8px #ff7edb60, 0 0 18px #ff7edb30;
-}
-[data-theme="bm77"] .badge {
-  box-shadow: 0 0 6px #ff7edb60, 0 0 14px #ff7edb30;
-}
-[data-theme="bm77"] .toolbar-btn:hover,
-[data-theme="bm77"] .toolbar-icon-btn:hover {
-  box-shadow: 0 0 8px #ff7edb50;
-  text-shadow: 0 0 6px #ff7edb80;
-}
-[data-theme="bm77"] .execute-btn {
-  box-shadow: 0 0 10px #ff7edb50, 0 0 25px #ff7edb25;
-  text-shadow: 0 0 6px #ff7edb80;
-}
-[data-theme="bm77"] .stats-sidebar-title,
-[data-theme="bm77"] .statscat-sidebar-title,
-[data-theme="bm77"] .cat-sidebar-title,
-[data-theme="bm77"] .gt-sidebar-title,
-[data-theme="bm77"] .calcol-editor-head span,
-[data-theme="bm77"] .calcol-sb-title,
-[data-theme="bm77"] .settings-section-title,
-[data-theme="bm77"] .preflight-head {
-  text-shadow: 0 0 8px #ff7edb50, 0 0 16px #ff7edb25;
-}
-[data-theme="bm77"] .type-toggle[data-type="numeric"] {
-  text-shadow: 0 0 6px #36f9f680;
-}
-[data-theme="bm77"] .type-toggle[data-type="categorical"] {
-  text-shadow: 0 0 6px #ff7edb80;
-}
-[data-theme="bm77"] .stats-preset.active,
-[data-theme="bm77"] .settings-preset-btn.active {
-  box-shadow: 0 0 6px #ff7edb50;
-  text-shadow: 0 0 6px #ff7edb80;
-}
-[data-theme="bm77"] .filter-apply-btn {
-  box-shadow: 0 0 6px #36f9f640;
-  text-shadow: 0 0 6px #36f9f680;
-}
-[data-theme="bm77"] .dropzone:hover,
-[data-theme="bm77"] .dropzone.drag-over {
-  box-shadow: 0 0 30px #ff7edb30, 0 0 60px #ff7edb15;
-}
-[data-theme="bm77"] .settings-swatch.selected {
-  box-shadow: 0 0 8px #ff7edb60;
-}
-[data-theme="bm77"] .results-toolbar {
-  border-bottom-color: #463b5e;
-  box-shadow: 0 1px 12px #ff7edb10;
-}
-[data-theme="bm77"] ::-webkit-scrollbar-thumb {
-  background: #4e3d6e;
-}
-[data-theme="bm77"] ::-webkit-scrollbar-thumb:hover {
-  background: #5f4d80;
-}
-[data-theme="bm77"] .hl-keyword { text-shadow: 0 0 8px #fede5d80, 0 0 18px #fede5d30; }
-[data-theme="bm77"] .hl-function { text-shadow: 0 0 8px #36f9f680, 0 0 18px #36f9f630; }
-[data-theme="bm77"] .hl-string { text-shadow: 0 0 6px #72f1b860; }
-[data-theme="bm77"] .hl-operator { text-shadow: 0 0 6px #ff7edb60; }
-[data-theme="bm77"] .hl-rowaccess { text-shadow: 0 0 8px #ff7edb80, 0 0 16px #ff7edb30; }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 14px; }
@@ -4890,7 +4874,8 @@ table.stats tr.stats-delta-row td:first-child {
 }
 .dh-provenance button:hover { color: var(--amber); border-color: var(--amber); }
 </style>
-<script>try{var t=JSON.parse(localStorage.getItem('bma:settings')||'{}').theme;if(t&&t!=='default')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+<script>/* C6-1a first paint: same resolution as settings.js applyTheme (Switchboard theme.js semantics, inlined for head timing) */
+try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light':'light','cream':'light','bm77':'dark'};var t=JSON.parse(localStorage.getItem('bma:settings')||'{}').theme||'system';t=m[t]||t;if(t.indexOf('custom-')===0)t='dark';if(t==='system')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}</script>
 </head>
 <body>
 <div class="app">
@@ -5506,7 +5491,7 @@ table.stats tr.stats-delta-row td:first-child {
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build e9c2c18 — click to check for updates">e9c2c18</div>
+<div class="build-badge" id="buildBadge" title="build 75d2d8e — click to check for updates">75d2d8e</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -25512,7 +25497,7 @@ f 4 8 5 1
 var bmaSettings = null;
 
 var SETTINGS_DEFAULTS = {
-  theme: 'default',
+  theme: 'system',
   customThemes: [null, null, null],
   defaultPercentilePreset: 'quartiles',
   customPercentiles: null,
@@ -25522,34 +25507,28 @@ var SETTINGS_DEFAULTS = {
   defaultCatSort: 'count-desc'
 };
 
+// C6-1a (D4): Switchboard light/dark/system replaces the legacy accent
+// themes. Stored legacy names migrate in loadSettings().
+var LEGACY_THEME_MAP = {
+  'default': 'system', 'teal': 'dark', 'blue': 'dark', 'mocha': 'dark',
+  'light': 'light', 'cream': 'light', 'bm77': 'dark'
+};
+
 var THEME_META_COLORS = {
-  'default': '#08090a',
-  'teal': '#070b0c',
-  'blue': '#080a0f',
-  'mocha': '#1e1e2e',
-  'light': '#f5f5f0',
-  'cream': '#ece8e0',
-  'bm77': '#262335'
+  'light': '#D2D1CE',
+  'dark': '#15171A'
 };
 
 var THEME_NAMES = {
-  'default': 'Default',
-  'teal': 'Teal',
-  'blue': 'Blue',
-  'mocha': 'Mocha',
+  'system': 'System',
   'light': 'Light',
-  'cream': 'Cream',
-  'bm77': 'BM77'
+  'dark': 'Dark'
 };
 
 var THEME_SWATCHES = {
-  'default': ['#08090a', '#161a1e', '#e8a317', '#b07a0e'],
-  'teal':    ['#070b0c', '#13191d', '#2dd4bf', '#14b8a6'],
-  'blue':    ['#080a0f', '#131825', '#4a9eff', '#2d7ad4'],
-  'mocha':   ['#1e1e2e', '#252540', '#f9e2af', '#e2c88c'],
-  'light':   ['#f5f5f0', '#ddddd8', '#c07800', '#996000'],
-  'cream':   ['#ece8e0', '#d8d4cc', '#9a7320', '#7a5b18'],
-  'bm77':    ['#262335', '#34294f', '#ff7edb', '#36f9f6']
+  'system': ['#D2D1CE', '#15171A', '#B54E1A', '#D4672E'],
+  'light':  ['#D2D1CE', '#E4E3E1', '#B54E1A', '#1B6B72'],
+  'dark':   ['#15171A', '#1D2024', '#D4672E', '#3A9BA3']
 };
 
 var CUSTOM_THEME_KEYS = ['name','bg','bg1','bg2','bg3','fg','fgDim','fgBright','accent','accentDim','border'];
@@ -25563,6 +25542,8 @@ function loadSettings() {
       for (var k in SETTINGS_DEFAULTS) {
         bmaSettings[k] = parsed[k] !== undefined ? parsed[k] : SETTINGS_DEFAULTS[k];
       }
+      // C6-1a: migrate stored legacy accent-theme names (D4)
+      if (LEGACY_THEME_MAP[bmaSettings.theme]) bmaSettings.theme = LEGACY_THEME_MAP[bmaSettings.theme];
       return;
     }
   } catch (e) {}
@@ -25575,9 +25556,26 @@ function saveSettings() {
   } catch (e) {}
 }
 
+// C6-1a: light / dark / system over the Switchboard tokens. 'system'
+// follows prefers-color-scheme live (one media-query listener, registered
+// on first apply). The template <head> has an inline first-paint snippet
+// with the same resolution so a dark-OS load never flashes light.
+var _themeMQ = null;
+function resolvedThemeMode() {
+  if (bmaSettings.theme === 'light' || bmaSettings.theme === 'dark') return bmaSettings.theme;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 function applyTheme(name) {
   bmaSettings.theme = name;
   saveSettings();
+
+  if (!_themeMQ && window.matchMedia) {
+    _themeMQ = window.matchMedia('(prefers-color-scheme: dark)');
+    var mqHandler = function() { if (bmaSettings.theme === 'system') applyTheme('system'); };
+    if (_themeMQ.addEventListener) _themeMQ.addEventListener('change', mqHandler);
+    else if (_themeMQ.addListener) _themeMQ.addListener(mqHandler);
+  }
 
   // Remove custom theme style if present
   var customStyle = document.getElementById('customThemeStyle');
@@ -25586,7 +25584,9 @@ function applyTheme(name) {
     var idx = parseInt(name.split('-')[1], 10);
     var ct = bmaSettings.customThemes[idx];
     if (ct) {
-      document.documentElement.removeAttribute('data-theme');
+      // custom themes predate Switchboard and are dark-styled — they
+      // override the app layer over the dark base
+      document.documentElement.setAttribute('data-theme', 'dark');
       var css = ':root {\n';
       css += '  --bg: ' + ct.bg + ';\n';
       css += '  --bg1: ' + ct.bg1 + ';\n';
@@ -25611,14 +25611,12 @@ function applyTheme(name) {
     return;
   }
 
-  // Built-in theme
+  // Built-in mode: light = :root, dark = data-theme="dark"
   if (customStyle) customStyle.textContent = '';
-  if (name && name !== 'default') {
-    document.documentElement.setAttribute('data-theme', name);
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-  }
-  updateThemeColor(THEME_META_COLORS[name] || THEME_META_COLORS['default']);
+  var mode = resolvedThemeMode();
+  if (mode === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  updateThemeColor(THEME_META_COLORS[mode]);
 }
 
 function updateThemeColor(color) {
@@ -25683,7 +25681,7 @@ function renderSettingsBody() {
   // ── Theme section ──
   html += '<div class="settings-section"><div class="settings-section-title">Theme</div>';
   html += '<div class="settings-theme-grid">';
-  var builtInThemes = ['default', 'teal', 'blue', 'mocha', 'light', 'cream', 'bm77'];
+  var builtInThemes = ['system', 'light', 'dark'];
   for (var i = 0; i < builtInThemes.length; i++) {
     var tid = builtInThemes[i];
     var sw = THEME_SWATCHES[tid];
@@ -25911,7 +25909,7 @@ function wireSettingsEvents() {
       var slot = parseInt(delBtn.dataset.slot, 10);
       bmaSettings.customThemes[slot] = null;
       if (bmaSettings.theme === 'custom-' + slot) {
-        applyTheme('default');
+        applyTheme('system');
       }
       saveSettings();
       renderSettingsBody();

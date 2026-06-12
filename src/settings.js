@@ -3,7 +3,7 @@
 var bmaSettings = null;
 
 var SETTINGS_DEFAULTS = {
-  theme: 'default',
+  theme: 'system',
   customThemes: [null, null, null],
   defaultPercentilePreset: 'quartiles',
   customPercentiles: null,
@@ -13,34 +13,28 @@ var SETTINGS_DEFAULTS = {
   defaultCatSort: 'count-desc'
 };
 
+// C6-1a (D4): Switchboard light/dark/system replaces the legacy accent
+// themes. Stored legacy names migrate in loadSettings().
+var LEGACY_THEME_MAP = {
+  'default': 'system', 'teal': 'dark', 'blue': 'dark', 'mocha': 'dark',
+  'light': 'light', 'cream': 'light', 'bm77': 'dark'
+};
+
 var THEME_META_COLORS = {
-  'default': '#08090a',
-  'teal': '#070b0c',
-  'blue': '#080a0f',
-  'mocha': '#1e1e2e',
-  'light': '#f5f5f0',
-  'cream': '#ece8e0',
-  'bm77': '#262335'
+  'light': '#D2D1CE',
+  'dark': '#15171A'
 };
 
 var THEME_NAMES = {
-  'default': 'Default',
-  'teal': 'Teal',
-  'blue': 'Blue',
-  'mocha': 'Mocha',
+  'system': 'System',
   'light': 'Light',
-  'cream': 'Cream',
-  'bm77': 'BM77'
+  'dark': 'Dark'
 };
 
 var THEME_SWATCHES = {
-  'default': ['#08090a', '#161a1e', '#e8a317', '#b07a0e'],
-  'teal':    ['#070b0c', '#13191d', '#2dd4bf', '#14b8a6'],
-  'blue':    ['#080a0f', '#131825', '#4a9eff', '#2d7ad4'],
-  'mocha':   ['#1e1e2e', '#252540', '#f9e2af', '#e2c88c'],
-  'light':   ['#f5f5f0', '#ddddd8', '#c07800', '#996000'],
-  'cream':   ['#ece8e0', '#d8d4cc', '#9a7320', '#7a5b18'],
-  'bm77':    ['#262335', '#34294f', '#ff7edb', '#36f9f6']
+  'system': ['#D2D1CE', '#15171A', '#B54E1A', '#D4672E'],
+  'light':  ['#D2D1CE', '#E4E3E1', '#B54E1A', '#1B6B72'],
+  'dark':   ['#15171A', '#1D2024', '#D4672E', '#3A9BA3']
 };
 
 var CUSTOM_THEME_KEYS = ['name','bg','bg1','bg2','bg3','fg','fgDim','fgBright','accent','accentDim','border'];
@@ -54,6 +48,8 @@ function loadSettings() {
       for (var k in SETTINGS_DEFAULTS) {
         bmaSettings[k] = parsed[k] !== undefined ? parsed[k] : SETTINGS_DEFAULTS[k];
       }
+      // C6-1a: migrate stored legacy accent-theme names (D4)
+      if (LEGACY_THEME_MAP[bmaSettings.theme]) bmaSettings.theme = LEGACY_THEME_MAP[bmaSettings.theme];
       return;
     }
   } catch (e) {}
@@ -66,9 +62,26 @@ function saveSettings() {
   } catch (e) {}
 }
 
+// C6-1a: light / dark / system over the Switchboard tokens. 'system'
+// follows prefers-color-scheme live (one media-query listener, registered
+// on first apply). The template <head> has an inline first-paint snippet
+// with the same resolution so a dark-OS load never flashes light.
+var _themeMQ = null;
+function resolvedThemeMode() {
+  if (bmaSettings.theme === 'light' || bmaSettings.theme === 'dark') return bmaSettings.theme;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 function applyTheme(name) {
   bmaSettings.theme = name;
   saveSettings();
+
+  if (!_themeMQ && window.matchMedia) {
+    _themeMQ = window.matchMedia('(prefers-color-scheme: dark)');
+    var mqHandler = function() { if (bmaSettings.theme === 'system') applyTheme('system'); };
+    if (_themeMQ.addEventListener) _themeMQ.addEventListener('change', mqHandler);
+    else if (_themeMQ.addListener) _themeMQ.addListener(mqHandler);
+  }
 
   // Remove custom theme style if present
   var customStyle = document.getElementById('customThemeStyle');
@@ -77,7 +90,9 @@ function applyTheme(name) {
     var idx = parseInt(name.split('-')[1], 10);
     var ct = bmaSettings.customThemes[idx];
     if (ct) {
-      document.documentElement.removeAttribute('data-theme');
+      // custom themes predate Switchboard and are dark-styled — they
+      // override the app layer over the dark base
+      document.documentElement.setAttribute('data-theme', 'dark');
       var css = ':root {\n';
       css += '  --bg: ' + ct.bg + ';\n';
       css += '  --bg1: ' + ct.bg1 + ';\n';
@@ -102,14 +117,12 @@ function applyTheme(name) {
     return;
   }
 
-  // Built-in theme
+  // Built-in mode: light = :root, dark = data-theme="dark"
   if (customStyle) customStyle.textContent = '';
-  if (name && name !== 'default') {
-    document.documentElement.setAttribute('data-theme', name);
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-  }
-  updateThemeColor(THEME_META_COLORS[name] || THEME_META_COLORS['default']);
+  var mode = resolvedThemeMode();
+  if (mode === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  else document.documentElement.removeAttribute('data-theme');
+  updateThemeColor(THEME_META_COLORS[mode]);
 }
 
 function updateThemeColor(color) {
@@ -174,7 +187,7 @@ function renderSettingsBody() {
   // ── Theme section ──
   html += '<div class="settings-section"><div class="settings-section-title">Theme</div>';
   html += '<div class="settings-theme-grid">';
-  var builtInThemes = ['default', 'teal', 'blue', 'mocha', 'light', 'cream', 'bm77'];
+  var builtInThemes = ['system', 'light', 'dark'];
   for (var i = 0; i < builtInThemes.length; i++) {
     var tid = builtInThemes[i];
     var sw = THEME_SWATCHES[tid];
@@ -402,7 +415,7 @@ function wireSettingsEvents() {
       var slot = parseInt(delBtn.dataset.slot, 10);
       bmaSettings.customThemes[slot] = null;
       if (bmaSettings.theme === 'custom-' + slot) {
-        applyTheme('default');
+        applyTheme('system');
       }
       saveSettings();
       renderSettingsBody();
