@@ -91,6 +91,17 @@ serializes/applies layouts, a preset is canned JSON.
 
 ## Phase log
 
+- **C6-1a ✅ ea5ed3e (2026-06-12)** — Switchboard tokens vendored (pinned
+  eff8abb) into the styles.css head; BMA tokens = app layer over `--au-*`
+  (documented deltas: fg-bright==fg, amber→action interim, mono unchanged);
+  Light/Dark/System with live OS-follow + first-paint head snippet; legacy
+  themes culled with stored-name migration; custom slots ride the dark
+  base. Both modes eyeballed (`experiments/c6-theme-shots.js`); suite green
+  — smokes now exercise LIGHT by default (headless). Remaining C6-1 slices:
+  **C6-1b** accent triage (action/caution/selected/brand split) + font
+  embed (Barlow/Space Mono subsets at build) + typography scale; **C6-1c**
+  chart tokens + light-safe palette + theme-change re-render hook; UI scale
+  setting.
 - **C6-0 ✅ fd4456a (2026-06-12)** — collapse state in module state
   (`gtTableCollapsed` by column name / `swathTableCollapsed`), renders
   state-driven; coord rows resolve in the context menu (axis header,
