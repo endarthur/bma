@@ -753,6 +753,9 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   const PRECISION_SAMPLE = 10000;
   let precisionSampleCount = 0;
 
+  // A9 F6: coordinate cells skipped by grid inference (sentinel/unparseable)
+  let coordInvalidCells = 0;
+
   // ── Stats accumulators (initialized after type detection) ──
   let stats = null;
   let catCounts = null;
@@ -1010,20 +1013,23 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     if (!hasXYZ) return;
     for (const axis of ['x', 'y', 'z']) {
       const raw = (fields[xyzGuess[axis]] || '').trim();
+      // Sentinel coordinates must not become grid positions — stats nulls
+      // them, and before this check a -999 X corrupted origin/extent
+      // inference (A9 F6). Counted together with unparseable cells.
+      if (NULL_SENTINELS.has(raw)) { coordInvalidCells++; continue; }
       const v = Number(raw);
-      if (isFinite(v)) {
-        xyzSets[axis].add(v);
-        if (precisionSampleCount < PRECISION_SAMPLE) {
-          const dotIdx = raw.indexOf('.');
-          if (dotIdx >= 0) {
-            const dp = raw.length - dotIdx - 1;
-            if (dp > maxDecimals[axis]) maxDecimals[axis] = dp;
-          }
+      if (!isFinite(v)) { coordInvalidCells++; continue; }
+      xyzSets[axis].add(v);
+      if (precisionSampleCount < PRECISION_SAMPLE) {
+        const dotIdx = raw.indexOf('.');
+        if (dotIdx >= 0) {
+          const dp = raw.length - dotIdx - 1;
+          if (dp > maxDecimals[axis]) maxDecimals[axis] = dp;
         }
-        if (orderSampleCount < ORDER_SAMPLE) {
-          if (prevCoord[axis] !== null && v !== prevCoord[axis]) transitions[axis]++;
-          prevCoord[axis] = v;
-        }
+      }
+      if (orderSampleCount < ORDER_SAMPLE) {
+        if (prevCoord[axis] !== null && v !== prevCoord[axis]) transitions[axis]++;
+        prevCoord[axis] = v;
       }
     }
     // Collect DXYZ dimension values
@@ -1223,6 +1229,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     weightArrayMismatch: wArr && wOrd !== wArr.length ? { expected: wArr.length, got: wOrd } : null,
     filterErrors: filterErrPayload(filterFn, null),
     calcolErrors: calcolErrPayload(src),
+    coordInvalidCells,
     header: src.extHeader,
     colTypes: extTypesFinal,
     xyzGuess,
@@ -1438,6 +1445,7 @@ async function swathAnalysis(data) {
   }
 
   let lastProgress = 0;
+  let weightExcluded = 0; // A9 F4: counted like the analyze pass, no silent skips
   await src.forEachRow({
     globalFn,
     row(row, fields, totalChars) {
@@ -1448,11 +1456,11 @@ async function swathAnalysis(data) {
       if (localFn && !localFn(row)) return;
       let rw = 1;
       if (wArr) {
-        if (!(awv > 0) || !isFinite(awv)) return;
+        if (!(awv > 0) || !isFinite(awv)) { weightExcluded++; return; }
         rw = awv;
       } else if (weightName) {
         const wv = row[weightName];
-        if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) return;
+        if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) { weightExcluded++; return; }
         rw = wv;
       }
       processRow(row, rw);
@@ -1493,7 +1501,7 @@ async function swathAnalysis(data) {
   }
 
   const elapsed = performance.now() - startTime;
-  self.postMessage({ type: 'swath-complete', results, elapsed, filterErrors: filterErrPayload(globalFn, localFn), calcolErrors: calcolErrPayload(src) });
+  self.postMessage({ type: 'swath-complete', results, elapsed, weightExcluded, filterErrors: filterErrPayload(globalFn, localFn), calcolErrors: calcolErrPayload(src) });
 }
 
 // ─── Cell declustering (GSLIB DECLUS) ─────────────────────────────────
@@ -1986,7 +1994,9 @@ async function gtAnalysis(data) {
   }
 
   function processRowGt(row, tonnage) {
-    var gv = groupByColName ? String(row[groupByColName] || '') : null;
+    // ?? not || — a falsy-but-real group value (numeric category 0) must
+    // keep its own group, matching the stats pass (A9 F5)
+    var gv = groupByColName ? String(row[groupByColName] ?? '') : null;
     for (var gi = 0; gi < gradeInfo.length; gi++) {
       var info = gradeInfo[gi];
       var grade = row[info.colName];
@@ -2009,6 +2019,11 @@ async function gtAnalysis(data) {
     }
   }
 
+  // A9 F4: a selected per-row tonnage input (DXYZ dims, density, weight)
+  // that is invalid on a row EXCLUDES the row, counted by reason — matching
+  // the analyze pass's weight contract. Previously the input silently
+  // became 1, keeping the block at fabricated tonnage.
+  var gtExcluded = { volume: 0, density: 0, weight: 0 };
   var lastProgress = 0;
   await src.forEachRow({
     globalFn: globalFn,
@@ -2021,6 +2036,9 @@ async function gtAnalysis(data) {
         var dx = row[dxyzNames[0]], dy = row[dxyzNames[1]], dz = row[dxyzNames[2]];
         if (typeof dx === 'number' && typeof dy === 'number' && typeof dz === 'number' && isFinite(dx) && isFinite(dy) && isFinite(dz)) {
           volume = Math.abs(dx) * Math.abs(dy) * Math.abs(dz);
+        } else {
+          gtExcluded.volume++;
+          return;
         }
       } else if (blockVolume > 0) {
         volume = blockVolume;
@@ -2031,11 +2049,13 @@ async function gtAnalysis(data) {
       } else if (densityColName) {
         var dv = row[densityColName];
         if (typeof dv === 'number' && isFinite(dv) && dv > 0) density = dv;
+        else { gtExcluded.density++; return; }
       }
       var weight = 1;
       if (weightColName) {
         var wv = row[weightColName];
         if (typeof wv === 'number' && isFinite(wv) && wv > 0) weight = wv;
+        else { gtExcluded.weight++; return; }
       }
       var tonnage = volume * density * weight;
       processRowGt(row, tonnage);
@@ -2103,6 +2123,7 @@ async function gtAnalysis(data) {
     grouped: groupByColName !== null,
     groupByColName: groupByColName,
     elapsed: elapsed,
+    excluded: (gtExcluded.volume || gtExcluded.density || gtExcluded.weight) ? gtExcluded : null,
     filterErrors: filterErrPayload(globalFn, localFn),
     calcolErrors: calcolErrPayload(src)
   });

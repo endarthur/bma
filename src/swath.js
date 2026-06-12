@@ -183,6 +183,12 @@ function renderSwathOutput(stat) {
 
   var html = workerErrNote(sd) +
     workerErrNote({ filterErrors: sd.auxFilterErrors, calcolErrors: sd.auxCalcolErrors }, auxPrefix || 'aux');
+  if (sd.weightExcluded > 0 || sd.auxWeightExcluded > 0) {
+    var wParts = [];
+    if (sd.weightExcluded > 0) wParts.push(sd.weightExcluded.toLocaleString() + ' model');
+    if (sd.auxWeightExcluded > 0) wParts.push(sd.auxWeightExcluded.toLocaleString() + ' ' + (auxPrefix || 'aux'));
+    html += '<div class="swath-aux-warn">Rows excluded for invalid weight: ' + wParts.join(', ') + '.</div>';
+  }
   if (sd.directions.length > 1) {
     html += '<div class="swath-dir-tabs">' + sd.directions.map(function(d) {
       var title = d.dir ? 'Az ' + Math.round(d.azimuth) + '\u00b0 / Pl ' + Math.round(d.plunge) + '\u00b0' : d.key.toUpperCase() + ' axis';
@@ -662,6 +668,7 @@ function runSwath() {
       auxError: out.auxError,
       filterErrors: out.filterErrors || null, calcolErrors: out.calcolErrors || null,
       auxFilterErrors: out.auxFilterErrors || null, auxCalcolErrors: out.auxCalcolErrors || null,
+      weightExcluded: out.weightExcluded || 0, auxWeightExcluded: out.auxWeightExcluded || 0,
       activeKey: dcfg.dirs.some(function(d) { return d.key === prevKey; }) ? prevKey : dcfg.dirs[0].key
     };
     renderSwathOutput(stat);
@@ -723,6 +730,7 @@ function runSwath() {
         out.elapsed = m.elapsed;
         out.filterErrors = m.filterErrors || null;
         out.calcolErrors = m.calcolErrors || null;
+        out.weightExcluded = m.weightExcluded || 0;
         swathWorker.terminate();
         swathWorker = null;
         pending--;
@@ -784,6 +792,7 @@ function runSwath() {
         out.auxResults = m.results;
         out.auxFilterErrors = m.filterErrors || null;
         out.auxCalcolErrors = m.calcolErrors || null;
+        out.auxWeightExcluded = m.weightExcluded || 0;
         swathAuxWorker.terminate();
         swathAuxWorker = null;
         pending--;

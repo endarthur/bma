@@ -620,8 +620,19 @@ function renderGtOutput() {
   }
 
   var gradeResults = lastGtData.gradeResults;
-  var html = workerErrNote(lastGtData) +
-    '<div class="gt-toolbar"><span class="gt-elapsed">' + (lastGtData.elapsed / 1000).toFixed(1) + 's</span></div>';
+  var html = workerErrNote(lastGtData);
+  // A9 F4: rows excluded for invalid per-row tonnage inputs
+  if (lastGtData.excluded) {
+    var ex = lastGtData.excluded;
+    var exParts = [];
+    if (ex.volume > 0) exParts.push(ex.volume.toLocaleString() + ' invalid block dims');
+    if (ex.density > 0) exParts.push(ex.density.toLocaleString() + ' invalid density');
+    if (ex.weight > 0) exParts.push(ex.weight.toLocaleString() + ' invalid weight');
+    var exTotal = ex.volume + ex.density + ex.weight;
+    html += '<div class="swath-aux-warn">' + exTotal.toLocaleString() + ' row' + (exTotal === 1 ? '' : 's') +
+      ' excluded from GT (' + exParts.join(', ') + ').</div>';
+  }
+  html += '<div class="gt-toolbar"><span class="gt-elapsed">' + (lastGtData.elapsed / 1000).toFixed(1) + 's</span></div>';
 
   // Theoretical overlay: kick a (re)load when enabled but not covered/fresh;
   // the load completion re-renders. Grouped charts skip the overlay.
