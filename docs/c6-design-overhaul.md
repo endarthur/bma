@@ -89,6 +89,15 @@ Layout presets (View → Layouts: "Validation" tiling Stats+Swath+GT, etc.) are
 post-release sugar unless trivial during C6-2 — rails already
 serializes/applies layouts, a preset is canned JSON.
 
+## Phase log
+
+- **C6-0 ✅ fd4456a (2026-06-12)** — collapse state in module state
+  (`gtTableCollapsed` by column name / `swathTableCollapsed`), renders
+  state-driven; coord rows resolve in the context menu (axis header,
+  change-assignment deep link, copy name); `.swath-aux-warn` → `.warn-note`
+  app-wide (12 JS sites + shared CSS block). New smoke
+  `experiments/c6-smoke.js` (7 asserts — grows with each C6 phase).
+
 ## Decisions needed (Arthur)
 
 - **D1 — accent identity.** Full Switchboard semantics: Generate/active
