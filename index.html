@@ -4959,9 +4959,9 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
         <span id="resultsMemInfo" class="results-toolbar-info"></span>
       </div>
       <div class="toolbar-right">
-        <button class="toolbar-btn" id="projectSave" title="Save project (.bma.json)">Save</button>
+        <button class="toolbar-btn" id="projectSave" title="Export project config (.bma.json) — the project itself auto-saves continuously">Export</button>
         <button class="toolbar-btn" id="projectPack" title="Pack project + data files into one portable zip">Pack</button>
-        <button class="toolbar-btn" id="projectLoad" title="Load project (.bma.json)">Load</button>
+        <button class="toolbar-btn" id="projectLoad" title="Import project config (.bma.json)">Import</button>
         <button class="toolbar-btn" id="projectClear" title="Clear saved config, revert to defaults">Clear</button>
         <input type="file" id="projectFileInput" accept=".bma.json,.json" style="display:none">
         <button class="toolbar-icon-btn" id="helpBtn" title="Help (F1)">
@@ -5491,7 +5491,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build ef6945f — click to check for updates">ef6945f</div>
+<div class="build-badge" id="buildBadge" title="build f00343c — click to check for updates">f00343c</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -16756,9 +16756,9 @@ function clearProject() {
 // rails-only section and the Panels checkmarks are live on every open
 Menu.dropdown($toolbarOverflow, function() {
   const items = [
-    { label: 'Save project', action: 'save' },
+    { label: 'Export project', action: 'save' },
     { label: 'Pack project', action: 'pack' },
-    { label: 'Load project', action: 'load' },
+    { label: 'Import project', action: 'load' },
     { label: 'Clear project', action: 'clear' },
   ];
   if (wsRails) {

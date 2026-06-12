@@ -875,9 +875,9 @@ function clearProject() {
 // rails-only section and the Panels checkmarks are live on every open
 Menu.dropdown($toolbarOverflow, function() {
   const items = [
-    { label: 'Save project', action: 'save' },
+    { label: 'Export project', action: 'save' },
     { label: 'Pack project', action: 'pack' },
-    { label: 'Load project', action: 'load' },
+    { label: 'Import project', action: 'load' },
     { label: 'Clear project', action: 'clear' },
   ];
   if (wsRails) {
