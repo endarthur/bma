@@ -1532,7 +1532,7 @@ function displayResults(data) {
       ${anySubBlocked && currentDXYZ.dx < 0 && currentDXYZ.dy < 0 && currentDXYZ.dz < 0 ? `<div style="margin-top:0.5rem; padding:0.4rem 0.6rem; border-radius:4px; background:rgba(255,180,0,0.12); border:1px solid rgba(255,180,0,0.3); font-size:0.75rem; color:#e5a800;">
         ⚠ This model appears sub-blocked. Assign DX/DY/DZ columns in Preflight for accurate block sizes.
       </div>` : ''}
-      ${data.coordInvalidCells > 0 ? `<div class="swath-aux-warn" style="margin-top:0.5rem;">
+      ${data.coordInvalidCells > 0 ? `<div class="warn-note" style="margin-top:0.5rem;">
         ${data.coordInvalidCells.toLocaleString()} coordinate value${data.coordInvalidCells === 1 ? '' : 's'} ignored by grid inference (null sentinel or unparseable).
       </div>` : ''}`;
   } else {
@@ -2245,7 +2245,7 @@ function renderStatsCatContent() {
 // values — say so instead of quietly truncating the breakdown
 function statsCatOverflowNote(data) {
   return data && data.groupStatsOverflow
-    ? '<div class="swath-aux-warn">Group cap reached (500) — rows beyond the first 500 group values are not in this breakdown. Filter the data or group by a lower-cardinality column.</div>'
+    ? '<div class="warn-note">Group cap reached (500) — rows beyond the first 500 group values are not in this breakdown. Filter the data or group by a lower-cardinality column.</div>'
     : '';
 }
 

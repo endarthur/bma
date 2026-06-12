@@ -63,7 +63,7 @@ Read in order:
 | `15/16-legacy-light-*` | The existing "light" theme — an accent remap on dark surfaces, not a designed light mode. The case for Switchboard |
 | `17-preflight-dirty-badges` | A pathological file: EMPTY/MIXED column badges, ragged-row warn — the A8/A9 trust language in preflight |
 | `18-summary-dirty-warns` | Coordinate-sentinel note in the geometry card |
-| `19-statistics-dirty-warns` | ∅/✱ badges + the red `.swath-aux-warn` note style (class itself is slated for rename to `.warn-note`, C6-0) |
+| `19-statistics-dirty-warns` | ∅/✱ badges + the red `.warn-note` style (renamed from `.swath-aux-warn` in C6-0) |
 | `20/21-mobile-*` | 390×844 legacy tab shell — what C1c will turn into a pager. Tokens you define will flow here |
 
 Regenerate any time: `node experiments/c6-shots.js` (add states as you need;

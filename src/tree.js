@@ -224,7 +224,8 @@ function treeDatasetHtml(ds, openState) {
       '</div>';
   }
   function coordRow(c) {
-    return '<div class="tree-row tree-row--coord">' +
+    // data attrs so the context menu resolves coordinate rows too (C6-0)
+    return '<div class="tree-row tree-row--coord" data-ds="' + ds + '" data-name="' + esc(c.name) + '" data-kind="coord" data-axis="' + c.axis + '">' +
       '<span class="tree-axis">' + c.axis + '</span>' +
       '<span class="tree-name" title="' + esc(c.name) + '">' + esc(c.name) + '</span>' +
       '</div>';

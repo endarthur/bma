@@ -26,6 +26,7 @@ const GT_GRADE_UNITS = GRADE_UNITS.concat([{ label: 'Custom\u2026', symbol: null
 
 let gtNumCols = [];
 let gtCatCols = [];
+let gtTableCollapsed = new Set(); // collapsed table sections by column name (C6-0)
 
 function renderGtConfig(data) {
   var $sidebar = document.getElementById('gtSidebar');
@@ -629,12 +630,12 @@ function renderGtOutput() {
     if (ex.density > 0) exParts.push(ex.density.toLocaleString() + ' invalid density');
     if (ex.weight > 0) exParts.push(ex.weight.toLocaleString() + ' invalid weight');
     var exTotal = ex.volume + ex.density + ex.weight;
-    html += '<div class="swath-aux-warn">' + exTotal.toLocaleString() + ' row' + (exTotal === 1 ? '' : 's') +
+    html += '<div class="warn-note">' + exTotal.toLocaleString() + ' row' + (exTotal === 1 ? '' : 's') +
       ' excluded from GT (' + exParts.join(', ') + ').</div>';
   }
   // A9 F7: GT group cap
   if (lastGtData.groupOverflow) {
-    html += '<div class="swath-aux-warn">Group cap reached (200) — groups beyond the first 200 values are missing from the group curves (totals are unaffected).</div>';
+    html += '<div class="warn-note">Group cap reached (200) — groups beyond the first 200 values are missing from the group curves (totals are unaffected).</div>';
   }
   html += '<div class="gt-toolbar"><span class="gt-elapsed">' + (lastGtData.elapsed / 1000).toFixed(1) + 's</span></div>';
 
@@ -673,14 +674,18 @@ function renderGtOutput() {
       '<button class="swath-chart-btn" data-gt-png="' + gi + '" data-col-name="' + esc(gr.colName || '') + '">Download PNG</button>' +
     '</div>';
     html += '<div class="gt-chart-wrap">' + renderGtChart(gr, cutoffs, units, isGrouped, gi, selectedGroups, showTotal, theo) + '</div>';
-    // Collapsible table with per-table copy button
+    // Collapsible table with per-table copy button. Collapse state lives in
+    // gtTableCollapsed (by column name), not the DOM \u2014 the chart-width
+    // observers rebuild this area (a collapse changes the scrollbar, which
+    // changes content width), and DOM-only state reopened the table (C6-0)
     var tableTitle = gradeResults.length > 1 ? esc(gr.colName) + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') : 'Table';
+    var tCollapsed = gtTableCollapsed.has(gr.colName);
     html += '<div class="gt-table-section">' +
       '<div class="gt-table-header" data-gt-collapse="' + gi + '">' +
-        '<span class="gt-table-toggle">\u25BC</span> ' + tableTitle +
+        '<span class="gt-table-toggle">' + (tCollapsed ? '\u25B6' : '\u25BC') + '</span> ' + tableTitle +
         '<button class="gt-copy-btn" data-gt-copy="' + gi + '">Copy</button>' +
       '</div>' +
-      '<div class="gt-table-body" id="gtTableBody' + gi + '">' +
+      '<div class="gt-table-body" id="gtTableBody' + gi + '"' + (tCollapsed ? ' style="display:none"' : '') + '>' +
         '<div class="gt-table-wrap">' + renderGtTable(gr, cutoffs, units, isGrouped, gi, selectedGroups, showTotal) + '</div>' +
       '</div>' +
     '</div>';
@@ -716,18 +721,21 @@ function renderGtOutput() {
     btn.addEventListener('click', function() { downloadGtPng(btn.dataset.gtPng, btn.dataset.colName); });
   });
 
-  // Wire collapsible table headers
+  // Wire collapsible table headers \u2014 state in gtTableCollapsed (C6-0)
   $content.querySelectorAll('[data-gt-collapse]').forEach(function(hdr) {
     hdr.addEventListener('click', function() {
       var idx = hdr.dataset.gtCollapse;
+      var colName = (lastGtData.gradeResults[idx] || {}).colName;
       var body = document.getElementById('gtTableBody' + idx);
       var toggle = hdr.querySelector('.gt-table-toggle');
       if (body.style.display === 'none') {
         body.style.display = '';
         toggle.textContent = '\u25BC';
+        gtTableCollapsed.delete(colName);
       } else {
         body.style.display = 'none';
         toggle.textContent = '\u25B6';
+        gtTableCollapsed.add(colName);
       }
     });
   });

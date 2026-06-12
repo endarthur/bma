@@ -37,10 +37,11 @@ function showCtxMenu(items, x, y) {
 function ctxResolveVariable(e) {
   var t = e.target;
 
-  var row = t.closest && t.closest('.tree-row--edit');
-  if (row) {
+  var row = t.closest && t.closest('.tree-row--edit, .tree-row--coord');
+  if (row && row.dataset.name) {
     return { ds: row.dataset.ds, name: row.dataset.name, kind: row.dataset.kind,
-             idx: row.dataset.idx !== undefined ? parseInt(row.dataset.idx) : null };
+             idx: row.dataset.idx !== undefined ? parseInt(row.dataset.idx) : null,
+             axis: row.dataset.axis || null };
   }
   if (!lastCompleteData) return null;
 
@@ -95,6 +96,19 @@ CTX_PROVIDERS.push(function variableProvider(e) {
   if (!v || !v.name) return null;
   var x = e.clientX, y = e.clientY;
   var items = [{ head: true, label: (v.ds === 'model' ? 'Model' : (auxPrefix || 'aux')) + ':' + v.name }];
+
+  // Coordinate rows: axis info + where to change it (C6-0 — these rows
+  // previously fell through to the native browser menu)
+  if (v.kind === 'coord') {
+    items[0].label += ' — ' + (v.axis || '?') + ' axis';
+    items.push({ label: 'Change axis assignment…', action: function() {
+      showPanel(v.ds === 'aux' ? 'aux' : 'preflight');
+    } });
+    items.push({ label: 'Copy column name', action: function() {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v.name);
+    } });
+    return items;
+  }
 
   items.push({ label: 'Properties…', action: function() { openTreeEditor(v.ds, v.name, v.kind, v.idx, x, y); } });
 

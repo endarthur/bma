@@ -426,7 +426,7 @@ function renderStatsCdfPanel() {
   }
 
   var note = skipped.length > 0
-    ? '<div class="swath-aux-warn">No data for ' + skipped.map(esc).join(', ') +
+    ? '<div class="warn-note">No data for ' + skipped.map(esc).join(', ') +
       ' — column empty or every value filtered out.</div>'
     : '';
 

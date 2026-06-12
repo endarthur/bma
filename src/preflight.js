@@ -702,7 +702,7 @@ function renderPreflightSidebar(data) {
   const raggedSample = (!data.isDm && data.sampleRows)
     ? data.sampleRows.filter(r => r.length !== header.length).length : 0;
   if (raggedSample > 0) {
-    html += `<div class="swath-aux-warn" style="margin:0 0 0.4rem;">${raggedSample} of ${data.sampleRows.length} sampled rows have a different field count than the header — check delimiter and quoting.</div>`;
+    html += `<div class="warn-note" style="margin:0 0 0.4rem;">${raggedSample} of ${data.sampleRows.length} sampled rows have a different field count than the header — check delimiter and quoting.</div>`;
   }
   html += '<div class="pf-col-list" id="pfColList">';
   for (let i = 0; i < header.length; i++) {

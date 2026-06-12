@@ -446,7 +446,7 @@ function workerErrNote(msg, label) {
     parts.push(msg.raggedRows.toLocaleString() + ' row' + (msg.raggedRows === 1 ? '' : 's') + ' with unexpected field count (check delimiter/quoting — misaligned values land in the wrong columns)');
   }
   if (parts.length === 0) return '';
-  return '<div class="swath-aux-warn">' + (label ? esc(label) + ': ' : '') + esc(parts.join(' · ')) + '</div>';
+  return '<div class="warn-note">' + (label ? esc(label) + ': ' : '') + esc(parts.join(' · ')) + '</div>';
 }
 
 // ─── Container-width charts (C1b-0) ────────────────────────────────────

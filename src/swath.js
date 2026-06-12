@@ -1,6 +1,7 @@
 // ─── Swath Tab ────────────────────────────────────────────────────────
 
 let swathNumCols = [];
+let swathTableCollapsed = false; // table section collapse, survives re-renders (C6-0)
 var _swathChartParams = null; // stored for crosshair
 var swathAuxWorker = null;          // second worker for the aux dataset pass
 var pendingSwathAuxRestore = null;  // { checked: [names], units: {name: unitIdx} } from project restore
@@ -187,7 +188,7 @@ function renderSwathOutput(stat) {
     var wParts = [];
     if (sd.weightExcluded > 0) wParts.push(sd.weightExcluded.toLocaleString() + ' model');
     if (sd.auxWeightExcluded > 0) wParts.push(sd.auxWeightExcluded.toLocaleString() + ' ' + (auxPrefix || 'aux'));
-    html += '<div class="swath-aux-warn">Rows excluded for invalid weight: ' + wParts.join(', ') + '.</div>';
+    html += '<div class="warn-note">Rows excluded for invalid weight: ' + wParts.join(', ') + '.</div>';
   }
   if (sd.directions.length > 1) {
     html += '<div class="swath-dir-tabs">' + sd.directions.map(function(d) {
@@ -945,10 +946,10 @@ function renderSwathCharts(swathData, stat, $target) {
     : renderSwathOverlaySvg(varEntries, swathData, stat, display);
   var html = '';
   if (swathData.auxError) {
-    html += '<div class="swath-aux-warn">Aux swath failed: ' + esc(swathData.auxError) + ' — showing primary only.</div>';
+    html += '<div class="warn-note">Aux swath failed: ' + esc(swathData.auxError) + ' — showing primary only.</div>';
   }
   if (noData.length > 0) {
-    html += '<div class="swath-aux-warn">No data for ' + noData.map(esc).join(', ') +
+    html += '<div class="warn-note">No data for ' + noData.map(esc).join(', ') +
       ' — column empty or every value filtered out.</div>';
   }
   html += '<div class="swath-chart-card">' +
@@ -1633,12 +1634,15 @@ function renderSwathTable(varEntries, swathData, stat) {
     tbody += '</tr>';
   }
 
+  // Collapse state lives in swathTableCollapsed, not the DOM \u2014 the
+  // chart-width observers rebuild this area and DOM-only state reopened
+  // the table (C6-0)
   return '<div class="swath-table-section">' +
     '<div class="swath-table-header" data-swath-collapse="0">' +
-      '<span class="swath-table-toggle">\u25BC</span> ' + tableTitle +
+      '<span class="swath-table-toggle">' + (swathTableCollapsed ? '\u25B6' : '\u25BC') + '</span> ' + tableTitle +
       '<button class="swath-copy-btn" data-swath-copy="0">Copy</button>' +
     '</div>' +
-    '<div class="swath-table-body" id="swathTableBody0">' +
+    '<div class="swath-table-body" id="swathTableBody0"' + (swathTableCollapsed ? ' style="display:none"' : '') + '>' +
       '<div class="swath-table-wrap">' +
         '<table class="swath-table"><thead><tr>' + thHtml + '</tr></thead><tbody>' + tbody + '</tbody></table>' +
       '</div>' +
@@ -1730,7 +1734,7 @@ function wireSwathTableEvents() {
     });
   });
 
-  // Collapsible table header
+  // Collapsible table header \u2014 state in swathTableCollapsed (C6-0)
   $content.querySelectorAll('[data-swath-collapse]').forEach(function(hdr) {
     hdr.addEventListener('click', function() {
       var idx = hdr.dataset.swathCollapse;
@@ -1739,9 +1743,11 @@ function wireSwathTableEvents() {
       if (body.style.display === 'none') {
         body.style.display = '';
         toggle.textContent = '\u25BC';
+        swathTableCollapsed = false;
       } else {
         body.style.display = 'none';
         toggle.textContent = '\u25B6';
+        swathTableCollapsed = true;
       }
     });
   });

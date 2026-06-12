@@ -1501,6 +1501,14 @@ header .logo-mark {
 }
 .stats tr.calcol-row { background: rgba(184, 115, 51, 0.05); }
 
+/* Shared warning box — analysis notes, no-data lists, exclusion counts
+   (was .swath-aux-warn; renamed app-wide in C6-0) */
+.warn-note {
+  color: var(--red); font-size: 0.72rem;
+  padding: 0.3rem 0.5rem; margin-bottom: 0.5rem;
+  border: 1px solid var(--red); border-radius: 3px; opacity: 0.85;
+}
+
 /* A8: ∅ markers for variables with zero valid values */
 .empty-tag {
   font-size: 0.7rem;
@@ -3849,11 +3857,7 @@ table.cat-values tr.cat-aux-only td { background: rgba(184,115,51,0.05); }
   font-size: 0.65rem; color: var(--fg-dim); opacity: 0.7;
   padding: 0.2rem; line-height: 1.4;
 }
-.swath-aux-warn {
-  color: var(--red); font-size: 0.72rem;
-  padding: 0.3rem 0.5rem; margin-bottom: 0.5rem;
-  border: 1px solid var(--red); border-radius: 3px; opacity: 0.85;
-}
+/* moved: the warn box is app-wide now — see .warn-note in the shared block */
 
 /* Aux rows in the Statistics tab */
 .stats-aux-divider {
@@ -5502,7 +5506,7 @@ table.stats tr.stats-delta-row td:first-child {
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 590d68e — click to check for updates">590d68e</div>
+<div class="build-badge" id="buildBadge" title="build e9c2c18 — click to check for updates">e9c2c18</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8424,7 +8428,7 @@ function workerErrNote(msg, label) {
     parts.push(msg.raggedRows.toLocaleString() + ' row' + (msg.raggedRows === 1 ? '' : 's') + ' with unexpected field count (check delimiter/quoting — misaligned values land in the wrong columns)');
   }
   if (parts.length === 0) return '';
-  return '<div class="swath-aux-warn">' + (label ? esc(label) + ': ' : '') + esc(parts.join(' · ')) + '</div>';
+  return '<div class="warn-note">' + (label ? esc(label) + ': ' : '') + esc(parts.join(' · ')) + '</div>';
 }
 
 // ─── Container-width charts (C1b-0) ────────────────────────────────────
@@ -13480,7 +13484,7 @@ function renderPreflightSidebar(data) {
   const raggedSample = (!data.isDm && data.sampleRows)
     ? data.sampleRows.filter(r => r.length !== header.length).length : 0;
   if (raggedSample > 0) {
-    html += `<div class="swath-aux-warn" style="margin:0 0 0.4rem;">${raggedSample} of ${data.sampleRows.length} sampled rows have a different field count than the header — check delimiter and quoting.</div>`;
+    html += `<div class="warn-note" style="margin:0 0 0.4rem;">${raggedSample} of ${data.sampleRows.length} sampled rows have a different field count than the header — check delimiter and quoting.</div>`;
   }
   html += '<div class="pf-col-list" id="pfColList">';
   for (let i = 0; i < header.length; i++) {
@@ -17424,7 +17428,7 @@ function displayResults(data) {
       ${anySubBlocked && currentDXYZ.dx < 0 && currentDXYZ.dy < 0 && currentDXYZ.dz < 0 ? `<div style="margin-top:0.5rem; padding:0.4rem 0.6rem; border-radius:4px; background:rgba(255,180,0,0.12); border:1px solid rgba(255,180,0,0.3); font-size:0.75rem; color:#e5a800;">
         ⚠ This model appears sub-blocked. Assign DX/DY/DZ columns in Preflight for accurate block sizes.
       </div>` : ''}
-      ${data.coordInvalidCells > 0 ? `<div class="swath-aux-warn" style="margin-top:0.5rem;">
+      ${data.coordInvalidCells > 0 ? `<div class="warn-note" style="margin-top:0.5rem;">
         ${data.coordInvalidCells.toLocaleString()} coordinate value${data.coordInvalidCells === 1 ? '' : 's'} ignored by grid inference (null sentinel or unparseable).
       </div>` : ''}`;
   } else {
@@ -18137,7 +18141,7 @@ function renderStatsCatContent() {
 // values — say so instead of quietly truncating the breakdown
 function statsCatOverflowNote(data) {
   return data && data.groupStatsOverflow
-    ? '<div class="swath-aux-warn">Group cap reached (500) — rows beyond the first 500 group values are not in this breakdown. Filter the data or group by a lower-cardinality column.</div>'
+    ? '<div class="warn-note">Group cap reached (500) — rows beyond the first 500 group values are not in this breakdown. Filter the data or group by a lower-cardinality column.</div>'
     : '';
 }
 
@@ -19039,7 +19043,7 @@ function renderStatsCdfPanel() {
   }
 
   var note = skipped.length > 0
-    ? '<div class="swath-aux-warn">No data for ' + skipped.map(esc).join(', ') +
+    ? '<div class="warn-note">No data for ' + skipped.map(esc).join(', ') +
       ' — column empty or every value filtered out.</div>'
     : '';
 
@@ -20451,6 +20455,7 @@ function restoreExportSettings(es) {
 // ─── Swath Tab ────────────────────────────────────────────────────────
 
 let swathNumCols = [];
+let swathTableCollapsed = false; // table section collapse, survives re-renders (C6-0)
 var _swathChartParams = null; // stored for crosshair
 var swathAuxWorker = null;          // second worker for the aux dataset pass
 var pendingSwathAuxRestore = null;  // { checked: [names], units: {name: unitIdx} } from project restore
@@ -20637,7 +20642,7 @@ function renderSwathOutput(stat) {
     var wParts = [];
     if (sd.weightExcluded > 0) wParts.push(sd.weightExcluded.toLocaleString() + ' model');
     if (sd.auxWeightExcluded > 0) wParts.push(sd.auxWeightExcluded.toLocaleString() + ' ' + (auxPrefix || 'aux'));
-    html += '<div class="swath-aux-warn">Rows excluded for invalid weight: ' + wParts.join(', ') + '.</div>';
+    html += '<div class="warn-note">Rows excluded for invalid weight: ' + wParts.join(', ') + '.</div>';
   }
   if (sd.directions.length > 1) {
     html += '<div class="swath-dir-tabs">' + sd.directions.map(function(d) {
@@ -21395,10 +21400,10 @@ function renderSwathCharts(swathData, stat, $target) {
     : renderSwathOverlaySvg(varEntries, swathData, stat, display);
   var html = '';
   if (swathData.auxError) {
-    html += '<div class="swath-aux-warn">Aux swath failed: ' + esc(swathData.auxError) + ' — showing primary only.</div>';
+    html += '<div class="warn-note">Aux swath failed: ' + esc(swathData.auxError) + ' — showing primary only.</div>';
   }
   if (noData.length > 0) {
-    html += '<div class="swath-aux-warn">No data for ' + noData.map(esc).join(', ') +
+    html += '<div class="warn-note">No data for ' + noData.map(esc).join(', ') +
       ' — column empty or every value filtered out.</div>';
   }
   html += '<div class="swath-chart-card">' +
@@ -22083,12 +22088,15 @@ function renderSwathTable(varEntries, swathData, stat) {
     tbody += '</tr>';
   }
 
+  // Collapse state lives in swathTableCollapsed, not the DOM \u2014 the
+  // chart-width observers rebuild this area and DOM-only state reopened
+  // the table (C6-0)
   return '<div class="swath-table-section">' +
     '<div class="swath-table-header" data-swath-collapse="0">' +
-      '<span class="swath-table-toggle">\u25BC</span> ' + tableTitle +
+      '<span class="swath-table-toggle">' + (swathTableCollapsed ? '\u25B6' : '\u25BC') + '</span> ' + tableTitle +
       '<button class="swath-copy-btn" data-swath-copy="0">Copy</button>' +
     '</div>' +
-    '<div class="swath-table-body" id="swathTableBody0">' +
+    '<div class="swath-table-body" id="swathTableBody0"' + (swathTableCollapsed ? ' style="display:none"' : '') + '>' +
       '<div class="swath-table-wrap">' +
         '<table class="swath-table"><thead><tr>' + thHtml + '</tr></thead><tbody>' + tbody + '</tbody></table>' +
       '</div>' +
@@ -22180,7 +22188,7 @@ function wireSwathTableEvents() {
     });
   });
 
-  // Collapsible table header
+  // Collapsible table header \u2014 state in swathTableCollapsed (C6-0)
   $content.querySelectorAll('[data-swath-collapse]').forEach(function(hdr) {
     hdr.addEventListener('click', function() {
       var idx = hdr.dataset.swathCollapse;
@@ -22189,9 +22197,11 @@ function wireSwathTableEvents() {
       if (body.style.display === 'none') {
         body.style.display = '';
         toggle.textContent = '\u25BC';
+        swathTableCollapsed = false;
       } else {
         body.style.display = 'none';
         toggle.textContent = '\u25B6';
+        swathTableCollapsed = true;
       }
     });
   });
@@ -22225,6 +22235,7 @@ const GT_GRADE_UNITS = GRADE_UNITS.concat([{ label: 'Custom\u2026', symbol: null
 
 let gtNumCols = [];
 let gtCatCols = [];
+let gtTableCollapsed = new Set(); // collapsed table sections by column name (C6-0)
 
 function renderGtConfig(data) {
   var $sidebar = document.getElementById('gtSidebar');
@@ -22828,12 +22839,12 @@ function renderGtOutput() {
     if (ex.density > 0) exParts.push(ex.density.toLocaleString() + ' invalid density');
     if (ex.weight > 0) exParts.push(ex.weight.toLocaleString() + ' invalid weight');
     var exTotal = ex.volume + ex.density + ex.weight;
-    html += '<div class="swath-aux-warn">' + exTotal.toLocaleString() + ' row' + (exTotal === 1 ? '' : 's') +
+    html += '<div class="warn-note">' + exTotal.toLocaleString() + ' row' + (exTotal === 1 ? '' : 's') +
       ' excluded from GT (' + exParts.join(', ') + ').</div>';
   }
   // A9 F7: GT group cap
   if (lastGtData.groupOverflow) {
-    html += '<div class="swath-aux-warn">Group cap reached (200) — groups beyond the first 200 values are missing from the group curves (totals are unaffected).</div>';
+    html += '<div class="warn-note">Group cap reached (200) — groups beyond the first 200 values are missing from the group curves (totals are unaffected).</div>';
   }
   html += '<div class="gt-toolbar"><span class="gt-elapsed">' + (lastGtData.elapsed / 1000).toFixed(1) + 's</span></div>';
 
@@ -22872,14 +22883,18 @@ function renderGtOutput() {
       '<button class="swath-chart-btn" data-gt-png="' + gi + '" data-col-name="' + esc(gr.colName || '') + '">Download PNG</button>' +
     '</div>';
     html += '<div class="gt-chart-wrap">' + renderGtChart(gr, cutoffs, units, isGrouped, gi, selectedGroups, showTotal, theo) + '</div>';
-    // Collapsible table with per-table copy button
+    // Collapsible table with per-table copy button. Collapse state lives in
+    // gtTableCollapsed (by column name), not the DOM \u2014 the chart-width
+    // observers rebuild this area (a collapse changes the scrollbar, which
+    // changes content width), and DOM-only state reopened the table (C6-0)
     var tableTitle = gradeResults.length > 1 ? esc(gr.colName) + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') : 'Table';
+    var tCollapsed = gtTableCollapsed.has(gr.colName);
     html += '<div class="gt-table-section">' +
       '<div class="gt-table-header" data-gt-collapse="' + gi + '">' +
-        '<span class="gt-table-toggle">\u25BC</span> ' + tableTitle +
+        '<span class="gt-table-toggle">' + (tCollapsed ? '\u25B6' : '\u25BC') + '</span> ' + tableTitle +
         '<button class="gt-copy-btn" data-gt-copy="' + gi + '">Copy</button>' +
       '</div>' +
-      '<div class="gt-table-body" id="gtTableBody' + gi + '">' +
+      '<div class="gt-table-body" id="gtTableBody' + gi + '"' + (tCollapsed ? ' style="display:none"' : '') + '>' +
         '<div class="gt-table-wrap">' + renderGtTable(gr, cutoffs, units, isGrouped, gi, selectedGroups, showTotal) + '</div>' +
       '</div>' +
     '</div>';
@@ -22915,18 +22930,21 @@ function renderGtOutput() {
     btn.addEventListener('click', function() { downloadGtPng(btn.dataset.gtPng, btn.dataset.colName); });
   });
 
-  // Wire collapsible table headers
+  // Wire collapsible table headers \u2014 state in gtTableCollapsed (C6-0)
   $content.querySelectorAll('[data-gt-collapse]').forEach(function(hdr) {
     hdr.addEventListener('click', function() {
       var idx = hdr.dataset.gtCollapse;
+      var colName = (lastGtData.gradeResults[idx] || {}).colName;
       var body = document.getElementById('gtTableBody' + idx);
       var toggle = hdr.querySelector('.gt-table-toggle');
       if (body.style.display === 'none') {
         body.style.display = '';
         toggle.textContent = '\u25BC';
+        gtTableCollapsed.delete(colName);
       } else {
         body.style.display = 'none';
         toggle.textContent = '\u25B6';
+        gtTableCollapsed.add(colName);
       }
     });
   });
@@ -26891,7 +26909,8 @@ function treeDatasetHtml(ds, openState) {
       '</div>';
   }
   function coordRow(c) {
-    return '<div class="tree-row tree-row--coord">' +
+    // data attrs so the context menu resolves coordinate rows too (C6-0)
+    return '<div class="tree-row tree-row--coord" data-ds="' + ds + '" data-name="' + esc(c.name) + '" data-kind="coord" data-axis="' + c.axis + '">' +
       '<span class="tree-axis">' + c.axis + '</span>' +
       '<span class="tree-name" title="' + esc(c.name) + '">' + esc(c.name) + '</span>' +
       '</div>';
@@ -27207,10 +27226,11 @@ function showCtxMenu(items, x, y) {
 function ctxResolveVariable(e) {
   var t = e.target;
 
-  var row = t.closest && t.closest('.tree-row--edit');
-  if (row) {
+  var row = t.closest && t.closest('.tree-row--edit, .tree-row--coord');
+  if (row && row.dataset.name) {
     return { ds: row.dataset.ds, name: row.dataset.name, kind: row.dataset.kind,
-             idx: row.dataset.idx !== undefined ? parseInt(row.dataset.idx) : null };
+             idx: row.dataset.idx !== undefined ? parseInt(row.dataset.idx) : null,
+             axis: row.dataset.axis || null };
   }
   if (!lastCompleteData) return null;
 
@@ -27265,6 +27285,19 @@ CTX_PROVIDERS.push(function variableProvider(e) {
   if (!v || !v.name) return null;
   var x = e.clientX, y = e.clientY;
   var items = [{ head: true, label: (v.ds === 'model' ? 'Model' : (auxPrefix || 'aux')) + ':' + v.name }];
+
+  // Coordinate rows: axis info + where to change it (C6-0 — these rows
+  // previously fell through to the native browser menu)
+  if (v.kind === 'coord') {
+    items[0].label += ' — ' + (v.axis || '?') + ' axis';
+    items.push({ label: 'Change axis assignment…', action: function() {
+      showPanel(v.ds === 'aux' ? 'aux' : 'preflight');
+    } });
+    items.push({ label: 'Copy column name', action: function() {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v.name);
+    } });
+    return items;
+  }
 
   items.push({ label: 'Properties…', action: function() { openTreeEditor(v.ds, v.name, v.kind, v.idx, x, y); } });
 
