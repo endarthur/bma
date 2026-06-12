@@ -98,10 +98,17 @@ serializes/applies layouts, a preset is canned JSON.
   themes culled with stored-name migration; custom slots ride the dark
   base. Both modes eyeballed (`experiments/c6-theme-shots.js`); suite green
   — smokes now exercise LIGHT by default (headless). Remaining C6-1 slices:
-  **C6-1b** accent triage (action/caution/selected/brand split) + font
-  embed (Barlow/Space Mono subsets at build) + typography scale; **C6-1c**
-  chart tokens + light-safe palette + theme-change re-render hook; UI scale
-  setting.
+  **C6-1b** accent triage (per-usage split of the interim all-amber→action
+  binding into action / caution / selected / brand — judgment work across
+  ~hundreds of `--amber` sites in styles.css) + font embed (COPY the woff2
+  subsets INTO this repo from `../auditable/ext/switchboard/fonts/` —
+  Barlow 400/600 + Space Mono 400/700, ~95KB, plus OFL.txt — then build.js
+  inlines them as base64 @font-face; don't build against the sibling repo
+  path) + typography scale (real heading sizes, raise the 0.55rem floor to
+  ~0.65, Barlow for prose surfaces per SPEC §5); **C6-1c** chart tokens +
+  light-safe palette (bring Arthur candidates rendered on BOTH surfaces
+  before committing) + theme-change re-render hook (reuse the chart-width
+  observers' cached re-render entries); UI scale setting.
 - **C6-0 ✅ fd4456a (2026-06-12)** — collapse state in module state
   (`gtTableCollapsed` by column name / `swathTableCollapsed`), renders
   state-driven; coord rows resolve in the context menu (axis header,
