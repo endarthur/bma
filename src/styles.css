@@ -4036,35 +4036,7 @@ table.stats tr.stats-delta-row td:first-child {
 }
 .tree-pop-select:focus { outline: none; border-color: var(--amber); }
 
-/* generic right-click context menu */
-.ctx-menu {
-  display: none;
-  position: fixed;
-  z-index: 300;
-  min-width: 168px;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.55);
-  padding: 0.25rem 0;
-  font-size: 0.68rem;
-}
-.ctx-menu.open { display: block; }
-.ctx-head {
-  color: var(--amber); font-size: 0.62rem; font-weight: 600;
-  letter-spacing: 0.04em; padding: 0.25rem 0.6rem 0.3rem;
-  border-bottom: 1px solid var(--border); margin-bottom: 0.2rem;
-  max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.ctx-item {
-  display: block; width: 100%; text-align: left;
-  background: none; border: none; cursor: pointer;
-  color: var(--fg); font-family: var(--mono); font-size: 0.68rem;
-  padding: 0.28rem 0.6rem;
-}
-.ctx-item:hover { background: var(--bg1); color: var(--amber); }
-.ctx-item:disabled { color: var(--fg-dim); cursor: default; }
-.ctx-sep { border-top: 1px solid var(--border); margin: 0.2rem 0; }
+/* (the right-click context menu renders via @gcu/menu since C4) */
 
 /* ════════════════════════════════════════════════════════════════════
    Vendored: @gcu/rails 0.1.0 — structural stylesheet (rails.css, verbatim)

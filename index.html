@@ -4049,35 +4049,7 @@ table.stats tr.stats-delta-row td:first-child {
 }
 .tree-pop-select:focus { outline: none; border-color: var(--amber); }
 
-/* generic right-click context menu */
-.ctx-menu {
-  display: none;
-  position: fixed;
-  z-index: 300;
-  min-width: 168px;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.55);
-  padding: 0.25rem 0;
-  font-size: 0.68rem;
-}
-.ctx-menu.open { display: block; }
-.ctx-head {
-  color: var(--amber); font-size: 0.62rem; font-weight: 600;
-  letter-spacing: 0.04em; padding: 0.25rem 0.6rem 0.3rem;
-  border-bottom: 1px solid var(--border); margin-bottom: 0.2rem;
-  max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.ctx-item {
-  display: block; width: 100%; text-align: left;
-  background: none; border: none; cursor: pointer;
-  color: var(--fg); font-family: var(--mono); font-size: 0.68rem;
-  padding: 0.28rem 0.6rem;
-}
-.ctx-item:hover { background: var(--bg1); color: var(--amber); }
-.ctx-item:disabled { color: var(--fg-dim); cursor: default; }
-.ctx-sep { border-top: 1px solid var(--border); margin: 0.2rem 0; }
+/* (the right-click context menu renders via @gcu/menu since C4) */
 
 /* ════════════════════════════════════════════════════════════════════
    Vendored: @gcu/rails 0.1.0 — structural stylesheet (rails.css, verbatim)
@@ -5507,7 +5479,7 @@ table.stats tr.stats-delta-row td:first-child {
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 9461eab — click to check for updates">9461eab</div>
+<div class="build-badge" id="buildBadge" title="build 8f3a6a4 — click to check for updates">8f3a6a4</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -26902,42 +26874,28 @@ function treeToggleRole(t, role) {
 // columns) and offers the shared actions: Properties… (the tree editor
 // popover), role toggles, pairing, CDF curves. Contextual providers add
 // "Copy table" and chart exports where those affordances already exist.
+//
+// C4: rendering goes through the vendored @gcu/menu (`Menu.show`) — the
+// provider contract is unchanged ({head}/{sep}/{label, action: fn},
+// plus the menu-native extras: checked, danger, children). Keyboard
+// nav, typeahead, submenus and dismissal come from the library.
 
 var CTX_PROVIDERS = [];
 
-function ctxMenuEl() {
-  var el = document.getElementById('bmaCtxMenu');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'bmaCtxMenu';
-    el.className = 'ctx-menu';
-    document.body.appendChild(el);
-  }
-  return el;
-}
-
-function hideCtxMenu() {
-  var el = document.getElementById('bmaCtxMenu');
-  if (el) el.classList.remove('open');
+function ctxToMenuItem(it) {
+  if (it.sep) return '---';
+  if (it.head) return { label: it.label, disabled: true };
+  var mi = { label: it.label, action: it.action, disabled: !!it.disabled };
+  if (it.checked !== undefined) mi.checked = it.checked;
+  if (it.danger) mi.danger = true;
+  if (it.children) mi.children = it.children.map(ctxToMenuItem);
+  return mi;
 }
 
 function showCtxMenu(items, x, y) {
-  var el = ctxMenuEl();
-  var html = '';
-  for (var i = 0; i < items.length; i++) {
-    var it = items[i];
-    if (it.sep) { html += '<div class="ctx-sep"></div>'; continue; }
-    if (it.head) { html += '<div class="ctx-head">' + esc(it.label) + '</div>'; continue; }
-    html += '<button class="ctx-item" data-ctx="' + i + '"' + (it.disabled ? ' disabled' : '') + '>' + esc(it.label) + '</button>';
-  }
-  el.innerHTML = html;
-  el._items = items;
-  el.style.left = '0px'; el.style.top = '0px';
-  el.classList.add('open');
-  // measure, then clamp into the viewport
-  var w = el.offsetWidth, h = el.offsetHeight;
-  el.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 8)) + 'px';
-  el.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 8)) + 'px';
+  Menu.show(items.map(ctxToMenuItem), { x: x, y: y }).then(function(action) {
+    if (typeof action === 'function') action();
+  });
 }
 
 // ── Variable resolution across surfaces ──
@@ -27007,17 +26965,18 @@ CTX_PROVIDERS.push(function variableProvider(e) {
   items.push({ label: 'Properties…', action: function() { openTreeEditor(v.ds, v.name, v.kind, v.idx, x, y); } });
 
   if (v.kind === 'num') {
-    var isW = catRole(v.ds, 'weight') === v.name;
-    items.push({ label: isW ? 'Clear weight role' : 'Set as weight', action: function() { treeToggleRole(v, 'weight'); } });
+    // role toggles read as checkmarks (stable labels, state on the check)
+    items.push({ label: 'Weight', checked: catRole(v.ds, 'weight') === v.name,
+      action: function() { treeToggleRole(v, 'weight'); } });
     if (v.ds === 'model') {
-      var isD = catRole('model', 'density') === v.name;
-      var isT = catRole('model', 'tonnageFactor') === v.name;
-      items.push({ label: isD ? 'Clear density role' : 'Set as density (GT)', action: function() { treeToggleRole(v, 'density'); } });
-      items.push({ label: isT ? 'Clear tonnage factor' : 'Set as tonnage factor (GT)', action: function() { treeToggleRole(v, 'tonnageFactor'); } });
+      items.push({ label: 'Density (GT)', checked: catRole('model', 'density') === v.name,
+        action: function() { treeToggleRole(v, 'density'); } });
+      items.push({ label: 'Tonnage factor (GT)', checked: catRole('model', 'tonnageFactor') === v.name,
+        action: function() { treeToggleRole(v, 'tonnageFactor'); } });
       // CDF curve toggle (Statistics panel state, usable from anywhere)
       if (lastCompleteData && typeof statsCdfSelected !== 'undefined' && v.idx !== null) {
         var on = statsCdfSelected.has(v.idx);
-        items.push({ label: on ? 'Remove CDF curve' : 'Add CDF curve', action: function() {
+        items.push({ label: 'CDF curve', checked: on, action: function() {
           if (on) statsCdfSelected.delete(v.idx); else statsCdfSelected.add(v.idx);
           if (typeof renderStatsCdfPanel === 'function') renderStatsCdfPanel();
           if (typeof renderStatsTable === 'function') renderStatsTable();
@@ -27028,13 +26987,24 @@ CTX_PROVIDERS.push(function variableProvider(e) {
   }
 
   if (v.ds === 'aux') {
+    // pairing as an inline submenu: every legal model target, radio-style
+    // checkmark on the current one (was: bounce to the Properties popover)
     var p = catPair(v.name);
-    if (p) items.push({ label: 'Unpair from ' + p, action: function() {
-      catalog.pairs[v.name] = null;
-      treePairChanged();
-      autoSaveProject();
-    } });
-    items.push({ label: p ? 'Change pairing…' : 'Pair with model variable…', action: function() { openTreeEditor(v.ds, v.name, v.kind, v.idx, x, y); } });
+    function setPair(target) {
+      return function() {
+        catalog.pairs[v.name] = target;
+        treePairChanged();
+        autoSaveProject();
+      };
+    }
+    var pairKids = [{ label: '— unpaired', checked: p === null, action: setPair(null) }];
+    var targets = (typeof treePairTargets === 'function') ? treePairTargets(v.kind) : [];
+    for (var ti = 0; ti < targets.length; ti++) {
+      pairKids.push({ label: targets[ti], checked: targets[ti] === p, action: setPair(targets[ti]) });
+    }
+    pairKids.push({ sep: true });
+    pairKids.push({ label: 'Edit in Properties…', action: function() { openTreeEditor(v.ds, v.name, v.kind, v.idx, x, y); } });
+    items.push({ label: 'Paired with' + (p ? ': ' + p : ''), children: pairKids });
   }
 
   if (v.kind === 'cat' && v.ds === 'model' && v.idx !== null) {
@@ -27083,10 +27053,12 @@ CTX_PROVIDERS.push(function cdfExportProvider(e) {
 });
 
 // ── Wiring ──
+// Dismissal (outside click, Escape, item activation) is the library's;
+// right-click outside an open menu dismisses AND re-fires contextmenu, so
+// rolling from one target to the next just works.
 (function() {
   document.addEventListener('contextmenu', function(e) {
     if (e.ctrlKey) return; // escape hatch: native menu
-    hideCtxMenu();
     var items = [];
     for (var i = 0; i < CTX_PROVIDERS.length; i++) {
       var got;
@@ -27100,23 +27072,7 @@ CTX_PROVIDERS.push(function cdfExportProvider(e) {
     e.preventDefault();
     showCtxMenu(items, e.clientX, e.clientY);
   });
-
-  document.addEventListener('pointerdown', function(e) {
-    var el = document.getElementById('bmaCtxMenu');
-    if (el && el.classList.contains('open') && !el.contains(e.target)) hideCtxMenu();
-  });
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') hideCtxMenu();
-  });
-  document.addEventListener('click', function(e) {
-    var item = e.target.closest && e.target.closest('#bmaCtxMenu .ctx-item');
-    if (!item) return;
-    var el = document.getElementById('bmaCtxMenu');
-    var entry = el._items && el._items[parseInt(item.dataset.ctx)];
-    hideCtxMenu();
-    if (entry && entry.action) entry.action();
-  });
-  window.addEventListener('blur', hideCtxMenu);
+  window.addEventListener('blur', function() { Menu.dismiss(); });
 })();
 
 // ─── CDF Plot ─────────────────────────────────────────────────────────
