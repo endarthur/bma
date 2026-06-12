@@ -142,9 +142,10 @@ and what makes it visible.
 - **Calcol compile failure → calcols absent** — guarded upstream: the
   editor validates before apply; restore paths carry editor-validated code.
 - **>100k-row files with an unresolvable column** lose the first 100k rows
-  to type detection (TYPE_MAX_ROWS cap) — documented in worker-protocol.md;
-  eliminated for all app flows once Phase 1 lands (full preflight types
-  skip detection entirely).
+  to type detection (TYPE_MAX_ROWS cap) — documented in worker-protocol.md.
+  Since Phase 1 landed this is unreachable from app flows (both model and
+  aux force full preflight types, skipping detection); it applies only to
+  direct worker use without resolved types (harnesses).
 - **Quote-aware field splitting deferred to ~B2** (F8): the hot-loop cost
   is real and most mining exports are unquoted; the Phase 4 ragged-row
   counters make the failure mode visible rather than silent, which is the
@@ -161,3 +162,36 @@ and what makes it visible.
 
 Each phase lands green on the full suite before the next; manuals regen
 once at the end (stats decimals drift in Phase 1).
+
+## Shipped — ALL FOUR PHASES DONE 2026-06-11
+
+- **Phase 1 ✅ 431cc08** — `fullTypeOverrides()` in project.js;
+  `typesFrom: 'preflight'` fingerprint marker; differential 29/29
+  bit-identical (worker comment-only).
+- **Phase 2 ✅ debaba5** — `parseFails` per column (apart from sentinel
+  nulls, also in group accumulators); `compileFilterFn` counts per-row
+  exceptions (fn.errCount/firstErr); calcol errors counted on the row
+  source; `filterErrors`/`calcolErrors` payloads on all seven passes; MIXED
+  badge in preflight (sample-based, hides on CAT toggle), ✱ in tree +
+  Statistics, NoParse metric; `workerErrNote()` warns on Statistics
+  (model + aux), Swath, GT, aux status. b1-differential gained
+  `--ignore-keys=` for intended field additions.
+  **Type-enrichment decision**: v1 stays two types + parseFails surfacing +
+  the manual toggle; an explicit `mixed` type is deferred until surfaced
+  counts prove this insufficient.
+- **Phase 3 ✅ dc25fd6** — GT invalid per-row volume/density/weight →
+  exclude + count by reason (`excluded`, note); swath counts
+  `weightExcluded` (model + aux split in the note); GT groupBy `?? ''`;
+  geometry skips sentinel/unparseable coordinate cells
+  (`coordInvalidCells`, Summary note). The differential's truncated-.dm
+  fixture proved F6: HEAD inferred X extent 600110 from one garbage
+  coordinate, fixed worker reads 100.
+- **Phase 4 ✅ 7e86181** — `groupStatsOverflow` (500 cap, StatsCat note),
+  GT `groupOverflow` (200 cap, note), `raggedRows` counter (analyze +
+  Statistics warn) and the preflight sampled ragged-row warn.
+- Smoke: `experiments/a9-smoke.js` (32 asserts, two fixtures — one
+  pathological 200-row model, one 600-group caps model). In the standing
+  regression list.
+- Noted for later: `groupCategories` (cross-tab) group values are uncapped
+  while groupStats caps at 500 — bounded by real data cardinality, but the
+  two should share one capped+flagged path when next touched (F7 remnant).
