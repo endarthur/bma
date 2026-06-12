@@ -38,7 +38,7 @@ Chilès & Delfiner). Pure worker/UI increments on existing infrastructure.
 | A6a | **Theoretical GT overlay — affine engine** | M | A3 | ✅ **DONE 2026-06-12 (65a7c6e)** — GT sidebar "Theoretical (samples)" section: f slider (user input, never model-derived), dashed overlay scaled to model total tonnage, aux-weighted distribution via `colvalues` (+weights), live re-evaluation. Smoke: `experiments/gt-theo-smoke.js` |
 | A6b | **DGM (Hermite) engine** | L | A6a | Hermite anamorphosis fit on the (declustered) aux distribution, φₙ→φₙrⁿ, r from f by root-find; closed-form T/Q above cutoff; slots into the existing engine select. Caveats (multigaussianity, no info effect) in help. Oracles: lognormal closed forms (exact — block dist is lognormal σ→rσ under lognormal anamorphosis); gstlearn (BSD-3 Python) harness |
 
-| A7 | **Drillhole aux ingestion** (collar + survey + intervals) | L | soft: C1a | **Design: [`docs/a7-drillhole-ingestion.md`](a7-drillhole-ingestion.md) (2026-06-11)** — phases 0–3, D1–D9 proposed. The adoption unlock: raw drillhole tables → min-curvature desurvey → length-weighted down-hole compositing (SUPPORT emitted, optional domain boundaries) → a synthesized point dataset feeding the existing aux pipeline **unchanged** (declus/top-cut/Δ%/Q-Q/swath/theoretical GT all free). **The consistency report is the feature**: BHID join failures, overlapping intervals, missing surveys, EOH mismatches surfaced, never silently dropped (no-magic). UI: pre-tree = three slots + zip role detection on the Aux empty state; re-homes naturally under the C1a tree (a drillhole set *is* a tree). Math factored as `@gcu/drillhole` (dee already has min-curvature desurvey — extract/share; oracle-harness playbook like DECLUS). Unlocks later: contact analysis (was LOW *because* BHID was missing), 3D traces in B7 |
+| A7 | **Drillhole aux ingestion** (collar + survey + intervals) | L | soft: C1a | ✅ **DONE 2026-06-11** (phases 0–3: e7da647 lib + oracle harness, 2d347fd ingestion UI, bed8b1c persistence + pack, 73f46a9 example trio + tutorial + manuals; smokes `experiments/drillhole-test.js` + `drillhole-smoke.js`). **Design + phase log: [`docs/a7-drillhole-ingestion.md`](a7-drillhole-ingestion.md)** — D1–D9 decided. Original scope — the adoption unlock: raw drillhole tables → min-curvature desurvey → length-weighted down-hole compositing (SUPPORT emitted, optional domain boundaries) → a synthesized point dataset feeding the existing aux pipeline **unchanged** (declus/top-cut/Δ%/Q-Q/swath/theoretical GT all free). **The consistency report is the feature**: BHID join failures, overlapping intervals, missing surveys, EOH mismatches surfaced, never silently dropped (no-magic). UI: pre-tree = three slots + zip role detection on the Aux empty state; re-homes naturally under the C1a tree (a drillhole set *is* a tree). Math factored as `@gcu/drillhole` (dee already has min-curvature desurvey — extract/share; oracle-harness playbook like DECLUS). Unlocks later: contact analysis (was LOW *because* BHID was missing), 3D traces in B7 |
 
 Out of scope, confirmed: variography, KNA. Contact analysis graduates from
 out-of-scope to "post-A7" — it was excluded for missing BHID structure, which
@@ -71,17 +71,17 @@ A7 provides.
 
 ## Suggested order
 
-*(A1–A5, A6a, B0, B1, C1a, C1b done.)*
+*(A1–A5, A6a, A7, B0, B1, C1a, C1b done.)*
 
-**B1 ✅ → C1a ✅ → C1b ✅ → A7 → A6b → B2 → B3 → B4 → B5 → B6 → B7.**
+**B1 ✅ → C1a ✅ → C1b ✅ → A7 ✅ → A6b → B2 → B3 → B4 → B5 → B6 → B7.**
 
 B1 went first (landed 2026-06-11): invisible to
 testers, the worker harness suite was at peak coverage for its bit-identical
-discipline, and A7's new readers will be born on row sources rather than
-migrated to them. The workspace generation (C1a property catalog → C1b rails)
-landed 2026-06-11. **Next: A7**, with A6b after; the platform phases follow,
+discipline, and A7's readers were born on the post-B1 architecture. The
+workspace generation (C1a property catalog → C1b rails) and A7 landed
+2026-06-11. **Next: A6b** (Hermite GT engine); the platform phases follow,
 with B5/B7 arriving as dockable panels because C1b came first. C4 (menu
-unification) and C1c (mobile pager) are small and slot in anywhere.
+unification), C5 (sidebar flow) and C1c (mobile pager) slot in anywhere.
 
 ## Housekeeping (standing)
 
