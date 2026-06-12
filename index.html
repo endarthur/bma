@@ -585,6 +585,12 @@ header .logo-mark {
   opacity: 0.45;
   cursor: default;
 }
+.pf-empty-badge {
+  color: var(--red, #f87171);
+  border-color: rgba(248,113,113,0.4);
+  opacity: 0.65;
+  cursor: help;
+}
 .pf-filter-btn {
   font-size: 0.5rem;
   padding: 0.06rem 0.2rem;
@@ -1490,6 +1496,15 @@ header .logo-mark {
   vertical-align: super;
 }
 .stats tr.calcol-row { background: rgba(184, 115, 51, 0.05); }
+
+/* A8: ∅ markers for variables with zero valid values */
+.empty-tag {
+  font-size: 0.7rem;
+  color: var(--red, #f87171);
+  font-weight: 700;
+  margin-left: 0.3rem;
+  cursor: help;
+}
 
 /* Expression autocomplete (generic — used by filter) */
 .expr-ac-wrap { position: relative; }
@@ -3992,6 +4007,7 @@ table.stats tr.stats-delta-row td:first-child {
   border: 1px solid var(--amber); border-radius: 2px; padding: 0 0.18rem;
   flex-shrink: 0; cursor: help; opacity: 0.85;
 }
+.tree-badge--empty { color: var(--red, #f87171); border-color: var(--red, #f87171); }
 .tree-count { color: var(--fg-dim); font-size: 0.6rem; flex-shrink: 0; }
 .tree-pair {
   color: var(--fg-dim); font-size: 0.6rem; margin-left: auto; flex-shrink: 0;
@@ -5480,7 +5496,7 @@ table.stats tr.stats-delta-row td:first-child {
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 47aca17 — click to check for updates">47aca17</div>
+<div class="build-badge" id="buildBadge" title="build 95591b6 — click to check for updates">95591b6</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -6534,6 +6550,30 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   let rowCount = 0, totalRowCount = 0, commentCount = 0;
   let lastProgress = 0;
 
+  // ── Stats phase (filter + accumulate) — one data line ──
+  function statsLine(fields) {
+    const hasCalcols = calcolFn !== null;
+    const needsRow = hasCalcols || filterFn || (groupByCol !== null && groupByCol >= nCols) || weightName !== null;
+    let row = null;
+    if (needsRow) row = buildRow(fields);
+    if (filterFn) {
+      if (!filterFn(row)) return;
+    }
+    let rowW = 1;
+    if (wArr) {
+      const wv = wArr[wOrd++];
+      if (!(wv > 0) || !isFinite(wv)) { weightExcluded++; return; }
+      rowW = wv;
+    } else if (weightName) {
+      const wv = row[weightName];
+      if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) { weightExcluded++; return; }
+      rowW = wv;
+    }
+    rowCount++;
+    processRowStats(fields, row, rowW);
+    if (hasCalcols) processCalcolStats(row, rowW);
+  }
+
   await src.stream({
     comment() { commentCount++; },
     line(line, totalChars) {
@@ -6562,27 +6602,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         return; // skip stats during detection — negligible row loss
       }
 
-      // ── Stats phase (filter + accumulate) ──
-      const hasCalcols = calcolFn !== null;
-      const needsRow = hasCalcols || filterFn || (groupByCol !== null && groupByCol >= nCols) || weightName !== null;
-      let row = null;
-      if (needsRow) row = buildRow(fields);
-      if (filterFn) {
-        if (!filterFn(row)) return;
-      }
-      let rowW = 1;
-      if (wArr) {
-        const wv = wArr[wOrd++];
-        if (!(wv > 0) || !isFinite(wv)) { weightExcluded++; return; }
-        rowW = wv;
-      } else if (weightName) {
-        const wv = row[weightName];
-        if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) { weightExcluded++; return; }
-        rowW = wv;
-      }
-      rowCount++;
-      processRowStats(fields, row, rowW);
-      if (hasCalcols) processCalcolStats(row, rowW);
+      statsLine(fields);
 
       // Progress
       if (totalRowCount - lastProgress >= 25000) {
@@ -6592,11 +6612,19 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     }
   });
 
-  // Edge case: file was so small that detection never triggered
+  // The whole file fit inside the detection phase — a tiny file, or a column
+  // with too few values to resolve (an all-empty column never resolves, A8).
+  // Detection skipped stats for every line, so resolve types and replay the
+  // stream for the stats pass alone (geometry and row counters already
+  // accumulated; the weight ordinal was never advanced). Bounded cost: only
+  // files that end before TYPE_MAX_ROWS can get here.
   if (!typesResolved) {
     typesResolved = true;
     colTypes = src.colTypes = resolveTypes();
     initStatsPhase();
+    await src.stream({
+      line(line) { statsLine(line.split(delimiter)); }
+    });
   }
 
   // Finalize stats
@@ -8274,6 +8302,17 @@ const GRADE_UNITS = [
   { label: 'oz/t',   symbol: 'oz/t', factor: 3.11035e-5 }
 ];
 // (per-variable units live in the catalog — catUnit/catSetUnit)
+
+// A8: a numeric variable that finished analysis with zero valid values —
+// every row was null/sentinel or removed by the per-column filters. Views
+// badge these instead of silently dropping their series.
+const EMPTY_COL_TITLE = 'no valid values in the last analysis — column is empty or every value was filtered out';
+function colIsEmpty(ds, idx) {
+  const d = ds === 'aux' ? auxCompleteData : lastCompleteData;
+  if (!d || !d.stats || idx == null) return false;
+  const s = d.stats[idx];
+  return !!s && s.count === 0;
+}
 
 // ─── Container-width charts (C1b-0) ────────────────────────────────────
 // Chart renderers draw their SVG at a logical width equal to the host's
@@ -13303,6 +13342,12 @@ function renderPreflightSidebar(data) {
 
   // Column list — always render both filter buttons; hide via class when not filterable
   const dmCols = data.isDm && data.dmInfo ? data.dmInfo.columns : null;
+  // A8: columns blank throughout the sample (every value a null sentinel) —
+  // these will analyze to zero valid values, flag before the user gets there
+  const sampleEmpty = header.map((_, i) => {
+    if (!data.sampleRows || data.sampleRows.length === 0) return false;
+    return data.sampleRows.every(row => NULL_SENTINELS_MAIN.has(i < row.length ? row[i].trim() : ''));
+  });
   html += '<div class="pf-col-list" id="pfColList">';
   for (let i = 0; i < header.length; i++) {
     const currentType = typeOverrides[i] || autoTypes[i];
@@ -13320,6 +13365,7 @@ function renderPreflightSidebar(data) {
       <span class="pf-col-name"${isDmConst ? constTooltip : ` title="${esc(header[i])}"`}>${esc(header[i])}</span>
       <div class="pf-col-controls">
         ${isDmConst ? '<span class="pf-const-badge" title="File constant">CONST</span>' : ''}
+        ${sampleEmpty[i] && !isDmConst ? `<span class="pf-const-badge pf-empty-badge" title="No values in the first ${data.sampleRows.length} sampled rows — column appears empty">EMPTY</span>` : ''}
         <button class="pf-filter-btn${cf.skipNeg ? ' active' : ''}${hideCls}" data-col="${i}" data-filter="skipNeg" title="Exclude negatives">≥0</button>
         <button class="pf-filter-btn${cf.skipZeros ? ' active' : ''}${hideCls}" data-col="${i}" data-filter="skipZeros" title="Exclude zeros">≠0</button>
         <button class="type-toggle" data-col="${i}" data-type="${currentType}">${label}</button>
@@ -18558,6 +18604,12 @@ function formatDeltaPct(p, a, metric) {
   return (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(1) + '%';
 }
 
+// A8: ∅ tag for variables whose analysis produced zero valid values
+function statsEmptyTag(ds, idx) {
+  if (!colIsEmpty(ds, idx)) return '';
+  return '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>';
+}
+
 function isMetricVisible(key) {
   if (statsVisibleMetrics === null) {
     if (key.startsWith('p') && key.length > 1 && !isNaN(key.slice(1))) return true;
@@ -18661,6 +18713,7 @@ function renderStatsSidebar() {
     html += '<input type="checkbox"' + checkedAttr + ' data-col="' + ci + '">';
     html += '<span class="var-name">' + esc(name) + '</span>';
     if (isCalcol) html += '<span class="calcol-tag">CALC</span>';
+    html += statsEmptyTag('model', ci);
     html += '</div>';
   }
 
@@ -18677,6 +18730,7 @@ function renderStatsSidebar() {
       html += '<div class="stats-var-item stats-var-item--aux' + (auxSel ? '' : ' unchecked') + '" data-aux-col="' + ac.idx + '">';
       html += '<input type="checkbox"' + (auxSel ? ' checked' : '') + ' data-aux-col="' + ac.idx + '">';
       html += '<span class="var-name">' + esc(dispName) + '</span>';
+      html += statsEmptyTag('aux', ac.idx);
       html += '</div>';
     }
   }
@@ -18710,7 +18764,7 @@ function renderStatsTable() {
     var as = auxCompleteData.stats[ac.idx];
     var aCdfActive = statsCdfAuxSelected.has(ac.idx);
     var aNameClass = aCdfActive ? 'cdf-link cdf-active' : 'cdf-link';
-    var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-aux-col="' + ac.idx + '" href="#">' + esc(auxLabel + ':' + ac.name) + '</a></td>';
+    var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-aux-col="' + ac.idx + '" href="#">' + esc(auxLabel + ':' + ac.name) + '</a>' + statsEmptyTag('aux', ac.idx) + '</td>';
     for (var m of metrics) rowHtml += '<td>' + formatStatValue(getStatValue(as, m), m) + '</td>';
     return rowHtml + '</tr>' + deltaRowHtml(ac);
   }
@@ -18744,6 +18798,7 @@ function renderStatsTable() {
     var nameClass = cdfActive ? 'cdf-link cdf-active' : 'cdf-link';
     var nameHtml = '<a class="' + nameClass + '" data-col="' + ci + '" href="#">' + esc(header[ci]) + '</a>';
     if (isCalcol) nameHtml += '<span class="calcol-tag">CALC</span>';
+    nameHtml += statsEmptyTag('model', ci);
 
     html += '<tr' + (isCalcol ? ' class="calcol-row"' : '') + '><td>' + nameHtml + '</td>';
     for (var m of metrics) {
@@ -18783,10 +18838,15 @@ function renderStatsCdfPanel() {
   var header = lastDisplayedHeader;
   if (!stats || !header) return;
 
+  // Selected variables with no centroid data (empty column, everything
+  // filtered) are listed in a note instead of silently vanishing (A8)
   var entries = [];
+  var skipped = [];
   statsCdfSelected.forEach(function(ci) {
     if (stats[ci] && stats[ci].centroids && stats[ci].centroids.length > 0) {
       entries.push([header[ci], stats[ci]]);
+    } else {
+      skipped.push(header[ci]);
     }
   });
   if (auxCompleteData && auxCompleteData.stats) {
@@ -18795,23 +18855,30 @@ function renderStatsCdfPanel() {
       var as = auxCompleteData.stats[ai];
       if (as && as.centroids && as.centroids.length > 0) {
         entries.push([auxLabel + ':' + auxCompleteData.header[ai], as, true]); // [2]=isAux → dashed
+      } else {
+        skipped.push(auxLabel + ':' + auxCompleteData.header[ai]);
       }
     });
   }
 
+  var note = skipped.length > 0
+    ? '<div class="swath-aux-warn">No data for ' + skipped.map(esc).join(', ') +
+      ' — column empty or every value filtered out.</div>'
+    : '';
+
   if (entries.length === 0) {
-    chart.innerHTML = '<div class="stats-cdf-hint">No centroid data for selected columns</div>';
+    chart.innerHTML = note || '<div class="stats-cdf-hint">No centroid data for selected columns</div>';
     return;
   }
 
   if (statsCdfMode === 'qq') {
     if (entries.length < 2) {
-      chart.innerHTML = '<div class="stats-cdf-hint">Q–Q needs two curves — click another variable name (the first selected is the reference axis)</div>';
+      chart.innerHTML = note + '<div class="stats-cdf-hint">Q–Q needs two curves — click another variable name (the first selected is the reference axis)</div>';
     } else {
-      chart.innerHTML = renderStatsQqSvg(entries);
+      chart.innerHTML = note + renderStatsQqSvg(entries);
     }
   } else {
-    chart.innerHTML = renderStatsCdfSvg(entries);
+    chart.innerHTML = note + renderStatsCdfSvg(entries);
     wireStatsCdfTooltip();
   }
 
@@ -20440,9 +20507,10 @@ function renderSwathConfig(data) {
       return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
     var varColor = getSwathVarColor(c.name, vi);
+    var emptyTag = colIsEmpty('model', c.idx) ? '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>' : '';
     return '<label class="swath-var-item"><input type="checkbox" value="' + c.idx + '" checked>' +
       '<div class="swath-color-swatch" data-col="' + c.idx + '" style="background:' + varColor + '"></div>' +
-      '<span>' + esc(c.name) + '</span>' +
+      '<span>' + esc(c.name) + '</span>' + emptyTag +
       '<select class="swath-var-unit" data-col="' + c.idx + '">' + unitOpts + '</select></label>';
   }).join('');
 
@@ -20716,10 +20784,11 @@ function renderSwathAuxVars() {
       return '<option value="' + ui + '"' + (ui === unitIdx ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
     var color = getAuxSwathVarColor(c.name, swathNumCols.length + ai);
+    var emptyTag = colIsEmpty('aux', c.idx) ? '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>' : '';
     html += '<label class="swath-var-item swath-var-item--aux">' +
       '<input type="checkbox" value="' + c.idx + '" data-aux="1" data-name="' + esc(c.name) + '"' + (checked ? ' checked' : '') + '>' +
       '<div class="swath-color-swatch" data-color-key="aux:' + esc(c.name) + '" data-aux-name="' + esc(c.name) + '" data-aux-idx="' + ai + '" style="background:' + color + '"></div>' +
-      '<span>' + esc(label) + ':' + esc(c.name) + '</span>' +
+      '<span>' + esc(label) + ':' + esc(c.name) + '</span>' + emptyTag +
       '<select class="swath-var-unit" data-aux-col="' + c.idx + '" data-aux-name="' + esc(c.name) + '">' + unitOpts + '</select></label>';
   }
   wrap.innerHTML = html;
@@ -21069,14 +21138,17 @@ function renderSwathCharts(swathData, stat, $target) {
     return;
   }
 
-  // Build per-variable entries — primary first, then aux
+  // Build per-variable entries — primary first, then aux. Selected variables
+  // with zero surviving bins (empty column, everything filtered) are listed
+  // in a note instead of silently vanishing from the chart (A8)
+  var noData = [];
   var varEntries = [];
   for (var vi = 0; vi < varCols.length; vi++) {
     var colIdx = varCols[vi];
     var bins = (swathData.vars[colIdx] || []).filter(function(b) { return b.count > 0; }).sort(function(a, b) { return a.center - b.center; });
-    if (bins.length === 0) continue;
-    var lines = buildSwathStatLines(bins, stat);
     var name = currentHeader[colIdx] || 'Variable';
+    if (bins.length === 0) { noData.push(name); continue; }
+    var lines = buildSwathStatLines(bins, stat);
     varEntries.push({
       colIdx: colIdx,
       isAux: false,
@@ -21097,9 +21169,9 @@ function renderSwathCharts(swathData, stat, $target) {
     for (var ai = 0; ai < auxVarCols.length; ai++) {
       var aIdx = auxVarCols[ai];
       var aBins = (swathData.auxVars[aIdx] || []).filter(function(b) { return b.count > 0; }).sort(function(a, b) { return a.center - b.center; });
-      if (aBins.length === 0) continue;
-      var aLines = buildSwathStatLines(aBins, stat);
       var baseName = (swathData.auxHeader && swathData.auxHeader[aIdx]) || 'Variable';
+      if (aBins.length === 0) { noData.push(prefixLabel + ':' + baseName); continue; }
+      var aLines = buildSwathStatLines(aBins, stat);
       // A paired aux variable shares its primary's Y axis (and color, dashed)
       var aPair = catPair(baseName);
       var aKey = aPair && primaryKeys[aPair] ? aPair : 'aux:' + baseName;
@@ -21131,6 +21203,10 @@ function renderSwathCharts(swathData, stat, $target) {
   var html = '';
   if (swathData.auxError) {
     html += '<div class="swath-aux-warn">Aux swath failed: ' + esc(swathData.auxError) + ' — showing primary only.</div>';
+  }
+  if (noData.length > 0) {
+    html += '<div class="swath-aux-warn">No data for ' + noData.map(esc).join(', ') +
+      ' — column empty or every value filtered out.</div>';
   }
   html += '<div class="swath-chart-card">' +
     '<div class="swath-chart-toolbar">' +
@@ -22006,7 +22082,8 @@ function renderGtConfig(data) {
     var opts = GT_GRADE_UNITS.slice(0, -1).map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
-    return '<label class="gt-var-item"><input type="checkbox" value="' + c.idx + '"' + (i === 0 ? ' checked' : '') + '><span>' + esc(c.name) + '</span>' +
+    var emptyTag = colIsEmpty('model', c.idx) ? '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>' : '';
+    return '<label class="gt-var-item"><input type="checkbox" value="' + c.idx + '"' + (i === 0 ? ' checked' : '') + '><span>' + esc(c.name) + '</span>' + emptyTag +
       '<select class="gt-var-unit" data-col="' + c.idx + '">' + opts + '</select></label>';
   }).join('');
 
@@ -22839,6 +22916,12 @@ function interpolateGt(results, cutoff, binWidth, gradeMin) {
 function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGroups, showTotal, theo) {
   var results = grData.results;
   if (!results || results.length === 0) return '<div class="gt-hint">No GT data available.</div>';
+  // A8: zero total tonnage = no row contributed (empty column, everything
+  // filtered) — say so instead of drawing an all-zero curve
+  if (!(grData.totalTonnage > 0)) {
+    return '<div class="gt-hint">No data for ' + esc(grData.colName || 'this variable') +
+      ' — column empty or every value filtered out.</div>';
+  }
   var binWidth = grData.binWidth;
   var gradeMin = grData.gradeMin;
   var totalTonnage = grData.totalTonnage;
@@ -26484,6 +26567,11 @@ function treeRoleBadges(ds, name) {
   return b;
 }
 
+function treeEmptyBadge(ds, idx) {
+  if (!colIsEmpty(ds, idx)) return '';
+  return '<span class="tree-badge tree-badge--empty" title="' + EMPTY_COL_TITLE + '">∅</span>';
+}
+
 function treeUnitChip(ds, name) {
   var u = catUnit(ds, name);
   if (!u || !GRADE_UNITS[u] || !GRADE_UNITS[u].symbol) return '';
@@ -26570,7 +26658,7 @@ function treeDatasetHtml(ds, openState) {
     return '<div class="tree-row tree-row--edit"' + rowAttrs(e, 'num') + ' title="click to edit">' +
       '<span class="tree-chip" style="background:' + color + '"></span>' +
       '<span class="tree-name">' + esc(e.name) + '</span>' +
-      treeUnitChip(ds, e.name) + treeRoleBadges(ds, e.name) +
+      treeUnitChip(ds, e.name) + treeRoleBadges(ds, e.name) + treeEmptyBadge(ds, e.idx) +
       (ds === 'aux' ? treePairChip(e.name) : '') +
       '</div>';
   }

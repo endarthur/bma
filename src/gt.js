@@ -76,7 +76,8 @@ function renderGtConfig(data) {
     var opts = GT_GRADE_UNITS.slice(0, -1).map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
-    return '<label class="gt-var-item"><input type="checkbox" value="' + c.idx + '"' + (i === 0 ? ' checked' : '') + '><span>' + esc(c.name) + '</span>' +
+    var emptyTag = colIsEmpty('model', c.idx) ? '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>' : '';
+    return '<label class="gt-var-item"><input type="checkbox" value="' + c.idx + '"' + (i === 0 ? ' checked' : '') + '><span>' + esc(c.name) + '</span>' + emptyTag +
       '<select class="gt-var-unit" data-col="' + c.idx + '">' + opts + '</select></label>';
   }).join('');
 
@@ -909,6 +910,12 @@ function interpolateGt(results, cutoff, binWidth, gradeMin) {
 function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGroups, showTotal, theo) {
   var results = grData.results;
   if (!results || results.length === 0) return '<div class="gt-hint">No GT data available.</div>';
+  // A8: zero total tonnage = no row contributed (empty column, everything
+  // filtered) — say so instead of drawing an all-zero curve
+  if (!(grData.totalTonnage > 0)) {
+    return '<div class="gt-hint">No data for ' + esc(grData.colName || 'this variable') +
+      ' — column empty or every value filtered out.</div>';
+  }
   var binWidth = grData.binWidth;
   var gradeMin = grData.gradeMin;
   var totalTonnage = grData.totalTonnage;

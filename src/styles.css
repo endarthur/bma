@@ -572,6 +572,12 @@ header .logo-mark {
   opacity: 0.45;
   cursor: default;
 }
+.pf-empty-badge {
+  color: var(--red, #f87171);
+  border-color: rgba(248,113,113,0.4);
+  opacity: 0.65;
+  cursor: help;
+}
 .pf-filter-btn {
   font-size: 0.5rem;
   padding: 0.06rem 0.2rem;
@@ -1477,6 +1483,15 @@ header .logo-mark {
   vertical-align: super;
 }
 .stats tr.calcol-row { background: rgba(184, 115, 51, 0.05); }
+
+/* A8: ∅ markers for variables with zero valid values */
+.empty-tag {
+  font-size: 0.7rem;
+  color: var(--red, #f87171);
+  font-weight: 700;
+  margin-left: 0.3rem;
+  cursor: help;
+}
 
 /* Expression autocomplete (generic — used by filter) */
 .expr-ac-wrap { position: relative; }
@@ -3979,6 +3994,7 @@ table.stats tr.stats-delta-row td:first-child {
   border: 1px solid var(--amber); border-radius: 2px; padding: 0 0.18rem;
   flex-shrink: 0; cursor: help; opacity: 0.85;
 }
+.tree-badge--empty { color: var(--red, #f87171); border-color: var(--red, #f87171); }
 .tree-count { color: var(--fg-dim); font-size: 0.6rem; flex-shrink: 0; }
 .tree-pair {
   color: var(--fg-dim); font-size: 0.6rem; margin-left: auto; flex-shrink: 0;

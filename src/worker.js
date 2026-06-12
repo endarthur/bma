@@ -1018,6 +1018,30 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
   let rowCount = 0, totalRowCount = 0, commentCount = 0;
   let lastProgress = 0;
 
+  // ── Stats phase (filter + accumulate) — one data line ──
+  function statsLine(fields) {
+    const hasCalcols = calcolFn !== null;
+    const needsRow = hasCalcols || filterFn || (groupByCol !== null && groupByCol >= nCols) || weightName !== null;
+    let row = null;
+    if (needsRow) row = buildRow(fields);
+    if (filterFn) {
+      if (!filterFn(row)) return;
+    }
+    let rowW = 1;
+    if (wArr) {
+      const wv = wArr[wOrd++];
+      if (!(wv > 0) || !isFinite(wv)) { weightExcluded++; return; }
+      rowW = wv;
+    } else if (weightName) {
+      const wv = row[weightName];
+      if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) { weightExcluded++; return; }
+      rowW = wv;
+    }
+    rowCount++;
+    processRowStats(fields, row, rowW);
+    if (hasCalcols) processCalcolStats(row, rowW);
+  }
+
   await src.stream({
     comment() { commentCount++; },
     line(line, totalChars) {
@@ -1046,27 +1070,7 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
         return; // skip stats during detection — negligible row loss
       }
 
-      // ── Stats phase (filter + accumulate) ──
-      const hasCalcols = calcolFn !== null;
-      const needsRow = hasCalcols || filterFn || (groupByCol !== null && groupByCol >= nCols) || weightName !== null;
-      let row = null;
-      if (needsRow) row = buildRow(fields);
-      if (filterFn) {
-        if (!filterFn(row)) return;
-      }
-      let rowW = 1;
-      if (wArr) {
-        const wv = wArr[wOrd++];
-        if (!(wv > 0) || !isFinite(wv)) { weightExcluded++; return; }
-        rowW = wv;
-      } else if (weightName) {
-        const wv = row[weightName];
-        if (typeof wv !== 'number' || !isFinite(wv) || wv <= 0) { weightExcluded++; return; }
-        rowW = wv;
-      }
-      rowCount++;
-      processRowStats(fields, row, rowW);
-      if (hasCalcols) processCalcolStats(row, rowW);
+      statsLine(fields);
 
       // Progress
       if (totalRowCount - lastProgress >= 25000) {
@@ -1076,11 +1080,19 @@ async function analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipC
     }
   });
 
-  // Edge case: file was so small that detection never triggered
+  // The whole file fit inside the detection phase — a tiny file, or a column
+  // with too few values to resolve (an all-empty column never resolves, A8).
+  // Detection skipped stats for every line, so resolve types and replay the
+  // stream for the stats pass alone (geometry and row counters already
+  // accumulated; the weight ordinal was never advanced). Bounded cost: only
+  // files that end before TYPE_MAX_ROWS can get here.
   if (!typesResolved) {
     typesResolved = true;
     colTypes = src.colTypes = resolveTypes();
     initStatsPhase();
+    await src.stream({
+      line(line) { statsLine(line.split(delimiter)); }
+    });
   }
 
   // Finalize stats

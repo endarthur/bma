@@ -234,9 +234,10 @@ function renderSwathConfig(data) {
       return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
     var varColor = getSwathVarColor(c.name, vi);
+    var emptyTag = colIsEmpty('model', c.idx) ? '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>' : '';
     return '<label class="swath-var-item"><input type="checkbox" value="' + c.idx + '" checked>' +
       '<div class="swath-color-swatch" data-col="' + c.idx + '" style="background:' + varColor + '"></div>' +
-      '<span>' + esc(c.name) + '</span>' +
+      '<span>' + esc(c.name) + '</span>' + emptyTag +
       '<select class="swath-var-unit" data-col="' + c.idx + '">' + unitOpts + '</select></label>';
   }).join('');
 
@@ -510,10 +511,11 @@ function renderSwathAuxVars() {
       return '<option value="' + ui + '"' + (ui === unitIdx ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
     var color = getAuxSwathVarColor(c.name, swathNumCols.length + ai);
+    var emptyTag = colIsEmpty('aux', c.idx) ? '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>' : '';
     html += '<label class="swath-var-item swath-var-item--aux">' +
       '<input type="checkbox" value="' + c.idx + '" data-aux="1" data-name="' + esc(c.name) + '"' + (checked ? ' checked' : '') + '>' +
       '<div class="swath-color-swatch" data-color-key="aux:' + esc(c.name) + '" data-aux-name="' + esc(c.name) + '" data-aux-idx="' + ai + '" style="background:' + color + '"></div>' +
-      '<span>' + esc(label) + ':' + esc(c.name) + '</span>' +
+      '<span>' + esc(label) + ':' + esc(c.name) + '</span>' + emptyTag +
       '<select class="swath-var-unit" data-aux-col="' + c.idx + '" data-aux-name="' + esc(c.name) + '">' + unitOpts + '</select></label>';
   }
   wrap.innerHTML = html;
@@ -863,14 +865,17 @@ function renderSwathCharts(swathData, stat, $target) {
     return;
   }
 
-  // Build per-variable entries — primary first, then aux
+  // Build per-variable entries — primary first, then aux. Selected variables
+  // with zero surviving bins (empty column, everything filtered) are listed
+  // in a note instead of silently vanishing from the chart (A8)
+  var noData = [];
   var varEntries = [];
   for (var vi = 0; vi < varCols.length; vi++) {
     var colIdx = varCols[vi];
     var bins = (swathData.vars[colIdx] || []).filter(function(b) { return b.count > 0; }).sort(function(a, b) { return a.center - b.center; });
-    if (bins.length === 0) continue;
-    var lines = buildSwathStatLines(bins, stat);
     var name = currentHeader[colIdx] || 'Variable';
+    if (bins.length === 0) { noData.push(name); continue; }
+    var lines = buildSwathStatLines(bins, stat);
     varEntries.push({
       colIdx: colIdx,
       isAux: false,
@@ -891,9 +896,9 @@ function renderSwathCharts(swathData, stat, $target) {
     for (var ai = 0; ai < auxVarCols.length; ai++) {
       var aIdx = auxVarCols[ai];
       var aBins = (swathData.auxVars[aIdx] || []).filter(function(b) { return b.count > 0; }).sort(function(a, b) { return a.center - b.center; });
-      if (aBins.length === 0) continue;
-      var aLines = buildSwathStatLines(aBins, stat);
       var baseName = (swathData.auxHeader && swathData.auxHeader[aIdx]) || 'Variable';
+      if (aBins.length === 0) { noData.push(prefixLabel + ':' + baseName); continue; }
+      var aLines = buildSwathStatLines(aBins, stat);
       // A paired aux variable shares its primary's Y axis (and color, dashed)
       var aPair = catPair(baseName);
       var aKey = aPair && primaryKeys[aPair] ? aPair : 'aux:' + baseName;
@@ -925,6 +930,10 @@ function renderSwathCharts(swathData, stat, $target) {
   var html = '';
   if (swathData.auxError) {
     html += '<div class="swath-aux-warn">Aux swath failed: ' + esc(swathData.auxError) + ' — showing primary only.</div>';
+  }
+  if (noData.length > 0) {
+    html += '<div class="swath-aux-warn">No data for ' + noData.map(esc).join(', ') +
+      ' — column empty or every value filtered out.</div>';
   }
   html += '<div class="swath-chart-card">' +
     '<div class="swath-chart-toolbar">' +

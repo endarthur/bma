@@ -157,6 +157,12 @@ function formatDeltaPct(p, a, metric) {
   return (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(1) + '%';
 }
 
+// A8: ∅ tag for variables whose analysis produced zero valid values
+function statsEmptyTag(ds, idx) {
+  if (!colIsEmpty(ds, idx)) return '';
+  return '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>';
+}
+
 function isMetricVisible(key) {
   if (statsVisibleMetrics === null) {
     if (key.startsWith('p') && key.length > 1 && !isNaN(key.slice(1))) return true;
@@ -260,6 +266,7 @@ function renderStatsSidebar() {
     html += '<input type="checkbox"' + checkedAttr + ' data-col="' + ci + '">';
     html += '<span class="var-name">' + esc(name) + '</span>';
     if (isCalcol) html += '<span class="calcol-tag">CALC</span>';
+    html += statsEmptyTag('model', ci);
     html += '</div>';
   }
 
@@ -276,6 +283,7 @@ function renderStatsSidebar() {
       html += '<div class="stats-var-item stats-var-item--aux' + (auxSel ? '' : ' unchecked') + '" data-aux-col="' + ac.idx + '">';
       html += '<input type="checkbox"' + (auxSel ? ' checked' : '') + ' data-aux-col="' + ac.idx + '">';
       html += '<span class="var-name">' + esc(dispName) + '</span>';
+      html += statsEmptyTag('aux', ac.idx);
       html += '</div>';
     }
   }
@@ -309,7 +317,7 @@ function renderStatsTable() {
     var as = auxCompleteData.stats[ac.idx];
     var aCdfActive = statsCdfAuxSelected.has(ac.idx);
     var aNameClass = aCdfActive ? 'cdf-link cdf-active' : 'cdf-link';
-    var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-aux-col="' + ac.idx + '" href="#">' + esc(auxLabel + ':' + ac.name) + '</a></td>';
+    var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-aux-col="' + ac.idx + '" href="#">' + esc(auxLabel + ':' + ac.name) + '</a>' + statsEmptyTag('aux', ac.idx) + '</td>';
     for (var m of metrics) rowHtml += '<td>' + formatStatValue(getStatValue(as, m), m) + '</td>';
     return rowHtml + '</tr>' + deltaRowHtml(ac);
   }
@@ -343,6 +351,7 @@ function renderStatsTable() {
     var nameClass = cdfActive ? 'cdf-link cdf-active' : 'cdf-link';
     var nameHtml = '<a class="' + nameClass + '" data-col="' + ci + '" href="#">' + esc(header[ci]) + '</a>';
     if (isCalcol) nameHtml += '<span class="calcol-tag">CALC</span>';
+    nameHtml += statsEmptyTag('model', ci);
 
     html += '<tr' + (isCalcol ? ' class="calcol-row"' : '') + '><td>' + nameHtml + '</td>';
     for (var m of metrics) {
@@ -382,10 +391,15 @@ function renderStatsCdfPanel() {
   var header = lastDisplayedHeader;
   if (!stats || !header) return;
 
+  // Selected variables with no centroid data (empty column, everything
+  // filtered) are listed in a note instead of silently vanishing (A8)
   var entries = [];
+  var skipped = [];
   statsCdfSelected.forEach(function(ci) {
     if (stats[ci] && stats[ci].centroids && stats[ci].centroids.length > 0) {
       entries.push([header[ci], stats[ci]]);
+    } else {
+      skipped.push(header[ci]);
     }
   });
   if (auxCompleteData && auxCompleteData.stats) {
@@ -394,23 +408,30 @@ function renderStatsCdfPanel() {
       var as = auxCompleteData.stats[ai];
       if (as && as.centroids && as.centroids.length > 0) {
         entries.push([auxLabel + ':' + auxCompleteData.header[ai], as, true]); // [2]=isAux → dashed
+      } else {
+        skipped.push(auxLabel + ':' + auxCompleteData.header[ai]);
       }
     });
   }
 
+  var note = skipped.length > 0
+    ? '<div class="swath-aux-warn">No data for ' + skipped.map(esc).join(', ') +
+      ' — column empty or every value filtered out.</div>'
+    : '';
+
   if (entries.length === 0) {
-    chart.innerHTML = '<div class="stats-cdf-hint">No centroid data for selected columns</div>';
+    chart.innerHTML = note || '<div class="stats-cdf-hint">No centroid data for selected columns</div>';
     return;
   }
 
   if (statsCdfMode === 'qq') {
     if (entries.length < 2) {
-      chart.innerHTML = '<div class="stats-cdf-hint">Q–Q needs two curves — click another variable name (the first selected is the reference axis)</div>';
+      chart.innerHTML = note + '<div class="stats-cdf-hint">Q–Q needs two curves — click another variable name (the first selected is the reference axis)</div>';
     } else {
-      chart.innerHTML = renderStatsQqSvg(entries);
+      chart.innerHTML = note + renderStatsQqSvg(entries);
     }
   } else {
-    chart.innerHTML = renderStatsCdfSvg(entries);
+    chart.innerHTML = note + renderStatsCdfSvg(entries);
     wireStatsCdfTooltip();
   }
 

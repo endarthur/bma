@@ -109,6 +109,11 @@ function treeRoleBadges(ds, name) {
   return b;
 }
 
+function treeEmptyBadge(ds, idx) {
+  if (!colIsEmpty(ds, idx)) return '';
+  return '<span class="tree-badge tree-badge--empty" title="' + EMPTY_COL_TITLE + '">∅</span>';
+}
+
 function treeUnitChip(ds, name) {
   var u = catUnit(ds, name);
   if (!u || !GRADE_UNITS[u] || !GRADE_UNITS[u].symbol) return '';
@@ -195,7 +200,7 @@ function treeDatasetHtml(ds, openState) {
     return '<div class="tree-row tree-row--edit"' + rowAttrs(e, 'num') + ' title="click to edit">' +
       '<span class="tree-chip" style="background:' + color + '"></span>' +
       '<span class="tree-name">' + esc(e.name) + '</span>' +
-      treeUnitChip(ds, e.name) + treeRoleBadges(ds, e.name) +
+      treeUnitChip(ds, e.name) + treeRoleBadges(ds, e.name) + treeEmptyBadge(ds, e.idx) +
       (ds === 'aux' ? treePairChip(e.name) : '') +
       '</div>';
   }

@@ -406,6 +406,17 @@ const GRADE_UNITS = [
 ];
 // (per-variable units live in the catalog — catUnit/catSetUnit)
 
+// A8: a numeric variable that finished analysis with zero valid values —
+// every row was null/sentinel or removed by the per-column filters. Views
+// badge these instead of silently dropping their series.
+const EMPTY_COL_TITLE = 'no valid values in the last analysis — column is empty or every value was filtered out';
+function colIsEmpty(ds, idx) {
+  const d = ds === 'aux' ? auxCompleteData : lastCompleteData;
+  if (!d || !d.stats || idx == null) return false;
+  const s = d.stats[idx];
+  return !!s && s.count === 0;
+}
+
 // ─── Container-width charts (C1b-0) ────────────────────────────────────
 // Chart renderers draw their SVG at a logical width equal to the host's
 // pixel width (1 viewBox unit = 1px → crisp text, no letterboxing); the

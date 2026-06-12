@@ -60,7 +60,7 @@ worker.postMessage({
 });
 ```
 
-Type detection samples rows until every non-forced column has ≥20 non-null values (max 100k rows); **detection rows are excluded from stats** (negligible on block models — force all types to avoid the loss on small files).
+Type detection samples rows until every non-forced column has ≥20 non-null values (max 100k rows); **detection rows are excluded from stats** (negligible on block models — force all types to avoid the loss on small files). If the stream ends with types still unresolved (tiny file, or an all-empty column that can never reach 20 values), the worker resolves from what it saw and **replays the stream for the stats pass**, so those files get complete stats instead of none (A8, 2026-06-11; before this fix any sub-100k-row file containing an all-empty column analyzed to all-zero stats). Files over 100k rows with an empty column still lose the first 100k rows to detection — the pre-existing cap semantics.
 
 ### `header` — posted once types resolve
 

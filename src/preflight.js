@@ -677,6 +677,12 @@ function renderPreflightSidebar(data) {
 
   // Column list — always render both filter buttons; hide via class when not filterable
   const dmCols = data.isDm && data.dmInfo ? data.dmInfo.columns : null;
+  // A8: columns blank throughout the sample (every value a null sentinel) —
+  // these will analyze to zero valid values, flag before the user gets there
+  const sampleEmpty = header.map((_, i) => {
+    if (!data.sampleRows || data.sampleRows.length === 0) return false;
+    return data.sampleRows.every(row => NULL_SENTINELS_MAIN.has(i < row.length ? row[i].trim() : ''));
+  });
   html += '<div class="pf-col-list" id="pfColList">';
   for (let i = 0; i < header.length; i++) {
     const currentType = typeOverrides[i] || autoTypes[i];
@@ -694,6 +700,7 @@ function renderPreflightSidebar(data) {
       <span class="pf-col-name"${isDmConst ? constTooltip : ` title="${esc(header[i])}"`}>${esc(header[i])}</span>
       <div class="pf-col-controls">
         ${isDmConst ? '<span class="pf-const-badge" title="File constant">CONST</span>' : ''}
+        ${sampleEmpty[i] && !isDmConst ? `<span class="pf-const-badge pf-empty-badge" title="No values in the first ${data.sampleRows.length} sampled rows — column appears empty">EMPTY</span>` : ''}
         <button class="pf-filter-btn${cf.skipNeg ? ' active' : ''}${hideCls}" data-col="${i}" data-filter="skipNeg" title="Exclude negatives">≥0</button>
         <button class="pf-filter-btn${cf.skipZeros ? ' active' : ''}${hideCls}" data-col="${i}" data-filter="skipZeros" title="Exclude zeros">≠0</button>
         <button class="type-toggle" data-col="${i}" data-type="${currentType}">${label}</button>
