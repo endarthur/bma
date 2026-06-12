@@ -2376,6 +2376,9 @@ table.cat-values td.cat-drag-cell {
   user-select: none;
 }
 table.cat-values td.cat-drag-cell:active { cursor: grabbing; }
+/* dormant = sort mode isn't Custom yet — still draggable (dragging switches) */
+table.cat-values td.cat-drag-cell--dormant { opacity: 0.35; }
+table.cat-values tr:hover td.cat-drag-cell--dormant { opacity: 0.8; }
 .cat-drag-hidden { display: none; }
 table.cat-values tr.dragging { opacity: 0.4; }
 table.cat-values tr.drag-over td { border-top: 2px solid var(--amber); }

@@ -294,7 +294,7 @@ function renderCatValueTable() {
   var auxLabel = (auxPrefix || 'aux') + ':' + colName;
 
   var html = '<thead><tr>';
-  if (isCustom) html += '<th></th>'; // drag handle column
+  html += '<th></th>'; // drag handle column — always present (C6: dragging sets Custom order)
   html += '<th></th><th></th><th>Value</th><th>Count</th><th>%</th>';
   if (auxCat) html += '<th title="' + esc(auxLabel) + '">aux n</th><th title="' + esc(auxLabel) + '">aux %</th>';
   html += '</tr></thead><tbody>';
@@ -308,7 +308,7 @@ function renderCatValueTable() {
     var color = getCategoryColor(colName, val, ri);
 
     html += '<tr style="--bar:' + barPct + '%" data-val="' + esc(val) + '">';
-    if (isCustom) html += '<td class="cat-drag-cell" draggable="true">\u2261</td>';
+    html += '<td class="cat-drag-cell' + (isCustom ? '' : ' cat-drag-cell--dormant') + '" draggable="true" title="Drag to reorder \u2014 sets Custom order">\u2261</td>';
     html += '<td class="cat-swatch-cell"><span class="cat-swatch" style="background:' + color + '" data-col="' + catFocusedCol + '" data-val="' + esc(val) + '"></span></td>';
     html += '<td class="cat-cb-cell"><input type="checkbox" data-col="' + catFocusedCol + '" data-val="' + esc(val) + '"></td>';
     html += '<td class="cat-val-cell">' + esc(val) + '</td>';
@@ -564,8 +564,19 @@ function wireCatEventsOnce() {
     dragSrcRow.classList.remove('dragging');
 
     var colName = _catData.header[catFocusedCol];
-    initCustomOrder(colName);
-    var order = catVar('model', colName).valueOrder;
+    var rec = catVar('model', colName);
+    if (rec.sortMode !== 'custom') {
+      // Dragging IS the declaration of a custom order (C6): adopt the
+      // currently displayed order as the starting point and switch modes —
+      // previously the handles only existed after clicking Custom, which
+      // nobody found
+      rec.valueOrder = getCatSortedEntries(catFocusedCol).map(function(e) { return e[0]; });
+      rec.sortMode = 'custom';
+      renderCatToolbar();
+    } else {
+      initCustomOrder(colName);
+    }
+    var order = rec.valueOrder;
     var fromVal = dragSrcRow.dataset.val;
     var toVal = tr.dataset.val;
     var fromIdx = order.indexOf(fromVal);
