@@ -223,18 +223,75 @@ function exampleData() {
     sampleAt(175 + rnd() * 60, 55 + rnd() * 90, rnd() * 100);
   }
 
-  return { model: model, samples: samples };
+  // Drillhole set (A7): the same deposit as RAW drillhole tables — 20 grid
+  // holes + 10 infill holes clustered in the high-grade east (the same
+  // clustering story as the samples), 2 m assay intervals carrying the same
+  // +2 Fe assay bias at point support. Survey dips are NEGATIVE-down on
+  // purpose (the dip-convention toggle's teaching moment); alternating grid
+  // holes are inclined westward and steepen ~3°/50 m so the minimum-curvature
+  // desurvey has something to do. Generated AFTER the samples so the shared
+  // RNG sequence keeps model/samples byte-identical to earlier releases.
+  var collar = 'BHID,XCOLLAR,YCOLLAR,ZCOLLAR,EOH\n';
+  var survey = 'BHID,AT,AZIMUTH,DIP\n';
+  var assays = 'BHID,FROM,TO,Fe,SiO2,Al2O3,LITO\n';
+  var holeNo = 0;
+  function makeHole(hx, hy, inclined) {
+    holeNo++;
+    var id = 'DH' + (holeNo < 10 ? '0' : '') + holeNo;
+    collar += id + ',' + (600000 + hx).toFixed(1) + ',' + (7780000 + hy).toFixed(1) + ',900.0,100\n';
+    var az = inclined ? 270 : 0;
+    var dip0 = inclined ? -60 : -90; // negative-down convention
+    survey += id + ',0,' + az + ',' + dip0 + '\n';
+    survey += id + ',50,' + az + ',' + (inclined ? dip0 - 3 : dip0) + '\n';
+    survey += id + ',100,' + az + ',' + (inclined ? dip0 - 6 : dip0) + '\n';
+    // integrate the path in 1 m steps with linearly interpolated dip so the
+    // assays sample the field where BMA's desurvey will place the composites
+    var px = hx, py = hy, pe = 900, dCur = 0;
+    var azr = az * Math.PI / 180;
+    function stepPath(len) {
+      var dip = (inclined ? dip0 - (dCur / 50) * 3 : dip0) * Math.PI / 180;
+      px += len * Math.sin(azr) * Math.cos(dip);
+      py += len * Math.cos(azr) * Math.cos(dip);
+      pe += len * Math.sin(dip);
+      dCur += len;
+    }
+    for (var d = 0; d < 100; d += 2) {
+      stepPath(1); // interval midpoint
+      var sz = clampv(pe - 800, 0, 100);
+      var afe = clampv(feAt(px / 10, py / 10, sz / 10) + 2.0 + gauss() * 3.2, 25, 70);
+      var asio2 = clampv(38 - 0.45 * afe + gauss() * 2.4, 0.3, 34);
+      var aal = clampv(3.5 + 1.2 * Math.cos(px / 40) + gauss() * 1.1, 0.1, 11);
+      var alito = afe > 58 ? 'HEM' : (afe > 48 ? 'ITA' : 'CGA');
+      if (rnd() < 0.02) alito = 'CAN';
+      assays += id + ',' + d + ',' + (d + 2) + ',' + afe.toFixed(2) + ',' +
+        asio2.toFixed(2) + ',' + aal.toFixed(2) + ',' + alito + '\n';
+      stepPath(1);
+    }
+  }
+  for (var gi = 0; gi < 5; gi++) {
+    for (var gj = 0; gj < 4; gj++) {
+      makeHole(24 + gi * 48, 30 + gj * 60, (gi + gj) % 2 === 1);
+    }
+  }
+  for (var fi = 0; fi < 10; fi++) {
+    makeHole(175 + rnd() * 60, 55 + rnd() * 90, false);
+  }
+
+  return { model: model, samples: samples, collar: collar, survey: survey, assays: assays };
 }
 
 var EXAMPLE_TUTORIAL = [
 '# BMA example dataset — tutorial',
 '',
-'Two synthetic files from the same imaginary iron deposit:',
+'Synthetic files from the same imaginary iron deposit:',
 '',
 '- bma-example-model.csv   — a 24 x 24 x 10 block model (10 m blocks):',
 '                            X,Y,Z, Fe, SiO2, Al2O3, DENSITY, LITO',
 '- bma-example-samples.csv — 560 drillhole composites: EAST,NORTH,ELEV,',
 '                            Fe, SiO2, Al2O3, LITO, SUPPORT (composite length, m)',
+'- bma-example-collar.csv / -survey.csv / -assays.csv — the same campaign',
+'                            as RAW drillhole tables (30 holes, 2 m assay',
+'                            intervals) for the drillhole-ingestion chapter',
 '',
 'Fe trends from ~44% in the west to ~57% in the east, with a fold along Y.',
 'Three things are planted for you to find: the samples carry a +2% Fe',
@@ -363,7 +420,31 @@ var EXAMPLE_TUTORIAL = [
 'Statistics, same axis and color (dashed) in Swath. The same trick cleans',
 'data before a top cut: aux.FE_CLEAN = aux.Fe < 0 ? null : aux.Fe;',
 '',
-'## 11. Where to go from here',
+'## 11. Drillholes — from raw tables to composites',
+'',
+'Sections 6-10 used a pre-composited samples file. Real campaigns start',
+'rawer: a collar table, a survey table, an assay-interval table. BMA',
+'composites those itself. Remove the current aux dataset (X Remove on the',
+'Aux tab), then drop bma-example-collar.csv, bma-example-survey.csv and',
+'bma-example-assays.csv together onto the "Drillhole set" card.',
+'',
+'Each file lands in its role (detected from the headers) and the column',
+'mapping appears, already filled in. Note the highlighted Dip convention',
+'row: this survey file uses NEGATIVE-down dips (-90 = vertical), BMA',
+'detected that from the data, and the toggle is there to override it -',
+'always check it against how your surveys were exported. Leave composite',
+'length at the detected 2 m and click Composite & load.',
+'',
+'The consistency report lists everything that did not join cleanly, then',
+'the composites load as the aux dataset: desurveyed XYZ (ten of the holes',
+'are inclined and curve gently - minimum curvature handles that), one row',
+'per 2 m composite, and a SUPPORT column already set as the aux weight.',
+'From here everything in sections 6-10 works the same: Analyze, and the',
+'dh:Fe rows show the familiar +2 bias story. Pack (toolbar) now carries',
+'the three RAW files plus your recipe - the composites are re-derived,',
+'never stored.',
+'',
+'## 12. Where to go from here',
 '',
 'Everything you configured is autosaved per file — reload the page and drop',
 'the same file to pick up where you left off. The aux filter box accepts',
@@ -423,6 +504,9 @@ async function downloadExampleZip() {
   var blob = await buildStoredZip([
     { name: 'bma-example-model.csv', blob: new Blob([data.model]) },
     { name: 'bma-example-samples.csv', blob: new Blob([data.samples]) },
+    { name: 'bma-example-collar.csv', blob: new Blob([data.collar]) },
+    { name: 'bma-example-survey.csv', blob: new Blob([data.survey]) },
+    { name: 'bma-example-assays.csv', blob: new Blob([data.assays]) },
     { name: 'bma-example.bma.json', blob: new Blob([exampleProjectJson(modelSize, samplesSize)]) },
     { name: 'TUTORIAL.txt', blob: new Blob([EXAMPLE_TUTORIAL]) }
   ]);

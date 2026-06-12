@@ -249,6 +249,24 @@ sidebar, filters, calcols, declus, top-cut — nothing new to learn.
   trio for the same synthetic deposit (the current samples file becomes
   *derivable* — keep both so old tutorials hold); TUTORIAL.txt section;
   manual sections + screenshots (both languages); help text on the Aux tab.
+  ✅ **DONE 2026-06-11** — `exampleData()` emits
+  `bma-example-collar/survey/assays.csv`: 20 grid + 10 east-infill holes
+  (the same clustering story), 2 m intervals with the same +2 Fe bias at
+  point support, **negative-down survey dips on purpose** (the convention
+  toggle's teaching moment), alternating grid holes inclined westward and
+  steepening 3°/50 m; the generator integrates the curved path so assays
+  sample the field where BMA's desurvey places the composites. Trio
+  generated AFTER the samples in the shared RNG sequence — model/samples
+  stay **byte-identical** to earlier releases (verified vs `git show
+  HEAD`). Example zip carries seven files; the packed-project json still
+  loads the samples as aux (the trio is tutorial material). TUTORIAL §11
+  "Drillholes — from raw tables to composites" (old §11 → §12). Manuals:
+  §12.9 both languages + two new shots (25-dh-mapping, 26-dh-loaded —
+  driver feeds the example trio, shoots, then clears before the samples
+  flow); §2.1 zip description updated; PDFs 36 pp each. Verified through
+  the lib: neg-down detected, L=2, 30 holes → 1500 composites, clean
+  report, composite Fe ≈ 54.1 (bias + clustering, as planted). Suite
+  10/10. **A7 COMPLETE.**
 
 ## Decisions
 
