@@ -1231,6 +1231,53 @@ header .logo-mark {
 }
 .section-body { padding: 1rem; }
 
+/* C6-5 — Data Health card: the A7 consistency-report pattern promoted
+   app-wide. Clean → a green all-good line; issues → warn rows with a count,
+   a label/detail, and a per-tab View link. */
+.health-clean {
+  color: var(--green);
+  font-size: 0.78rem;
+  font-family: var(--sans);
+}
+.health-item {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.health-item:last-child { border-bottom: none; }
+.health-count {
+  flex-shrink: 0;
+  min-width: 2.4rem;
+  text-align: center;
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-radius: 3px;
+  padding: 0.15rem 0.35rem;
+}
+.health-text { flex: 1; min-width: 0; }
+.health-label { font-size: 0.76rem; color: var(--fg); font-weight: 600; }
+.health-detail {
+  font-size: 0.7rem;
+  color: var(--fg-dim);
+  font-family: var(--sans);
+  margin-top: 0.1rem;
+  word-break: break-word;
+}
+.health-link {
+  flex-shrink: 0;
+  color: var(--blue);
+  font-size: 0.7rem;
+  font-family: var(--mono);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.health-link:hover { text-decoration: underline; }
+
 /* Calcol three-column layout */
 #panelCalcols.active { display: flex; flex-direction: column; }
 .calcol-layout {

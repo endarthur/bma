@@ -1458,6 +1458,120 @@ function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerpr
   });
 }
 
+// C6-5: Data Health card — aggregates the scattered A8/A9 data-quality
+// counters (the badges/warn-notes each tab surfaces locally) into one
+// glanceable Summary card with per-tab "View →" links. The A7 drillhole
+// consistency-report pattern, promoted app-wide. Clean → a green all-good
+// line; issues → a warn row each. Reads the analyze 'complete' message fields.
+function renderHealthCard(data) {
+  var $sec = document.getElementById('healthSection');
+  var $content = document.getElementById('healthContent');
+  var $badge = document.getElementById('healthBadge');
+  if (!$sec || !$content) return;
+  var header = data.header || [];
+  var stats = data.stats || [];
+  var items = [];
+
+  // stats is keyed by column index (not a dense array) — iterate by header
+  var emptyCols = [];
+  for (var i = 0; i < header.length; i++) {
+    if (stats[i] && stats[i].count === 0) emptyCols.push(header[i]);
+  }
+  if (emptyCols.length) items.push({
+    n: emptyCols.length,
+    label: emptyCols.length + ' empty column' + (emptyCols.length === 1 ? '' : 's'),
+    detail: emptyCols.join(', ') + ' — no valid values in this analysis',
+    tab: 'statistics'
+  });
+
+  var mixedCols = [], mixedTotal = 0;
+  for (var j = 0; j < header.length; j++) {
+    if (stats[j] && stats[j].parseFails > 0) { mixedCols.push(header[j]); mixedTotal += stats[j].parseFails; }
+  }
+  if (mixedCols.length) items.push({
+    n: mixedTotal,
+    label: mixedTotal.toLocaleString() + ' non-numeric value' + (mixedTotal === 1 ? '' : 's') + ' in ' + mixedCols.length + ' column' + (mixedCols.length === 1 ? '' : 's'),
+    detail: mixedCols.join(', ') + ' — treated as nulls; toggle to CAT in Preflight if a category',
+    tab: 'statistics'
+  });
+
+  if (data.raggedRows > 0) items.push({
+    n: data.raggedRows,
+    label: data.raggedRows.toLocaleString() + ' ragged row' + (data.raggedRows === 1 ? '' : 's'),
+    detail: 'unexpected field count — check delimiter/quoting; misaligned values land in the wrong columns',
+    tab: 'preflight'
+  });
+
+  if (data.filterErrors) {
+    var fe = (data.filterErrors.global || 0) + (data.filterErrors.local || 0);
+    if (fe > 0) items.push({
+      n: fe,
+      label: fe.toLocaleString() + ' row' + (fe === 1 ? '' : 's') + ' excluded by filter errors',
+      detail: 'first: ' + data.filterErrors.message,
+      tab: 'statistics'
+    });
+  }
+
+  if (data.calcolErrors && data.calcolErrors.count > 0) items.push({
+    n: data.calcolErrors.count,
+    label: data.calcolErrors.count.toLocaleString() + ' calculated-column error' + (data.calcolErrors.count === 1 ? '' : 's'),
+    detail: 'first: ' + data.calcolErrors.message,
+    tab: 'calc'
+  });
+
+  if (data.weightExcluded > 0) items.push({
+    n: data.weightExcluded,
+    label: data.weightExcluded.toLocaleString() + ' row' + (data.weightExcluded === 1 ? '' : 's') + ' excluded for invalid weight',
+    detail: 'missing or ≤0 weight — excluded from weighted statistics',
+    tab: 'statistics'
+  });
+
+  if (data.coordInvalidCells > 0) items.push({
+    n: data.coordInvalidCells,
+    label: data.coordInvalidCells.toLocaleString() + ' coordinate value' + (data.coordInvalidCells === 1 ? '' : 's') + ' ignored',
+    detail: 'null sentinel or unparseable — excluded from grid inference (see Grid Geometry above)',
+    tab: null
+  });
+
+  if (data.groupStatsOverflow) items.push({
+    n: null,
+    label: 'Group cap reached (500)',
+    detail: 'some categories were omitted from grouped statistics',
+    tab: 'statscat'
+  });
+
+  var rowCount = (data.totalRowCount != null ? data.totalRowCount : data.rowCount) || 0;
+  if (items.length === 0) {
+    $badge.textContent = 'clean';
+    $badge.style.background = 'var(--green-soft)';
+    $badge.style.color = 'var(--green)';
+    $content.innerHTML = '<div class="health-clean">✓ No data-quality issues — all ' +
+      rowCount.toLocaleString() + ' rows and ' + header.length + ' columns parsed cleanly.</div>';
+  } else {
+    $badge.textContent = items.length + ' check' + (items.length === 1 ? '' : 's');
+    $badge.style.background = 'var(--warn-soft)';
+    $badge.style.color = 'var(--warn)';
+    $content.innerHTML = items.map(function(it) {
+      var link = it.tab ? '<a class="health-link" data-goto="' + esc(it.tab) + '" href="#">View →</a>' : '';
+      var cnt = '<span class="health-count">' + (it.n != null ? it.n.toLocaleString() : '!') + '</span>';
+      return '<div class="health-item">' + cnt +
+        '<div class="health-text"><div class="health-label">' + esc(it.label) + '</div>' +
+        '<div class="health-detail">' + esc(it.detail) + '</div></div>' + link + '</div>';
+    }).join('');
+  }
+  $sec.style.display = '';
+
+  if (!$content.dataset.gotoBound) {
+    $content.dataset.gotoBound = '1';
+    $content.addEventListener('click', function(e) {
+      var a = e.target.closest('[data-goto]');
+      if (!a) return;
+      e.preventDefault();
+      showPanel(a.getAttribute('data-goto'));
+    });
+  }
+}
+
 function displayResults(data) {
   const isFirstAnalysis = !hasResults;
   hasResults = true;
@@ -1512,6 +1626,9 @@ function displayResults(data) {
   );
   if (commentCount > 0) infoItems.splice(zipName ? 4 : 3, 0, fi('Comments', commentCount.toLocaleString()));
   $fileInfo.innerHTML = infoItems.join('');
+
+  // C6-5 data-health card (after the file/geometry fields are read off data)
+  renderHealthCard(data);
 
   // XYZ Config
   renderXYZConfig(header, colTypes, xyzGuess);
