@@ -80,6 +80,9 @@ function wireSearchShortcuts(input, allBtn, noneBtn) {
 const $dropzone = document.getElementById('dropzone');
 const $fileInput = document.getElementById('fileInput');
 const $recentFiles = document.getElementById('recentFiles');
+// C6-2: recents snapshot for the File → Open recent submenu (menu factories
+// are sync; renderRecentFiles refreshes this from the async IDB list).
+var wsRecentsCache = [];
 const $panelPreflight = document.getElementById('panelPreflight');
 const $preflightZip = document.getElementById('preflightZip');
 const $preflightHead = document.getElementById('preflightHead');
@@ -587,7 +590,8 @@ var _helpWorkspace =
   '<div class="help-section"><div class="help-section-title">Workspace</div>' +
   '<div class="help-row"><span><strong>Drag a tab</strong> to rearrange: drop in the gaps between panels to split, onto a panel body to tear off a <strong>floating window</strong>, or on a tab strip to re-dock.</span></div>' +
   '<div class="help-row"><span><strong>Right-click a tab</strong> for Float / Move / Close; right-click a float’s titlebar to dock or close it.</span></div>' +
-  '<div class="help-row"><span><strong>⋮ → Panels</strong> reopens closed panels; <strong>⋮ → Reset layout</strong> restores the default. The layout is saved with the project.</span></div>' +
+  '<div class="help-row"><span><strong>View → Panels</strong> reopens closed panels; <strong>View → Reset layout</strong> restores the default. The layout is saved with the project.</span></div>' +
+  '<div class="help-row"><kbd>Ctrl+S</kbd> <span>flush the autosave (File → Save). <kbd>Alt</kbd> opens the menubar.</span></div>' +
   '<div class="help-row"><span>The <strong>Data</strong> rail (catalog tree) collapses and restores with its ◀ / ▶ buttons.</span></div></div>';
 
 var _helpTabs = {
@@ -866,6 +870,14 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'F1') {
     e.preventDefault();
     toggleHelp();
+    return;
+  }
+  // Ctrl/Cmd+S — flush the continuous autosave with a visible beat (C6-2)
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 's') {
+    if ($results.classList.contains('active')) {
+      e.preventDefault();
+      if (typeof flushProjectSave === 'function') flushProjectSave();
+    }
     return;
   }
   // Escape — close help if open

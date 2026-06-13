@@ -94,6 +94,7 @@ function timeAgo(ts) {
 
 function renderRecentFiles() {
   recentList().then(function(items) {
+    wsRecentsCache = items || [];   // C6-2: feed the File → Open recent submenu
     if (items.length === 0) {
       $recentFiles.innerHTML = '';
       return;
@@ -528,6 +529,26 @@ function autoSaveProject() {
   }, 2000);
 }
 
+// C6-2: File → Save (Ctrl+S) — flush the continuous autosave immediately and
+// flash a peace-of-mind "Saved ✓" beat. Same write the debounced timer does.
+function flushProjectSave() {
+  if (!currentFile || !preflightData) return;
+  clearTimeout(autoSaveTimer);
+  var ok = false;
+  try {
+    localStorage.setItem(projectKey(currentFile), JSON.stringify(serializeProject()));
+    ok = true;
+  } catch (e) { /* quota — silent fail */ }
+  var beat = document.getElementById('saveBeat');
+  if (beat) {
+    beat.textContent = ok ? 'Saved ✓' : 'Save failed';
+    beat.style.color = ok ? 'var(--green)' : 'var(--red)';
+    beat.classList.add('on');
+    clearTimeout(flushProjectSave._t);
+    flushProjectSave._t = setTimeout(function() { beat.classList.remove('on'); }, 1400);
+  }
+}
+
 async function applyProject(project) {
   if (!project || !project._bma) return;
 
@@ -875,6 +896,9 @@ function clearProject() {
 // rails-only section and the Panels checkmarks are live on every open
 Menu.dropdown($toolbarOverflow, function() {
   const items = [
+    { label: 'Open…', action: 'open' },
+    { label: 'Save', action: 'saveFlush' },
+    '---',
     { label: 'Export project', action: 'save' },
     { label: 'Pack project', action: 'pack' },
     { label: 'Import project', action: 'load' },
@@ -891,6 +915,8 @@ Menu.dropdown($toolbarOverflow, function() {
   return items;
 }, { onAction: (action) => {
   if (action && action.panel) showPanel(action.panel);
+  else if (action === 'open') { var fi = document.getElementById('fileInput'); if (fi) fi.click(); }
+  else if (action === 'saveFlush') flushProjectSave();
   else if (action === 'save') saveProjectFile();
   else if (action === 'pack') openPackModal();
   else if (action === 'load') $projectFileInput.click();

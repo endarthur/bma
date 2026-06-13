@@ -4801,7 +4801,39 @@ table.stats tr.stats-delta-row td:first-child {
 .gcu-menu-arrow { color: var(--ui-fg-muted); font-size: 0.85em; }
 .gcu-menu-check { color: var(--sel); }
 .gcu-menu-sep { background: var(--ui-border); }
-/* MenuBar theme intentionally omitted — unused in BMA (D7) */
+
+/* ─── MenuBar theme (C6-2) — the desktop top-left command bar ─────────── */
+.gcu-menubar { gap: 0; align-items: stretch; }
+.gcu-menubar-trigger {
+  font: 0.72rem var(--mono);
+  color: var(--fg-dim);
+  letter-spacing: 0.03em;
+  border-radius: 3px;
+  transition: color 80ms, background 80ms;
+}
+.gcu-menubar-trigger:hover,
+.gcu-menubar-trigger.gcu-menubar-focused { color: var(--fg-bright); background: var(--bg3); }
+.gcu-menubar-trigger.gcu-menubar-active { color: var(--fg-bright); background: var(--bg3); }
+
+/* ─── C6-2 toolbar: menubar (rails shell only) replaces the button/icon row ──
+   The menubar lives top-left following reading order; the desktop kebab,
+   the Export/Import/Pack/Clear buttons, the ?/⚙ icons, and the ✕ close-file
+   all fold into the menus. Below 701px the rails shell never mounts, so the
+   legacy toolbar (kebab = the mobile menu) survives untouched. */
+.app-menubar { display: none; }
+#results.rails-shell .app-menubar { display: flex; }
+#results.rails-shell .toolbar-right { display: none; }
+#results.rails-shell #backToPreflight { display: none; }
+
+/* Save verb's peace-of-mind beat (File → Save / Ctrl+S) */
+.save-beat {
+  font: 0.68rem var(--mono);
+  color: var(--green);
+  opacity: 0;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.save-beat.on { opacity: 1; }
 
 /* ─── Drillhole set ingestion (A7 Phase 1) ───────────────────────────── */
 .dh-card {
@@ -4985,6 +5017,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <div id="results">
     <div class="results-toolbar" id="resultsToolbar">
       <div class="toolbar-left">
+        <div class="app-menubar" id="appMenubar"></div>
         <button class="preflight-back-btn" id="backToPreflight" title="Close file">✕</button>
         <span class="results-toolbar-title" id="resultsFilename"></span>
       </div>
@@ -4992,6 +5025,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
         <span id="resultsRowInfo" class="results-toolbar-info"></span>
         <span id="resultsTimeInfo" class="results-toolbar-info"></span>
         <span id="resultsMemInfo" class="results-toolbar-info"></span>
+        <span id="saveBeat" class="save-beat"></span>
       </div>
       <div class="toolbar-right">
         <button class="toolbar-btn" id="projectSave" title="Export project config (.bma.json) — the project itself auto-saves continuously">Export</button>
@@ -5526,7 +5560,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 344864c — click to check for updates">344864c</div>
+<div class="build-badge" id="buildBadge" title="build 083b662 — click to check for updates">083b662</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8082,6 +8116,9 @@ function wireSearchShortcuts(input, allBtn, noneBtn) {
 const $dropzone = document.getElementById('dropzone');
 const $fileInput = document.getElementById('fileInput');
 const $recentFiles = document.getElementById('recentFiles');
+// C6-2: recents snapshot for the File → Open recent submenu (menu factories
+// are sync; renderRecentFiles refreshes this from the async IDB list).
+var wsRecentsCache = [];
 const $panelPreflight = document.getElementById('panelPreflight');
 const $preflightZip = document.getElementById('preflightZip');
 const $preflightHead = document.getElementById('preflightHead');
@@ -8589,7 +8626,8 @@ var _helpWorkspace =
   '<div class="help-section"><div class="help-section-title">Workspace</div>' +
   '<div class="help-row"><span><strong>Drag a tab</strong> to rearrange: drop in the gaps between panels to split, onto a panel body to tear off a <strong>floating window</strong>, or on a tab strip to re-dock.</span></div>' +
   '<div class="help-row"><span><strong>Right-click a tab</strong> for Float / Move / Close; right-click a float’s titlebar to dock or close it.</span></div>' +
-  '<div class="help-row"><span><strong>⋮ → Panels</strong> reopens closed panels; <strong>⋮ → Reset layout</strong> restores the default. The layout is saved with the project.</span></div>' +
+  '<div class="help-row"><span><strong>View → Panels</strong> reopens closed panels; <strong>View → Reset layout</strong> restores the default. The layout is saved with the project.</span></div>' +
+  '<div class="help-row"><kbd>Ctrl+S</kbd> <span>flush the autosave (File → Save). <kbd>Alt</kbd> opens the menubar.</span></div>' +
   '<div class="help-row"><span>The <strong>Data</strong> rail (catalog tree) collapses and restores with its ◀ / ▶ buttons.</span></div></div>';
 
 var _helpTabs = {
@@ -8868,6 +8906,14 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'F1') {
     e.preventDefault();
     toggleHelp();
+    return;
+  }
+  // Ctrl/Cmd+S — flush the continuous autosave with a visible beat (C6-2)
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 's') {
+    if ($results.classList.contains('active')) {
+      e.preventDefault();
+      if (typeof flushProjectSave === 'function') flushProjectSave();
+    }
     return;
   }
   // Escape — close help if open
@@ -16045,6 +16091,7 @@ function timeAgo(ts) {
 
 function renderRecentFiles() {
   recentList().then(function(items) {
+    wsRecentsCache = items || [];   // C6-2: feed the File → Open recent submenu
     if (items.length === 0) {
       $recentFiles.innerHTML = '';
       return;
@@ -16479,6 +16526,26 @@ function autoSaveProject() {
   }, 2000);
 }
 
+// C6-2: File → Save (Ctrl+S) — flush the continuous autosave immediately and
+// flash a peace-of-mind "Saved ✓" beat. Same write the debounced timer does.
+function flushProjectSave() {
+  if (!currentFile || !preflightData) return;
+  clearTimeout(autoSaveTimer);
+  var ok = false;
+  try {
+    localStorage.setItem(projectKey(currentFile), JSON.stringify(serializeProject()));
+    ok = true;
+  } catch (e) { /* quota — silent fail */ }
+  var beat = document.getElementById('saveBeat');
+  if (beat) {
+    beat.textContent = ok ? 'Saved ✓' : 'Save failed';
+    beat.style.color = ok ? 'var(--green)' : 'var(--red)';
+    beat.classList.add('on');
+    clearTimeout(flushProjectSave._t);
+    flushProjectSave._t = setTimeout(function() { beat.classList.remove('on'); }, 1400);
+  }
+}
+
 async function applyProject(project) {
   if (!project || !project._bma) return;
 
@@ -16826,6 +16893,9 @@ function clearProject() {
 // rails-only section and the Panels checkmarks are live on every open
 Menu.dropdown($toolbarOverflow, function() {
   const items = [
+    { label: 'Open…', action: 'open' },
+    { label: 'Save', action: 'saveFlush' },
+    '---',
     { label: 'Export project', action: 'save' },
     { label: 'Pack project', action: 'pack' },
     { label: 'Import project', action: 'load' },
@@ -16842,6 +16912,8 @@ Menu.dropdown($toolbarOverflow, function() {
   return items;
 }, { onAction: (action) => {
   if (action && action.panel) showPanel(action.panel);
+  else if (action === 'open') { var fi = document.getElementById('fileInput'); if (fi) fi.click(); }
+  else if (action === 'saveFlush') flushProjectSave();
   else if (action === 'save') saveProjectFile();
   else if (action === 'pack') openPackModal();
   else if (action === 'load') $projectFileInput.click();
@@ -25579,7 +25651,8 @@ var SETTINGS_DEFAULTS = {
   sigFigs: null,
   thousandsSep: 'space',
   sciNotation: 'auto',
-  defaultCatSort: 'count-desc'
+  defaultCatSort: 'count-desc',
+  uiScale: 100   // C6-2: root font-size scale (%), View → UI scale
 };
 
 // C6-1a (D4): Switchboard light/dark/system replaces the legacy accent
@@ -25702,6 +25775,16 @@ function applyTheme(name) {
 function updateThemeColor(color) {
   var meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', color);
+}
+
+// C6-2: UI scale — multiply the 14px root font-size; the whole rem-based UI
+// (and rem-sized chart hosts) scales with it. Persisted; applied at init.
+var UI_SCALE_BASE_PX = 14;
+function applyUiScale(scale) {
+  var pct = Math.max(70, Math.min(160, parseInt(scale, 10) || 100));
+  bmaSettings.uiScale = pct;
+  saveSettings();
+  document.documentElement.style.fontSize = (UI_SCALE_BASE_PX * pct / 100).toFixed(2) + 'px';
 }
 
 // ─── Cache Enumeration ───────────────────────────────────────────────
@@ -26153,6 +26236,7 @@ function refreshFormattedViews() {
 function initSettings() {
   loadSettings();
   applyTheme(bmaSettings.theme);
+  if (bmaSettings.uiScale && bmaSettings.uiScale !== 100) applyUiScale(bmaSettings.uiScale);
 
   // Modal close handlers
   $settingsClose.addEventListener('click', closeSettings);
@@ -28069,6 +28153,7 @@ if ($exampleBtn) $exampleBtn.addEventListener('click', downloadExampleZip);
 
 var wsRails = null;      // rails instance when the rails shell is up, else null
 var wsLastLayout = null; // serialized rails layout — survives shell exits, rides projects
+var wsMenuBar = null;    // C6-2 desktop menubar (rails shell only); null on legacy
 
 var WS_PANELS = [
   { id: 'preflight',  title: 'Preflight',  el: 'panelPreflight' },
@@ -28249,6 +28334,126 @@ function wsPanelsMenuItems() {
   });
 }
 
+// ── C6-2 desktop menubar (File / View / Data / Help) ──────────────────────
+// Each section's items is a LIVE factory (Menu.show re-evaluates it on every
+// open via evaluateItems), so checkmarks (panels/theme/scale/tree) always
+// reflect current state — no manual refresh needed. Only mounted on the rails
+// shell (≥701px); the <700px legacy shell keeps the toolbar ⋮ kebab as its menu.
+function wsThemeMenuItems() {
+  var cur = (typeof bmaSettings !== 'undefined' && bmaSettings) ? bmaSettings.theme : 'system';
+  return [
+    { label: 'Light',  checked: cur === 'light',  action: { theme: 'light' } },
+    { label: 'Dark',   checked: cur === 'dark',   action: { theme: 'dark' } },
+    { label: 'System', checked: cur === 'system', action: { theme: 'system' } },
+  ];
+}
+var WS_UI_SCALES = [90, 100, 110, 125, 150];
+function wsScaleMenuItems() {
+  var cur = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.uiScale) || 100;
+  return WS_UI_SCALES.map(function(s) {
+    return { label: s + '%', checked: s === cur, action: { scale: s } };
+  });
+}
+function wsRecentMenuItems() {
+  if (!wsRecentsCache || !wsRecentsCache.length) return [{ label: '(no recent files)', disabled: true }];
+  return wsRecentsCache.slice(0, 12).map(function(it) {
+    return { label: it.name, action: { recent: it._key } };
+  });
+}
+function wsFileMenuItems() {
+  return [
+    { label: 'Open…', action: 'open' },
+    { label: 'Open recent', children: wsRecentMenuItems },
+    '---',
+    { label: 'Save', shortcut: 'Ctrl+S', action: 'saveFlush' },
+    { label: 'Export project', action: 'export' },
+    { label: 'Import project…', action: 'import' },
+    '---',
+    { label: 'Pack…', action: 'pack' },
+    { label: 'Clear project', action: 'clear' },
+    '---',
+    { label: 'Close file', action: 'closeFile' },
+    { label: 'Settings…', action: 'settings' },
+  ];
+}
+function wsViewMenuItems() {
+  return [
+    { label: 'Panels', children: wsPanelsMenuItems },
+    { label: 'Data tree', checked: !!catalogTreeOpen, action: 'toggleTree' },
+    { label: 'Reset layout', action: 'resetLayout' },
+    '---',
+    { label: 'Theme', children: wsThemeMenuItems },
+    { label: 'UI scale', children: wsScaleMenuItems },
+  ];
+}
+function wsDataMenuItems() {
+  return [
+    { label: 'Analyze', action: 'analyze' },
+    { label: 'Filter…', action: 'filter' },
+    { label: 'Calculated columns…', action: 'calcols' },
+    '---',
+    { label: 'Datasets…', action: 'datasets' },
+  ];
+}
+function wsHelpMenuItems() {
+  return [
+    { label: 'Keyboard shortcuts', shortcut: 'F1', action: 'help' },
+    { label: 'Download example dataset', action: 'example' },
+    '---',
+    { label: 'About BMA', action: 'about' },
+  ];
+}
+var WS_MENU_SECTIONS = [
+  { label: 'File', items: wsFileMenuItems },
+  { label: 'View', items: wsViewMenuItems },
+  { label: 'Data', items: wsDataMenuItems },
+  { label: 'Help', items: wsHelpMenuItems },
+];
+
+function wsFocusFilter() {
+  if (typeof $filterSection !== 'undefined' && $filterSection) $filterSection.classList.add('active');
+  if (typeof $appFooter !== 'undefined' && $appFooter) $appFooter.classList.add('active');
+  var el = document.getElementById('filterExpr');
+  if (el) { el.focus(); }
+}
+function wsShowAbout() {
+  var badge = document.getElementById('buildBadge');
+  var build = badge ? badge.textContent.trim() : '';
+  bmaConfirm({
+    title: 'About BMA',
+    html: '<div class="confirm-detail"><strong>BMA — Block Model Atelier</strong></div>' +
+      '<div class="confirm-detail">Client-side CSV block model analyzer for mining &amp; geostatistics. Everything runs in your browser — nothing is uploaded.</div>' +
+      '<div class="confirm-hint">Build ' + esc(build) + ' · Geoscientific Chaos Union · MIT</div>',
+    okLabel: 'Close', cancelLabel: 'Close'
+  });
+}
+function wsMenuAction(a) {
+  if (!a) return;
+  if (a.panel) { showPanel(a.panel); return; }
+  if (a.theme) { applyTheme(a.theme); return; }
+  if (a.scale != null) { if (typeof applyUiScale === 'function') applyUiScale(a.scale); return; }
+  if (a.recent) { if (typeof reopenRecent === 'function') reopenRecent(a.recent); return; }
+  switch (a) {
+    case 'open': { var fi = document.getElementById('fileInput'); if (fi) fi.click(); break; }
+    case 'saveFlush': if (typeof flushProjectSave === 'function') flushProjectSave(); break;
+    case 'export': saveProjectFile(); break;
+    case 'import': $projectFileInput.click(); break;
+    case 'pack': openPackModal(); break;
+    case 'clear': clearProject(); break;
+    case 'closeFile': $backToPreflight.click(); break;
+    case 'settings': openSettings(); break;
+    case 'toggleTree': toggleCatalogTree(); break;
+    case 'resetLayout': wsResetLayout(); break;
+    case 'analyze': executeAnalysis(); break;
+    case 'filter': wsFocusFilter(); break;
+    case 'calcols': showPanel('calcols'); break;
+    case 'datasets': showPanel('aux'); break;
+    case 'help': toggleHelp(); break;
+    case 'example': { var ex = document.getElementById('exampleDownload'); if (ex) ex.click(); break; }
+    case 'about': wsShowAbout(); break;
+  }
+}
+
 function buildRailsShell(host) {
   var activeId = getActiveTabId();
 
@@ -28385,6 +28590,14 @@ function buildRailsShell(host) {
   // bring back the remembered arrangement
   if (wsLastLayout) wsApplyLayout(wsLastLayout);
 
+  // C6-2 menubar — top-left command surface; live-factory sections
+  var mbEl = document.getElementById('appMenubar');
+  if (mbEl && typeof MenuBar !== 'undefined') {
+    if (wsMenuBar) { wsMenuBar.destroy(); wsMenuBar = null; }
+    wsMenuBar = new MenuBar(mbEl, WS_MENU_SECTIONS);
+    wsMenuBar.on('action', wsMenuAction);
+  }
+
   wsSyncBadgesFromLegacy();
   wsSyncResultsTreeClass();
   renderCatalogTree();
@@ -28401,6 +28614,7 @@ function wsExitRails() {
   var activeId = getActiveTabId();
   var inst = wsRails;
   wsLastLayout = inst.serialize(); // arrangement survives the legacy interlude
+  if (wsMenuBar) { wsMenuBar.destroy(); wsMenuBar = null; }   // C6-2 menubar is rails-only
   wsRails = null;        // legacy arm live before destroy() re-homes panels
   document.getElementById('results').classList.remove('rails-shell');
   inst.destroy();        // onPanelDestroy → wsRehomePanel for every mounted panel

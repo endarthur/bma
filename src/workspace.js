@@ -25,6 +25,7 @@
 
 var wsRails = null;      // rails instance when the rails shell is up, else null
 var wsLastLayout = null; // serialized rails layout — survives shell exits, rides projects
+var wsMenuBar = null;    // C6-2 desktop menubar (rails shell only); null on legacy
 
 var WS_PANELS = [
   { id: 'preflight',  title: 'Preflight',  el: 'panelPreflight' },
@@ -205,6 +206,126 @@ function wsPanelsMenuItems() {
   });
 }
 
+// ── C6-2 desktop menubar (File / View / Data / Help) ──────────────────────
+// Each section's items is a LIVE factory (Menu.show re-evaluates it on every
+// open via evaluateItems), so checkmarks (panels/theme/scale/tree) always
+// reflect current state — no manual refresh needed. Only mounted on the rails
+// shell (≥701px); the <700px legacy shell keeps the toolbar ⋮ kebab as its menu.
+function wsThemeMenuItems() {
+  var cur = (typeof bmaSettings !== 'undefined' && bmaSettings) ? bmaSettings.theme : 'system';
+  return [
+    { label: 'Light',  checked: cur === 'light',  action: { theme: 'light' } },
+    { label: 'Dark',   checked: cur === 'dark',   action: { theme: 'dark' } },
+    { label: 'System', checked: cur === 'system', action: { theme: 'system' } },
+  ];
+}
+var WS_UI_SCALES = [90, 100, 110, 125, 150];
+function wsScaleMenuItems() {
+  var cur = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.uiScale) || 100;
+  return WS_UI_SCALES.map(function(s) {
+    return { label: s + '%', checked: s === cur, action: { scale: s } };
+  });
+}
+function wsRecentMenuItems() {
+  if (!wsRecentsCache || !wsRecentsCache.length) return [{ label: '(no recent files)', disabled: true }];
+  return wsRecentsCache.slice(0, 12).map(function(it) {
+    return { label: it.name, action: { recent: it._key } };
+  });
+}
+function wsFileMenuItems() {
+  return [
+    { label: 'Open…', action: 'open' },
+    { label: 'Open recent', children: wsRecentMenuItems },
+    '---',
+    { label: 'Save', shortcut: 'Ctrl+S', action: 'saveFlush' },
+    { label: 'Export project', action: 'export' },
+    { label: 'Import project…', action: 'import' },
+    '---',
+    { label: 'Pack…', action: 'pack' },
+    { label: 'Clear project', action: 'clear' },
+    '---',
+    { label: 'Close file', action: 'closeFile' },
+    { label: 'Settings…', action: 'settings' },
+  ];
+}
+function wsViewMenuItems() {
+  return [
+    { label: 'Panels', children: wsPanelsMenuItems },
+    { label: 'Data tree', checked: !!catalogTreeOpen, action: 'toggleTree' },
+    { label: 'Reset layout', action: 'resetLayout' },
+    '---',
+    { label: 'Theme', children: wsThemeMenuItems },
+    { label: 'UI scale', children: wsScaleMenuItems },
+  ];
+}
+function wsDataMenuItems() {
+  return [
+    { label: 'Analyze', action: 'analyze' },
+    { label: 'Filter…', action: 'filter' },
+    { label: 'Calculated columns…', action: 'calcols' },
+    '---',
+    { label: 'Datasets…', action: 'datasets' },
+  ];
+}
+function wsHelpMenuItems() {
+  return [
+    { label: 'Keyboard shortcuts', shortcut: 'F1', action: 'help' },
+    { label: 'Download example dataset', action: 'example' },
+    '---',
+    { label: 'About BMA', action: 'about' },
+  ];
+}
+var WS_MENU_SECTIONS = [
+  { label: 'File', items: wsFileMenuItems },
+  { label: 'View', items: wsViewMenuItems },
+  { label: 'Data', items: wsDataMenuItems },
+  { label: 'Help', items: wsHelpMenuItems },
+];
+
+function wsFocusFilter() {
+  if (typeof $filterSection !== 'undefined' && $filterSection) $filterSection.classList.add('active');
+  if (typeof $appFooter !== 'undefined' && $appFooter) $appFooter.classList.add('active');
+  var el = document.getElementById('filterExpr');
+  if (el) { el.focus(); }
+}
+function wsShowAbout() {
+  var badge = document.getElementById('buildBadge');
+  var build = badge ? badge.textContent.trim() : '';
+  bmaConfirm({
+    title: 'About BMA',
+    html: '<div class="confirm-detail"><strong>BMA — Block Model Atelier</strong></div>' +
+      '<div class="confirm-detail">Client-side CSV block model analyzer for mining &amp; geostatistics. Everything runs in your browser — nothing is uploaded.</div>' +
+      '<div class="confirm-hint">Build ' + esc(build) + ' · Geoscientific Chaos Union · MIT</div>',
+    okLabel: 'Close', cancelLabel: 'Close'
+  });
+}
+function wsMenuAction(a) {
+  if (!a) return;
+  if (a.panel) { showPanel(a.panel); return; }
+  if (a.theme) { applyTheme(a.theme); return; }
+  if (a.scale != null) { if (typeof applyUiScale === 'function') applyUiScale(a.scale); return; }
+  if (a.recent) { if (typeof reopenRecent === 'function') reopenRecent(a.recent); return; }
+  switch (a) {
+    case 'open': { var fi = document.getElementById('fileInput'); if (fi) fi.click(); break; }
+    case 'saveFlush': if (typeof flushProjectSave === 'function') flushProjectSave(); break;
+    case 'export': saveProjectFile(); break;
+    case 'import': $projectFileInput.click(); break;
+    case 'pack': openPackModal(); break;
+    case 'clear': clearProject(); break;
+    case 'closeFile': $backToPreflight.click(); break;
+    case 'settings': openSettings(); break;
+    case 'toggleTree': toggleCatalogTree(); break;
+    case 'resetLayout': wsResetLayout(); break;
+    case 'analyze': executeAnalysis(); break;
+    case 'filter': wsFocusFilter(); break;
+    case 'calcols': showPanel('calcols'); break;
+    case 'datasets': showPanel('aux'); break;
+    case 'help': toggleHelp(); break;
+    case 'example': { var ex = document.getElementById('exampleDownload'); if (ex) ex.click(); break; }
+    case 'about': wsShowAbout(); break;
+  }
+}
+
 function buildRailsShell(host) {
   var activeId = getActiveTabId();
 
@@ -341,6 +462,14 @@ function buildRailsShell(host) {
   // bring back the remembered arrangement
   if (wsLastLayout) wsApplyLayout(wsLastLayout);
 
+  // C6-2 menubar — top-left command surface; live-factory sections
+  var mbEl = document.getElementById('appMenubar');
+  if (mbEl && typeof MenuBar !== 'undefined') {
+    if (wsMenuBar) { wsMenuBar.destroy(); wsMenuBar = null; }
+    wsMenuBar = new MenuBar(mbEl, WS_MENU_SECTIONS);
+    wsMenuBar.on('action', wsMenuAction);
+  }
+
   wsSyncBadgesFromLegacy();
   wsSyncResultsTreeClass();
   renderCatalogTree();
@@ -357,6 +486,7 @@ function wsExitRails() {
   var activeId = getActiveTabId();
   var inst = wsRails;
   wsLastLayout = inst.serialize(); // arrangement survives the legacy interlude
+  if (wsMenuBar) { wsMenuBar.destroy(); wsMenuBar = null; }   // C6-2 menubar is rails-only
   wsRails = null;        // legacy arm live before destroy() re-homes panels
   document.getElementById('results').classList.remove('rails-shell');
   inst.destroy();        // onPanelDestroy → wsRehomePanel for every mounted panel

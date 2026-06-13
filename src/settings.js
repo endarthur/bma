@@ -10,7 +10,8 @@ var SETTINGS_DEFAULTS = {
   sigFigs: null,
   thousandsSep: 'space',
   sciNotation: 'auto',
-  defaultCatSort: 'count-desc'
+  defaultCatSort: 'count-desc',
+  uiScale: 100   // C6-2: root font-size scale (%), View → UI scale
 };
 
 // C6-1a (D4): Switchboard light/dark/system replaces the legacy accent
@@ -133,6 +134,16 @@ function applyTheme(name) {
 function updateThemeColor(color) {
   var meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', color);
+}
+
+// C6-2: UI scale — multiply the 14px root font-size; the whole rem-based UI
+// (and rem-sized chart hosts) scales with it. Persisted; applied at init.
+var UI_SCALE_BASE_PX = 14;
+function applyUiScale(scale) {
+  var pct = Math.max(70, Math.min(160, parseInt(scale, 10) || 100));
+  bmaSettings.uiScale = pct;
+  saveSettings();
+  document.documentElement.style.fontSize = (UI_SCALE_BASE_PX * pct / 100).toFixed(2) + 'px';
 }
 
 // ─── Cache Enumeration ───────────────────────────────────────────────
@@ -584,6 +595,7 @@ function refreshFormattedViews() {
 function initSettings() {
   loadSettings();
   applyTheme(bmaSettings.theme);
+  if (bmaSettings.uiScale && bmaSettings.uiScale !== 100) applyUiScale(bmaSettings.uiScale);
 
   // Modal close handlers
   $settingsClose.addEventListener('click', closeSettings);

@@ -4786,7 +4786,39 @@ table.stats tr.stats-delta-row td:first-child {
 .gcu-menu-arrow { color: var(--ui-fg-muted); font-size: 0.85em; }
 .gcu-menu-check { color: var(--sel); }
 .gcu-menu-sep { background: var(--ui-border); }
-/* MenuBar theme intentionally omitted — unused in BMA (D7) */
+
+/* ─── MenuBar theme (C6-2) — the desktop top-left command bar ─────────── */
+.gcu-menubar { gap: 0; align-items: stretch; }
+.gcu-menubar-trigger {
+  font: 0.72rem var(--mono);
+  color: var(--fg-dim);
+  letter-spacing: 0.03em;
+  border-radius: 3px;
+  transition: color 80ms, background 80ms;
+}
+.gcu-menubar-trigger:hover,
+.gcu-menubar-trigger.gcu-menubar-focused { color: var(--fg-bright); background: var(--bg3); }
+.gcu-menubar-trigger.gcu-menubar-active { color: var(--fg-bright); background: var(--bg3); }
+
+/* ─── C6-2 toolbar: menubar (rails shell only) replaces the button/icon row ──
+   The menubar lives top-left following reading order; the desktop kebab,
+   the Export/Import/Pack/Clear buttons, the ?/⚙ icons, and the ✕ close-file
+   all fold into the menus. Below 701px the rails shell never mounts, so the
+   legacy toolbar (kebab = the mobile menu) survives untouched. */
+.app-menubar { display: none; }
+#results.rails-shell .app-menubar { display: flex; }
+#results.rails-shell .toolbar-right { display: none; }
+#results.rails-shell #backToPreflight { display: none; }
+
+/* Save verb's peace-of-mind beat (File → Save / Ctrl+S) */
+.save-beat {
+  font: 0.68rem var(--mono);
+  color: var(--green);
+  opacity: 0;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.save-beat.on { opacity: 1; }
 
 /* ─── Drillhole set ingestion (A7 Phase 1) ───────────────────────────── */
 .dh-card {

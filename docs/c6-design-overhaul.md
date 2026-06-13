@@ -91,6 +91,39 @@ serializes/applies layouts, a preset is canned JSON.
 
 ## Phase log
 
+- **C6-2 (menubar) ✅ (2026-06-13)** — desktop top-left command bar via the
+  already-vendored `@gcu/menu` `MenuBar` (`src/workspace.js`), mounted on
+  `#appMenubar` in `buildRailsShell()`, destroyed in `wsExitRails()` (rails
+  shell only):
+  - **File**: Open… (triggers `#fileInput`) / Open recent ▸ (factory off
+    `wsRecentsCache`, fed by `renderRecentFiles`) / Save (Ctrl+S — flushes the
+    continuous autosave immediately + flashes a "Saved ✓" beat in the toolbar;
+    `flushProjectSave()`) / Export project (.bma.json) / Import project… / Pack…
+    / Clear project / Close file / Settings…. **Save as… deferred to C8.**
+  - **View**: Panels ▸ (the canonical reopen-closed-tabs home, live checkmarks)
+    / Data tree (toggle) / Reset layout / Theme ▸ (live) / UI scale ▸.
+  - **Data**: Analyze / Filter… (focuses the filter input) / Calculated
+    columns… / Datasets… (opens Aux — the A10 add-dataset surface).
+  - **Help**: Keyboard shortcuts (F1) / Download example dataset / About BMA
+    (version via bmaConfirm). **Manual omitted** — no hosted URL yet; add when
+    the manual ships to Pages.
+  - **Live menus for free**: each section's `items` is a factory (Menu.show
+    re-evaluates via `evaluateItems` on every open), so panel/theme/scale/tree
+    checkmarks always reflect current state — no manual `refresh()`.
+  - **Toolbar slimmed (D5)**: on `#results.rails-shell` the whole
+    `.toolbar-right` (Export/Import/Pack/Clear buttons, ?/⚙ icons, the ⋮ kebab)
+    and the ✕ close-file button are `display:none` — folded into the menus.
+    Toolbar is now menubar + filename (brand) + stats. The kebab + buttons
+    survive < 701px untouched (the legacy shell's menu); the mobile kebab
+    gained Open + Save for parity.
+  - **UI scale** (the deferred C6-1c item): `applyUiScale(pct)` multiplies the
+    14px root font-size; `bmaSettings.uiScale` persisted, applied in
+    `initSettings`. View → UI scale ▸ (90/100/110/125/150%).
+  - Suite 18/18 (c6-smoke +7 menubar asserts; rails-smoke Panels/Reset now
+    driven via the View trigger; c6/drillhole pack smokes call `openPackModal()`
+    since the toolbar button is hidden). Both modes shot
+    (`experiments/c6-2-shot.js`). **C6-1 + C6-2 complete; next: C6-3 aux/add-
+    dataset surface, or C6-4 (C5 sidebar flow).**
 - **C6-1c (chart colors) ✅ (2026-06-13)** — the muddy light-surface charts
   fixed; **C6-1 foundation complete** bar the UI-scale setting (carried to a
   follow-up):
