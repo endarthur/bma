@@ -168,22 +168,31 @@ with no new vendor code:
 - **All dataset panel state lives in the `ds` object, not the DOM**, so close =
   destroy, reopen = renderPanel-rebuilds-from-`ds` — no `preserveOnClose` needed.
 
-Design for the remaining phase-1 work:
+Phase-1g slices:
 
-- **1g-a (foundation, behavior-identical)** — make the shell access root-relative:
-  `auxPanelRoot()` (and the cached `$aux*` shell consts → root-relative
-  accessors) take a root; parameterize `renderAuxConfig`/`runAuxAnalysis`/preview/
-  summary/declus/topcut by an explicit `(ds, root)`. Extract the load-time wiring
-  (listeners on the sidebar/topcut/view-toggle + clear button) into
-  `wireDatasetPanel(root, ds)` and call it for the static `#panelAux` (ds=aux).
-  Single instance still = `#panelAux`; aux smokes stay green.
-- **1g-b** — per-`ds` state + worker handles: read `ds.file/preflight/filter/
-  prefix/calcolCode/declus/topcut/view/complete/stale` instead of the `aux*`
-  globals (aux is `datasets[1]`, a getter-view, so reading `ds.*` ≡ today —
-  bit-identical); move `auxWorker`/`auxDeclusWorker`/`auxTopcutWorker` onto the
-  `ds` object (`ds._worker` etc.) so datasets analyze concurrently. `rowVarOverride
-  = ds.rowVar` ('aux' for the legacy aux, the id for d2+); catalog namespace =
-  `ds.id`.
+- **1g-a ✅ (a5acb1d)** — instance scaffolding: `dsConfigRoot(ds)` (model→
+  `#panelPreflight`, aux→`#panelAux`, d2+→`.ds-panel[data-ds=<id>]` clones) +
+  `auxQ(sel, root)` optional root; `data-aux` identity added to ALL aux-panel
+  SHELL elements (additive, ids/classes kept → inert, single instance untouched);
+  `#panelAux` gains `.ds-panel`+`data-ds="aux"`.
+- **1g-b ✅ (84802e0)** — parameterized every aux render/analysis/declus/topcut
+  function in auxtab.js + topcut.js by an explicit `(ds, root)` (default
+  `ds=dsById('aux')`, `root=dsConfigRoot(ds)`). State reads moved off the `aux*`
+  globals onto `ds.file/preflight/filter/prefix/calcolCode/calcolMeta/declus/
+  topcut/view/complete/stale` (bit-identical via the datasets[1] getter-view);
+  catalog by `ds.id` (`catRole`/`catSetRole`); worker `rowVarOverride` + the
+  Copy-calcol handle by `ds.rowVar`; DOM root-relative via
+  `auxQ('[data-aux=..]', root)` — the cached `$aux*` shell consts are GONE. The
+  topcut svg builders take the topcut state object `t` (= `ds.topcut`) directly.
+  Load-time wiring extracted into `wireDatasetPanel(root, ds)` (auxtab) +
+  `wireDatasetTopcut(root, ds)` (topcut), invoked ONCE for the static `#panelAux`
+  from topcut.js (the last dataset module, so both are defined). **DEVIATION from
+  the sketch below: worker handles stay GLOBAL** (`auxWorker`/`auxDeclusWorker`/
+  `auxTopcutWorker`) — single aux, no concurrency yet; they move onto `ds` in 1g-c
+  when concurrent instances exist. Aux suite bit-identical green (topcut/declus-ui/
+  delta-row/drillhole/gt-theo/logprob/tree/sidebar-scroll + a9/empty-col/rails/c6);
+  worker.js untouched. (topcut-smoke's two direct `auxTopcutCappedStats(c)` calls
+  updated to pass the state object — the only smoke change.)
 - **1g-c (instances live)** — `renderPanel` dispatch: data → tree; `wsPanelById`
   → static singleton (incl. aux); else `dsById(tab.id)` → `wsBuildDatasetPanel(ds)`
   (clone a **config-shell template** — scoped, no unique ids, no dh card; set
