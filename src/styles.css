@@ -4095,6 +4095,14 @@ table.cat-values tr.cat-aux-only td { background: color-mix(in srgb, var(--brand
 }
 .aux-view-btn.active { color: var(--sel); border-color: var(--sel); }
 .aux-topcut { padding: 0.5rem 0.7rem 1rem; overflow-y: auto; }
+/* A10 — per-dataset summary (bbox + health) in the aux panel */
+.aux-summary { overflow-y: auto; }
+.aux-bbox-table { border-collapse: collapse; font: 0.74rem var(--mono); }
+.aux-bbox-table th, .aux-bbox-table td {
+  padding: 0.25rem 0.9rem 0.25rem 0; text-align: right; color: var(--fg);
+}
+.aux-bbox-table th { color: var(--fg-dim); font-weight: 600; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.aux-bbox-table td:first-child, .aux-bbox-table th:first-child { text-align: left; color: var(--fg-dim); padding-right: 1.2rem; }
 .tc-toolbar {
   display: flex; align-items: center; gap: 0.5rem;
   padding: 0.2rem 0 0.5rem;

@@ -195,26 +195,20 @@ document.getElementById('colOverviewContent').addEventListener('change', functio
 });
 
 // Export bounding box as OBJ
-document.getElementById('exportObjBtn').addEventListener('click', () => {
-  if (!lastGeoData) return;
-  const g = lastGeoData;
-  const gx = g.x, gy = g.y, gz = g.z;
-  const xMin = gx.origin - gx.blockSize / 2;
-  const xMax = gx.origin + gx.gridCount * gx.blockSize - gx.blockSize / 2;
-  const yMin = gy.origin - gy.blockSize / 2;
-  const yMax = gy.origin + gy.gridCount * gy.blockSize - gy.blockSize / 2;
-  const zMin = gz.origin - gz.blockSize / 2;
-  const zMax = gz.origin + gz.gridCount * gz.blockSize - gz.blockSize / 2;
-  const fname = currentFile ? currentFile.name : 'model';
+// Write an axis-aligned bounding box as a Wavefront .obj (8 verts, 6 quads).
+// b = { xMin, xMax, yMin, yMax, zMin, zMax }; shared by the model geometry
+// export and the per-dataset (point/drillhole) bbox export (A10).
+function downloadBboxObj(b, fname) {
+  fname = fname || 'dataset';
   const obj = `# BMA Bounding Box \u2014 ${fname}
-v ${xMin} ${yMin} ${zMin}
-v ${xMax} ${yMin} ${zMin}
-v ${xMax} ${yMax} ${zMin}
-v ${xMin} ${yMax} ${zMin}
-v ${xMin} ${yMin} ${zMax}
-v ${xMax} ${yMin} ${zMax}
-v ${xMax} ${yMax} ${zMax}
-v ${xMin} ${yMax} ${zMax}
+v ${b.xMin} ${b.yMin} ${b.zMin}
+v ${b.xMax} ${b.yMin} ${b.zMin}
+v ${b.xMax} ${b.yMax} ${b.zMin}
+v ${b.xMin} ${b.yMax} ${b.zMin}
+v ${b.xMin} ${b.yMin} ${b.zMax}
+v ${b.xMax} ${b.yMin} ${b.zMax}
+v ${b.xMax} ${b.yMax} ${b.zMax}
+v ${b.xMin} ${b.yMax} ${b.zMax}
 f 1 2 3 4
 f 5 8 7 6
 f 1 5 6 2
@@ -228,5 +222,19 @@ f 4 8 5 1
   a.download = fname.replace(/\.[^.]+$/, '') + '_bbox.obj';
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+document.getElementById('exportObjBtn').addEventListener('click', () => {
+  if (!lastGeoData) return;
+  const g = lastGeoData;
+  const gx = g.x, gy = g.y, gz = g.z;
+  downloadBboxObj({
+    xMin: gx.origin - gx.blockSize / 2,
+    xMax: gx.origin + gx.gridCount * gx.blockSize - gx.blockSize / 2,
+    yMin: gy.origin - gy.blockSize / 2,
+    yMax: gy.origin + gy.gridCount * gy.blockSize - gy.blockSize / 2,
+    zMin: gz.origin - gz.blockSize / 2,
+    zMax: gz.origin + gz.gridCount * gz.blockSize - gz.blockSize / 2
+  }, currentFile ? currentFile.name : 'model');
 });
 

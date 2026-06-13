@@ -37,9 +37,13 @@ function renderAuxView() {
     b.classList.toggle('active', b.dataset.auxview === auxView);
   });
   var showTopcut = hasAux && auxView === 'topcut';
-  if ($auxPreview) $auxPreview.style.display = showTopcut ? 'none' : '';
+  var showSummary = hasAux && auxView === 'summary';
+  if ($auxPreview) $auxPreview.style.display = (showTopcut || showSummary) ? 'none' : '';
   if ($auxTopcut) $auxTopcut.style.display = showTopcut ? '' : 'none';
+  var $auxSummary = document.getElementById('auxSummary');
+  if ($auxSummary) $auxSummary.style.display = showSummary ? '' : 'none';
   if (showTopcut) renderAuxTopcut();
+  if (showSummary && typeof renderAuxSummary === 'function') renderAuxSummary();
 }
 
 // ── Capped statistics from (weighted) prefix sums ──

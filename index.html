@@ -4110,6 +4110,14 @@ table.cat-values tr.cat-aux-only td { background: color-mix(in srgb, var(--brand
 }
 .aux-view-btn.active { color: var(--sel); border-color: var(--sel); }
 .aux-topcut { padding: 0.5rem 0.7rem 1rem; overflow-y: auto; }
+/* A10 — per-dataset summary (bbox + health) in the aux panel */
+.aux-summary { overflow-y: auto; }
+.aux-bbox-table { border-collapse: collapse; font: 0.74rem var(--mono); }
+.aux-bbox-table th, .aux-bbox-table td {
+  padding: 0.25rem 0.9rem 0.25rem 0; text-align: right; color: var(--fg);
+}
+.aux-bbox-table th { color: var(--fg-dim); font-weight: 600; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.aux-bbox-table td:first-child, .aux-bbox-table th:first-child { text-align: left; color: var(--fg-dim); padding-right: 1.2rem; }
 .tc-toolbar {
   display: flex; align-items: center; gap: 0.5rem;
   padding: 0.2rem 0 0.5rem;
@@ -5345,9 +5353,11 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
             <div class="preflight-preview-wrap">
               <div class="aux-view-toggle" id="auxViewToggle">
                 <button class="aux-view-btn active" data-auxview="preview">Preview</button>
+                <button class="aux-view-btn" data-auxview="summary">Summary</button>
                 <button class="aux-view-btn" data-auxview="topcut">Top-cut</button>
               </div>
               <div class="preflight-preview" id="auxPreview"></div>
+              <div class="aux-summary" id="auxSummary" style="display:none"></div>
               <div class="aux-topcut" id="auxTopcut" style="display:none"></div>
             </div>
           </div>
@@ -5778,7 +5788,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 1cffa60 — click to check for updates">1cffa60</div>
+<div class="build-badge" id="buildBadge" title="build 6669dcb — click to check for updates">6669dcb</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -14490,7 +14500,10 @@ function runAuxAnalysis() {
         fail('Declustered weights misaligned (' + m.weightArrayMismatch.expected + ' vs ' + m.weightArrayMismatch.got + ' rows) — re-run Declustering.');
         return;
       }
-      auxCompleteData = { header: m.header, colTypes: m.colTypes, stats: m.stats, categories: m.categories, rowCount: m.rowCount };
+      auxCompleteData = { header: m.header, colTypes: m.colTypes, stats: m.stats, categories: m.categories, rowCount: m.rowCount,
+        // A10: carry the A9 data-health counters for the per-dataset summary
+        filterErrors: m.filterErrors || null, calcolErrors: m.calcolErrors || null,
+        raggedRows: m.raggedRows || 0, coordInvalidCells: m.coordInvalidCells || 0, weightExcluded: m.weightExcluded || 0 };
       auxStale = false;
       if ($btn) $btn.disabled = false;
       if (typeof setGenStale === 'function') setGenStale('auxAnalyzeBtn', false);  // C6-5 dim-when-done
@@ -14504,6 +14517,7 @@ function runAuxAnalysis() {
         renderStatsCdfPanel();
       }
       if (typeof renderCatMain === 'function' && catFocusedCol !== null) renderCatMain();
+      if (auxView === 'summary' && typeof renderAuxSummary === 'function') renderAuxSummary();  // A10 per-dataset summary
       autoSaveProject();
     } else if (m.type === 'error') {
       fail(m.message);
@@ -14544,6 +14558,69 @@ function renderAuxPreview() {
     return '<tr>' + r.map(function(c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>';
   }).join('');
   $auxPreview.innerHTML = '<table class="aux-preview-table"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table>';
+}
+
+// A10 phase 3 — per-dataset summary: a bounding box (from the coordinate
+// columns' analyzed extents) with Export OBJ, plus the row-health card
+// (shared computeHealthItems). The point/drillhole analogue of the model's
+// Grid Geometry summary — no grid params, since this data isn't gridded.
+function renderAuxSummary() {
+  var $s = document.getElementById('auxSummary');
+  if (!$s) return;
+  if (!auxCompleteData) {
+    $s.innerHTML = '<div class="aux-hint" style="padding:1rem">Run Analyze to see the dataset summary — bounding box and row health.</div>';
+    return;
+  }
+  var d = auxCompleteData;
+  var xyz = (auxPreflightData && auxPreflightData.xyz) || { x: -1, y: -1, z: -1 };
+  var label = auxPrefix || 'aux';
+  var sx = xyz.x >= 0 ? d.stats[xyz.x] : null;
+  var sy = xyz.y >= 0 ? d.stats[xyz.y] : null;
+  var sz = xyz.z >= 0 ? d.stats[xyz.z] : null;
+  var haveBox = !!(sx && sy && sz && sx.min != null && sy.min != null && sz.min != null);
+
+  var bboxHtml;
+  if (haveBox) {
+    function boxRow(ax, s) {
+      return '<tr><td>' + ax + '</td><td>' + formatNum(s.min) + '</td><td>' + formatNum(s.max) +
+        '</td><td>' + formatNum(s.max - s.min) + '</td></tr>';
+    }
+    bboxHtml = '<table class="aux-bbox-table"><thead><tr><th></th><th>Min</th><th>Max</th><th>Extent</th></tr></thead><tbody>' +
+      boxRow('X', sx) + boxRow('Y', sy) + boxRow('Z', sz) + '</tbody></table>' +
+      '<button class="copy-table-btn" id="auxExportObjBtn" style="margin-top:0.5rem">Export OBJ</button>';
+  } else {
+    bboxHtml = '<div class="aux-hint">Assign X / Y / Z in the sidebar and re-run Analyze to compute the bounding box.</div>';
+  }
+
+  var items = (typeof computeHealthItems === 'function') ? computeHealthItems(d) : [];
+  var healthHtml;
+  if (items.length === 0) {
+    healthHtml = '<div class="health-clean">✓ No data-quality issues — all ' + (d.rowCount || 0).toLocaleString() +
+      ' rows and ' + (d.header ? d.header.length : 0) + ' columns parsed cleanly.</div>';
+  } else {
+    healthHtml = items.map(function(it) {
+      return '<div class="health-item"><span class="health-count">' + (it.n != null ? it.n.toLocaleString() : '!') + '</span>' +
+        '<div class="health-text"><div class="health-label">' + esc(it.label) + '</div>' +
+        '<div class="health-detail">' + esc(it.detail) + '</div></div></div>';
+    }).join('');
+  }
+  var hBadge = items.length
+    ? '<span class="badge" style="background:var(--warn-soft);color:var(--warn)">' + items.length + ' check' + (items.length === 1 ? '' : 's') + '</span>'
+    : '<span class="badge" style="background:var(--green-soft);color:var(--green)">clean</span>';
+
+  $s.innerHTML =
+    '<div class="section" style="margin:0.7rem"><div class="section-head">Bounding Box <span class="badge">' + esc(label) + '</span></div>' +
+      '<div class="section-body">' + bboxHtml + '</div></div>' +
+    '<div class="section" style="margin:0.7rem"><div class="section-head">Data Health ' + hBadge + '</div>' +
+      '<div class="section-body">' + healthHtml + '</div></div>';
+
+  var $obj = document.getElementById('auxExportObjBtn');
+  if ($obj && haveBox && typeof downloadBboxObj === 'function') {
+    $obj.addEventListener('click', function() {
+      downloadBboxObj({ xMin: sx.min, xMax: sx.max, yMin: sy.min, yMax: sy.max, zMin: sz.min, zMax: sz.max },
+        auxFile ? auxFile.name : label);
+    });
+  }
 }
 
 function onAuxConfigChange(e) {
@@ -15799,9 +15876,13 @@ function renderAuxView() {
     b.classList.toggle('active', b.dataset.auxview === auxView);
   });
   var showTopcut = hasAux && auxView === 'topcut';
-  if ($auxPreview) $auxPreview.style.display = showTopcut ? 'none' : '';
+  var showSummary = hasAux && auxView === 'summary';
+  if ($auxPreview) $auxPreview.style.display = (showTopcut || showSummary) ? 'none' : '';
   if ($auxTopcut) $auxTopcut.style.display = showTopcut ? '' : 'none';
+  var $auxSummary = document.getElementById('auxSummary');
+  if ($auxSummary) $auxSummary.style.display = showSummary ? '' : 'none';
   if (showTopcut) renderAuxTopcut();
+  if (showSummary && typeof renderAuxSummary === 'function') renderAuxSummary();
 }
 
 // ── Capped statistics from (weighted) prefix sums ──
@@ -17761,11 +17842,10 @@ function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerpr
 // glanceable Summary card with per-tab "View →" links. The A7 drillhole
 // consistency-report pattern, promoted app-wide. Clean → a green all-good
 // line; issues → a warn row each. Reads the analyze 'complete' message fields.
-function renderHealthCard(data) {
-  var $sec = document.getElementById('healthSection');
-  var $content = document.getElementById('healthContent');
-  var $badge = document.getElementById('healthBadge');
-  if (!$sec || !$content) return;
+// Returns the data-quality issue list for a dataset's analyze 'complete'
+// message — shared by the model Summary health card and the per-dataset
+// (aux) summary. Empty array = clean.
+function computeHealthItems(data) {
   var header = data.header || [];
   var stats = data.stats || [];
   var items = [];
@@ -17837,6 +17917,17 @@ function renderHealthCard(data) {
     detail: 'some categories were omitted from grouped statistics',
     tab: 'statscat'
   });
+
+  return items;
+}
+
+function renderHealthCard(data) {
+  var $sec = document.getElementById('healthSection');
+  var $content = document.getElementById('healthContent');
+  var $badge = document.getElementById('healthBadge');
+  if (!$sec || !$content) return;
+  var header = data.header || [];
+  var items = computeHealthItems(data);
 
   var rowCount = (data.totalRowCount != null ? data.totalRowCount : data.rowCount) || 0;
   if (items.length === 0) {
@@ -26093,26 +26184,20 @@ document.getElementById('colOverviewContent').addEventListener('change', functio
 });
 
 // Export bounding box as OBJ
-document.getElementById('exportObjBtn').addEventListener('click', () => {
-  if (!lastGeoData) return;
-  const g = lastGeoData;
-  const gx = g.x, gy = g.y, gz = g.z;
-  const xMin = gx.origin - gx.blockSize / 2;
-  const xMax = gx.origin + gx.gridCount * gx.blockSize - gx.blockSize / 2;
-  const yMin = gy.origin - gy.blockSize / 2;
-  const yMax = gy.origin + gy.gridCount * gy.blockSize - gy.blockSize / 2;
-  const zMin = gz.origin - gz.blockSize / 2;
-  const zMax = gz.origin + gz.gridCount * gz.blockSize - gz.blockSize / 2;
-  const fname = currentFile ? currentFile.name : 'model';
+// Write an axis-aligned bounding box as a Wavefront .obj (8 verts, 6 quads).
+// b = { xMin, xMax, yMin, yMax, zMin, zMax }; shared by the model geometry
+// export and the per-dataset (point/drillhole) bbox export (A10).
+function downloadBboxObj(b, fname) {
+  fname = fname || 'dataset';
   const obj = `# BMA Bounding Box \u2014 ${fname}
-v ${xMin} ${yMin} ${zMin}
-v ${xMax} ${yMin} ${zMin}
-v ${xMax} ${yMax} ${zMin}
-v ${xMin} ${yMax} ${zMin}
-v ${xMin} ${yMin} ${zMax}
-v ${xMax} ${yMin} ${zMax}
-v ${xMax} ${yMax} ${zMax}
-v ${xMin} ${yMax} ${zMax}
+v ${b.xMin} ${b.yMin} ${b.zMin}
+v ${b.xMax} ${b.yMin} ${b.zMin}
+v ${b.xMax} ${b.yMax} ${b.zMin}
+v ${b.xMin} ${b.yMax} ${b.zMin}
+v ${b.xMin} ${b.yMin} ${b.zMax}
+v ${b.xMax} ${b.yMin} ${b.zMax}
+v ${b.xMax} ${b.yMax} ${b.zMax}
+v ${b.xMin} ${b.yMax} ${b.zMax}
 f 1 2 3 4
 f 5 8 7 6
 f 1 5 6 2
@@ -26126,6 +26211,20 @@ f 4 8 5 1
   a.download = fname.replace(/\.[^.]+$/, '') + '_bbox.obj';
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+document.getElementById('exportObjBtn').addEventListener('click', () => {
+  if (!lastGeoData) return;
+  const g = lastGeoData;
+  const gx = g.x, gy = g.y, gz = g.z;
+  downloadBboxObj({
+    xMin: gx.origin - gx.blockSize / 2,
+    xMax: gx.origin + gx.gridCount * gx.blockSize - gx.blockSize / 2,
+    yMin: gy.origin - gy.blockSize / 2,
+    yMax: gy.origin + gy.gridCount * gy.blockSize - gy.blockSize / 2,
+    zMin: gz.origin - gz.blockSize / 2,
+    zMax: gz.origin + gz.gridCount * gz.blockSize - gz.blockSize / 2
+  }, currentFile ? currentFile.name : 'model');
 });
 
 // ─── Settings Modal — Themes, Cache, Defaults ─────────────────────────

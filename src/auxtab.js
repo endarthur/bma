@@ -155,7 +155,10 @@ function runAuxAnalysis() {
         fail('Declustered weights misaligned (' + m.weightArrayMismatch.expected + ' vs ' + m.weightArrayMismatch.got + ' rows) — re-run Declustering.');
         return;
       }
-      auxCompleteData = { header: m.header, colTypes: m.colTypes, stats: m.stats, categories: m.categories, rowCount: m.rowCount };
+      auxCompleteData = { header: m.header, colTypes: m.colTypes, stats: m.stats, categories: m.categories, rowCount: m.rowCount,
+        // A10: carry the A9 data-health counters for the per-dataset summary
+        filterErrors: m.filterErrors || null, calcolErrors: m.calcolErrors || null,
+        raggedRows: m.raggedRows || 0, coordInvalidCells: m.coordInvalidCells || 0, weightExcluded: m.weightExcluded || 0 };
       auxStale = false;
       if ($btn) $btn.disabled = false;
       if (typeof setGenStale === 'function') setGenStale('auxAnalyzeBtn', false);  // C6-5 dim-when-done
@@ -169,6 +172,7 @@ function runAuxAnalysis() {
         renderStatsCdfPanel();
       }
       if (typeof renderCatMain === 'function' && catFocusedCol !== null) renderCatMain();
+      if (auxView === 'summary' && typeof renderAuxSummary === 'function') renderAuxSummary();  // A10 per-dataset summary
       autoSaveProject();
     } else if (m.type === 'error') {
       fail(m.message);
@@ -209,6 +213,69 @@ function renderAuxPreview() {
     return '<tr>' + r.map(function(c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>';
   }).join('');
   $auxPreview.innerHTML = '<table class="aux-preview-table"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table>';
+}
+
+// A10 phase 3 — per-dataset summary: a bounding box (from the coordinate
+// columns' analyzed extents) with Export OBJ, plus the row-health card
+// (shared computeHealthItems). The point/drillhole analogue of the model's
+// Grid Geometry summary — no grid params, since this data isn't gridded.
+function renderAuxSummary() {
+  var $s = document.getElementById('auxSummary');
+  if (!$s) return;
+  if (!auxCompleteData) {
+    $s.innerHTML = '<div class="aux-hint" style="padding:1rem">Run Analyze to see the dataset summary — bounding box and row health.</div>';
+    return;
+  }
+  var d = auxCompleteData;
+  var xyz = (auxPreflightData && auxPreflightData.xyz) || { x: -1, y: -1, z: -1 };
+  var label = auxPrefix || 'aux';
+  var sx = xyz.x >= 0 ? d.stats[xyz.x] : null;
+  var sy = xyz.y >= 0 ? d.stats[xyz.y] : null;
+  var sz = xyz.z >= 0 ? d.stats[xyz.z] : null;
+  var haveBox = !!(sx && sy && sz && sx.min != null && sy.min != null && sz.min != null);
+
+  var bboxHtml;
+  if (haveBox) {
+    function boxRow(ax, s) {
+      return '<tr><td>' + ax + '</td><td>' + formatNum(s.min) + '</td><td>' + formatNum(s.max) +
+        '</td><td>' + formatNum(s.max - s.min) + '</td></tr>';
+    }
+    bboxHtml = '<table class="aux-bbox-table"><thead><tr><th></th><th>Min</th><th>Max</th><th>Extent</th></tr></thead><tbody>' +
+      boxRow('X', sx) + boxRow('Y', sy) + boxRow('Z', sz) + '</tbody></table>' +
+      '<button class="copy-table-btn" id="auxExportObjBtn" style="margin-top:0.5rem">Export OBJ</button>';
+  } else {
+    bboxHtml = '<div class="aux-hint">Assign X / Y / Z in the sidebar and re-run Analyze to compute the bounding box.</div>';
+  }
+
+  var items = (typeof computeHealthItems === 'function') ? computeHealthItems(d) : [];
+  var healthHtml;
+  if (items.length === 0) {
+    healthHtml = '<div class="health-clean">✓ No data-quality issues — all ' + (d.rowCount || 0).toLocaleString() +
+      ' rows and ' + (d.header ? d.header.length : 0) + ' columns parsed cleanly.</div>';
+  } else {
+    healthHtml = items.map(function(it) {
+      return '<div class="health-item"><span class="health-count">' + (it.n != null ? it.n.toLocaleString() : '!') + '</span>' +
+        '<div class="health-text"><div class="health-label">' + esc(it.label) + '</div>' +
+        '<div class="health-detail">' + esc(it.detail) + '</div></div></div>';
+    }).join('');
+  }
+  var hBadge = items.length
+    ? '<span class="badge" style="background:var(--warn-soft);color:var(--warn)">' + items.length + ' check' + (items.length === 1 ? '' : 's') + '</span>'
+    : '<span class="badge" style="background:var(--green-soft);color:var(--green)">clean</span>';
+
+  $s.innerHTML =
+    '<div class="section" style="margin:0.7rem"><div class="section-head">Bounding Box <span class="badge">' + esc(label) + '</span></div>' +
+      '<div class="section-body">' + bboxHtml + '</div></div>' +
+    '<div class="section" style="margin:0.7rem"><div class="section-head">Data Health ' + hBadge + '</div>' +
+      '<div class="section-body">' + healthHtml + '</div></div>';
+
+  var $obj = document.getElementById('auxExportObjBtn');
+  if ($obj && haveBox && typeof downloadBboxObj === 'function') {
+    $obj.addEventListener('click', function() {
+      downloadBboxObj({ xMin: sx.min, xMax: sx.max, yMin: sy.min, yMax: sy.max, zMin: sz.min, zMax: sz.max },
+        auxFile ? auxFile.name : label);
+    });
+  }
 }
 
 function onAuxConfigChange(e) {

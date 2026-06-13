@@ -1463,11 +1463,10 @@ function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerpr
 // glanceable Summary card with per-tab "View →" links. The A7 drillhole
 // consistency-report pattern, promoted app-wide. Clean → a green all-good
 // line; issues → a warn row each. Reads the analyze 'complete' message fields.
-function renderHealthCard(data) {
-  var $sec = document.getElementById('healthSection');
-  var $content = document.getElementById('healthContent');
-  var $badge = document.getElementById('healthBadge');
-  if (!$sec || !$content) return;
+// Returns the data-quality issue list for a dataset's analyze 'complete'
+// message — shared by the model Summary health card and the per-dataset
+// (aux) summary. Empty array = clean.
+function computeHealthItems(data) {
   var header = data.header || [];
   var stats = data.stats || [];
   var items = [];
@@ -1539,6 +1538,17 @@ function renderHealthCard(data) {
     detail: 'some categories were omitted from grouped statistics',
     tab: 'statscat'
   });
+
+  return items;
+}
+
+function renderHealthCard(data) {
+  var $sec = document.getElementById('healthSection');
+  var $content = document.getElementById('healthContent');
+  var $badge = document.getElementById('healthBadge');
+  if (!$sec || !$content) return;
+  var header = data.header || [];
+  var items = computeHealthItems(data);
 
   var rowCount = (data.totalRowCount != null ? data.totalRowCount : data.rowCount) || 0;
   if (items.length === 0) {
