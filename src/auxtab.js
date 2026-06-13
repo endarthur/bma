@@ -4,35 +4,39 @@
 // variables surface across Statistics / CDF / Swath with a display prefix.
 // The display prefix (auxPrefix) is cosmetic only — aux filter/calc always
 // reference columns through the fixed AUX_ROW_VAR handle ("aux.").
+//
+// A10 phase 1g-b: every render/analysis function is parameterized by an
+// explicit (ds, root) — ds is the dataset registry entry (default: the aux
+// view dsById('aux'); reading ds.* over the getter-view is bit-identical for
+// the single aux), root is its config-panel element (default dsConfigRoot(ds)
+// = #panelAux). DOM is resolved root-relative via auxQ(sel, root) and the
+// data-aux/data-act identity attrs, so N instance panels (1g-c) can coexist.
+// Worker handles stay global for 1g-b (single aux); they move onto ds in 1g-c.
 
-var $auxEmpty = document.getElementById('auxEmpty');
-var $auxConfig = document.getElementById('auxConfig');
-var $auxDropzone = document.getElementById('auxDropzone');
-var $auxFileInput = document.getElementById('auxFileInput');
-var $auxFileInfo = document.getElementById('auxFileInfo');
-var $auxSidebar = document.getElementById('auxSidebar');
-var $auxPreview = document.getElementById('auxPreview');
-
-function auxColOptions(selectedIdx) {
+function auxColOptions(selectedIdx, ds) {
+  ds = ds || dsById('aux');
   var opts = '<option value="-1">— none —</option>';
-  var h = auxPreflightData.header;
+  var h = ds.preflight.header;
   for (var i = 0; i < h.length; i++) {
     opts += '<option value="' + i + '"' + (i === selectedIdx ? ' selected' : '') + '>' + esc(h[i]) + '</option>';
   }
   return opts;
 }
 
-function renderAuxConfig() {
-  if (!auxPreflightData) return;
-  var d = auxPreflightData;
+function renderAuxConfig(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!ds.preflight) return;
+  var d = ds.preflight;
   var xyz = d.xyz || { x: -1, y: -1, z: -1 };
 
   // File info banner
   var meta = d.header.length + ' columns';
   if (d.isDm) meta += ' · DM ' + (d.dmFormat === 'ep' ? 'EP' : 'SP');
   else if (d.zipEntries) meta += ' · ZIP';
-  $auxFileInfo.innerHTML = 'Aux: <strong style="color:var(--fg-bright)">' + esc(auxFile.name) + '</strong>' +
-    '<span class="zip-size">' + formatBytes(auxFile.size) + ' — ' + meta + '</span>';
+  var fileInfo = auxQ('[data-aux="fileInfo"]', root);
+  if (fileInfo) fileInfo.innerHTML = 'Aux: <strong style="color:var(--fg-bright)">' + esc(ds.file.name) + '</strong>' +
+    '<span class="zip-size">' + formatBytes(ds.file.size) + ' — ' + meta + '</span>';
 
   // Sidebar: zip entry + prefix + coordinates + aux filter
   var zipSection = '';
@@ -46,58 +50,61 @@ function renderAuxConfig() {
         '<select class="aux-select" data-aux="zipEntry">' + zOpts + '</select>' +
       '</div>';
   }
-  $auxSidebar.innerHTML = zipSection +
+  var sidebar = auxQ('[data-aux="sidebar"]', root);
+  sidebar.innerHTML = zipSection +
     '<div class="pf-sidebar-section" data-sb="prefix">' +
       '<div class="pf-sidebar-section-title">Display prefix</div>' +
-      '<input type="text" class="aux-input" data-aux="prefix" value="' + esc(auxPrefix) + '" placeholder="aux" spellcheck="false">' +
-      '<div class="aux-hint">Label for aux variables in selection lists and plot labels (e.g. <code>' + esc(auxPrefix || 'aux') + ':Fe</code>). Cosmetic only.</div>' +
+      '<input type="text" class="aux-input" data-aux="prefix" value="' + esc(ds.prefix) + '" placeholder="aux" spellcheck="false">' +
+      '<div class="aux-hint">Label for aux variables in selection lists and plot labels (e.g. <code>' + esc(ds.prefix || 'aux') + ':Fe</code>). Cosmetic only.</div>' +
     '</div>' +
     '<div class="pf-sidebar-section" data-sb="coords">' +
       '<div class="pf-sidebar-section-title">Coordinates</div>' +
-      '<div class="aux-xyz-row"><label>X</label><select class="aux-select" data-aux="x">' + auxColOptions(xyz.x) + '</select></div>' +
-      '<div class="aux-xyz-row"><label>Y</label><select class="aux-select" data-aux="y">' + auxColOptions(xyz.y) + '</select></div>' +
-      '<div class="aux-xyz-row"><label>Z</label><select class="aux-select" data-aux="z">' + auxColOptions(xyz.z) + '</select></div>' +
+      '<div class="aux-xyz-row"><label>X</label><select class="aux-select" data-aux="x">' + auxColOptions(xyz.x, ds) + '</select></div>' +
+      '<div class="aux-xyz-row"><label>Y</label><select class="aux-select" data-aux="y">' + auxColOptions(xyz.y, ds) + '</select></div>' +
+      '<div class="aux-xyz-row"><label>Z</label><select class="aux-select" data-aux="z">' + auxColOptions(xyz.z, ds) + '</select></div>' +
       '<div class="aux-hint">Aux and the block model must share the same coordinate space for swath overlays to line up.</div>' +
     '</div>' +
     '<div class="pf-sidebar-section" data-sb="auxfilter">' +
       '<div class="pf-sidebar-section-title">Aux filter</div>' +
-      '<textarea class="aux-input aux-filter" data-aux="filter" rows="2" spellcheck="false" placeholder="aux.Au > 0">' + esc(auxFilter ? auxFilter.expression : '') + '</textarea>' +
+      '<textarea class="aux-input aux-filter" data-aux="filter" rows="2" spellcheck="false" placeholder="aux.Au > 0">' + esc(ds.filter ? ds.filter.expression : '') + '</textarea>' +
       '<div class="aux-hint">Reference aux columns as <code>aux.</code>… — independent of the display prefix.</div>' +
     '</div>' +
     '<div class="pf-sidebar-section" data-sb="weight">' +
       '<div class="pf-sidebar-section-title">Weight (optional)</div>' +
-      '<select class="aux-select" data-aux="weight">' + auxWeightOptions() + '</select>' +
+      '<select class="aux-select" data-aux="weight">' + auxWeightOptions(ds) + '</select>' +
       '<div class="aux-hint">A weight column, or the computed declustering weights from below — applied to all aux statistics (Statistics, CDF, Swath). Rows with missing or ≤0 weight are excluded.</div>' +
     '</div>' +
-    renderAuxDeclusSection() +
+    renderAuxDeclusSection(ds) +
     '<div class="sb-footer">' +
       '<button class="swath-generate" data-act="auxAnalyze">Analyze</button>' +
       '<div class="aux-hint aux-analyze-status" data-aux="analyzeStatus">' +
-        (auxCompleteData
-          ? (auxStale ? 'Config changed — re-run Analyze' : auxCompleteData.rowCount.toLocaleString() + ' rows analyzed' +
-              (auxCompleteData.filterErrors || auxCompleteData.calcolErrors ? ' · ⚠ filter/calc row errors — see Statistics' : ''))
+        (ds.complete
+          ? (ds.stale ? 'Config changed — re-run Analyze' : ds.complete.rowCount.toLocaleString() + ' rows analyzed' +
+              (ds.complete.filterErrors || ds.complete.calcolErrors ? ' · ⚠ filter/calc row errors — see Statistics' : ''))
           : 'Run to compare aux statistics on the Statistics tab') +
       '</div>' +
     '</div>';
 
   // C6-4b — collapsible config sections; cosmetic/advanced ones collapsed
-  wsEnhanceSidebar('aux', $auxSidebar, { prefix: 'collapsed', auxfilter: 'collapsed', declus: 'collapsed' });
+  wsEnhanceSidebar(ds.id, sidebar, { prefix: 'collapsed', auxfilter: 'collapsed', declus: 'collapsed' });
   // C6-5 — dim the Analyze button when the current result is fresh
-  if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]'), !(auxCompleteData && !auxStale));
+  if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]', root), !(ds.complete && !ds.stale));
 
-  renderAuxPreview();
-  if (typeof renderAuxView === 'function') renderAuxView();
+  renderAuxPreview(ds, root);
+  if (typeof renderAuxView === 'function') renderAuxView(ds, root);
   // drillhole-derived aux: provenance banner + report/re-composite links (A7)
   if (typeof renderDhProvenance === 'function') renderDhProvenance();
 }
 
-function runAuxAnalysis() {
-  if (!auxFile || !auxPreflightData) return;
+function runAuxAnalysis(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!ds.file || !ds.preflight) return;
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
   auxWorker = new Worker(workerUrl);
 
-  var $btn = auxQ('[data-act="auxAnalyze"]');
-  var $status = auxQ('[data-aux="analyzeStatus"]');
+  var $btn = auxQ('[data-act="auxAnalyze"]', root);
+  var $status = auxQ('[data-aux="analyzeStatus"]', root);
   if ($btn) $btn.disabled = true;
   if ($status) { $status.textContent = '0%'; $status.style.color = ''; }
 
@@ -107,42 +114,42 @@ function runAuxAnalysis() {
     if (auxWorker) { auxWorker.terminate(); auxWorker = null; }
   }
 
-  var xyz = auxPreflightData.xyz || { x: -1, y: -1, z: -1 };
+  var xyz = ds.preflight.xyz || { x: -1, y: -1, z: -1 };
   // Force every column's type from the preflight sample: the worker then
   // skips its detection warmup, whose rows are excluded from stats —
   // negligible on block models but a real bias on small sample files
   var auxTypeOverrides = {};
-  for (var ti = 0; ti < auxPreflightData.autoTypes.length; ti++) {
-    auxTypeOverrides[ti] = auxPreflightData.autoTypes[ti];
+  for (var ti = 0; ti < ds.preflight.autoTypes.length; ti++) {
+    auxTypeOverrides[ti] = ds.preflight.autoTypes[ti];
   }
   // Declustered weights: computed array, gated on a fresh fingerprint so the
   // row ordinals are guaranteed to align with this pass's filter
   var declusWeights = null;
-  var auxWeight = catRole('aux', 'weight');
+  var auxWeight = catRole(ds.id, 'weight');
   if (auxWeight === AUX_DECLUS_WEIGHT) {
-    if (!auxDeclus || !auxDeclus.weights) { fail('Run Declustering first — no weights computed.'); return; }
-    if (auxDeclus.fingerprint !== auxDeclusFingerprintNow()) { fail('Aux config changed since declustering — re-run Declustering.'); return; }
-    declusWeights = auxDeclus.weights;
+    if (!ds.declus || !ds.declus.weights) { fail('Run Declustering first — no weights computed.'); return; }
+    if (ds.declus.fingerprint !== auxDeclusFingerprintNow(ds)) { fail('Aux config changed since declustering — re-run Declustering.'); return; }
+    declusWeights = ds.declus.weights;
   }
   auxWorker.postMessage({
-    file: auxFile,
+    file: ds.file,
     xyzOverride: xyz.x >= 0 && xyz.y >= 0 && xyz.z >= 0 ? xyz : null,
-    filter: auxFilter ? { expression: auxFilter.expression } : null,
+    filter: ds.filter ? { expression: ds.filter.expression } : null,
     typeOverrides: auxTypeOverrides,
-    zipEntry: auxPreflightData.selectedZipEntry || null,
+    zipEntry: ds.preflight.selectedZipEntry || null,
     skipCols: [],
     colFilters: {},
-    calcolCode: auxCalcolCode || null,
-    calcolMeta: auxCalcolMeta.length > 0 ? auxCalcolMeta : null,
+    calcolCode: ds.calcolCode || null,
+    calcolMeta: ds.calcolMeta.length > 0 ? ds.calcolMeta : null,
     groupBy: null,
     groupStatsCols: null,
     dxyzOverride: null,
-    dmEndianness: auxPreflightData.dmEndianness || null,
-    dmFormat: auxPreflightData.dmFormat || null,
-    rowVarOverride: AUX_ROW_VAR,
+    dmEndianness: ds.preflight.dmEndianness || null,
+    dmFormat: ds.preflight.dmFormat || null,
+    rowVarOverride: ds.rowVar,
     weightColName: declusWeights ? null : auxWeight,
     weightArray: declusWeights,
-    weightArrayLabel: declusWeights ? 'declustered (cell ' + formatNum(auxDeclus.optCellSize) + ')' : null
+    weightArrayLabel: declusWeights ? 'declustered (cell ' + formatNum(ds.declus.optCellSize) + ')' : null
   });
 
   auxWorker.onerror = function(e) { fail(e.message || 'unknown error'); };
@@ -155,13 +162,13 @@ function runAuxAnalysis() {
         fail('Declustered weights misaligned (' + m.weightArrayMismatch.expected + ' vs ' + m.weightArrayMismatch.got + ' rows) — re-run Declustering.');
         return;
       }
-      auxCompleteData = { header: m.header, colTypes: m.colTypes, stats: m.stats, categories: m.categories, rowCount: m.rowCount,
+      ds.complete = { header: m.header, colTypes: m.colTypes, stats: m.stats, categories: m.categories, rowCount: m.rowCount,
         // A10: carry the A9 data-health counters for the per-dataset summary
         filterErrors: m.filterErrors || null, calcolErrors: m.calcolErrors || null,
         raggedRows: m.raggedRows || 0, coordInvalidCells: m.coordInvalidCells || 0, weightExcluded: m.weightExcluded || 0 };
-      auxStale = false;
+      ds.stale = false;
       if ($btn) $btn.disabled = false;
-      if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]'), false);  // C6-5 dim-when-done
+      if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]', root), false);  // C6-5 dim-when-done
       if ($status) { $status.textContent = m.rowCount.toLocaleString() + ' rows analyzed'; $status.style.color = ''; }
       auxWorker.terminate();
       auxWorker = null;
@@ -172,7 +179,7 @@ function runAuxAnalysis() {
         renderStatsCdfPanel();
       }
       if (typeof renderCatMain === 'function' && catFocusedCol !== null) renderCatMain();
-      if (auxView === 'summary' && typeof renderAuxSummary === 'function') renderAuxSummary();  // A10 per-dataset summary
+      if (ds.view === 'summary' && typeof renderAuxSummary === 'function') renderAuxSummary(ds, root);  // A10 per-dataset summary
       autoSaveProject();
     } else if (m.type === 'error') {
       fail(m.message);
@@ -181,19 +188,20 @@ function runAuxAnalysis() {
 }
 
 // Weight candidates: aux numeric columns + numeric aux calcols, by name
-function auxWeightOptions() {
+function auxWeightOptions(ds) {
+  ds = ds || dsById('aux');
   var opts = '<option value="">— none</option>';
-  if (!auxPreflightData) return opts;
-  var auxWeight = catRole('aux', 'weight');
+  if (!ds.preflight) return opts;
+  var auxWeight = catRole(ds.id, 'weight');
   opts += '<option value="' + AUX_DECLUS_WEIGHT + '"' + (auxWeight === AUX_DECLUS_WEIGHT ? ' selected' : '') + '>(declustered weights)</option>';
-  for (var i = 0; i < auxPreflightData.header.length; i++) {
-    if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
-    var n = auxPreflightData.header[i];
+  for (var i = 0; i < ds.preflight.header.length; i++) {
+    if ((ds.preflight.autoTypes || [])[i] !== 'numeric') continue;
+    var n = ds.preflight.header[i];
     opts += '<option value="' + esc(n) + '"' + (n === auxWeight ? ' selected' : '') + '>' + esc(n) + '</option>';
   }
-  for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
-    if (auxCalcolMeta[ci].type !== 'numeric') continue;
-    var cn = auxCalcolMeta[ci].name;
+  for (var ci = 0; ci < ds.calcolMeta.length; ci++) {
+    if (ds.calcolMeta[ci].type !== 'numeric') continue;
+    var cn = ds.calcolMeta[ci].name;
     opts += '<option value="' + esc(cn) + '"' + (cn === auxWeight ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
   }
   return opts;
@@ -201,34 +209,41 @@ function auxWeightOptions() {
 
 // Refresh just the weight select (e.g. after aux calcols change) without
 // rebuilding the sidebar — preserves focus elsewhere
-function renderAuxWeightOptions() {
-  var sel = auxQ('[data-aux="weight"]');
-  if (sel) sel.innerHTML = auxWeightOptions();
+function renderAuxWeightOptions(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var sel = auxQ('[data-aux="weight"]', root);
+  if (sel) sel.innerHTML = auxWeightOptions(ds);
 }
 
-function renderAuxPreview() {
-  var d = auxPreflightData;
+function renderAuxPreview(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var d = ds.preflight;
   var head = '<tr>' + d.header.map(function(h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
   var rows = d.sampleRows.slice(0, 20).map(function(r) {
     return '<tr>' + r.map(function(c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>';
   }).join('');
-  $auxPreview.innerHTML = '<table class="aux-preview-table"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table>';
+  var preview = auxQ('[data-aux="preview"]', root);
+  if (preview) preview.innerHTML = '<table class="aux-preview-table"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table>';
 }
 
 // A10 phase 3 — per-dataset summary: a bounding box (from the coordinate
 // columns' analyzed extents) with Export OBJ, plus the row-health card
 // (shared computeHealthItems). The point/drillhole analogue of the model's
 // Grid Geometry summary — no grid params, since this data isn't gridded.
-function renderAuxSummary() {
-  var $s = auxQ('#auxSummary');
+function renderAuxSummary(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var $s = auxQ('[data-aux="summaryView"]', root);
   if (!$s) return;
-  if (!auxCompleteData) {
+  if (!ds.complete) {
     $s.innerHTML = '<div class="aux-hint" style="padding:1rem">Run Analyze to see the dataset summary — bounding box and row health.</div>';
     return;
   }
-  var d = auxCompleteData;
-  var xyz = (auxPreflightData && auxPreflightData.xyz) || { x: -1, y: -1, z: -1 };
-  var label = auxPrefix || 'aux';
+  var d = ds.complete;
+  var xyz = (ds.preflight && ds.preflight.xyz) || { x: -1, y: -1, z: -1 };
+  var label = ds.prefix || 'aux';
   var sx = xyz.x >= 0 ? d.stats[xyz.x] : null;
   var sy = xyz.y >= 0 ? d.stats[xyz.y] : null;
   var sz = xyz.z >= 0 ? d.stats[xyz.z] : null;
@@ -269,37 +284,40 @@ function renderAuxSummary() {
     '<div class="section" style="margin:0.7rem"><div class="section-head">Data Health ' + hBadge + '</div>' +
       '<div class="section-body">' + healthHtml + '</div></div>';
 
-  var $obj = auxQ('[data-act="auxExportObj"]');
+  var $obj = auxQ('[data-act="auxExportObj"]', root);
   if ($obj && haveBox && typeof downloadBboxObj === 'function') {
     $obj.addEventListener('click', function() {
       downloadBboxObj({ xMin: sx.min, xMax: sx.max, yMin: sy.min, yMax: sy.max, zMin: sz.min, zMax: sz.max },
-        auxFile ? auxFile.name : label);
+        ds.file ? ds.file.name : label);
     });
   }
 }
 
-function onAuxConfigChange(e) {
-  if (!auxPreflightData) return;
+function onAuxConfigChange(e, ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!ds.preflight) return;
   // Declustering params only gate the (separately fingerprinted) declus run —
   // they don't invalidate the aux analysis config
   if (e && e.target && e.target.dataset && e.target.dataset.aux && e.target.dataset.aux.indexOf('declus') === 0) {
-    auxDeclus = auxDeclus || {};
-    auxDeclus.params = auxDeclusParamsFromUI();
+    ds.declus = ds.declus || {};
+    ds.declus.params = auxDeclusParamsFromUI(ds, root);
     if (typeof autoSaveProject === 'function') autoSaveProject();
     return;
   }
-  var p = auxQ('[data-aux="prefix"]');
-  if (p) auxPrefix = p.value.trim() || 'aux';
-  var x = auxQ('[data-aux="x"]'), y = auxQ('[data-aux="y"]'), z = auxQ('[data-aux="z"]');
-  if (x && y && z) auxPreflightData.xyz = { x: parseInt(x.value), y: parseInt(y.value), z: parseInt(z.value) };
-  var f = auxQ('[data-aux="filter"]');
-  if (f) { var v = f.value.trim(); auxFilter = v ? { expression: v } : null; }
-  var wSel = auxQ('[data-aux="weight"]');
-  if (wSel) catSetRole('aux', 'weight', wSel.value || null);
-  markAuxStale();
+  var p = auxQ('[data-aux="prefix"]', root);
+  if (p) ds.prefix = p.value.trim() || 'aux';
+  var x = auxQ('[data-aux="x"]', root), y = auxQ('[data-aux="y"]', root), z = auxQ('[data-aux="z"]', root);
+  if (x && y && z) ds.preflight.xyz = { x: parseInt(x.value), y: parseInt(y.value), z: parseInt(z.value) };
+  var f = auxQ('[data-aux="filter"]', root);
+  if (f) { var v = f.value.trim(); ds.filter = v ? { expression: v } : null; }
+  var wSel = auxQ('[data-aux="weight"]', root);
+  if (wSel) catSetRole(ds.id, 'weight', wSel.value || null);
+  markAuxStale(ds, root);
   // Live-update the prefix hint without a full re-render (keeps focus/caret)
-  var hint = $auxSidebar.querySelector('.pf-sidebar-section .aux-hint code');
-  if (hint && p) hint.textContent = (auxPrefix || 'aux') + ':Fe';
+  var sidebar = auxQ('[data-aux="sidebar"]', root);
+  var hint = sidebar && sidebar.querySelector('.pf-sidebar-section .aux-hint code');
+  if (hint && p) hint.textContent = (ds.prefix || 'aux') + ':Fe';
   // Keep the swath sidebar's aux rows in sync (prefix labels, xyz exclusions);
   // check/unit state is preserved by name across the rebuild
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
@@ -307,11 +325,13 @@ function onAuxConfigChange(e) {
 }
 
 // Flag a completed aux analysis as no longer reflecting the current config
-function markAuxStale() {
-  if (!auxCompleteData || auxStale) return;
-  auxStale = true;
-  if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]'), true);  // C6-5: back to orange call-to-action
-  var $st = auxQ('[data-aux="analyzeStatus"]');
+function markAuxStale(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!ds.complete || ds.stale) return;
+  ds.stale = true;
+  if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]', root), true);  // C6-5: back to orange call-to-action
+  var $st = auxQ('[data-aux="analyzeStatus"]', root);
   if ($st) { $st.textContent = '↻ config changed — re-run Analyze'; $st.style.color = 'var(--warn)'; }
 }
 
@@ -319,32 +339,36 @@ function markAuxStale() {
 // Weights are computed against the CURRENT aux row space (file, zip entry,
 // filter, calcols, XYZ); this fingerprint gates their reuse so ordinals
 // can never silently misalign.
-function auxDeclusFingerprintNow() {
-  if (!auxFile || !auxPreflightData) return null;
-  var xyz = auxPreflightData.xyz || {};
+function auxDeclusFingerprintNow(ds) {
+  ds = ds || dsById('aux');
+  if (!ds.file || !ds.preflight) return null;
+  var xyz = ds.preflight.xyz || {};
   return JSON.stringify({
-    f: auxFile.name + '|' + auxFile.size,
-    z: auxPreflightData.selectedZipEntry || null,
-    flt: auxFilter ? auxFilter.expression : '',
-    cc: auxCalcolCode || '',
+    f: ds.file.name + '|' + ds.file.size,
+    z: ds.preflight.selectedZipEntry || null,
+    flt: ds.filter ? ds.filter.expression : '',
+    cc: ds.calcolCode || '',
     xyz: [xyz.x, xyz.y, xyz.z]
   });
 }
 
-function auxDeclusFresh() {
-  return !!(auxDeclus && auxDeclus.weights && auxDeclus.fingerprint === auxDeclusFingerprintNow());
+function auxDeclusFresh(ds) {
+  ds = ds || dsById('aux');
+  return !!(ds.declus && ds.declus.weights && ds.declus.fingerprint === auxDeclusFingerprintNow(ds));
 }
 
-function auxDeclusParamsFromUI() {
+function auxDeclusParamsFromUI(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
   function num(key) {
-    var el = auxQ('[data-aux="' + key + '"]');
+    var el = auxQ('[data-aux="' + key + '"]', root);
     if (!el || el.value === '') return null;
     var v = parseFloat(el.value);
     return isFinite(v) ? v : null;
   }
-  var sel = auxQ('[data-aux="declusVar"]');
-  var crit = auxQ('[data-aux="declusCrit"]');
-  var prev = (auxDeclus && auxDeclus.params) || {};
+  var sel = auxQ('[data-aux="declusVar"]', root);
+  var crit = auxQ('[data-aux="declusCrit"]', root);
+  var prev = (ds.declus && ds.declus.params) || {};
   return {
     varName: sel ? sel.value : (prev.varName || null),
     cellMin: num('declusCellMin'),
@@ -358,19 +382,20 @@ function auxDeclusParamsFromUI() {
   };
 }
 
-function renderAuxDeclusSection() {
-  if (!auxPreflightData) return '';
-  var p = (auxDeclus && auxDeclus.params) || {};
+function renderAuxDeclusSection(ds) {
+  ds = ds || dsById('aux');
+  if (!ds.preflight) return '';
+  var p = (ds.declus && ds.declus.params) || {};
   var varOpts = '', firstNum = null;
-  for (var i = 0; i < auxPreflightData.header.length; i++) {
-    if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
-    var n = auxPreflightData.header[i];
+  for (var i = 0; i < ds.preflight.header.length; i++) {
+    if ((ds.preflight.autoTypes || [])[i] !== 'numeric') continue;
+    var n = ds.preflight.header[i];
     if (firstNum === null) firstNum = n;
     varOpts += '<option value="' + esc(n) + '"' + (n === p.varName ? ' selected' : '') + '>' + esc(n) + '</option>';
   }
-  for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
-    if (auxCalcolMeta[ci].type !== 'numeric') continue;
-    var cn = auxCalcolMeta[ci].name;
+  for (var ci = 0; ci < ds.calcolMeta.length; ci++) {
+    if (ds.calcolMeta[ci].type !== 'numeric') continue;
+    var cn = ds.calcolMeta[ci].name;
     varOpts += '<option value="' + esc(cn) + '"' + (cn === p.varName ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
   }
   function numVal(v) { return (v === null || v === undefined) ? '' : String(v); }
@@ -396,14 +421,15 @@ function renderAuxDeclusSection() {
     '<div class="aux-hint">GSLIB cell declustering: sweeps cell sizes, weights ∝ 1/(samples per cell), averaged over origin offsets. Use min for data clustered in high grades, max for low.</div>' +
     '<button class="swath-generate" data-act="auxDeclusRun">Run declustering</button>' +
     '<div class="aux-hint aux-analyze-status" data-aux="declusStatus"></div>' +
-    renderAuxDeclusResults() +
+    renderAuxDeclusResults(ds) +
   '</div>';
 }
 
-function renderAuxDeclusResults() {
-  if (!auxDeclus || !auxDeclus.curve) return '';
-  var d = auxDeclus;
-  var fresh = auxDeclusFresh();
+function renderAuxDeclusResults(ds) {
+  ds = ds || dsById('aux');
+  if (!ds.declus || !ds.declus.curve) return '';
+  var d = ds.declus;
+  var fresh = auxDeclusFresh(ds);
   var html = '<div class="aux-declus-results">';
   if (!fresh) {
     html += '<div class="aux-hint" style="color:var(--warn)">' +
@@ -423,7 +449,7 @@ function renderAuxDeclusResults() {
     }
     html += auxDeclusCurveSvg(d);
   }
-  if (catRole('aux', 'weight') === AUX_DECLUS_WEIGHT) html += '<div class="aux-hint">In use as the aux weight.</div>';
+  if (catRole(ds.id, 'weight') === AUX_DECLUS_WEIGHT) html += '<div class="aux-hint">In use as the aux weight.</div>';
   else if (fresh) html += '<button class="aux-from-main-btn" data-act="auxDeclusUse" style="margin-top:0.3rem">Use as aux weight</button>';
   return html + '</div>';
 }
@@ -502,7 +528,8 @@ function auxDeclusNearestPt(svg, e) {
   return bestPt;
 }
 
-function auxDeclusUpdateCursor(svg, pt) {
+function auxDeclusUpdateCursor(svg, pt, ds) {
+  ds = ds || dsById('aux');
   var g = svg.querySelector('.aux-declus-cursor');
   if (!g) return;
   if (!pt) { g.style.display = 'none'; return; }
@@ -510,7 +537,7 @@ function auxDeclusUpdateCursor(svg, pt) {
   var line = g.querySelector('line'), circ = g.querySelector('circle'), txt = g.querySelector('text');
   line.setAttribute('x1', pt[0]); line.setAttribute('x2', pt[0]);
   circ.setAttribute('cx', pt[0]); circ.setAttribute('cy', pt[1]);
-  var d = auxDeclus;
+  var d = ds.declus;
   var lbl = pt[2] <= 0 ? 'naive ' + formatNum(pt[3])
     : 'cell ' + formatNum(pt[2]) + ' → ' + formatNum(pt[3]) +
       (d && d.naiveMean ? ' (' + (pt[3] >= d.naiveMean ? '+' : '−') + Math.abs((pt[3] - d.naiveMean) / Math.abs(d.naiveMean) * 100).toFixed(1) + '%)' : '');
@@ -521,18 +548,20 @@ function auxDeclusUpdateCursor(svg, pt) {
   txt.setAttribute('text-anchor', flip ? 'end' : 'start');
 }
 
-function runAuxDeclus() {
-  if (!auxFile || !auxPreflightData) return;
-  var $st = auxQ('[data-aux="declusStatus"]');
-  var $runBtn = auxQ('[data-act="auxDeclusRun"]');
+function runAuxDeclus(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!ds.file || !ds.preflight) return;
+  var $st = auxQ('[data-aux="declusStatus"]', root);
+  var $runBtn = auxQ('[data-act="auxDeclusRun"]', root);
   function dfail(msg) {
     if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
     if ($runBtn) $runBtn.disabled = false;
     if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
   }
-  var xyz = auxPreflightData.xyz || { x: -1, y: -1, z: -1 };
+  var xyz = ds.preflight.xyz || { x: -1, y: -1, z: -1 };
   if (xyz.x < 0 || xyz.y < 0) { dfail('Assign X and Y coordinates first (Z optional).'); return; }
-  var params = auxDeclusParamsFromUI();
+  var params = auxDeclusParamsFromUI(ds, root);
   if (!params.varName) { dfail('No numeric variable to decluster on.'); return; }
   if (params.cellMin !== null && params.cellMax !== null && params.cellMax < params.cellMin) { dfail('Cell max must be ≥ cell min.'); return; }
 
@@ -543,12 +572,12 @@ function runAuxDeclus() {
 
   auxDeclusWorker.postMessage({
     mode: 'declus',
-    file: auxFile,
-    zipEntry: auxPreflightData.selectedZipEntry || null,
-    globalFilter: auxFilter ? { expression: auxFilter.expression } : null,
-    calcolCode: auxCalcolCode || null,
-    calcolMeta: auxCalcolMeta.length > 0 ? auxCalcolMeta : null,
-    resolvedTypes: auxPreflightData.autoTypes,
+    file: ds.file,
+    zipEntry: ds.preflight.selectedZipEntry || null,
+    globalFilter: ds.filter ? { expression: ds.filter.expression } : null,
+    calcolCode: ds.calcolCode || null,
+    calcolMeta: ds.calcolMeta.length > 0 ? ds.calcolMeta : null,
+    resolvedTypes: ds.preflight.autoTypes,
     xyzCols: [xyz.x, xyz.y, xyz.z],
     varColName: params.varName,
     cellMin: params.cellMin, cellMax: params.cellMax,
@@ -556,9 +585,9 @@ function runAuxDeclus() {
     anisy: params.anisy, anisz: params.anisz,
     iminmax: params.criterion === 'max' ? 1 : 0,
     pinnedCell: params.pinned || null,
-    rowVarOverride: AUX_ROW_VAR,
-    dmEndianness: auxPreflightData.dmEndianness || null,
-    dmFormat: auxPreflightData.dmFormat || null
+    rowVarOverride: ds.rowVar,
+    dmEndianness: ds.preflight.dmEndianness || null,
+    dmFormat: ds.preflight.dmFormat || null
   });
   auxDeclusWorker.onerror = function(e) { dfail(e.message || 'unknown error'); };
   auxDeclusWorker.onmessage = function(e) {
@@ -570,52 +599,55 @@ function runAuxDeclus() {
     } else if (m.type === 'declus-complete') {
       auxDeclusWorker.terminate();
       auxDeclusWorker = null;
-      auxDeclus = {
+      ds.declus = {
         params: params,
         weights: m.weights, n: m.n, located: m.located,
         curve: m.curve, optCellSize: m.optCellSize,
         declusteredMean: m.declusteredMean, naiveMean: m.naiveMean,
         pinned: m.pinned ? params.pinned : null,
         wtMin: m.wtMin, wtMax: m.wtMax, usedRange: m.usedRange,
-        fingerprint: auxDeclusFingerprintNow()
+        fingerprint: auxDeclusFingerprintNow(ds)
       };
       // Fresh weights change the analysis result if they're the active weight
-      if (catRole('aux', 'weight') === AUX_DECLUS_WEIGHT) markAuxStale();
-      renderAuxConfig();
+      if (catRole(ds.id, 'weight') === AUX_DECLUS_WEIGHT) markAuxStale(ds, root);
+      renderAuxConfig(ds, root);
       if (typeof autoSaveProject === 'function') autoSaveProject();
     }
   };
 }
 
-function applyAuxRestore(saved) {
-  auxPrefix = saved.prefix || 'aux';
-  auxFilter = saved.filter ? { expression: saved.filter } : null;
+function applyAuxRestore(saved, ds) {
+  ds = ds || dsById('aux');
+  ds.prefix = saved.prefix || 'aux';
+  ds.filter = saved.filter ? { expression: saved.filter } : null;
   // Legacy projects carried the aux weight here; the catalog is canonical
   // now (a project.catalog, when present, was applied before this runs)
-  if (saved.weight !== undefined && catRole('aux', 'weight') === null) catSetRole('aux', 'weight', saved.weight || null);
+  if (saved.weight !== undefined && catRole(ds.id, 'weight') === null) catSetRole(ds.id, 'weight', saved.weight || null);
   // Declus params restore; weights are never persisted — re-run to compute
-  auxDeclus = (saved.declus && saved.declus.params) ? { params: saved.declus.params, weights: null } : null;
+  ds.declus = (saved.declus && saved.declus.params) ? { params: saved.declus.params, weights: null } : null;
   // Top-cut: variable + cap + scale restore; the distribution is re-loaded on demand
-  auxTopcut = (saved.topcut && saved.topcut.varName) ? { varName: saved.topcut.varName, cap: saved.topcut.cap != null ? saved.topcut.cap : null, xlog: !!saved.topcut.xlog, useDeclus: !!saved.topcut.useDeclus, values: null } : null;
-  auxView = saved.view === 'topcut' ? 'topcut' : 'preview';
-  if (saved.xyz && auxPreflightData) auxPreflightData.xyz = saved.xyz;
-  auxCalcolCode = saved.calcolCode || '';
-  auxCalcolMeta = saved.calcolMeta || [];
+  ds.topcut = (saved.topcut && saved.topcut.varName) ? { varName: saved.topcut.varName, cap: saved.topcut.cap != null ? saved.topcut.cap : null, xlog: !!saved.topcut.xlog, useDeclus: !!saved.topcut.useDeclus, values: null } : null;
+  ds.view = saved.view === 'topcut' ? 'topcut' : 'preview';
+  if (saved.xyz && ds.preflight) ds.preflight.xyz = saved.xyz;
+  ds.calcolCode = saved.calcolCode || '';
+  ds.calcolMeta = saved.calcolMeta || [];
   if (calcolMode === 'aux' && $calcolCodeArea) {
-    $calcolCodeArea.value = auxCalcolCode;
+    $calcolCodeArea.value = ds.calcolCode;
     syncCodeHighlight();
   }
 }
 
 // When the primary file is a multi-entry archive, offer its other entries
 // as aux candidates (e.g. a zip holding both the model and its composites)
-function renderAuxFromMain() {
+function renderAuxFromMain(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
   // C6-3: name the model in the "Add a dataset" intro (runs on model load + clearAux)
-  var mn = auxQ('#dsModelName');
+  var mn = auxQ('[data-aux="modelName"]', root);
   if (mn) mn.textContent = (currentFile && currentFile.name) ? currentFile.name : 'your block model';
-  var $wrap = auxQ('#auxFromMain');
+  var $wrap = auxQ('[data-aux="fromMain"]', root);
   if (!$wrap) return;
-  if (auxFile || !currentFile || !preflightData || !preflightData.zipEntries || preflightData.zipEntries.length < 2) {
+  if (ds.file || !currentFile || !preflightData || !preflightData.zipEntries || preflightData.zipEntries.length < 2) {
     $wrap.innerHTML = '';
     return;
   }
@@ -630,24 +662,29 @@ function renderAuxFromMain() {
       '<select class="aux-select" data-aux="fromMainSel" style="flex:1">' + opts + '</select>' +
       '<button class="aux-from-main-btn" data-act="auxFromMain">Use entry</button>' +
     '</div>';
-  var sel = auxQ('[data-aux="fromMainSel"]');
+  var sel = auxQ('[data-aux="fromMainSel"]', root);
   var firstFree = preflightData.zipEntries.find(function(z) { return z.name !== preflightData.selectedZipEntry; });
   if (firstFree) sel.value = firstFree.name;
-  auxQ('[data-act="auxFromMain"]').addEventListener('click', function() {
-    loadAuxFile(currentFile, null, sel.value);
+  auxQ('[data-act="auxFromMain"]', root).addEventListener('click', function() {
+    loadAuxFile(currentFile, null, sel.value, ds, root);
   });
 }
 
-function loadAuxFile(file, handle, zipEntryName) {
-  auxFile = file;
-  auxHandle = handle || null;
-  var e0 = auxQ('#auxLoadError');
+function loadAuxFile(file, handle, zipEntryName, ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  ds.file = file;
+  ds.handle = handle || null;
+  var e0 = auxQ('[data-aux="loadError"]', root);
   if (e0) e0.textContent = '';
-  $auxFileInfo.textContent = 'Loading ' + file.name + '…';
-  $auxEmpty.style.display = 'none';
-  $auxConfig.style.display = '';
+  var fileInfo = auxQ('[data-aux="fileInfo"]', root);
+  if (fileInfo) fileInfo.textContent = 'Loading ' + file.name + '…';
+  var emptyEl = auxQ('[data-aux="empty"]', root);
+  if (emptyEl) emptyEl.style.display = 'none';
+  var configEl = auxQ('[data-aux="config"]', root);
+  if (configEl) configEl.style.display = '';
   runPreflight(file).then(async function(data) {
-    auxPreflightData = data;
+    ds.preflight = data;
     if (zipEntryName && data.zipEntries && zipEntryName !== data.selectedZipEntry) {
       try { await loadZipEntryIntoPreflight(file, data, zipEntryName); } catch (e) { /* keep default entry */ }
     }
@@ -657,50 +694,59 @@ function loadAuxFile(file, handle, zipEntryName) {
       if (savedAux.zipEntry && data.zipEntries && savedAux.zipEntry !== data.selectedZipEntry) {
         try { await loadZipEntryIntoPreflight(file, data, savedAux.zipEntry); } catch (e) { /* entry gone — keep default */ }
       }
-      applyAuxRestore(savedAux);
+      applyAuxRestore(savedAux, ds);
     }
-    renderAuxConfig();
+    renderAuxConfig(ds, root);
     if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
     if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
     if (typeof autoSaveProject === 'function') autoSaveProject();
   }).catch(function(err) {
-    auxFile = null;
-    auxPreflightData = null;
-    $auxConfig.style.display = 'none';
-    $auxEmpty.style.display = '';
-    $auxFileInfo.textContent = '';
-    var errEl = auxQ('#auxLoadError');
+    ds.file = null;
+    ds.preflight = null;
+    var cfg = auxQ('[data-aux="config"]', root);
+    if (cfg) cfg.style.display = 'none';
+    var emp = auxQ('[data-aux="empty"]', root);
+    if (emp) emp.style.display = '';
+    var fi = auxQ('[data-aux="fileInfo"]', root);
+    if (fi) fi.textContent = '';
+    var errEl = auxQ('[data-aux="loadError"]', root);
     if (errEl) errEl.textContent = 'Dataset load failed: ' + err.message;
   });
 }
 
-function clearAux() {
-  auxFile = null;
-  auxHandle = null;
-  auxPreflightData = null;
-  auxCompleteData = null;
+function clearAux(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  ds.file = null;
+  ds.handle = null;
+  ds.preflight = null;
+  ds.complete = null;
   auxData = null;
-  auxFilter = null;
-  auxPrefix = 'aux';
-  auxStale = false;
+  ds.filter = null;
+  ds.prefix = 'aux';
+  ds.stale = false;
   statsAuxSelected = null;
   statsCdfAuxSelected = new Set();
-  auxCalcolCode = '';
-  auxCalcolMeta = [];
-  catSetRole('aux', 'weight', null);
-  auxDeclus = null;
+  ds.calcolCode = '';
+  ds.calcolMeta = [];
+  catSetRole(ds.id, 'weight', null);
+  ds.declus = null;
   if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
-  auxTopcut = null;
-  auxView = 'preview';
+  ds.topcut = null;
+  ds.view = 'preview';
   if (typeof auxTopcutWorker !== 'undefined' && auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} auxTopcutWorker = null; }
-  if (typeof renderAuxView === 'function') renderAuxView();
+  if (typeof renderAuxView === 'function') renderAuxView(ds, root);
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
   if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
-  $auxConfig.style.display = 'none';
-  $auxEmpty.style.display = '';
-  $auxSidebar.innerHTML = '';
-  $auxPreview.innerHTML = '';
-  renderAuxFromMain();
+  var configEl = auxQ('[data-aux="config"]', root);
+  if (configEl) configEl.style.display = 'none';
+  var emptyEl = auxQ('[data-aux="empty"]', root);
+  if (emptyEl) emptyEl.style.display = '';
+  var sidebar = auxQ('[data-aux="sidebar"]', root);
+  if (sidebar) sidebar.innerHTML = '';
+  var preview = auxQ('[data-aux="preview"]', root);
+  if (preview) preview.innerHTML = '';
+  renderAuxFromMain(ds, root);
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
   if (typeof renderCatMain === 'function' && catFocusedCol !== null) renderCatMain();
   if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
@@ -713,98 +759,117 @@ function clearAux() {
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
 
-// ─── Wiring (runs at load; DOM is already parsed) ─────────────────────
-if ($auxDropzone) {
-  $auxDropzone.addEventListener('dragover', function(e) { e.preventDefault(); $auxDropzone.classList.add('drag-over'); });
-  $auxDropzone.addEventListener('dragleave', function() { $auxDropzone.classList.remove('drag-over'); });
-  $auxDropzone.addEventListener('drop', async function(e) {
-    e.preventDefault();
-    e.stopPropagation(); // keep the $results drop handler from loading this as the main dataset
-    $auxDropzone.classList.remove('drag-over');
-    var handle = null;
-    if (HAS_FSAA && e.dataTransfer.items && e.dataTransfer.items[0] && e.dataTransfer.items[0].getAsFileSystemHandle) {
-      try { handle = await e.dataTransfer.items[0].getAsFileSystemHandle(); } catch (ex) {}
-    }
-    var file = handle ? await handle.getFile() : (e.dataTransfer.files[0] || null);
-    if (file) loadAuxFile(file, handle);
-  });
+// ─── Wiring — attaches the panel's listeners for one dataset instance ──
+// Extracted so a cloned instance panel (1g-c) wires the same way as the
+// static #panelAux. Listeners resolve targets root-relative and pass the
+// owning (ds, root) into every handler. Called once at load for the aux view
+// (from topcut.js, after wireDatasetTopcut is defined).
+function wireDatasetPanel(root, ds) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!root) return;
+  var dropzone = auxQ('[data-aux="dropzone"]', root);
+  var fileInput = auxQ('[data-aux="fileInput"]', root);
+  var sidebar = auxQ('[data-aux="sidebar"]', root);
 
-  if (HAS_FSAA) {
-    $auxDropzone.addEventListener('click', async function(e) {
-      if (e.target === $auxFileInput) return;
+  if (dropzone) {
+    dropzone.addEventListener('dragover', function(e) { e.preventDefault(); dropzone.classList.add('drag-over'); });
+    dropzone.addEventListener('dragleave', function() { dropzone.classList.remove('drag-over'); });
+    dropzone.addEventListener('drop', async function(e) {
       e.preventDefault();
-      try {
-        var handles = await window.showOpenFilePicker({
-          types: [
-            { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
-            { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } },
-            { description: 'Datamine files', accept: { 'application/octet-stream': ['.dm'] } }
-          ],
-          multiple: false
-        });
-        var handle = handles[0];
-        var file = await handle.getFile();
-        loadAuxFile(file, handle);
-      } catch (ex) { /* cancelled */ }
+      e.stopPropagation(); // keep the $results drop handler from loading this as the main dataset
+      dropzone.classList.remove('drag-over');
+      var handle = null;
+      if (HAS_FSAA && e.dataTransfer.items && e.dataTransfer.items[0] && e.dataTransfer.items[0].getAsFileSystemHandle) {
+        try { handle = await e.dataTransfer.items[0].getAsFileSystemHandle(); } catch (ex) {}
+      }
+      var file = handle ? await handle.getFile() : (e.dataTransfer.files[0] || null);
+      if (file) loadAuxFile(file, handle, undefined, ds, root);
     });
-    if ($auxFileInput) $auxFileInput.style.display = 'none';
+
+    if (HAS_FSAA) {
+      dropzone.addEventListener('click', async function(e) {
+        if (e.target === fileInput) return;
+        e.preventDefault();
+        try {
+          var handles = await window.showOpenFilePicker({
+            types: [
+              { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
+              { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } },
+              { description: 'Datamine files', accept: { 'application/octet-stream': ['.dm'] } }
+            ],
+            multiple: false
+          });
+          var handle = handles[0];
+          var file = await handle.getFile();
+          loadAuxFile(file, handle, undefined, ds, root);
+        } catch (ex) { /* cancelled */ }
+      });
+      if (fileInput) fileInput.style.display = 'none';
+    }
+
+    if (fileInput) fileInput.addEventListener('change', function(e) { if (e.target.files.length) loadAuxFile(e.target.files[0], null, undefined, ds, root); });
   }
 
-  if ($auxFileInput) $auxFileInput.addEventListener('change', function(e) { if (e.target.files.length) loadAuxFile(e.target.files[0], null); });
-  if ($auxSidebar) {
-    $auxSidebar.addEventListener('input', onAuxConfigChange);
-    $auxSidebar.addEventListener('change', onAuxConfigChange);
-    $auxSidebar.addEventListener('click', function(e) {
+  if (sidebar) {
+    sidebar.addEventListener('input', function(e) { onAuxConfigChange(e, ds, root); });
+    sidebar.addEventListener('change', function(e) { onAuxConfigChange(e, ds, root); });
+    sidebar.addEventListener('click', function(e) {
       if (!e.target) return;
       var act = e.target.dataset ? e.target.dataset.act : null;
-      if (act === 'auxAnalyze') runAuxAnalysis();
+      if (act === 'auxAnalyze') runAuxAnalysis(ds, root);
       else if (act === 'auxDeclusRun') {
         // Run = fresh sweep; an existing pin is released
-        if (auxDeclus && auxDeclus.params) auxDeclus.params.pinned = null;
-        runAuxDeclus();
+        if (ds.declus && ds.declus.params) ds.declus.params.pinned = null;
+        runAuxDeclus(ds, root);
       } else if (act === 'auxDeclusUse') {
-        catSetRole('aux', 'weight', AUX_DECLUS_WEIGHT);
-        markAuxStale();
-        renderAuxConfig();
+        catSetRole(ds.id, 'weight', AUX_DECLUS_WEIGHT);
+        markAuxStale(ds, root);
+        renderAuxConfig(ds, root);
         if (typeof autoSaveProject === 'function') autoSaveProject();
       } else {
         // Click on the sweep curve: pin the nearest cell size and recompute
         var svg = e.target.closest ? e.target.closest('.aux-declus-curve') : null;
-        if (svg && auxDeclus) {
+        if (svg && ds.declus) {
           var pt = auxDeclusNearestPt(svg, e);
           if (pt && pt[2] > 0) {
-            auxDeclus.params = auxDeclus.params || {};
-            auxDeclus.params.pinned = pt[2];
-            runAuxDeclus();
+            ds.declus.params = ds.declus.params || {};
+            ds.declus.params.pinned = pt[2];
+            runAuxDeclus(ds, root);
           }
         }
       }
     });
     // Curve scrubbing: crosshair with cell size, declustered mean and Δ%
-    $auxSidebar.addEventListener('pointermove', function(e) {
+    sidebar.addEventListener('pointermove', function(e) {
       var svg = e.target && e.target.closest ? e.target.closest('.aux-declus-curve') : null;
-      var anySvg = auxQ('.aux-declus-curve');
-      if (!svg) { if (anySvg) auxDeclusUpdateCursor(anySvg, null); return; }
-      auxDeclusUpdateCursor(svg, auxDeclusNearestPt(svg, e));
+      var anySvg = auxQ('.aux-declus-curve', root);
+      if (!svg) { if (anySvg) auxDeclusUpdateCursor(anySvg, null, ds); return; }
+      auxDeclusUpdateCursor(svg, auxDeclusNearestPt(svg, e), ds);
     });
-    $auxSidebar.addEventListener('pointerleave', function() {
-      var svg = auxQ('.aux-declus-curve');
-      if (svg) auxDeclusUpdateCursor(svg, null);
+    sidebar.addEventListener('pointerleave', function() {
+      var svg = auxQ('.aux-declus-curve', root);
+      if (svg) auxDeclusUpdateCursor(svg, null, ds);
     });
     // Zip entry switch — re-read header/types/xyz from the chosen entry
-    $auxSidebar.addEventListener('change', async function(e) {
-      if (!e.target || !e.target.dataset || e.target.dataset.aux !== 'zipEntry' || !auxFile || !auxPreflightData) return;
+    sidebar.addEventListener('change', async function(e) {
+      if (!e.target || !e.target.dataset || e.target.dataset.aux !== 'zipEntry' || !ds.file || !ds.preflight) return;
       try {
-        await loadZipEntryIntoPreflight(auxFile, auxPreflightData, e.target.value);
-        renderAuxConfig();
+        await loadZipEntryIntoPreflight(ds.file, ds.preflight, e.target.value);
+        renderAuxConfig(ds, root);
         if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
-        markAuxStale();
+        markAuxStale(ds, root);
         if (typeof autoSaveProject === 'function') autoSaveProject();
       } catch (err) {
-        $auxPreview.innerHTML = '<div style="padding:1rem;color:var(--red)">' + esc(err.message) + '</div>';
+        var preview = auxQ('[data-aux="preview"]', root);
+        if (preview) preview.innerHTML = '<div style="padding:1rem;color:var(--red)">' + esc(err.message) + '</div>';
       }
     });
   }
-  var $auxClearBtn = auxQ('#auxClear');
-  if ($auxClearBtn) $auxClearBtn.addEventListener('click', clearAux);
+
+  var clearBtn = auxQ('[data-aux="clear"]', root);
+  if (clearBtn) clearBtn.addEventListener('click', function() { clearAux(ds, root); });
+
+  // Top-cut + view-toggle listeners live in topcut.js (loaded later)
+  if (typeof wireDatasetTopcut === 'function') wireDatasetTopcut(root, ds);
 }

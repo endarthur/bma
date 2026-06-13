@@ -5788,7 +5788,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build def6550 — click to check for updates">def6550</div>
+<div class="build-badge" id="buildBadge" title="build 1dad8ad — click to check for updates">1dad8ad</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -14411,35 +14411,39 @@ function delimName(d) {
 // variables surface across Statistics / CDF / Swath with a display prefix.
 // The display prefix (auxPrefix) is cosmetic only — aux filter/calc always
 // reference columns through the fixed AUX_ROW_VAR handle ("aux.").
+//
+// A10 phase 1g-b: every render/analysis function is parameterized by an
+// explicit (ds, root) — ds is the dataset registry entry (default: the aux
+// view dsById('aux'); reading ds.* over the getter-view is bit-identical for
+// the single aux), root is its config-panel element (default dsConfigRoot(ds)
+// = #panelAux). DOM is resolved root-relative via auxQ(sel, root) and the
+// data-aux/data-act identity attrs, so N instance panels (1g-c) can coexist.
+// Worker handles stay global for 1g-b (single aux); they move onto ds in 1g-c.
 
-var $auxEmpty = document.getElementById('auxEmpty');
-var $auxConfig = document.getElementById('auxConfig');
-var $auxDropzone = document.getElementById('auxDropzone');
-var $auxFileInput = document.getElementById('auxFileInput');
-var $auxFileInfo = document.getElementById('auxFileInfo');
-var $auxSidebar = document.getElementById('auxSidebar');
-var $auxPreview = document.getElementById('auxPreview');
-
-function auxColOptions(selectedIdx) {
+function auxColOptions(selectedIdx, ds) {
+  ds = ds || dsById('aux');
   var opts = '<option value="-1">— none —</option>';
-  var h = auxPreflightData.header;
+  var h = ds.preflight.header;
   for (var i = 0; i < h.length; i++) {
     opts += '<option value="' + i + '"' + (i === selectedIdx ? ' selected' : '') + '>' + esc(h[i]) + '</option>';
   }
   return opts;
 }
 
-function renderAuxConfig() {
-  if (!auxPreflightData) return;
-  var d = auxPreflightData;
+function renderAuxConfig(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!ds.preflight) return;
+  var d = ds.preflight;
   var xyz = d.xyz || { x: -1, y: -1, z: -1 };
 
   // File info banner
   var meta = d.header.length + ' columns';
   if (d.isDm) meta += ' · DM ' + (d.dmFormat === 'ep' ? 'EP' : 'SP');
   else if (d.zipEntries) meta += ' · ZIP';
-  $auxFileInfo.innerHTML = 'Aux: <strong style="color:var(--fg-bright)">' + esc(auxFile.name) + '</strong>' +
-    '<span class="zip-size">' + formatBytes(auxFile.size) + ' — ' + meta + '</span>';
+  var fileInfo = auxQ('[data-aux="fileInfo"]', root);
+  if (fileInfo) fileInfo.innerHTML = 'Aux: <strong style="color:var(--fg-bright)">' + esc(ds.file.name) + '</strong>' +
+    '<span class="zip-size">' + formatBytes(ds.file.size) + ' — ' + meta + '</span>';
 
   // Sidebar: zip entry + prefix + coordinates + aux filter
   var zipSection = '';
@@ -14453,58 +14457,61 @@ function renderAuxConfig() {
         '<select class="aux-select" data-aux="zipEntry">' + zOpts + '</select>' +
       '</div>';
   }
-  $auxSidebar.innerHTML = zipSection +
+  var sidebar = auxQ('[data-aux="sidebar"]', root);
+  sidebar.innerHTML = zipSection +
     '<div class="pf-sidebar-section" data-sb="prefix">' +
       '<div class="pf-sidebar-section-title">Display prefix</div>' +
-      '<input type="text" class="aux-input" data-aux="prefix" value="' + esc(auxPrefix) + '" placeholder="aux" spellcheck="false">' +
-      '<div class="aux-hint">Label for aux variables in selection lists and plot labels (e.g. <code>' + esc(auxPrefix || 'aux') + ':Fe</code>). Cosmetic only.</div>' +
+      '<input type="text" class="aux-input" data-aux="prefix" value="' + esc(ds.prefix) + '" placeholder="aux" spellcheck="false">' +
+      '<div class="aux-hint">Label for aux variables in selection lists and plot labels (e.g. <code>' + esc(ds.prefix || 'aux') + ':Fe</code>). Cosmetic only.</div>' +
     '</div>' +
     '<div class="pf-sidebar-section" data-sb="coords">' +
       '<div class="pf-sidebar-section-title">Coordinates</div>' +
-      '<div class="aux-xyz-row"><label>X</label><select class="aux-select" data-aux="x">' + auxColOptions(xyz.x) + '</select></div>' +
-      '<div class="aux-xyz-row"><label>Y</label><select class="aux-select" data-aux="y">' + auxColOptions(xyz.y) + '</select></div>' +
-      '<div class="aux-xyz-row"><label>Z</label><select class="aux-select" data-aux="z">' + auxColOptions(xyz.z) + '</select></div>' +
+      '<div class="aux-xyz-row"><label>X</label><select class="aux-select" data-aux="x">' + auxColOptions(xyz.x, ds) + '</select></div>' +
+      '<div class="aux-xyz-row"><label>Y</label><select class="aux-select" data-aux="y">' + auxColOptions(xyz.y, ds) + '</select></div>' +
+      '<div class="aux-xyz-row"><label>Z</label><select class="aux-select" data-aux="z">' + auxColOptions(xyz.z, ds) + '</select></div>' +
       '<div class="aux-hint">Aux and the block model must share the same coordinate space for swath overlays to line up.</div>' +
     '</div>' +
     '<div class="pf-sidebar-section" data-sb="auxfilter">' +
       '<div class="pf-sidebar-section-title">Aux filter</div>' +
-      '<textarea class="aux-input aux-filter" data-aux="filter" rows="2" spellcheck="false" placeholder="aux.Au > 0">' + esc(auxFilter ? auxFilter.expression : '') + '</textarea>' +
+      '<textarea class="aux-input aux-filter" data-aux="filter" rows="2" spellcheck="false" placeholder="aux.Au > 0">' + esc(ds.filter ? ds.filter.expression : '') + '</textarea>' +
       '<div class="aux-hint">Reference aux columns as <code>aux.</code>… — independent of the display prefix.</div>' +
     '</div>' +
     '<div class="pf-sidebar-section" data-sb="weight">' +
       '<div class="pf-sidebar-section-title">Weight (optional)</div>' +
-      '<select class="aux-select" data-aux="weight">' + auxWeightOptions() + '</select>' +
+      '<select class="aux-select" data-aux="weight">' + auxWeightOptions(ds) + '</select>' +
       '<div class="aux-hint">A weight column, or the computed declustering weights from below — applied to all aux statistics (Statistics, CDF, Swath). Rows with missing or ≤0 weight are excluded.</div>' +
     '</div>' +
-    renderAuxDeclusSection() +
+    renderAuxDeclusSection(ds) +
     '<div class="sb-footer">' +
       '<button class="swath-generate" data-act="auxAnalyze">Analyze</button>' +
       '<div class="aux-hint aux-analyze-status" data-aux="analyzeStatus">' +
-        (auxCompleteData
-          ? (auxStale ? 'Config changed — re-run Analyze' : auxCompleteData.rowCount.toLocaleString() + ' rows analyzed' +
-              (auxCompleteData.filterErrors || auxCompleteData.calcolErrors ? ' · ⚠ filter/calc row errors — see Statistics' : ''))
+        (ds.complete
+          ? (ds.stale ? 'Config changed — re-run Analyze' : ds.complete.rowCount.toLocaleString() + ' rows analyzed' +
+              (ds.complete.filterErrors || ds.complete.calcolErrors ? ' · ⚠ filter/calc row errors — see Statistics' : ''))
           : 'Run to compare aux statistics on the Statistics tab') +
       '</div>' +
     '</div>';
 
   // C6-4b — collapsible config sections; cosmetic/advanced ones collapsed
-  wsEnhanceSidebar('aux', $auxSidebar, { prefix: 'collapsed', auxfilter: 'collapsed', declus: 'collapsed' });
+  wsEnhanceSidebar(ds.id, sidebar, { prefix: 'collapsed', auxfilter: 'collapsed', declus: 'collapsed' });
   // C6-5 — dim the Analyze button when the current result is fresh
-  if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]'), !(auxCompleteData && !auxStale));
+  if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]', root), !(ds.complete && !ds.stale));
 
-  renderAuxPreview();
-  if (typeof renderAuxView === 'function') renderAuxView();
+  renderAuxPreview(ds, root);
+  if (typeof renderAuxView === 'function') renderAuxView(ds, root);
   // drillhole-derived aux: provenance banner + report/re-composite links (A7)
   if (typeof renderDhProvenance === 'function') renderDhProvenance();
 }
 
-function runAuxAnalysis() {
-  if (!auxFile || !auxPreflightData) return;
+function runAuxAnalysis(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!ds.file || !ds.preflight) return;
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
   auxWorker = new Worker(workerUrl);
 
-  var $btn = auxQ('[data-act="auxAnalyze"]');
-  var $status = auxQ('[data-aux="analyzeStatus"]');
+  var $btn = auxQ('[data-act="auxAnalyze"]', root);
+  var $status = auxQ('[data-aux="analyzeStatus"]', root);
   if ($btn) $btn.disabled = true;
   if ($status) { $status.textContent = '0%'; $status.style.color = ''; }
 
@@ -14514,42 +14521,42 @@ function runAuxAnalysis() {
     if (auxWorker) { auxWorker.terminate(); auxWorker = null; }
   }
 
-  var xyz = auxPreflightData.xyz || { x: -1, y: -1, z: -1 };
+  var xyz = ds.preflight.xyz || { x: -1, y: -1, z: -1 };
   // Force every column's type from the preflight sample: the worker then
   // skips its detection warmup, whose rows are excluded from stats —
   // negligible on block models but a real bias on small sample files
   var auxTypeOverrides = {};
-  for (var ti = 0; ti < auxPreflightData.autoTypes.length; ti++) {
-    auxTypeOverrides[ti] = auxPreflightData.autoTypes[ti];
+  for (var ti = 0; ti < ds.preflight.autoTypes.length; ti++) {
+    auxTypeOverrides[ti] = ds.preflight.autoTypes[ti];
   }
   // Declustered weights: computed array, gated on a fresh fingerprint so the
   // row ordinals are guaranteed to align with this pass's filter
   var declusWeights = null;
-  var auxWeight = catRole('aux', 'weight');
+  var auxWeight = catRole(ds.id, 'weight');
   if (auxWeight === AUX_DECLUS_WEIGHT) {
-    if (!auxDeclus || !auxDeclus.weights) { fail('Run Declustering first — no weights computed.'); return; }
-    if (auxDeclus.fingerprint !== auxDeclusFingerprintNow()) { fail('Aux config changed since declustering — re-run Declustering.'); return; }
-    declusWeights = auxDeclus.weights;
+    if (!ds.declus || !ds.declus.weights) { fail('Run Declustering first — no weights computed.'); return; }
+    if (ds.declus.fingerprint !== auxDeclusFingerprintNow(ds)) { fail('Aux config changed since declustering — re-run Declustering.'); return; }
+    declusWeights = ds.declus.weights;
   }
   auxWorker.postMessage({
-    file: auxFile,
+    file: ds.file,
     xyzOverride: xyz.x >= 0 && xyz.y >= 0 && xyz.z >= 0 ? xyz : null,
-    filter: auxFilter ? { expression: auxFilter.expression } : null,
+    filter: ds.filter ? { expression: ds.filter.expression } : null,
     typeOverrides: auxTypeOverrides,
-    zipEntry: auxPreflightData.selectedZipEntry || null,
+    zipEntry: ds.preflight.selectedZipEntry || null,
     skipCols: [],
     colFilters: {},
-    calcolCode: auxCalcolCode || null,
-    calcolMeta: auxCalcolMeta.length > 0 ? auxCalcolMeta : null,
+    calcolCode: ds.calcolCode || null,
+    calcolMeta: ds.calcolMeta.length > 0 ? ds.calcolMeta : null,
     groupBy: null,
     groupStatsCols: null,
     dxyzOverride: null,
-    dmEndianness: auxPreflightData.dmEndianness || null,
-    dmFormat: auxPreflightData.dmFormat || null,
-    rowVarOverride: AUX_ROW_VAR,
+    dmEndianness: ds.preflight.dmEndianness || null,
+    dmFormat: ds.preflight.dmFormat || null,
+    rowVarOverride: ds.rowVar,
     weightColName: declusWeights ? null : auxWeight,
     weightArray: declusWeights,
-    weightArrayLabel: declusWeights ? 'declustered (cell ' + formatNum(auxDeclus.optCellSize) + ')' : null
+    weightArrayLabel: declusWeights ? 'declustered (cell ' + formatNum(ds.declus.optCellSize) + ')' : null
   });
 
   auxWorker.onerror = function(e) { fail(e.message || 'unknown error'); };
@@ -14562,13 +14569,13 @@ function runAuxAnalysis() {
         fail('Declustered weights misaligned (' + m.weightArrayMismatch.expected + ' vs ' + m.weightArrayMismatch.got + ' rows) — re-run Declustering.');
         return;
       }
-      auxCompleteData = { header: m.header, colTypes: m.colTypes, stats: m.stats, categories: m.categories, rowCount: m.rowCount,
+      ds.complete = { header: m.header, colTypes: m.colTypes, stats: m.stats, categories: m.categories, rowCount: m.rowCount,
         // A10: carry the A9 data-health counters for the per-dataset summary
         filterErrors: m.filterErrors || null, calcolErrors: m.calcolErrors || null,
         raggedRows: m.raggedRows || 0, coordInvalidCells: m.coordInvalidCells || 0, weightExcluded: m.weightExcluded || 0 };
-      auxStale = false;
+      ds.stale = false;
       if ($btn) $btn.disabled = false;
-      if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]'), false);  // C6-5 dim-when-done
+      if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]', root), false);  // C6-5 dim-when-done
       if ($status) { $status.textContent = m.rowCount.toLocaleString() + ' rows analyzed'; $status.style.color = ''; }
       auxWorker.terminate();
       auxWorker = null;
@@ -14579,7 +14586,7 @@ function runAuxAnalysis() {
         renderStatsCdfPanel();
       }
       if (typeof renderCatMain === 'function' && catFocusedCol !== null) renderCatMain();
-      if (auxView === 'summary' && typeof renderAuxSummary === 'function') renderAuxSummary();  // A10 per-dataset summary
+      if (ds.view === 'summary' && typeof renderAuxSummary === 'function') renderAuxSummary(ds, root);  // A10 per-dataset summary
       autoSaveProject();
     } else if (m.type === 'error') {
       fail(m.message);
@@ -14588,19 +14595,20 @@ function runAuxAnalysis() {
 }
 
 // Weight candidates: aux numeric columns + numeric aux calcols, by name
-function auxWeightOptions() {
+function auxWeightOptions(ds) {
+  ds = ds || dsById('aux');
   var opts = '<option value="">— none</option>';
-  if (!auxPreflightData) return opts;
-  var auxWeight = catRole('aux', 'weight');
+  if (!ds.preflight) return opts;
+  var auxWeight = catRole(ds.id, 'weight');
   opts += '<option value="' + AUX_DECLUS_WEIGHT + '"' + (auxWeight === AUX_DECLUS_WEIGHT ? ' selected' : '') + '>(declustered weights)</option>';
-  for (var i = 0; i < auxPreflightData.header.length; i++) {
-    if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
-    var n = auxPreflightData.header[i];
+  for (var i = 0; i < ds.preflight.header.length; i++) {
+    if ((ds.preflight.autoTypes || [])[i] !== 'numeric') continue;
+    var n = ds.preflight.header[i];
     opts += '<option value="' + esc(n) + '"' + (n === auxWeight ? ' selected' : '') + '>' + esc(n) + '</option>';
   }
-  for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
-    if (auxCalcolMeta[ci].type !== 'numeric') continue;
-    var cn = auxCalcolMeta[ci].name;
+  for (var ci = 0; ci < ds.calcolMeta.length; ci++) {
+    if (ds.calcolMeta[ci].type !== 'numeric') continue;
+    var cn = ds.calcolMeta[ci].name;
     opts += '<option value="' + esc(cn) + '"' + (cn === auxWeight ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
   }
   return opts;
@@ -14608,34 +14616,41 @@ function auxWeightOptions() {
 
 // Refresh just the weight select (e.g. after aux calcols change) without
 // rebuilding the sidebar — preserves focus elsewhere
-function renderAuxWeightOptions() {
-  var sel = auxQ('[data-aux="weight"]');
-  if (sel) sel.innerHTML = auxWeightOptions();
+function renderAuxWeightOptions(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var sel = auxQ('[data-aux="weight"]', root);
+  if (sel) sel.innerHTML = auxWeightOptions(ds);
 }
 
-function renderAuxPreview() {
-  var d = auxPreflightData;
+function renderAuxPreview(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var d = ds.preflight;
   var head = '<tr>' + d.header.map(function(h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
   var rows = d.sampleRows.slice(0, 20).map(function(r) {
     return '<tr>' + r.map(function(c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>';
   }).join('');
-  $auxPreview.innerHTML = '<table class="aux-preview-table"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table>';
+  var preview = auxQ('[data-aux="preview"]', root);
+  if (preview) preview.innerHTML = '<table class="aux-preview-table"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table>';
 }
 
 // A10 phase 3 — per-dataset summary: a bounding box (from the coordinate
 // columns' analyzed extents) with Export OBJ, plus the row-health card
 // (shared computeHealthItems). The point/drillhole analogue of the model's
 // Grid Geometry summary — no grid params, since this data isn't gridded.
-function renderAuxSummary() {
-  var $s = auxQ('#auxSummary');
+function renderAuxSummary(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var $s = auxQ('[data-aux="summaryView"]', root);
   if (!$s) return;
-  if (!auxCompleteData) {
+  if (!ds.complete) {
     $s.innerHTML = '<div class="aux-hint" style="padding:1rem">Run Analyze to see the dataset summary — bounding box and row health.</div>';
     return;
   }
-  var d = auxCompleteData;
-  var xyz = (auxPreflightData && auxPreflightData.xyz) || { x: -1, y: -1, z: -1 };
-  var label = auxPrefix || 'aux';
+  var d = ds.complete;
+  var xyz = (ds.preflight && ds.preflight.xyz) || { x: -1, y: -1, z: -1 };
+  var label = ds.prefix || 'aux';
   var sx = xyz.x >= 0 ? d.stats[xyz.x] : null;
   var sy = xyz.y >= 0 ? d.stats[xyz.y] : null;
   var sz = xyz.z >= 0 ? d.stats[xyz.z] : null;
@@ -14676,37 +14691,40 @@ function renderAuxSummary() {
     '<div class="section" style="margin:0.7rem"><div class="section-head">Data Health ' + hBadge + '</div>' +
       '<div class="section-body">' + healthHtml + '</div></div>';
 
-  var $obj = auxQ('[data-act="auxExportObj"]');
+  var $obj = auxQ('[data-act="auxExportObj"]', root);
   if ($obj && haveBox && typeof downloadBboxObj === 'function') {
     $obj.addEventListener('click', function() {
       downloadBboxObj({ xMin: sx.min, xMax: sx.max, yMin: sy.min, yMax: sy.max, zMin: sz.min, zMax: sz.max },
-        auxFile ? auxFile.name : label);
+        ds.file ? ds.file.name : label);
     });
   }
 }
 
-function onAuxConfigChange(e) {
-  if (!auxPreflightData) return;
+function onAuxConfigChange(e, ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!ds.preflight) return;
   // Declustering params only gate the (separately fingerprinted) declus run —
   // they don't invalidate the aux analysis config
   if (e && e.target && e.target.dataset && e.target.dataset.aux && e.target.dataset.aux.indexOf('declus') === 0) {
-    auxDeclus = auxDeclus || {};
-    auxDeclus.params = auxDeclusParamsFromUI();
+    ds.declus = ds.declus || {};
+    ds.declus.params = auxDeclusParamsFromUI(ds, root);
     if (typeof autoSaveProject === 'function') autoSaveProject();
     return;
   }
-  var p = auxQ('[data-aux="prefix"]');
-  if (p) auxPrefix = p.value.trim() || 'aux';
-  var x = auxQ('[data-aux="x"]'), y = auxQ('[data-aux="y"]'), z = auxQ('[data-aux="z"]');
-  if (x && y && z) auxPreflightData.xyz = { x: parseInt(x.value), y: parseInt(y.value), z: parseInt(z.value) };
-  var f = auxQ('[data-aux="filter"]');
-  if (f) { var v = f.value.trim(); auxFilter = v ? { expression: v } : null; }
-  var wSel = auxQ('[data-aux="weight"]');
-  if (wSel) catSetRole('aux', 'weight', wSel.value || null);
-  markAuxStale();
+  var p = auxQ('[data-aux="prefix"]', root);
+  if (p) ds.prefix = p.value.trim() || 'aux';
+  var x = auxQ('[data-aux="x"]', root), y = auxQ('[data-aux="y"]', root), z = auxQ('[data-aux="z"]', root);
+  if (x && y && z) ds.preflight.xyz = { x: parseInt(x.value), y: parseInt(y.value), z: parseInt(z.value) };
+  var f = auxQ('[data-aux="filter"]', root);
+  if (f) { var v = f.value.trim(); ds.filter = v ? { expression: v } : null; }
+  var wSel = auxQ('[data-aux="weight"]', root);
+  if (wSel) catSetRole(ds.id, 'weight', wSel.value || null);
+  markAuxStale(ds, root);
   // Live-update the prefix hint without a full re-render (keeps focus/caret)
-  var hint = $auxSidebar.querySelector('.pf-sidebar-section .aux-hint code');
-  if (hint && p) hint.textContent = (auxPrefix || 'aux') + ':Fe';
+  var sidebar = auxQ('[data-aux="sidebar"]', root);
+  var hint = sidebar && sidebar.querySelector('.pf-sidebar-section .aux-hint code');
+  if (hint && p) hint.textContent = (ds.prefix || 'aux') + ':Fe';
   // Keep the swath sidebar's aux rows in sync (prefix labels, xyz exclusions);
   // check/unit state is preserved by name across the rebuild
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
@@ -14714,11 +14732,13 @@ function onAuxConfigChange(e) {
 }
 
 // Flag a completed aux analysis as no longer reflecting the current config
-function markAuxStale() {
-  if (!auxCompleteData || auxStale) return;
-  auxStale = true;
-  if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]'), true);  // C6-5: back to orange call-to-action
-  var $st = auxQ('[data-aux="analyzeStatus"]');
+function markAuxStale(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!ds.complete || ds.stale) return;
+  ds.stale = true;
+  if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]', root), true);  // C6-5: back to orange call-to-action
+  var $st = auxQ('[data-aux="analyzeStatus"]', root);
   if ($st) { $st.textContent = '↻ config changed — re-run Analyze'; $st.style.color = 'var(--warn)'; }
 }
 
@@ -14726,32 +14746,36 @@ function markAuxStale() {
 // Weights are computed against the CURRENT aux row space (file, zip entry,
 // filter, calcols, XYZ); this fingerprint gates their reuse so ordinals
 // can never silently misalign.
-function auxDeclusFingerprintNow() {
-  if (!auxFile || !auxPreflightData) return null;
-  var xyz = auxPreflightData.xyz || {};
+function auxDeclusFingerprintNow(ds) {
+  ds = ds || dsById('aux');
+  if (!ds.file || !ds.preflight) return null;
+  var xyz = ds.preflight.xyz || {};
   return JSON.stringify({
-    f: auxFile.name + '|' + auxFile.size,
-    z: auxPreflightData.selectedZipEntry || null,
-    flt: auxFilter ? auxFilter.expression : '',
-    cc: auxCalcolCode || '',
+    f: ds.file.name + '|' + ds.file.size,
+    z: ds.preflight.selectedZipEntry || null,
+    flt: ds.filter ? ds.filter.expression : '',
+    cc: ds.calcolCode || '',
     xyz: [xyz.x, xyz.y, xyz.z]
   });
 }
 
-function auxDeclusFresh() {
-  return !!(auxDeclus && auxDeclus.weights && auxDeclus.fingerprint === auxDeclusFingerprintNow());
+function auxDeclusFresh(ds) {
+  ds = ds || dsById('aux');
+  return !!(ds.declus && ds.declus.weights && ds.declus.fingerprint === auxDeclusFingerprintNow(ds));
 }
 
-function auxDeclusParamsFromUI() {
+function auxDeclusParamsFromUI(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
   function num(key) {
-    var el = auxQ('[data-aux="' + key + '"]');
+    var el = auxQ('[data-aux="' + key + '"]', root);
     if (!el || el.value === '') return null;
     var v = parseFloat(el.value);
     return isFinite(v) ? v : null;
   }
-  var sel = auxQ('[data-aux="declusVar"]');
-  var crit = auxQ('[data-aux="declusCrit"]');
-  var prev = (auxDeclus && auxDeclus.params) || {};
+  var sel = auxQ('[data-aux="declusVar"]', root);
+  var crit = auxQ('[data-aux="declusCrit"]', root);
+  var prev = (ds.declus && ds.declus.params) || {};
   return {
     varName: sel ? sel.value : (prev.varName || null),
     cellMin: num('declusCellMin'),
@@ -14765,19 +14789,20 @@ function auxDeclusParamsFromUI() {
   };
 }
 
-function renderAuxDeclusSection() {
-  if (!auxPreflightData) return '';
-  var p = (auxDeclus && auxDeclus.params) || {};
+function renderAuxDeclusSection(ds) {
+  ds = ds || dsById('aux');
+  if (!ds.preflight) return '';
+  var p = (ds.declus && ds.declus.params) || {};
   var varOpts = '', firstNum = null;
-  for (var i = 0; i < auxPreflightData.header.length; i++) {
-    if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
-    var n = auxPreflightData.header[i];
+  for (var i = 0; i < ds.preflight.header.length; i++) {
+    if ((ds.preflight.autoTypes || [])[i] !== 'numeric') continue;
+    var n = ds.preflight.header[i];
     if (firstNum === null) firstNum = n;
     varOpts += '<option value="' + esc(n) + '"' + (n === p.varName ? ' selected' : '') + '>' + esc(n) + '</option>';
   }
-  for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
-    if (auxCalcolMeta[ci].type !== 'numeric') continue;
-    var cn = auxCalcolMeta[ci].name;
+  for (var ci = 0; ci < ds.calcolMeta.length; ci++) {
+    if (ds.calcolMeta[ci].type !== 'numeric') continue;
+    var cn = ds.calcolMeta[ci].name;
     varOpts += '<option value="' + esc(cn) + '"' + (cn === p.varName ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
   }
   function numVal(v) { return (v === null || v === undefined) ? '' : String(v); }
@@ -14803,14 +14828,15 @@ function renderAuxDeclusSection() {
     '<div class="aux-hint">GSLIB cell declustering: sweeps cell sizes, weights ∝ 1/(samples per cell), averaged over origin offsets. Use min for data clustered in high grades, max for low.</div>' +
     '<button class="swath-generate" data-act="auxDeclusRun">Run declustering</button>' +
     '<div class="aux-hint aux-analyze-status" data-aux="declusStatus"></div>' +
-    renderAuxDeclusResults() +
+    renderAuxDeclusResults(ds) +
   '</div>';
 }
 
-function renderAuxDeclusResults() {
-  if (!auxDeclus || !auxDeclus.curve) return '';
-  var d = auxDeclus;
-  var fresh = auxDeclusFresh();
+function renderAuxDeclusResults(ds) {
+  ds = ds || dsById('aux');
+  if (!ds.declus || !ds.declus.curve) return '';
+  var d = ds.declus;
+  var fresh = auxDeclusFresh(ds);
   var html = '<div class="aux-declus-results">';
   if (!fresh) {
     html += '<div class="aux-hint" style="color:var(--warn)">' +
@@ -14830,7 +14856,7 @@ function renderAuxDeclusResults() {
     }
     html += auxDeclusCurveSvg(d);
   }
-  if (catRole('aux', 'weight') === AUX_DECLUS_WEIGHT) html += '<div class="aux-hint">In use as the aux weight.</div>';
+  if (catRole(ds.id, 'weight') === AUX_DECLUS_WEIGHT) html += '<div class="aux-hint">In use as the aux weight.</div>';
   else if (fresh) html += '<button class="aux-from-main-btn" data-act="auxDeclusUse" style="margin-top:0.3rem">Use as aux weight</button>';
   return html + '</div>';
 }
@@ -14909,7 +14935,8 @@ function auxDeclusNearestPt(svg, e) {
   return bestPt;
 }
 
-function auxDeclusUpdateCursor(svg, pt) {
+function auxDeclusUpdateCursor(svg, pt, ds) {
+  ds = ds || dsById('aux');
   var g = svg.querySelector('.aux-declus-cursor');
   if (!g) return;
   if (!pt) { g.style.display = 'none'; return; }
@@ -14917,7 +14944,7 @@ function auxDeclusUpdateCursor(svg, pt) {
   var line = g.querySelector('line'), circ = g.querySelector('circle'), txt = g.querySelector('text');
   line.setAttribute('x1', pt[0]); line.setAttribute('x2', pt[0]);
   circ.setAttribute('cx', pt[0]); circ.setAttribute('cy', pt[1]);
-  var d = auxDeclus;
+  var d = ds.declus;
   var lbl = pt[2] <= 0 ? 'naive ' + formatNum(pt[3])
     : 'cell ' + formatNum(pt[2]) + ' → ' + formatNum(pt[3]) +
       (d && d.naiveMean ? ' (' + (pt[3] >= d.naiveMean ? '+' : '−') + Math.abs((pt[3] - d.naiveMean) / Math.abs(d.naiveMean) * 100).toFixed(1) + '%)' : '');
@@ -14928,18 +14955,20 @@ function auxDeclusUpdateCursor(svg, pt) {
   txt.setAttribute('text-anchor', flip ? 'end' : 'start');
 }
 
-function runAuxDeclus() {
-  if (!auxFile || !auxPreflightData) return;
-  var $st = auxQ('[data-aux="declusStatus"]');
-  var $runBtn = auxQ('[data-act="auxDeclusRun"]');
+function runAuxDeclus(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!ds.file || !ds.preflight) return;
+  var $st = auxQ('[data-aux="declusStatus"]', root);
+  var $runBtn = auxQ('[data-act="auxDeclusRun"]', root);
   function dfail(msg) {
     if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
     if ($runBtn) $runBtn.disabled = false;
     if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
   }
-  var xyz = auxPreflightData.xyz || { x: -1, y: -1, z: -1 };
+  var xyz = ds.preflight.xyz || { x: -1, y: -1, z: -1 };
   if (xyz.x < 0 || xyz.y < 0) { dfail('Assign X and Y coordinates first (Z optional).'); return; }
-  var params = auxDeclusParamsFromUI();
+  var params = auxDeclusParamsFromUI(ds, root);
   if (!params.varName) { dfail('No numeric variable to decluster on.'); return; }
   if (params.cellMin !== null && params.cellMax !== null && params.cellMax < params.cellMin) { dfail('Cell max must be ≥ cell min.'); return; }
 
@@ -14950,12 +14979,12 @@ function runAuxDeclus() {
 
   auxDeclusWorker.postMessage({
     mode: 'declus',
-    file: auxFile,
-    zipEntry: auxPreflightData.selectedZipEntry || null,
-    globalFilter: auxFilter ? { expression: auxFilter.expression } : null,
-    calcolCode: auxCalcolCode || null,
-    calcolMeta: auxCalcolMeta.length > 0 ? auxCalcolMeta : null,
-    resolvedTypes: auxPreflightData.autoTypes,
+    file: ds.file,
+    zipEntry: ds.preflight.selectedZipEntry || null,
+    globalFilter: ds.filter ? { expression: ds.filter.expression } : null,
+    calcolCode: ds.calcolCode || null,
+    calcolMeta: ds.calcolMeta.length > 0 ? ds.calcolMeta : null,
+    resolvedTypes: ds.preflight.autoTypes,
     xyzCols: [xyz.x, xyz.y, xyz.z],
     varColName: params.varName,
     cellMin: params.cellMin, cellMax: params.cellMax,
@@ -14963,9 +14992,9 @@ function runAuxDeclus() {
     anisy: params.anisy, anisz: params.anisz,
     iminmax: params.criterion === 'max' ? 1 : 0,
     pinnedCell: params.pinned || null,
-    rowVarOverride: AUX_ROW_VAR,
-    dmEndianness: auxPreflightData.dmEndianness || null,
-    dmFormat: auxPreflightData.dmFormat || null
+    rowVarOverride: ds.rowVar,
+    dmEndianness: ds.preflight.dmEndianness || null,
+    dmFormat: ds.preflight.dmFormat || null
   });
   auxDeclusWorker.onerror = function(e) { dfail(e.message || 'unknown error'); };
   auxDeclusWorker.onmessage = function(e) {
@@ -14977,52 +15006,55 @@ function runAuxDeclus() {
     } else if (m.type === 'declus-complete') {
       auxDeclusWorker.terminate();
       auxDeclusWorker = null;
-      auxDeclus = {
+      ds.declus = {
         params: params,
         weights: m.weights, n: m.n, located: m.located,
         curve: m.curve, optCellSize: m.optCellSize,
         declusteredMean: m.declusteredMean, naiveMean: m.naiveMean,
         pinned: m.pinned ? params.pinned : null,
         wtMin: m.wtMin, wtMax: m.wtMax, usedRange: m.usedRange,
-        fingerprint: auxDeclusFingerprintNow()
+        fingerprint: auxDeclusFingerprintNow(ds)
       };
       // Fresh weights change the analysis result if they're the active weight
-      if (catRole('aux', 'weight') === AUX_DECLUS_WEIGHT) markAuxStale();
-      renderAuxConfig();
+      if (catRole(ds.id, 'weight') === AUX_DECLUS_WEIGHT) markAuxStale(ds, root);
+      renderAuxConfig(ds, root);
       if (typeof autoSaveProject === 'function') autoSaveProject();
     }
   };
 }
 
-function applyAuxRestore(saved) {
-  auxPrefix = saved.prefix || 'aux';
-  auxFilter = saved.filter ? { expression: saved.filter } : null;
+function applyAuxRestore(saved, ds) {
+  ds = ds || dsById('aux');
+  ds.prefix = saved.prefix || 'aux';
+  ds.filter = saved.filter ? { expression: saved.filter } : null;
   // Legacy projects carried the aux weight here; the catalog is canonical
   // now (a project.catalog, when present, was applied before this runs)
-  if (saved.weight !== undefined && catRole('aux', 'weight') === null) catSetRole('aux', 'weight', saved.weight || null);
+  if (saved.weight !== undefined && catRole(ds.id, 'weight') === null) catSetRole(ds.id, 'weight', saved.weight || null);
   // Declus params restore; weights are never persisted — re-run to compute
-  auxDeclus = (saved.declus && saved.declus.params) ? { params: saved.declus.params, weights: null } : null;
+  ds.declus = (saved.declus && saved.declus.params) ? { params: saved.declus.params, weights: null } : null;
   // Top-cut: variable + cap + scale restore; the distribution is re-loaded on demand
-  auxTopcut = (saved.topcut && saved.topcut.varName) ? { varName: saved.topcut.varName, cap: saved.topcut.cap != null ? saved.topcut.cap : null, xlog: !!saved.topcut.xlog, useDeclus: !!saved.topcut.useDeclus, values: null } : null;
-  auxView = saved.view === 'topcut' ? 'topcut' : 'preview';
-  if (saved.xyz && auxPreflightData) auxPreflightData.xyz = saved.xyz;
-  auxCalcolCode = saved.calcolCode || '';
-  auxCalcolMeta = saved.calcolMeta || [];
+  ds.topcut = (saved.topcut && saved.topcut.varName) ? { varName: saved.topcut.varName, cap: saved.topcut.cap != null ? saved.topcut.cap : null, xlog: !!saved.topcut.xlog, useDeclus: !!saved.topcut.useDeclus, values: null } : null;
+  ds.view = saved.view === 'topcut' ? 'topcut' : 'preview';
+  if (saved.xyz && ds.preflight) ds.preflight.xyz = saved.xyz;
+  ds.calcolCode = saved.calcolCode || '';
+  ds.calcolMeta = saved.calcolMeta || [];
   if (calcolMode === 'aux' && $calcolCodeArea) {
-    $calcolCodeArea.value = auxCalcolCode;
+    $calcolCodeArea.value = ds.calcolCode;
     syncCodeHighlight();
   }
 }
 
 // When the primary file is a multi-entry archive, offer its other entries
 // as aux candidates (e.g. a zip holding both the model and its composites)
-function renderAuxFromMain() {
+function renderAuxFromMain(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
   // C6-3: name the model in the "Add a dataset" intro (runs on model load + clearAux)
-  var mn = auxQ('#dsModelName');
+  var mn = auxQ('[data-aux="modelName"]', root);
   if (mn) mn.textContent = (currentFile && currentFile.name) ? currentFile.name : 'your block model';
-  var $wrap = auxQ('#auxFromMain');
+  var $wrap = auxQ('[data-aux="fromMain"]', root);
   if (!$wrap) return;
-  if (auxFile || !currentFile || !preflightData || !preflightData.zipEntries || preflightData.zipEntries.length < 2) {
+  if (ds.file || !currentFile || !preflightData || !preflightData.zipEntries || preflightData.zipEntries.length < 2) {
     $wrap.innerHTML = '';
     return;
   }
@@ -15037,24 +15069,29 @@ function renderAuxFromMain() {
       '<select class="aux-select" data-aux="fromMainSel" style="flex:1">' + opts + '</select>' +
       '<button class="aux-from-main-btn" data-act="auxFromMain">Use entry</button>' +
     '</div>';
-  var sel = auxQ('[data-aux="fromMainSel"]');
+  var sel = auxQ('[data-aux="fromMainSel"]', root);
   var firstFree = preflightData.zipEntries.find(function(z) { return z.name !== preflightData.selectedZipEntry; });
   if (firstFree) sel.value = firstFree.name;
-  auxQ('[data-act="auxFromMain"]').addEventListener('click', function() {
-    loadAuxFile(currentFile, null, sel.value);
+  auxQ('[data-act="auxFromMain"]', root).addEventListener('click', function() {
+    loadAuxFile(currentFile, null, sel.value, ds, root);
   });
 }
 
-function loadAuxFile(file, handle, zipEntryName) {
-  auxFile = file;
-  auxHandle = handle || null;
-  var e0 = auxQ('#auxLoadError');
+function loadAuxFile(file, handle, zipEntryName, ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  ds.file = file;
+  ds.handle = handle || null;
+  var e0 = auxQ('[data-aux="loadError"]', root);
   if (e0) e0.textContent = '';
-  $auxFileInfo.textContent = 'Loading ' + file.name + '…';
-  $auxEmpty.style.display = 'none';
-  $auxConfig.style.display = '';
+  var fileInfo = auxQ('[data-aux="fileInfo"]', root);
+  if (fileInfo) fileInfo.textContent = 'Loading ' + file.name + '…';
+  var emptyEl = auxQ('[data-aux="empty"]', root);
+  if (emptyEl) emptyEl.style.display = 'none';
+  var configEl = auxQ('[data-aux="config"]', root);
+  if (configEl) configEl.style.display = '';
   runPreflight(file).then(async function(data) {
-    auxPreflightData = data;
+    ds.preflight = data;
     if (zipEntryName && data.zipEntries && zipEntryName !== data.selectedZipEntry) {
       try { await loadZipEntryIntoPreflight(file, data, zipEntryName); } catch (e) { /* keep default entry */ }
     }
@@ -15064,50 +15101,59 @@ function loadAuxFile(file, handle, zipEntryName) {
       if (savedAux.zipEntry && data.zipEntries && savedAux.zipEntry !== data.selectedZipEntry) {
         try { await loadZipEntryIntoPreflight(file, data, savedAux.zipEntry); } catch (e) { /* entry gone — keep default */ }
       }
-      applyAuxRestore(savedAux);
+      applyAuxRestore(savedAux, ds);
     }
-    renderAuxConfig();
+    renderAuxConfig(ds, root);
     if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
     if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
     if (typeof autoSaveProject === 'function') autoSaveProject();
   }).catch(function(err) {
-    auxFile = null;
-    auxPreflightData = null;
-    $auxConfig.style.display = 'none';
-    $auxEmpty.style.display = '';
-    $auxFileInfo.textContent = '';
-    var errEl = auxQ('#auxLoadError');
+    ds.file = null;
+    ds.preflight = null;
+    var cfg = auxQ('[data-aux="config"]', root);
+    if (cfg) cfg.style.display = 'none';
+    var emp = auxQ('[data-aux="empty"]', root);
+    if (emp) emp.style.display = '';
+    var fi = auxQ('[data-aux="fileInfo"]', root);
+    if (fi) fi.textContent = '';
+    var errEl = auxQ('[data-aux="loadError"]', root);
     if (errEl) errEl.textContent = 'Dataset load failed: ' + err.message;
   });
 }
 
-function clearAux() {
-  auxFile = null;
-  auxHandle = null;
-  auxPreflightData = null;
-  auxCompleteData = null;
+function clearAux(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  ds.file = null;
+  ds.handle = null;
+  ds.preflight = null;
+  ds.complete = null;
   auxData = null;
-  auxFilter = null;
-  auxPrefix = 'aux';
-  auxStale = false;
+  ds.filter = null;
+  ds.prefix = 'aux';
+  ds.stale = false;
   statsAuxSelected = null;
   statsCdfAuxSelected = new Set();
-  auxCalcolCode = '';
-  auxCalcolMeta = [];
-  catSetRole('aux', 'weight', null);
-  auxDeclus = null;
+  ds.calcolCode = '';
+  ds.calcolMeta = [];
+  catSetRole(ds.id, 'weight', null);
+  ds.declus = null;
   if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
-  auxTopcut = null;
-  auxView = 'preview';
+  ds.topcut = null;
+  ds.view = 'preview';
   if (typeof auxTopcutWorker !== 'undefined' && auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} auxTopcutWorker = null; }
-  if (typeof renderAuxView === 'function') renderAuxView();
+  if (typeof renderAuxView === 'function') renderAuxView(ds, root);
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
   if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
-  $auxConfig.style.display = 'none';
-  $auxEmpty.style.display = '';
-  $auxSidebar.innerHTML = '';
-  $auxPreview.innerHTML = '';
-  renderAuxFromMain();
+  var configEl = auxQ('[data-aux="config"]', root);
+  if (configEl) configEl.style.display = 'none';
+  var emptyEl = auxQ('[data-aux="empty"]', root);
+  if (emptyEl) emptyEl.style.display = '';
+  var sidebar = auxQ('[data-aux="sidebar"]', root);
+  if (sidebar) sidebar.innerHTML = '';
+  var preview = auxQ('[data-aux="preview"]', root);
+  if (preview) preview.innerHTML = '';
+  renderAuxFromMain(ds, root);
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
   if (typeof renderCatMain === 'function' && catFocusedCol !== null) renderCatMain();
   if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
@@ -15120,100 +15166,119 @@ function clearAux() {
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
 
-// ─── Wiring (runs at load; DOM is already parsed) ─────────────────────
-if ($auxDropzone) {
-  $auxDropzone.addEventListener('dragover', function(e) { e.preventDefault(); $auxDropzone.classList.add('drag-over'); });
-  $auxDropzone.addEventListener('dragleave', function() { $auxDropzone.classList.remove('drag-over'); });
-  $auxDropzone.addEventListener('drop', async function(e) {
-    e.preventDefault();
-    e.stopPropagation(); // keep the $results drop handler from loading this as the main dataset
-    $auxDropzone.classList.remove('drag-over');
-    var handle = null;
-    if (HAS_FSAA && e.dataTransfer.items && e.dataTransfer.items[0] && e.dataTransfer.items[0].getAsFileSystemHandle) {
-      try { handle = await e.dataTransfer.items[0].getAsFileSystemHandle(); } catch (ex) {}
-    }
-    var file = handle ? await handle.getFile() : (e.dataTransfer.files[0] || null);
-    if (file) loadAuxFile(file, handle);
-  });
+// ─── Wiring — attaches the panel's listeners for one dataset instance ──
+// Extracted so a cloned instance panel (1g-c) wires the same way as the
+// static #panelAux. Listeners resolve targets root-relative and pass the
+// owning (ds, root) into every handler. Called once at load for the aux view
+// (from topcut.js, after wireDatasetTopcut is defined).
+function wireDatasetPanel(root, ds) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!root) return;
+  var dropzone = auxQ('[data-aux="dropzone"]', root);
+  var fileInput = auxQ('[data-aux="fileInput"]', root);
+  var sidebar = auxQ('[data-aux="sidebar"]', root);
 
-  if (HAS_FSAA) {
-    $auxDropzone.addEventListener('click', async function(e) {
-      if (e.target === $auxFileInput) return;
+  if (dropzone) {
+    dropzone.addEventListener('dragover', function(e) { e.preventDefault(); dropzone.classList.add('drag-over'); });
+    dropzone.addEventListener('dragleave', function() { dropzone.classList.remove('drag-over'); });
+    dropzone.addEventListener('drop', async function(e) {
       e.preventDefault();
-      try {
-        var handles = await window.showOpenFilePicker({
-          types: [
-            { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
-            { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } },
-            { description: 'Datamine files', accept: { 'application/octet-stream': ['.dm'] } }
-          ],
-          multiple: false
-        });
-        var handle = handles[0];
-        var file = await handle.getFile();
-        loadAuxFile(file, handle);
-      } catch (ex) { /* cancelled */ }
+      e.stopPropagation(); // keep the $results drop handler from loading this as the main dataset
+      dropzone.classList.remove('drag-over');
+      var handle = null;
+      if (HAS_FSAA && e.dataTransfer.items && e.dataTransfer.items[0] && e.dataTransfer.items[0].getAsFileSystemHandle) {
+        try { handle = await e.dataTransfer.items[0].getAsFileSystemHandle(); } catch (ex) {}
+      }
+      var file = handle ? await handle.getFile() : (e.dataTransfer.files[0] || null);
+      if (file) loadAuxFile(file, handle, undefined, ds, root);
     });
-    if ($auxFileInput) $auxFileInput.style.display = 'none';
+
+    if (HAS_FSAA) {
+      dropzone.addEventListener('click', async function(e) {
+        if (e.target === fileInput) return;
+        e.preventDefault();
+        try {
+          var handles = await window.showOpenFilePicker({
+            types: [
+              { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
+              { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } },
+              { description: 'Datamine files', accept: { 'application/octet-stream': ['.dm'] } }
+            ],
+            multiple: false
+          });
+          var handle = handles[0];
+          var file = await handle.getFile();
+          loadAuxFile(file, handle, undefined, ds, root);
+        } catch (ex) { /* cancelled */ }
+      });
+      if (fileInput) fileInput.style.display = 'none';
+    }
+
+    if (fileInput) fileInput.addEventListener('change', function(e) { if (e.target.files.length) loadAuxFile(e.target.files[0], null, undefined, ds, root); });
   }
 
-  if ($auxFileInput) $auxFileInput.addEventListener('change', function(e) { if (e.target.files.length) loadAuxFile(e.target.files[0], null); });
-  if ($auxSidebar) {
-    $auxSidebar.addEventListener('input', onAuxConfigChange);
-    $auxSidebar.addEventListener('change', onAuxConfigChange);
-    $auxSidebar.addEventListener('click', function(e) {
+  if (sidebar) {
+    sidebar.addEventListener('input', function(e) { onAuxConfigChange(e, ds, root); });
+    sidebar.addEventListener('change', function(e) { onAuxConfigChange(e, ds, root); });
+    sidebar.addEventListener('click', function(e) {
       if (!e.target) return;
       var act = e.target.dataset ? e.target.dataset.act : null;
-      if (act === 'auxAnalyze') runAuxAnalysis();
+      if (act === 'auxAnalyze') runAuxAnalysis(ds, root);
       else if (act === 'auxDeclusRun') {
         // Run = fresh sweep; an existing pin is released
-        if (auxDeclus && auxDeclus.params) auxDeclus.params.pinned = null;
-        runAuxDeclus();
+        if (ds.declus && ds.declus.params) ds.declus.params.pinned = null;
+        runAuxDeclus(ds, root);
       } else if (act === 'auxDeclusUse') {
-        catSetRole('aux', 'weight', AUX_DECLUS_WEIGHT);
-        markAuxStale();
-        renderAuxConfig();
+        catSetRole(ds.id, 'weight', AUX_DECLUS_WEIGHT);
+        markAuxStale(ds, root);
+        renderAuxConfig(ds, root);
         if (typeof autoSaveProject === 'function') autoSaveProject();
       } else {
         // Click on the sweep curve: pin the nearest cell size and recompute
         var svg = e.target.closest ? e.target.closest('.aux-declus-curve') : null;
-        if (svg && auxDeclus) {
+        if (svg && ds.declus) {
           var pt = auxDeclusNearestPt(svg, e);
           if (pt && pt[2] > 0) {
-            auxDeclus.params = auxDeclus.params || {};
-            auxDeclus.params.pinned = pt[2];
-            runAuxDeclus();
+            ds.declus.params = ds.declus.params || {};
+            ds.declus.params.pinned = pt[2];
+            runAuxDeclus(ds, root);
           }
         }
       }
     });
     // Curve scrubbing: crosshair with cell size, declustered mean and Δ%
-    $auxSidebar.addEventListener('pointermove', function(e) {
+    sidebar.addEventListener('pointermove', function(e) {
       var svg = e.target && e.target.closest ? e.target.closest('.aux-declus-curve') : null;
-      var anySvg = auxQ('.aux-declus-curve');
-      if (!svg) { if (anySvg) auxDeclusUpdateCursor(anySvg, null); return; }
-      auxDeclusUpdateCursor(svg, auxDeclusNearestPt(svg, e));
+      var anySvg = auxQ('.aux-declus-curve', root);
+      if (!svg) { if (anySvg) auxDeclusUpdateCursor(anySvg, null, ds); return; }
+      auxDeclusUpdateCursor(svg, auxDeclusNearestPt(svg, e), ds);
     });
-    $auxSidebar.addEventListener('pointerleave', function() {
-      var svg = auxQ('.aux-declus-curve');
-      if (svg) auxDeclusUpdateCursor(svg, null);
+    sidebar.addEventListener('pointerleave', function() {
+      var svg = auxQ('.aux-declus-curve', root);
+      if (svg) auxDeclusUpdateCursor(svg, null, ds);
     });
     // Zip entry switch — re-read header/types/xyz from the chosen entry
-    $auxSidebar.addEventListener('change', async function(e) {
-      if (!e.target || !e.target.dataset || e.target.dataset.aux !== 'zipEntry' || !auxFile || !auxPreflightData) return;
+    sidebar.addEventListener('change', async function(e) {
+      if (!e.target || !e.target.dataset || e.target.dataset.aux !== 'zipEntry' || !ds.file || !ds.preflight) return;
       try {
-        await loadZipEntryIntoPreflight(auxFile, auxPreflightData, e.target.value);
-        renderAuxConfig();
+        await loadZipEntryIntoPreflight(ds.file, ds.preflight, e.target.value);
+        renderAuxConfig(ds, root);
         if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
-        markAuxStale();
+        markAuxStale(ds, root);
         if (typeof autoSaveProject === 'function') autoSaveProject();
       } catch (err) {
-        $auxPreview.innerHTML = '<div style="padding:1rem;color:var(--red)">' + esc(err.message) + '</div>';
+        var preview = auxQ('[data-aux="preview"]', root);
+        if (preview) preview.innerHTML = '<div style="padding:1rem;color:var(--red)">' + esc(err.message) + '</div>';
       }
     });
   }
-  var $auxClearBtn = auxQ('#auxClear');
-  if ($auxClearBtn) $auxClearBtn.addEventListener('click', clearAux);
+
+  var clearBtn = auxQ('[data-aux="clear"]', root);
+  if (clearBtn) clearBtn.addEventListener('click', function() { clearAux(ds, root); });
+
+  // Top-cut + view-toggle listeners live in topcut.js (loaded later)
+  if (typeof wireDatasetTopcut === 'function') wireDatasetTopcut(root, ds);
 }
 
 // ─── Drillhole set ingestion (A7 Phase 1) ───────────────────────────────
@@ -15908,44 +15973,52 @@ function dhReset() {
 // log-probability, mean & CV vs cap, and % metal above cap. No auto-pick:
 // the plots are the evidence, the user moves the line. Applying a cap is a
 // one-click calcol (cap() already lives in the Math preamble).
+//
+// A10 phase 1g-b: parameterized by (ds, root) like auxtab.js. The svg
+// builders take the topcut state object t (= ds.topcut) directly; the worker
+// handle (auxTopcutWorker) stays global for the single aux dataset.
 
-var $auxViewToggle = document.getElementById('auxViewToggle');
-var $auxTopcut = document.getElementById('auxTopcut');
-
-function auxTopcutFingerprintNow() {
-  if (!auxFile || !auxPreflightData) return null;
-  var useDeclus = !!(auxTopcut && auxTopcut.useDeclus);
+function auxTopcutFingerprintNow(ds) {
+  ds = ds || dsById('aux');
+  if (!ds.file || !ds.preflight) return null;
+  var useDeclus = !!(ds.topcut && ds.topcut.useDeclus);
   return JSON.stringify({
-    f: auxFile.name + '|' + auxFile.size,
-    z: auxPreflightData.selectedZipEntry || null,
-    flt: auxFilter ? auxFilter.expression : '',
-    cc: auxCalcolCode || '',
+    f: ds.file.name + '|' + ds.file.size,
+    z: ds.preflight.selectedZipEntry || null,
+    flt: ds.filter ? ds.filter.expression : '',
+    cc: ds.calcolCode || '',
     // Weight mode is part of the distribution's identity: flipping
     // Raw | Declustered (or re-running declus) demands a reload
     uw: useDeclus,
-    dw: useDeclus && auxDeclus ? auxDeclus.fingerprint : null
+    dw: useDeclus && ds.declus ? ds.declus.fingerprint : null
   });
 }
 
-function auxTopcutFresh() {
-  return !!(auxTopcut && auxTopcut.values && auxTopcut.fingerprint === auxTopcutFingerprintNow());
+function auxTopcutFresh(ds) {
+  ds = ds || dsById('aux');
+  return !!(ds.topcut && ds.topcut.values && ds.topcut.fingerprint === auxTopcutFingerprintNow(ds));
 }
 
-function renderAuxView() {
-  if (!$auxViewToggle) return;
-  var hasAux = !!auxPreflightData;
-  $auxViewToggle.style.display = hasAux ? '' : 'none';
-  $auxViewToggle.querySelectorAll('.aux-view-btn').forEach(function(b) {
-    b.classList.toggle('active', b.dataset.auxview === auxView);
+function renderAuxView(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var viewToggle = auxQ('[data-aux="viewToggle"]', root);
+  if (!viewToggle) return;
+  var hasAux = !!ds.preflight;
+  viewToggle.style.display = hasAux ? '' : 'none';
+  viewToggle.querySelectorAll('.aux-view-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.auxview === ds.view);
   });
-  var showTopcut = hasAux && auxView === 'topcut';
-  var showSummary = hasAux && auxView === 'summary';
-  if ($auxPreview) $auxPreview.style.display = (showTopcut || showSummary) ? 'none' : '';
-  if ($auxTopcut) $auxTopcut.style.display = showTopcut ? '' : 'none';
-  var $auxSummary = auxQ('#auxSummary');
-  if ($auxSummary) $auxSummary.style.display = showSummary ? '' : 'none';
-  if (showTopcut) renderAuxTopcut();
-  if (showSummary && typeof renderAuxSummary === 'function') renderAuxSummary();
+  var showTopcut = hasAux && ds.view === 'topcut';
+  var showSummary = hasAux && ds.view === 'summary';
+  var preview = auxQ('[data-aux="preview"]', root);
+  if (preview) preview.style.display = (showTopcut || showSummary) ? 'none' : '';
+  var topcut = auxQ('[data-aux="topcutView"]', root);
+  if (topcut) topcut.style.display = showTopcut ? '' : 'none';
+  var summary = auxQ('[data-aux="summaryView"]', root);
+  if (summary) summary.style.display = showSummary ? '' : 'none';
+  if (showTopcut) renderAuxTopcut(ds, root);
+  if (showSummary && typeof renderAuxSummary === 'function') renderAuxSummary(ds, root);
 }
 
 // ── Capped statistics from (weighted) prefix sums ──
@@ -15954,8 +16027,7 @@ function renderAuxView() {
 // arithmetic: sum' = S[k] + (W−W[k])·c, ss' = SS[k] + (W−W[k])·c².
 // Weighted runs use population variance, raw keeps the sample form —
 // the same convention as every other weighted statistic in BMA.
-function auxTopcutCappedStats(c) {
-  var t = auxTopcut;
+function auxTopcutCappedStats(c, t) {
   var v = t.values, m = v.length;
   var lo = 0, hi = m;
   while (lo < hi) { var mid = (lo + hi) >> 1; if (v[mid] <= c) lo = mid + 1; else hi = mid; }
@@ -15978,33 +16050,36 @@ function auxTopcutCappedStats(c) {
   };
 }
 
-function renderAuxTopcut() {
-  if (!$auxTopcut || !auxPreflightData) return;
-  var t = auxTopcut;
+function renderAuxTopcut(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var topcutEl = auxQ('[data-aux="topcutView"]', root);
+  if (!topcutEl || !ds.preflight) return;
+  var t = ds.topcut;
 
   // Variable options: numeric raw columns + numeric aux calcols
   var chosen = (t && t.varName) || null;
   var varOpts = '';
-  for (var i = 0; i < auxPreflightData.header.length; i++) {
-    if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
-    var nm = auxPreflightData.header[i];
+  for (var i = 0; i < ds.preflight.header.length; i++) {
+    if ((ds.preflight.autoTypes || [])[i] !== 'numeric') continue;
+    var nm = ds.preflight.header[i];
     if (chosen === null) chosen = nm;
     varOpts += '<option value="' + esc(nm) + '"' + (nm === chosen ? ' selected' : '') + '>' + esc(nm) + '</option>';
   }
-  for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
-    if (auxCalcolMeta[ci].type !== 'numeric') continue;
-    var cn = auxCalcolMeta[ci].name;
+  for (var ci = 0; ci < ds.calcolMeta.length; ci++) {
+    if (ds.calcolMeta[ci].type !== 'numeric') continue;
+    var cn = ds.calcolMeta[ci].name;
     varOpts += '<option value="' + esc(cn) + '"' + (cn === chosen ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
   }
 
   var html = '<div class="tc-toolbar">' +
     '<label>Variable</label>' +
     '<select class="aux-select" data-aux="topcutVar" style="width:auto;min-width:120px">' + varOpts + '</select>' +
-    '<button class="aux-from-main-btn" data-act="auxTopcutLoad">' + (auxTopcutFresh() ? 'Reload' : 'Load distribution') + '</button>' +
+    '<button class="aux-from-main-btn" data-act="auxTopcutLoad">' + (auxTopcutFresh(ds) ? 'Reload' : 'Load distribution') + '</button>' +
     '<span class="aux-hint" data-aux="topcutStatus" style="margin:0"></span>' +
   '</div>';
 
-  if (!auxTopcutFresh()) {
+  if (!auxTopcutFresh(ds)) {
     if (t && t.varName && !t.values) {
       html += '<div class="tc-empty">Restored top-cut config (' + esc(t.varName) + (t.cap != null ? ', cap ' + formatNum(t.cap) : '') + ') — load the distribution to continue.</div>';
     } else if (t && t.values) {
@@ -16012,7 +16087,7 @@ function renderAuxTopcut() {
     } else {
       html += '<div class="tc-empty">Load a variable’s sample distribution to analyse top cuts: histogram, log-probability, mean & CV vs cap, and metal above cap, with a draggable cap line across all four.</div>';
     }
-    $auxTopcut.innerHTML = html;
+    topcutEl.innerHTML = html;
     return;
   }
 
@@ -16021,12 +16096,12 @@ function renderAuxTopcut() {
   if (t.cap == null || !(t.cap >= vMin && t.cap <= vMax)) {
     t.cap = t.values[Math.min(m - 1, Math.floor(0.99 * m))]; // starting handle at P99 — a position, not a recommendation
   }
-  var un = auxTopcutCappedStats(vMax);
-  var cs = auxTopcutCappedStats(t.cap);
+  var un = auxTopcutCappedStats(vMax, t);
+  var cs = auxTopcutCappedStats(t.cap, t);
 
   var canLog = vMin > 0;
   if (!canLog) t.xlog = false;
-  html += '<div class="tc-stats" data-aux="topcutStats">' + auxTopcutStatsHtml(un, cs) + '</div>';
+  html += '<div class="tc-stats" data-aux="topcutStats">' + auxTopcutStatsHtml(un, cs, t) + '</div>';
   html += '<div class="tc-caprow">' +
     '<label>Cap</label>' +
     '<input type="text" class="aux-input" data-aux="topcutCap" value="' + formatNum(t.cap) + '" spellcheck="false" style="width:90px">' +
@@ -16035,7 +16110,7 @@ function renderAuxTopcut() {
     '<span style="margin-left:auto;display:flex;gap:0.25rem">' +
       '<button class="aux-view-btn' + (!t.useDeclus ? ' active' : '') + '" data-act="auxTopcutWRaw" title="raw sample distribution — the capping convention">Raw</button>' +
       '<button class="aux-view-btn' + (t.useDeclus ? ' active' : '') + '" data-act="auxTopcutWDeclus"' +
-        (typeof auxDeclusFresh === 'function' && auxDeclusFresh()
+        (typeof auxDeclusFresh === 'function' && auxDeclusFresh(ds)
           ? ' title="weight every statistic by the declustering weights — capped means/metal unbiased by drilling pattern"'
           : ' disabled title="run Declustering on the sidebar first (weights missing or stale)"') + '>Declustered</button>' +
       '<span style="width:0.4rem"></span>' +
@@ -16045,22 +16120,21 @@ function renderAuxTopcut() {
     '</span>' +
   '</div>';
   html += '<div class="tc-grid">' +
-    '<div class="tc-plot">' + auxTopcutHistSvg() + '</div>' +
-    '<div class="tc-plot">' + auxTopcutLogProbSvg() + '</div>' +
-    '<div class="tc-plot">' + auxTopcutMeanCvSvg() + '</div>' +
-    '<div class="tc-plot">' + auxTopcutMetalSvg() + '</div>' +
+    '<div class="tc-plot">' + auxTopcutHistSvg(t) + '</div>' +
+    '<div class="tc-plot">' + auxTopcutLogProbSvg(t) + '</div>' +
+    '<div class="tc-plot">' + auxTopcutMeanCvSvg(t) + '</div>' +
+    '<div class="tc-plot">' + auxTopcutMetalSvg(t) + '</div>' +
   '</div>';
   html += '<div class="aux-hint">drag the cap line on any plot (or type a value) · n ' + m.toLocaleString() +
     (t.n > m + (t.weightExcluded || 0) ? ' (+' + (t.n - m - (t.weightExcluded || 0)) + ' non-numeric/null excluded)' : '') +
     (t.weightExcluded ? ' (+' + t.weightExcluded + ' invalid-weight excluded)' : '') +
     ' · ' + (t.weights ? 'declustering-weighted distribution' : 'raw unweighted sample distribution (the capping convention)') + '</div>';
 
-  $auxTopcut.innerHTML = html;
-  auxTopcutPositionCaps();
+  topcutEl.innerHTML = html;
+  auxTopcutPositionCaps(ds, root);
 }
 
-function auxTopcutStatsHtml(un, cs) {
-  var t = auxTopcut;
+function auxTopcutStatsHtml(un, cs, t) {
   function d(a, b) {
     if (b === 0 || b == null || a == null) return '';
     var p = (a - b) / Math.abs(b) * 100;
@@ -16094,9 +16168,9 @@ function tcFrame(title, yLabel) {
     (yLabel ? '<text x="10" y="' + ((P.padT + P.H - P.padB) / 2) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="9" transform="rotate(-90, 10, ' + ((P.padT + P.H - P.padB) / 2) + ')">' + yLabel + '</text>' : '');
 }
 
-function tcCapMarker(ax) {
+function tcCapMarker(ax, t) {
   var P = TC_PLOT;
-  var x = ax.sx(auxTopcut.cap).toFixed(1);
+  var x = ax.sx(t.cap).toFixed(1);
   return '<g class="tc-cap"><line x1="' + x + '" x2="' + x + '" y1="' + P.padT + '" y2="' + (P.H - P.padB) + '" stroke="var(--red, #e05555)" stroke-width="1.2" stroke-dasharray="5,3"/>' +
     '<text x="' + x + '" y="' + (P.padT - 4 + 10) + '" fill="var(--red, #e05555)" font-size="8.5" text-anchor="middle"></text></g>';
 }
@@ -16117,8 +16191,8 @@ function tcSvgOpen(ax) {
   return '<svg class="tc-svg" viewBox="0 0 ' + P.W + ' ' + P.H + '"' + ax.attrs + '><rect width="' + P.W + '" height="' + P.H + '" fill="var(--bg)" rx="3"/>';
 }
 
-function auxTopcutHistSvg() {
-  var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
+function auxTopcutHistSvg(t) {
+  var v = t.values, m = v.length, P = TC_PLOT;
   var xlog = !!t.xlog;
   var x0 = v[0], x1 = v[m - 1];
   if (x1 <= x0) x1 = x0 + 1;
@@ -16141,11 +16215,11 @@ function auxTopcutHistSvg() {
     var bh = bins[b2] / bMax * plotH;
     bars += '<rect x="' + (P.padL + b2 * bw).toFixed(1) + '" y="' + (P.padT + plotH - bh).toFixed(1) + '" width="' + Math.max(0.5, bw - 0.6).toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="rgba(240,178,50,0.45)"/>';
   }
-  return tcSvgOpen(ax) + tcXTicks(ax, x0, x1, xlog) + bars + tcCapMarker(ax) + tcFrame('Histogram' + (xlog ? ' (log X)' : ''), 'count') + '</svg>';
+  return tcSvgOpen(ax) + tcXTicks(ax, x0, x1, xlog) + bars + tcCapMarker(ax, t) + tcFrame('Histogram' + (xlog ? ' (log X)' : ''), 'count') + '</svg>';
 }
 
-function auxTopcutLogProbSvg() {
-  var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
+function auxTopcutLogProbSvg(t) {
+  var v = t.values, m = v.length, P = TC_PLOT;
   var xlog = !!t.xlog;
   var x0 = v[0], x1 = v[m - 1];
   if (x1 <= x0) x1 = x0 + 1;
@@ -16171,12 +16245,12 @@ function auxTopcutLogProbSvg() {
     if (p < pLo || p > pHi) continue;
     pts += '<circle cx="' + ax.sx(v[i]).toFixed(1) + '" cy="' + sy(p).toFixed(1) + '" r="1.2" fill="var(--action)" opacity="0.7"/>';
   }
-  return tcSvgOpen(ax) + grid + tcXTicks(ax, x0, x1, xlog) + pts + tcCapMarker(ax) +
+  return tcSvgOpen(ax) + grid + tcXTicks(ax, x0, x1, xlog) + pts + tcCapMarker(ax, t) +
     tcFrame((xlog ? 'Log-probability' : 'Probability (linear X)') + (t.weights ? ' · declustered' : ''), 'cum %') + '</svg>';
 }
 
-function auxTopcutMeanCvSvg() {
-  var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
+function auxTopcutMeanCvSvg(t) {
+  var v = t.values, m = v.length, P = TC_PLOT;
   var xlog = !!t.xlog;
   var x0 = v[Math.floor(m * 0.5)], x1 = v[m - 1];
   if (x1 <= x0) { x0 = v[0]; x1 = v[m - 1] || x0 + 1; }
@@ -16187,7 +16261,7 @@ function auxTopcutMeanCvSvg() {
   for (var i = 0; i <= N; i++) {
     var c = xlog ? Math.pow(10, Math.log10(x0) + (Math.log10(x1) - Math.log10(x0)) * i / N)
                  : x0 + (x1 - x0) * i / N;
-    var s = auxTopcutCappedStats(c);
+    var s = auxTopcutCappedStats(c, t);
     means.push([c, s.mean]); cvs.push([c, s.cv]);
     if (s.mean < mnLo) mnLo = s.mean; if (s.mean > mnHi) mnHi = s.mean;
     if (s.cv != null) { if (s.cv < cvLo) cvLo = s.cv; if (s.cv > cvHi) cvHi = s.cv; }
@@ -16204,11 +16278,11 @@ function auxTopcutMeanCvSvg() {
   return tcSvgOpen(ax) + tcXTicks(ax, x0, x1, xlog) +
     '<path d="' + pM + '" fill="none" stroke="var(--action)" stroke-width="1.4"/>' +
     '<path d="' + pC + '" fill="none" stroke="var(--info)" stroke-width="1.2"/>' +
-    legend + tcCapMarker(ax) + tcFrame('Mean & CV vs cap' + (xlog ? ' (log X)' : ''), '') + '</svg>';
+    legend + tcCapMarker(ax, t) + tcFrame('Mean & CV vs cap' + (xlog ? ' (log X)' : ''), '') + '</svg>';
 }
 
-function auxTopcutMetalSvg() {
-  var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
+function auxTopcutMetalSvg(t) {
+  var v = t.values, m = v.length, P = TC_PLOT;
   var xlog = !!t.xlog;
   var x0 = v[0], x1 = v[m - 1];
   if (x1 <= x0) x1 = x0 + 1;
@@ -16220,7 +16294,7 @@ function auxTopcutMetalSvg() {
   for (var i = 0; i <= N; i++) {
     var c = xlog ? Math.pow(10, Math.log10(x0) + (Math.log10(x1) - Math.log10(x0)) * i / N)
                  : x0 + (x1 - x0) * i / N;
-    var s = auxTopcutCappedStats(c);
+    var s = auxTopcutCappedStats(c, t);
     pts2.push([c, s.metalRemovedPct]);
     if (s.metalRemovedPct > yMax) yMax = s.metalRemovedPct;
   }
@@ -16235,15 +16309,19 @@ function auxTopcutMetalSvg() {
   }
   return tcSvgOpen(ax) + grid + tcXTicks(ax, x0, x1, xlog) +
     '<path d="' + path + '" fill="none" stroke="var(--action)" stroke-width="1.4"/>' +
-    tcCapMarker(ax) + tcFrame('Metal removed by cap' + (xlog ? ' (log X)' : ''), '') + '</svg>';
+    tcCapMarker(ax, t) + tcFrame('Metal removed by cap' + (xlog ? ' (log X)' : ''), '') + '</svg>';
 }
 
 // Reposition every cap marker + refresh the stats strip (drag-time path —
 // curves are static, only the markers and numbers move)
-function auxTopcutPositionCaps() {
-  var t = auxTopcut;
+function auxTopcutPositionCaps(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var t = ds.topcut;
   if (!t || !t.values) return;
-  document.querySelectorAll('#auxTopcut .tc-svg').forEach(function(svg) {
+  var topcutEl = auxQ('[data-aux="topcutView"]', root);
+  if (!topcutEl) return;
+  topcutEl.querySelectorAll('.tc-svg').forEach(function(svg) {
     var x0 = parseFloat(svg.dataset.x0), x1 = parseFloat(svg.dataset.x1), xlog = svg.dataset.xlog === '1';
     var P = TC_PLOT, plotW = P.W - P.padL - P.padR;
     var lx0 = xlog ? Math.log10(x0) : x0, lx1 = xlog ? Math.log10(x1) : x1;
@@ -16257,40 +16335,44 @@ function auxTopcutPositionCaps() {
     txt.textContent = formatNum(t.cap);
     txt.setAttribute('text-anchor', x > P.W * 0.8 ? 'end' : (x < P.W * 0.2 ? 'start' : 'middle'));
   });
-  var strip = auxQ('[data-aux="topcutStats"]');
+  var strip = auxQ('[data-aux="topcutStats"]', root);
   if (strip) {
-    var un = auxTopcutCappedStats(t.values[t.values.length - 1]);
-    strip.innerHTML = auxTopcutStatsHtml(un, auxTopcutCappedStats(t.cap));
+    var un = auxTopcutCappedStats(t.values[t.values.length - 1], t);
+    strip.innerHTML = auxTopcutStatsHtml(un, auxTopcutCappedStats(t.cap, t), t);
   }
-  var inp = auxQ('[data-aux="topcutCap"]');
+  var inp = auxQ('[data-aux="topcutCap"]', root);
   if (inp && document.activeElement !== inp) inp.value = formatNum(t.cap);
 }
 
-function auxTopcutSetCap(c, save) {
-  var t = auxTopcut;
+function auxTopcutSetCap(c, save, ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var t = ds.topcut;
   if (!t || !t.values || !isFinite(c)) return;
   var m = t.values.length;
   t.cap = Math.min(Math.max(c, t.values[0]), t.values[m - 1]);
-  auxTopcutPositionCaps();
+  auxTopcutPositionCaps(ds, root);
   if (save && typeof autoSaveProject === 'function') autoSaveProject();
 }
 
-function loadAuxTopcut() {
-  if (!auxFile || !auxPreflightData) return;
-  var sel = auxQ('[data-aux="topcutVar"]');
-  var varName = sel ? sel.value : (auxTopcut && auxTopcut.varName);
+function loadAuxTopcut(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!ds.file || !ds.preflight) return;
+  var sel = auxQ('[data-aux="topcutVar"]', root);
+  var varName = sel ? sel.value : (ds.topcut && ds.topcut.varName);
   if (!varName) return;
-  var $st = auxQ('[data-aux="topcutStatus"]');
+  var $st = auxQ('[data-aux="topcutStatus"]', root);
   function tfail(msg) {
     if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
     if (auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} auxTopcutWorker = null; }
   }
   // Declustered mode: weights ride per-row, fingerprint-gated like every
   // other consumer of the declus weights
-  var useDeclus = !!(auxTopcut && auxTopcut.useDeclus);
+  var useDeclus = !!(ds.topcut && ds.topcut.useDeclus);
   var declusWeights = null;
   if (useDeclus) {
-    if (typeof auxDeclusFresh === 'function' && auxDeclusFresh()) declusWeights = auxDeclus.weights;
+    if (typeof auxDeclusFresh === 'function' && auxDeclusFresh(ds)) declusWeights = ds.declus.weights;
     else { tfail('declustered weights missing or stale — run Declustering on the sidebar'); return; }
   }
   if (auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} }
@@ -16298,17 +16380,17 @@ function loadAuxTopcut() {
   if ($st) { $st.textContent = '0%'; $st.style.color = ''; }
   auxTopcutWorker.postMessage({
     mode: 'colvalues',
-    file: auxFile,
-    zipEntry: auxPreflightData.selectedZipEntry || null,
-    globalFilter: auxFilter ? { expression: auxFilter.expression } : null,
-    calcolCode: auxCalcolCode || null,
-    calcolMeta: auxCalcolMeta.length > 0 ? auxCalcolMeta : null,
-    resolvedTypes: auxPreflightData.autoTypes,
+    file: ds.file,
+    zipEntry: ds.preflight.selectedZipEntry || null,
+    globalFilter: ds.filter ? { expression: ds.filter.expression } : null,
+    calcolCode: ds.calcolCode || null,
+    calcolMeta: ds.calcolMeta.length > 0 ? ds.calcolMeta : null,
+    resolvedTypes: ds.preflight.autoTypes,
     varColName: varName,
     weightArray: declusWeights,
-    rowVarOverride: AUX_ROW_VAR,
-    dmEndianness: auxPreflightData.dmEndianness || null,
-    dmFormat: auxPreflightData.dmFormat || null
+    rowVarOverride: ds.rowVar,
+    dmEndianness: ds.preflight.dmEndianness || null,
+    dmFormat: ds.preflight.dmFormat || null
   });
   auxTopcutWorker.onerror = function(e) { tfail(e.message || 'unknown error'); };
   auxTopcutWorker.onmessage = function(e) {
@@ -16330,32 +16412,35 @@ function loadAuxTopcut() {
         S[i + 1] = S[i] + wi * msg.values[i];
         SS[i + 1] = SS[i] + wi * msg.values[i] * msg.values[i];
       }
-      var prevCap = (auxTopcut && auxTopcut.varName === varName) ? auxTopcut.cap : null;
-      var prevXlog = (auxTopcut && auxTopcut.varName === varName) ? auxTopcut.xlog : undefined;
+      var prevCap = (ds.topcut && ds.topcut.varName === varName) ? ds.topcut.cap : null;
+      var prevXlog = (ds.topcut && ds.topcut.varName === varName) ? ds.topcut.xlog : undefined;
       // Default scale: log when the data is strictly positive and spans
       // ~2 decades (lognormal-shaped) — a seed, the toggle is right there
       var autoLog = msg.values[0] > 0 && (msg.values[m - 1] / msg.values[0] > 50);
-      auxTopcut = {
+      ds.topcut = {
         varName: varName, cap: prevCap,
         xlog: prevXlog !== undefined ? prevXlog : autoLog,
         useDeclus: useDeclus,
         values: msg.values, weights: msg.weights || null,
         prefixW: PW, prefixS: S, prefixSS: SS,
         n: msg.n, finite: msg.finite, weightExcluded: msg.weightExcluded || 0,
-        fingerprint: auxTopcutFingerprintNow()
+        fingerprint: auxTopcutFingerprintNow(ds)
       };
-      renderAuxTopcut();
+      renderAuxTopcut(ds, root);
       if (typeof autoSaveProject === 'function') autoSaveProject();
     }
   };
 }
 
-function auxTopcutCopyCalcol() {
-  var t = auxTopcut;
+function auxTopcutCopyCalcol(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var t = ds.topcut;
   if (!t || t.cap == null) return;
+  var rv = ds.rowVar;
   var safe = t.varName.replace(/[^\w]/g, '_');
-  var code = 'aux.' + safe + '_cap = cap(aux.' + t.varName + ', ' + formatNum(t.cap) + ');';
-  var done = auxQ('[data-aux="topcutCopied"]');
+  var code = rv + '.' + safe + '_cap = cap(' + rv + '.' + t.varName + ', ' + formatNum(t.cap) + ');';
+  var done = auxQ('[data-aux="topcutCopied"]', root);
   function ok() { if (done) { done.textContent = 'copied — paste in Calc (Aux mode)'; setTimeout(function() { if (done) done.textContent = ''; }, 3000); } }
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(code).then(ok, function() { if (done) done.textContent = code; });
@@ -16364,83 +16449,99 @@ function auxTopcutCopyCalcol() {
   }
 }
 
-// ── Wiring (static container — listeners attach once) ──
-if ($auxViewToggle) {
-  $auxViewToggle.addEventListener('click', function(e) {
-    var btn = e.target.closest('.aux-view-btn');
-    if (!btn) return;
-    auxView = btn.dataset.auxview;
-    renderAuxView();
-    if (typeof autoSaveProject === 'function') autoSaveProject();
-  });
+// ── Wiring — the top-cut + view-toggle listeners for one dataset instance ──
+// Called from wireDatasetPanel (auxtab.js) so a cloned panel wires the same.
+function wireDatasetTopcut(root, ds) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!root) return;
+  var viewToggle = auxQ('[data-aux="viewToggle"]', root);
+  var topcutEl = auxQ('[data-aux="topcutView"]', root);
+
+  if (viewToggle) {
+    viewToggle.addEventListener('click', function(e) {
+      var btn = e.target.closest('.aux-view-btn');
+      if (!btn) return;
+      ds.view = btn.dataset.auxview;
+      renderAuxView(ds, root);
+      if (typeof autoSaveProject === 'function') autoSaveProject();
+    });
+  }
+  if (topcutEl) {
+    topcutEl.addEventListener('click', function(e) {
+      var act = e.target.dataset ? e.target.dataset.act : null;
+      if (act === 'auxTopcutLoad') loadAuxTopcut(ds, root);
+      else if (act === 'auxTopcutCopy') auxTopcutCopyCalcol(ds, root);
+      else if (act === 'auxTopcutWRaw' || act === 'auxTopcutWDeclus') {
+        if (!ds.topcut) return;
+        var wantDeclus = act === 'auxTopcutWDeclus';
+        if (wantDeclus && !(typeof auxDeclusFresh === 'function' && auxDeclusFresh(ds))) return; // disabled anyway
+        if (!!ds.topcut.useDeclus !== wantDeclus) {
+          ds.topcut.useDeclus = wantDeclus;
+          // The distribution itself changes — reload as pairs
+          loadAuxTopcut(ds, root);
+          if (typeof autoSaveProject === 'function') autoSaveProject();
+        }
+      }
+      else if (act === 'auxTopcutXLin' || act === 'auxTopcutXLog') {
+        if (!ds.topcut || !ds.topcut.values) return;
+        var wantLog = act === 'auxTopcutXLog';
+        if (wantLog && !(ds.topcut.values[0] > 0)) return; // disabled anyway
+        if (!!ds.topcut.xlog !== wantLog) {
+          ds.topcut.xlog = wantLog;
+          renderAuxTopcut(ds, root);
+          if (typeof autoSaveProject === 'function') autoSaveProject();
+        }
+      }
+    });
+    topcutEl.addEventListener('change', function(e) {
+      var dx = e.target.dataset ? e.target.dataset.aux : null;
+      if (dx === 'topcutVar') {
+        // Variable switch invalidates the loaded distribution (weight mode carries over)
+        if (ds.topcut && ds.topcut.varName !== e.target.value) {
+          ds.topcut = { varName: e.target.value, cap: null, values: null, useDeclus: !!ds.topcut.useDeclus };
+          renderAuxTopcut(ds, root);
+          if (typeof autoSaveProject === 'function') autoSaveProject();
+        }
+      } else if (dx === 'topcutCap') {
+        var c = parseFloat(e.target.value);
+        if (isFinite(c)) auxTopcutSetCap(c, true, ds, root);
+      }
+    });
+    // Cap drag across any plot — the svg is captured at pointerdown so the drag
+    // keeps tracking even when the pointer leaves it
+    topcutEl.addEventListener('pointerdown', function(e) {
+      var svg = e.target.closest ? e.target.closest('.tc-svg') : null;
+      if (!svg || !ds.topcut || !ds.topcut.values) return;
+      var P = TC_PLOT;
+      var x0 = parseFloat(svg.dataset.x0), x1 = parseFloat(svg.dataset.x1), xlog = svg.dataset.xlog === '1';
+      function capFrom(ev) {
+        var rect = svg.getBoundingClientRect();
+        var vx = (ev.clientX - rect.left) * (P.W / rect.width);
+        var frac = Math.min(1, Math.max(0, (vx - P.padL) / (P.W - P.padL - P.padR)));
+        if (xlog) return Math.pow(10, Math.log10(x0) + frac * (Math.log10(x1) - Math.log10(x0)));
+        return x0 + frac * (x1 - x0);
+      }
+      auxTopcutSetCap(capFrom(e), false, ds, root);
+      e.preventDefault();
+      function onMove(ev) { auxTopcutSetCap(capFrom(ev), false, ds, root); }
+      function onUp() {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        auxTopcutSetCap(ds.topcut.cap, true, ds, root); // settle + autosave
+      }
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    });
+  }
 }
-if ($auxTopcut) {
-  $auxTopcut.addEventListener('click', function(e) {
-    var act = e.target.dataset ? e.target.dataset.act : null;
-    if (act === 'auxTopcutLoad') loadAuxTopcut();
-    else if (act === 'auxTopcutCopy') auxTopcutCopyCalcol();
-    else if (act === 'auxTopcutWRaw' || act === 'auxTopcutWDeclus') {
-      if (!auxTopcut) return;
-      var wantDeclus = act === 'auxTopcutWDeclus';
-      if (wantDeclus && !(typeof auxDeclusFresh === 'function' && auxDeclusFresh())) return; // disabled anyway
-      if (!!auxTopcut.useDeclus !== wantDeclus) {
-        auxTopcut.useDeclus = wantDeclus;
-        // The distribution itself changes — reload as pairs
-        loadAuxTopcut();
-        if (typeof autoSaveProject === 'function') autoSaveProject();
-      }
-    }
-    else if (act === 'auxTopcutXLin' || act === 'auxTopcutXLog') {
-      if (!auxTopcut || !auxTopcut.values) return;
-      var wantLog = act === 'auxTopcutXLog';
-      if (wantLog && !(auxTopcut.values[0] > 0)) return; // disabled anyway
-      if (!!auxTopcut.xlog !== wantLog) {
-        auxTopcut.xlog = wantLog;
-        renderAuxTopcut();
-        if (typeof autoSaveProject === 'function') autoSaveProject();
-      }
-    }
-  });
-  $auxTopcut.addEventListener('change', function(e) {
-    var dx = e.target.dataset ? e.target.dataset.aux : null;
-    if (dx === 'topcutVar') {
-      // Variable switch invalidates the loaded distribution (weight mode carries over)
-      if (auxTopcut && auxTopcut.varName !== e.target.value) {
-        auxTopcut = { varName: e.target.value, cap: null, values: null, useDeclus: !!auxTopcut.useDeclus };
-        renderAuxTopcut();
-        if (typeof autoSaveProject === 'function') autoSaveProject();
-      }
-    } else if (dx === 'topcutCap') {
-      var c = parseFloat(e.target.value);
-      if (isFinite(c)) auxTopcutSetCap(c, true);
-    }
-  });
-  // Cap drag across any plot — the svg is captured at pointerdown so the drag
-  // keeps tracking even when the pointer leaves it
-  $auxTopcut.addEventListener('pointerdown', function(e) {
-    var svg = e.target.closest ? e.target.closest('.tc-svg') : null;
-    if (!svg || !auxTopcut || !auxTopcut.values) return;
-    var P = TC_PLOT;
-    var x0 = parseFloat(svg.dataset.x0), x1 = parseFloat(svg.dataset.x1), xlog = svg.dataset.xlog === '1';
-    function capFrom(ev) {
-      var rect = svg.getBoundingClientRect();
-      var vx = (ev.clientX - rect.left) * (P.W / rect.width);
-      var frac = Math.min(1, Math.max(0, (vx - P.padL) / (P.W - P.padL - P.padR)));
-      if (xlog) return Math.pow(10, Math.log10(x0) + frac * (Math.log10(x1) - Math.log10(x0)));
-      return x0 + frac * (x1 - x0);
-    }
-    auxTopcutSetCap(capFrom(e), false);
-    e.preventDefault();
-    function onMove(ev) { auxTopcutSetCap(capFrom(ev), false); }
-    function onUp() {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      auxTopcutSetCap(auxTopcut.cap, true); // settle + autosave
-    }
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  });
-}
+
+// ── Wire the static aux panel once at load (last of the dataset modules,
+// so both wireDatasetPanel and wireDatasetTopcut are defined). ──
+(function() {
+  var auxDs = dsById('aux');
+  if (auxDs && typeof wireDatasetPanel === 'function') wireDatasetPanel(dsConfigRoot(auxDs), auxDs);
+})();
 
 // ─── Result Cache (IndexedDB) ──────────────────────────────────────────
 

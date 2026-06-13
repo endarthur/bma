@@ -6,44 +6,52 @@
 // log-probability, mean & CV vs cap, and % metal above cap. No auto-pick:
 // the plots are the evidence, the user moves the line. Applying a cap is a
 // one-click calcol (cap() already lives in the Math preamble).
+//
+// A10 phase 1g-b: parameterized by (ds, root) like auxtab.js. The svg
+// builders take the topcut state object t (= ds.topcut) directly; the worker
+// handle (auxTopcutWorker) stays global for the single aux dataset.
 
-var $auxViewToggle = document.getElementById('auxViewToggle');
-var $auxTopcut = document.getElementById('auxTopcut');
-
-function auxTopcutFingerprintNow() {
-  if (!auxFile || !auxPreflightData) return null;
-  var useDeclus = !!(auxTopcut && auxTopcut.useDeclus);
+function auxTopcutFingerprintNow(ds) {
+  ds = ds || dsById('aux');
+  if (!ds.file || !ds.preflight) return null;
+  var useDeclus = !!(ds.topcut && ds.topcut.useDeclus);
   return JSON.stringify({
-    f: auxFile.name + '|' + auxFile.size,
-    z: auxPreflightData.selectedZipEntry || null,
-    flt: auxFilter ? auxFilter.expression : '',
-    cc: auxCalcolCode || '',
+    f: ds.file.name + '|' + ds.file.size,
+    z: ds.preflight.selectedZipEntry || null,
+    flt: ds.filter ? ds.filter.expression : '',
+    cc: ds.calcolCode || '',
     // Weight mode is part of the distribution's identity: flipping
     // Raw | Declustered (or re-running declus) demands a reload
     uw: useDeclus,
-    dw: useDeclus && auxDeclus ? auxDeclus.fingerprint : null
+    dw: useDeclus && ds.declus ? ds.declus.fingerprint : null
   });
 }
 
-function auxTopcutFresh() {
-  return !!(auxTopcut && auxTopcut.values && auxTopcut.fingerprint === auxTopcutFingerprintNow());
+function auxTopcutFresh(ds) {
+  ds = ds || dsById('aux');
+  return !!(ds.topcut && ds.topcut.values && ds.topcut.fingerprint === auxTopcutFingerprintNow(ds));
 }
 
-function renderAuxView() {
-  if (!$auxViewToggle) return;
-  var hasAux = !!auxPreflightData;
-  $auxViewToggle.style.display = hasAux ? '' : 'none';
-  $auxViewToggle.querySelectorAll('.aux-view-btn').forEach(function(b) {
-    b.classList.toggle('active', b.dataset.auxview === auxView);
+function renderAuxView(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var viewToggle = auxQ('[data-aux="viewToggle"]', root);
+  if (!viewToggle) return;
+  var hasAux = !!ds.preflight;
+  viewToggle.style.display = hasAux ? '' : 'none';
+  viewToggle.querySelectorAll('.aux-view-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.auxview === ds.view);
   });
-  var showTopcut = hasAux && auxView === 'topcut';
-  var showSummary = hasAux && auxView === 'summary';
-  if ($auxPreview) $auxPreview.style.display = (showTopcut || showSummary) ? 'none' : '';
-  if ($auxTopcut) $auxTopcut.style.display = showTopcut ? '' : 'none';
-  var $auxSummary = auxQ('#auxSummary');
-  if ($auxSummary) $auxSummary.style.display = showSummary ? '' : 'none';
-  if (showTopcut) renderAuxTopcut();
-  if (showSummary && typeof renderAuxSummary === 'function') renderAuxSummary();
+  var showTopcut = hasAux && ds.view === 'topcut';
+  var showSummary = hasAux && ds.view === 'summary';
+  var preview = auxQ('[data-aux="preview"]', root);
+  if (preview) preview.style.display = (showTopcut || showSummary) ? 'none' : '';
+  var topcut = auxQ('[data-aux="topcutView"]', root);
+  if (topcut) topcut.style.display = showTopcut ? '' : 'none';
+  var summary = auxQ('[data-aux="summaryView"]', root);
+  if (summary) summary.style.display = showSummary ? '' : 'none';
+  if (showTopcut) renderAuxTopcut(ds, root);
+  if (showSummary && typeof renderAuxSummary === 'function') renderAuxSummary(ds, root);
 }
 
 // ── Capped statistics from (weighted) prefix sums ──
@@ -52,8 +60,7 @@ function renderAuxView() {
 // arithmetic: sum' = S[k] + (W−W[k])·c, ss' = SS[k] + (W−W[k])·c².
 // Weighted runs use population variance, raw keeps the sample form —
 // the same convention as every other weighted statistic in BMA.
-function auxTopcutCappedStats(c) {
-  var t = auxTopcut;
+function auxTopcutCappedStats(c, t) {
   var v = t.values, m = v.length;
   var lo = 0, hi = m;
   while (lo < hi) { var mid = (lo + hi) >> 1; if (v[mid] <= c) lo = mid + 1; else hi = mid; }
@@ -76,33 +83,36 @@ function auxTopcutCappedStats(c) {
   };
 }
 
-function renderAuxTopcut() {
-  if (!$auxTopcut || !auxPreflightData) return;
-  var t = auxTopcut;
+function renderAuxTopcut(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var topcutEl = auxQ('[data-aux="topcutView"]', root);
+  if (!topcutEl || !ds.preflight) return;
+  var t = ds.topcut;
 
   // Variable options: numeric raw columns + numeric aux calcols
   var chosen = (t && t.varName) || null;
   var varOpts = '';
-  for (var i = 0; i < auxPreflightData.header.length; i++) {
-    if ((auxPreflightData.autoTypes || [])[i] !== 'numeric') continue;
-    var nm = auxPreflightData.header[i];
+  for (var i = 0; i < ds.preflight.header.length; i++) {
+    if ((ds.preflight.autoTypes || [])[i] !== 'numeric') continue;
+    var nm = ds.preflight.header[i];
     if (chosen === null) chosen = nm;
     varOpts += '<option value="' + esc(nm) + '"' + (nm === chosen ? ' selected' : '') + '>' + esc(nm) + '</option>';
   }
-  for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
-    if (auxCalcolMeta[ci].type !== 'numeric') continue;
-    var cn = auxCalcolMeta[ci].name;
+  for (var ci = 0; ci < ds.calcolMeta.length; ci++) {
+    if (ds.calcolMeta[ci].type !== 'numeric') continue;
+    var cn = ds.calcolMeta[ci].name;
     varOpts += '<option value="' + esc(cn) + '"' + (cn === chosen ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
   }
 
   var html = '<div class="tc-toolbar">' +
     '<label>Variable</label>' +
     '<select class="aux-select" data-aux="topcutVar" style="width:auto;min-width:120px">' + varOpts + '</select>' +
-    '<button class="aux-from-main-btn" data-act="auxTopcutLoad">' + (auxTopcutFresh() ? 'Reload' : 'Load distribution') + '</button>' +
+    '<button class="aux-from-main-btn" data-act="auxTopcutLoad">' + (auxTopcutFresh(ds) ? 'Reload' : 'Load distribution') + '</button>' +
     '<span class="aux-hint" data-aux="topcutStatus" style="margin:0"></span>' +
   '</div>';
 
-  if (!auxTopcutFresh()) {
+  if (!auxTopcutFresh(ds)) {
     if (t && t.varName && !t.values) {
       html += '<div class="tc-empty">Restored top-cut config (' + esc(t.varName) + (t.cap != null ? ', cap ' + formatNum(t.cap) : '') + ') — load the distribution to continue.</div>';
     } else if (t && t.values) {
@@ -110,7 +120,7 @@ function renderAuxTopcut() {
     } else {
       html += '<div class="tc-empty">Load a variable’s sample distribution to analyse top cuts: histogram, log-probability, mean & CV vs cap, and metal above cap, with a draggable cap line across all four.</div>';
     }
-    $auxTopcut.innerHTML = html;
+    topcutEl.innerHTML = html;
     return;
   }
 
@@ -119,12 +129,12 @@ function renderAuxTopcut() {
   if (t.cap == null || !(t.cap >= vMin && t.cap <= vMax)) {
     t.cap = t.values[Math.min(m - 1, Math.floor(0.99 * m))]; // starting handle at P99 — a position, not a recommendation
   }
-  var un = auxTopcutCappedStats(vMax);
-  var cs = auxTopcutCappedStats(t.cap);
+  var un = auxTopcutCappedStats(vMax, t);
+  var cs = auxTopcutCappedStats(t.cap, t);
 
   var canLog = vMin > 0;
   if (!canLog) t.xlog = false;
-  html += '<div class="tc-stats" data-aux="topcutStats">' + auxTopcutStatsHtml(un, cs) + '</div>';
+  html += '<div class="tc-stats" data-aux="topcutStats">' + auxTopcutStatsHtml(un, cs, t) + '</div>';
   html += '<div class="tc-caprow">' +
     '<label>Cap</label>' +
     '<input type="text" class="aux-input" data-aux="topcutCap" value="' + formatNum(t.cap) + '" spellcheck="false" style="width:90px">' +
@@ -133,7 +143,7 @@ function renderAuxTopcut() {
     '<span style="margin-left:auto;display:flex;gap:0.25rem">' +
       '<button class="aux-view-btn' + (!t.useDeclus ? ' active' : '') + '" data-act="auxTopcutWRaw" title="raw sample distribution — the capping convention">Raw</button>' +
       '<button class="aux-view-btn' + (t.useDeclus ? ' active' : '') + '" data-act="auxTopcutWDeclus"' +
-        (typeof auxDeclusFresh === 'function' && auxDeclusFresh()
+        (typeof auxDeclusFresh === 'function' && auxDeclusFresh(ds)
           ? ' title="weight every statistic by the declustering weights — capped means/metal unbiased by drilling pattern"'
           : ' disabled title="run Declustering on the sidebar first (weights missing or stale)"') + '>Declustered</button>' +
       '<span style="width:0.4rem"></span>' +
@@ -143,22 +153,21 @@ function renderAuxTopcut() {
     '</span>' +
   '</div>';
   html += '<div class="tc-grid">' +
-    '<div class="tc-plot">' + auxTopcutHistSvg() + '</div>' +
-    '<div class="tc-plot">' + auxTopcutLogProbSvg() + '</div>' +
-    '<div class="tc-plot">' + auxTopcutMeanCvSvg() + '</div>' +
-    '<div class="tc-plot">' + auxTopcutMetalSvg() + '</div>' +
+    '<div class="tc-plot">' + auxTopcutHistSvg(t) + '</div>' +
+    '<div class="tc-plot">' + auxTopcutLogProbSvg(t) + '</div>' +
+    '<div class="tc-plot">' + auxTopcutMeanCvSvg(t) + '</div>' +
+    '<div class="tc-plot">' + auxTopcutMetalSvg(t) + '</div>' +
   '</div>';
   html += '<div class="aux-hint">drag the cap line on any plot (or type a value) · n ' + m.toLocaleString() +
     (t.n > m + (t.weightExcluded || 0) ? ' (+' + (t.n - m - (t.weightExcluded || 0)) + ' non-numeric/null excluded)' : '') +
     (t.weightExcluded ? ' (+' + t.weightExcluded + ' invalid-weight excluded)' : '') +
     ' · ' + (t.weights ? 'declustering-weighted distribution' : 'raw unweighted sample distribution (the capping convention)') + '</div>';
 
-  $auxTopcut.innerHTML = html;
-  auxTopcutPositionCaps();
+  topcutEl.innerHTML = html;
+  auxTopcutPositionCaps(ds, root);
 }
 
-function auxTopcutStatsHtml(un, cs) {
-  var t = auxTopcut;
+function auxTopcutStatsHtml(un, cs, t) {
   function d(a, b) {
     if (b === 0 || b == null || a == null) return '';
     var p = (a - b) / Math.abs(b) * 100;
@@ -192,9 +201,9 @@ function tcFrame(title, yLabel) {
     (yLabel ? '<text x="10" y="' + ((P.padT + P.H - P.padB) / 2) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="9" transform="rotate(-90, 10, ' + ((P.padT + P.H - P.padB) / 2) + ')">' + yLabel + '</text>' : '');
 }
 
-function tcCapMarker(ax) {
+function tcCapMarker(ax, t) {
   var P = TC_PLOT;
-  var x = ax.sx(auxTopcut.cap).toFixed(1);
+  var x = ax.sx(t.cap).toFixed(1);
   return '<g class="tc-cap"><line x1="' + x + '" x2="' + x + '" y1="' + P.padT + '" y2="' + (P.H - P.padB) + '" stroke="var(--red, #e05555)" stroke-width="1.2" stroke-dasharray="5,3"/>' +
     '<text x="' + x + '" y="' + (P.padT - 4 + 10) + '" fill="var(--red, #e05555)" font-size="8.5" text-anchor="middle"></text></g>';
 }
@@ -215,8 +224,8 @@ function tcSvgOpen(ax) {
   return '<svg class="tc-svg" viewBox="0 0 ' + P.W + ' ' + P.H + '"' + ax.attrs + '><rect width="' + P.W + '" height="' + P.H + '" fill="var(--bg)" rx="3"/>';
 }
 
-function auxTopcutHistSvg() {
-  var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
+function auxTopcutHistSvg(t) {
+  var v = t.values, m = v.length, P = TC_PLOT;
   var xlog = !!t.xlog;
   var x0 = v[0], x1 = v[m - 1];
   if (x1 <= x0) x1 = x0 + 1;
@@ -239,11 +248,11 @@ function auxTopcutHistSvg() {
     var bh = bins[b2] / bMax * plotH;
     bars += '<rect x="' + (P.padL + b2 * bw).toFixed(1) + '" y="' + (P.padT + plotH - bh).toFixed(1) + '" width="' + Math.max(0.5, bw - 0.6).toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="rgba(240,178,50,0.45)"/>';
   }
-  return tcSvgOpen(ax) + tcXTicks(ax, x0, x1, xlog) + bars + tcCapMarker(ax) + tcFrame('Histogram' + (xlog ? ' (log X)' : ''), 'count') + '</svg>';
+  return tcSvgOpen(ax) + tcXTicks(ax, x0, x1, xlog) + bars + tcCapMarker(ax, t) + tcFrame('Histogram' + (xlog ? ' (log X)' : ''), 'count') + '</svg>';
 }
 
-function auxTopcutLogProbSvg() {
-  var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
+function auxTopcutLogProbSvg(t) {
+  var v = t.values, m = v.length, P = TC_PLOT;
   var xlog = !!t.xlog;
   var x0 = v[0], x1 = v[m - 1];
   if (x1 <= x0) x1 = x0 + 1;
@@ -269,12 +278,12 @@ function auxTopcutLogProbSvg() {
     if (p < pLo || p > pHi) continue;
     pts += '<circle cx="' + ax.sx(v[i]).toFixed(1) + '" cy="' + sy(p).toFixed(1) + '" r="1.2" fill="var(--action)" opacity="0.7"/>';
   }
-  return tcSvgOpen(ax) + grid + tcXTicks(ax, x0, x1, xlog) + pts + tcCapMarker(ax) +
+  return tcSvgOpen(ax) + grid + tcXTicks(ax, x0, x1, xlog) + pts + tcCapMarker(ax, t) +
     tcFrame((xlog ? 'Log-probability' : 'Probability (linear X)') + (t.weights ? ' · declustered' : ''), 'cum %') + '</svg>';
 }
 
-function auxTopcutMeanCvSvg() {
-  var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
+function auxTopcutMeanCvSvg(t) {
+  var v = t.values, m = v.length, P = TC_PLOT;
   var xlog = !!t.xlog;
   var x0 = v[Math.floor(m * 0.5)], x1 = v[m - 1];
   if (x1 <= x0) { x0 = v[0]; x1 = v[m - 1] || x0 + 1; }
@@ -285,7 +294,7 @@ function auxTopcutMeanCvSvg() {
   for (var i = 0; i <= N; i++) {
     var c = xlog ? Math.pow(10, Math.log10(x0) + (Math.log10(x1) - Math.log10(x0)) * i / N)
                  : x0 + (x1 - x0) * i / N;
-    var s = auxTopcutCappedStats(c);
+    var s = auxTopcutCappedStats(c, t);
     means.push([c, s.mean]); cvs.push([c, s.cv]);
     if (s.mean < mnLo) mnLo = s.mean; if (s.mean > mnHi) mnHi = s.mean;
     if (s.cv != null) { if (s.cv < cvLo) cvLo = s.cv; if (s.cv > cvHi) cvHi = s.cv; }
@@ -302,11 +311,11 @@ function auxTopcutMeanCvSvg() {
   return tcSvgOpen(ax) + tcXTicks(ax, x0, x1, xlog) +
     '<path d="' + pM + '" fill="none" stroke="var(--action)" stroke-width="1.4"/>' +
     '<path d="' + pC + '" fill="none" stroke="var(--info)" stroke-width="1.2"/>' +
-    legend + tcCapMarker(ax) + tcFrame('Mean & CV vs cap' + (xlog ? ' (log X)' : ''), '') + '</svg>';
+    legend + tcCapMarker(ax, t) + tcFrame('Mean & CV vs cap' + (xlog ? ' (log X)' : ''), '') + '</svg>';
 }
 
-function auxTopcutMetalSvg() {
-  var t = auxTopcut, v = t.values, m = v.length, P = TC_PLOT;
+function auxTopcutMetalSvg(t) {
+  var v = t.values, m = v.length, P = TC_PLOT;
   var xlog = !!t.xlog;
   var x0 = v[0], x1 = v[m - 1];
   if (x1 <= x0) x1 = x0 + 1;
@@ -318,7 +327,7 @@ function auxTopcutMetalSvg() {
   for (var i = 0; i <= N; i++) {
     var c = xlog ? Math.pow(10, Math.log10(x0) + (Math.log10(x1) - Math.log10(x0)) * i / N)
                  : x0 + (x1 - x0) * i / N;
-    var s = auxTopcutCappedStats(c);
+    var s = auxTopcutCappedStats(c, t);
     pts2.push([c, s.metalRemovedPct]);
     if (s.metalRemovedPct > yMax) yMax = s.metalRemovedPct;
   }
@@ -333,15 +342,19 @@ function auxTopcutMetalSvg() {
   }
   return tcSvgOpen(ax) + grid + tcXTicks(ax, x0, x1, xlog) +
     '<path d="' + path + '" fill="none" stroke="var(--action)" stroke-width="1.4"/>' +
-    tcCapMarker(ax) + tcFrame('Metal removed by cap' + (xlog ? ' (log X)' : ''), '') + '</svg>';
+    tcCapMarker(ax, t) + tcFrame('Metal removed by cap' + (xlog ? ' (log X)' : ''), '') + '</svg>';
 }
 
 // Reposition every cap marker + refresh the stats strip (drag-time path —
 // curves are static, only the markers and numbers move)
-function auxTopcutPositionCaps() {
-  var t = auxTopcut;
+function auxTopcutPositionCaps(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var t = ds.topcut;
   if (!t || !t.values) return;
-  document.querySelectorAll('#auxTopcut .tc-svg').forEach(function(svg) {
+  var topcutEl = auxQ('[data-aux="topcutView"]', root);
+  if (!topcutEl) return;
+  topcutEl.querySelectorAll('.tc-svg').forEach(function(svg) {
     var x0 = parseFloat(svg.dataset.x0), x1 = parseFloat(svg.dataset.x1), xlog = svg.dataset.xlog === '1';
     var P = TC_PLOT, plotW = P.W - P.padL - P.padR;
     var lx0 = xlog ? Math.log10(x0) : x0, lx1 = xlog ? Math.log10(x1) : x1;
@@ -355,40 +368,44 @@ function auxTopcutPositionCaps() {
     txt.textContent = formatNum(t.cap);
     txt.setAttribute('text-anchor', x > P.W * 0.8 ? 'end' : (x < P.W * 0.2 ? 'start' : 'middle'));
   });
-  var strip = auxQ('[data-aux="topcutStats"]');
+  var strip = auxQ('[data-aux="topcutStats"]', root);
   if (strip) {
-    var un = auxTopcutCappedStats(t.values[t.values.length - 1]);
-    strip.innerHTML = auxTopcutStatsHtml(un, auxTopcutCappedStats(t.cap));
+    var un = auxTopcutCappedStats(t.values[t.values.length - 1], t);
+    strip.innerHTML = auxTopcutStatsHtml(un, auxTopcutCappedStats(t.cap, t), t);
   }
-  var inp = auxQ('[data-aux="topcutCap"]');
+  var inp = auxQ('[data-aux="topcutCap"]', root);
   if (inp && document.activeElement !== inp) inp.value = formatNum(t.cap);
 }
 
-function auxTopcutSetCap(c, save) {
-  var t = auxTopcut;
+function auxTopcutSetCap(c, save, ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var t = ds.topcut;
   if (!t || !t.values || !isFinite(c)) return;
   var m = t.values.length;
   t.cap = Math.min(Math.max(c, t.values[0]), t.values[m - 1]);
-  auxTopcutPositionCaps();
+  auxTopcutPositionCaps(ds, root);
   if (save && typeof autoSaveProject === 'function') autoSaveProject();
 }
 
-function loadAuxTopcut() {
-  if (!auxFile || !auxPreflightData) return;
-  var sel = auxQ('[data-aux="topcutVar"]');
-  var varName = sel ? sel.value : (auxTopcut && auxTopcut.varName);
+function loadAuxTopcut(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!ds.file || !ds.preflight) return;
+  var sel = auxQ('[data-aux="topcutVar"]', root);
+  var varName = sel ? sel.value : (ds.topcut && ds.topcut.varName);
   if (!varName) return;
-  var $st = auxQ('[data-aux="topcutStatus"]');
+  var $st = auxQ('[data-aux="topcutStatus"]', root);
   function tfail(msg) {
     if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
     if (auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} auxTopcutWorker = null; }
   }
   // Declustered mode: weights ride per-row, fingerprint-gated like every
   // other consumer of the declus weights
-  var useDeclus = !!(auxTopcut && auxTopcut.useDeclus);
+  var useDeclus = !!(ds.topcut && ds.topcut.useDeclus);
   var declusWeights = null;
   if (useDeclus) {
-    if (typeof auxDeclusFresh === 'function' && auxDeclusFresh()) declusWeights = auxDeclus.weights;
+    if (typeof auxDeclusFresh === 'function' && auxDeclusFresh(ds)) declusWeights = ds.declus.weights;
     else { tfail('declustered weights missing or stale — run Declustering on the sidebar'); return; }
   }
   if (auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} }
@@ -396,17 +413,17 @@ function loadAuxTopcut() {
   if ($st) { $st.textContent = '0%'; $st.style.color = ''; }
   auxTopcutWorker.postMessage({
     mode: 'colvalues',
-    file: auxFile,
-    zipEntry: auxPreflightData.selectedZipEntry || null,
-    globalFilter: auxFilter ? { expression: auxFilter.expression } : null,
-    calcolCode: auxCalcolCode || null,
-    calcolMeta: auxCalcolMeta.length > 0 ? auxCalcolMeta : null,
-    resolvedTypes: auxPreflightData.autoTypes,
+    file: ds.file,
+    zipEntry: ds.preflight.selectedZipEntry || null,
+    globalFilter: ds.filter ? { expression: ds.filter.expression } : null,
+    calcolCode: ds.calcolCode || null,
+    calcolMeta: ds.calcolMeta.length > 0 ? ds.calcolMeta : null,
+    resolvedTypes: ds.preflight.autoTypes,
     varColName: varName,
     weightArray: declusWeights,
-    rowVarOverride: AUX_ROW_VAR,
-    dmEndianness: auxPreflightData.dmEndianness || null,
-    dmFormat: auxPreflightData.dmFormat || null
+    rowVarOverride: ds.rowVar,
+    dmEndianness: ds.preflight.dmEndianness || null,
+    dmFormat: ds.preflight.dmFormat || null
   });
   auxTopcutWorker.onerror = function(e) { tfail(e.message || 'unknown error'); };
   auxTopcutWorker.onmessage = function(e) {
@@ -428,32 +445,35 @@ function loadAuxTopcut() {
         S[i + 1] = S[i] + wi * msg.values[i];
         SS[i + 1] = SS[i] + wi * msg.values[i] * msg.values[i];
       }
-      var prevCap = (auxTopcut && auxTopcut.varName === varName) ? auxTopcut.cap : null;
-      var prevXlog = (auxTopcut && auxTopcut.varName === varName) ? auxTopcut.xlog : undefined;
+      var prevCap = (ds.topcut && ds.topcut.varName === varName) ? ds.topcut.cap : null;
+      var prevXlog = (ds.topcut && ds.topcut.varName === varName) ? ds.topcut.xlog : undefined;
       // Default scale: log when the data is strictly positive and spans
       // ~2 decades (lognormal-shaped) — a seed, the toggle is right there
       var autoLog = msg.values[0] > 0 && (msg.values[m - 1] / msg.values[0] > 50);
-      auxTopcut = {
+      ds.topcut = {
         varName: varName, cap: prevCap,
         xlog: prevXlog !== undefined ? prevXlog : autoLog,
         useDeclus: useDeclus,
         values: msg.values, weights: msg.weights || null,
         prefixW: PW, prefixS: S, prefixSS: SS,
         n: msg.n, finite: msg.finite, weightExcluded: msg.weightExcluded || 0,
-        fingerprint: auxTopcutFingerprintNow()
+        fingerprint: auxTopcutFingerprintNow(ds)
       };
-      renderAuxTopcut();
+      renderAuxTopcut(ds, root);
       if (typeof autoSaveProject === 'function') autoSaveProject();
     }
   };
 }
 
-function auxTopcutCopyCalcol() {
-  var t = auxTopcut;
+function auxTopcutCopyCalcol(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var t = ds.topcut;
   if (!t || t.cap == null) return;
+  var rv = ds.rowVar;
   var safe = t.varName.replace(/[^\w]/g, '_');
-  var code = 'aux.' + safe + '_cap = cap(aux.' + t.varName + ', ' + formatNum(t.cap) + ');';
-  var done = auxQ('[data-aux="topcutCopied"]');
+  var code = rv + '.' + safe + '_cap = cap(' + rv + '.' + t.varName + ', ' + formatNum(t.cap) + ');';
+  var done = auxQ('[data-aux="topcutCopied"]', root);
   function ok() { if (done) { done.textContent = 'copied — paste in Calc (Aux mode)'; setTimeout(function() { if (done) done.textContent = ''; }, 3000); } }
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(code).then(ok, function() { if (done) done.textContent = code; });
@@ -462,80 +482,96 @@ function auxTopcutCopyCalcol() {
   }
 }
 
-// ── Wiring (static container — listeners attach once) ──
-if ($auxViewToggle) {
-  $auxViewToggle.addEventListener('click', function(e) {
-    var btn = e.target.closest('.aux-view-btn');
-    if (!btn) return;
-    auxView = btn.dataset.auxview;
-    renderAuxView();
-    if (typeof autoSaveProject === 'function') autoSaveProject();
-  });
+// ── Wiring — the top-cut + view-toggle listeners for one dataset instance ──
+// Called from wireDatasetPanel (auxtab.js) so a cloned panel wires the same.
+function wireDatasetTopcut(root, ds) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  if (!root) return;
+  var viewToggle = auxQ('[data-aux="viewToggle"]', root);
+  var topcutEl = auxQ('[data-aux="topcutView"]', root);
+
+  if (viewToggle) {
+    viewToggle.addEventListener('click', function(e) {
+      var btn = e.target.closest('.aux-view-btn');
+      if (!btn) return;
+      ds.view = btn.dataset.auxview;
+      renderAuxView(ds, root);
+      if (typeof autoSaveProject === 'function') autoSaveProject();
+    });
+  }
+  if (topcutEl) {
+    topcutEl.addEventListener('click', function(e) {
+      var act = e.target.dataset ? e.target.dataset.act : null;
+      if (act === 'auxTopcutLoad') loadAuxTopcut(ds, root);
+      else if (act === 'auxTopcutCopy') auxTopcutCopyCalcol(ds, root);
+      else if (act === 'auxTopcutWRaw' || act === 'auxTopcutWDeclus') {
+        if (!ds.topcut) return;
+        var wantDeclus = act === 'auxTopcutWDeclus';
+        if (wantDeclus && !(typeof auxDeclusFresh === 'function' && auxDeclusFresh(ds))) return; // disabled anyway
+        if (!!ds.topcut.useDeclus !== wantDeclus) {
+          ds.topcut.useDeclus = wantDeclus;
+          // The distribution itself changes — reload as pairs
+          loadAuxTopcut(ds, root);
+          if (typeof autoSaveProject === 'function') autoSaveProject();
+        }
+      }
+      else if (act === 'auxTopcutXLin' || act === 'auxTopcutXLog') {
+        if (!ds.topcut || !ds.topcut.values) return;
+        var wantLog = act === 'auxTopcutXLog';
+        if (wantLog && !(ds.topcut.values[0] > 0)) return; // disabled anyway
+        if (!!ds.topcut.xlog !== wantLog) {
+          ds.topcut.xlog = wantLog;
+          renderAuxTopcut(ds, root);
+          if (typeof autoSaveProject === 'function') autoSaveProject();
+        }
+      }
+    });
+    topcutEl.addEventListener('change', function(e) {
+      var dx = e.target.dataset ? e.target.dataset.aux : null;
+      if (dx === 'topcutVar') {
+        // Variable switch invalidates the loaded distribution (weight mode carries over)
+        if (ds.topcut && ds.topcut.varName !== e.target.value) {
+          ds.topcut = { varName: e.target.value, cap: null, values: null, useDeclus: !!ds.topcut.useDeclus };
+          renderAuxTopcut(ds, root);
+          if (typeof autoSaveProject === 'function') autoSaveProject();
+        }
+      } else if (dx === 'topcutCap') {
+        var c = parseFloat(e.target.value);
+        if (isFinite(c)) auxTopcutSetCap(c, true, ds, root);
+      }
+    });
+    // Cap drag across any plot — the svg is captured at pointerdown so the drag
+    // keeps tracking even when the pointer leaves it
+    topcutEl.addEventListener('pointerdown', function(e) {
+      var svg = e.target.closest ? e.target.closest('.tc-svg') : null;
+      if (!svg || !ds.topcut || !ds.topcut.values) return;
+      var P = TC_PLOT;
+      var x0 = parseFloat(svg.dataset.x0), x1 = parseFloat(svg.dataset.x1), xlog = svg.dataset.xlog === '1';
+      function capFrom(ev) {
+        var rect = svg.getBoundingClientRect();
+        var vx = (ev.clientX - rect.left) * (P.W / rect.width);
+        var frac = Math.min(1, Math.max(0, (vx - P.padL) / (P.W - P.padL - P.padR)));
+        if (xlog) return Math.pow(10, Math.log10(x0) + frac * (Math.log10(x1) - Math.log10(x0)));
+        return x0 + frac * (x1 - x0);
+      }
+      auxTopcutSetCap(capFrom(e), false, ds, root);
+      e.preventDefault();
+      function onMove(ev) { auxTopcutSetCap(capFrom(ev), false, ds, root); }
+      function onUp() {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        auxTopcutSetCap(ds.topcut.cap, true, ds, root); // settle + autosave
+      }
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    });
+  }
 }
-if ($auxTopcut) {
-  $auxTopcut.addEventListener('click', function(e) {
-    var act = e.target.dataset ? e.target.dataset.act : null;
-    if (act === 'auxTopcutLoad') loadAuxTopcut();
-    else if (act === 'auxTopcutCopy') auxTopcutCopyCalcol();
-    else if (act === 'auxTopcutWRaw' || act === 'auxTopcutWDeclus') {
-      if (!auxTopcut) return;
-      var wantDeclus = act === 'auxTopcutWDeclus';
-      if (wantDeclus && !(typeof auxDeclusFresh === 'function' && auxDeclusFresh())) return; // disabled anyway
-      if (!!auxTopcut.useDeclus !== wantDeclus) {
-        auxTopcut.useDeclus = wantDeclus;
-        // The distribution itself changes — reload as pairs
-        loadAuxTopcut();
-        if (typeof autoSaveProject === 'function') autoSaveProject();
-      }
-    }
-    else if (act === 'auxTopcutXLin' || act === 'auxTopcutXLog') {
-      if (!auxTopcut || !auxTopcut.values) return;
-      var wantLog = act === 'auxTopcutXLog';
-      if (wantLog && !(auxTopcut.values[0] > 0)) return; // disabled anyway
-      if (!!auxTopcut.xlog !== wantLog) {
-        auxTopcut.xlog = wantLog;
-        renderAuxTopcut();
-        if (typeof autoSaveProject === 'function') autoSaveProject();
-      }
-    }
-  });
-  $auxTopcut.addEventListener('change', function(e) {
-    var dx = e.target.dataset ? e.target.dataset.aux : null;
-    if (dx === 'topcutVar') {
-      // Variable switch invalidates the loaded distribution (weight mode carries over)
-      if (auxTopcut && auxTopcut.varName !== e.target.value) {
-        auxTopcut = { varName: e.target.value, cap: null, values: null, useDeclus: !!auxTopcut.useDeclus };
-        renderAuxTopcut();
-        if (typeof autoSaveProject === 'function') autoSaveProject();
-      }
-    } else if (dx === 'topcutCap') {
-      var c = parseFloat(e.target.value);
-      if (isFinite(c)) auxTopcutSetCap(c, true);
-    }
-  });
-  // Cap drag across any plot — the svg is captured at pointerdown so the drag
-  // keeps tracking even when the pointer leaves it
-  $auxTopcut.addEventListener('pointerdown', function(e) {
-    var svg = e.target.closest ? e.target.closest('.tc-svg') : null;
-    if (!svg || !auxTopcut || !auxTopcut.values) return;
-    var P = TC_PLOT;
-    var x0 = parseFloat(svg.dataset.x0), x1 = parseFloat(svg.dataset.x1), xlog = svg.dataset.xlog === '1';
-    function capFrom(ev) {
-      var rect = svg.getBoundingClientRect();
-      var vx = (ev.clientX - rect.left) * (P.W / rect.width);
-      var frac = Math.min(1, Math.max(0, (vx - P.padL) / (P.W - P.padL - P.padR)));
-      if (xlog) return Math.pow(10, Math.log10(x0) + frac * (Math.log10(x1) - Math.log10(x0)));
-      return x0 + frac * (x1 - x0);
-    }
-    auxTopcutSetCap(capFrom(e), false);
-    e.preventDefault();
-    function onMove(ev) { auxTopcutSetCap(capFrom(ev), false); }
-    function onUp() {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      auxTopcutSetCap(auxTopcut.cap, true); // settle + autosave
-    }
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  });
-}
+
+// ── Wire the static aux panel once at load (last of the dataset modules,
+// so both wireDatasetPanel and wireDatasetTopcut are defined). ──
+(function() {
+  var auxDs = dsById('aux');
+  if (auxDs && typeof wireDatasetPanel === 'function') wireDatasetPanel(dsConfigRoot(auxDs), auxDs);
+})();
