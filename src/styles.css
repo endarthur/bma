@@ -847,6 +847,45 @@ header .logo-mark {
   flex-direction: column;
   gap: 1rem;
 }
+
+/* ─── C6-4a: collapsible control sidebars (chevron rail) ──────────────────
+   .sb-rail is a permanent flex child of each X-body (left of the sidebar),
+   so it survives the sidebar's own innerHTML re-renders. ◀ collapses; when
+   the body is .sb-collapsed the sidebar (.sb-panel) hides and the rail
+   widens into a labeled ▶ strip to re-open it — handing the results the full
+   width (charts redraw via the C1b-0 width observers). Desktop only. */
+.sb-rail {
+  flex: 0 0 16px;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0 0;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: var(--bg1);
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-family: var(--mono);
+  transition: color 80ms, background 80ms, flex-basis 120ms;
+}
+.sb-rail:hover { color: var(--fg-bright); background: var(--bg2); }
+.sb-rail-icon { font-size: 0.68rem; line-height: 1; }
+.sb-rail-icon::before { content: '\25C0'; }   /* ◀ collapse */
+.sb-rail-label {
+  display: none;
+  font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase;
+  writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap;
+}
+@media (min-width: 701px) {
+  .sb-host.sb-collapsed > .sb-panel { display: none; }
+  .sb-host.sb-collapsed > .sb-rail { flex-basis: 28px; background: var(--bg2); }
+  .sb-host.sb-collapsed > .sb-rail:hover { background: var(--bg3); }
+  .sb-host.sb-collapsed > .sb-rail .sb-rail-icon::before { content: '\25B6'; }   /* ▶ expand */
+  .sb-host.sb-collapsed > .sb-rail .sb-rail-label { display: block; }
+}
+@media (max-width: 700px) { .sb-rail { display: none; } }
 /* Statistics tab — full-bleed sidebar + CDF panel */
 #panelStatistics.active { display: flex; flex-direction: column; }
 .stats-body {

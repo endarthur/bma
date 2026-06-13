@@ -91,6 +91,23 @@ serializes/applies layouts, a preset is canned JSON.
 
 ## Phase log
 
+- **C6-4a (whole-sidebar collapse) ✅ (2026-06-13)** — first C6-4 sub-slice
+  (the piece Arthur added to C5's scope). Every analysis surface's control
+  sidebar collapses to hand the results the full width: a permanent slim
+  chevron **rail** (`.sb-rail`, a flex child of each `X-body` inserted left of
+  the sidebar, so it survives the sidebar's own innerHTML re-renders) — ◀
+  collapses; when `.sb-collapsed` the sidebar (`.sb-panel`) hides and the rail
+  widens into a labeled vertical ▶ strip (the "slim labeled strip, not a bare
+  sliver"). Wired for Statistics / Categories / StatsCat / GT / Swath / Export
+  via `wsInitSidebars()` (workspace.js); state per-panel in `SIDEBAR_COLLAPSED`,
+  persisted as the project `sidebars.collapsed` key, restored in `applyProject`.
+  Charts redraw at the new width through the C1b-0 observers (verified: GT
+  content 849→1097px on collapse). Desktop only (`@media min-width:701px`;
+  rail hidden < 701 where sidebars stack). Suite 18/18 (c6-smoke +3 asserts;
+  `experiments/c6-4-shot.js`). **Remaining C6-4: 4b** the C5 sidebar flow
+  (collapsible *sections* within each sidebar, per-tab reorder, sticky
+  Generate — the "nine sections in a wall" fix) and **4c** the Categories pass
+  (sort buttons by the table, label the checkbox column).
 - **C6-3 (add-dataset surface) ✅ (2026-06-13)** — the aux empty state
   ("three floating blocks in a void") rebuilt as the **Add a dataset**
   surface, designed against [`a10-n-datasets.md`](a10-n-datasets.md) so it's

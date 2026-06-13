@@ -862,6 +862,45 @@ header .logo-mark {
   flex-direction: column;
   gap: 1rem;
 }
+
+/* ─── C6-4a: collapsible control sidebars (chevron rail) ──────────────────
+   .sb-rail is a permanent flex child of each X-body (left of the sidebar),
+   so it survives the sidebar's own innerHTML re-renders. ◀ collapses; when
+   the body is .sb-collapsed the sidebar (.sb-panel) hides and the rail
+   widens into a labeled ▶ strip to re-open it — handing the results the full
+   width (charts redraw via the C1b-0 width observers). Desktop only. */
+.sb-rail {
+  flex: 0 0 16px;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0 0;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: var(--bg1);
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-family: var(--mono);
+  transition: color 80ms, background 80ms, flex-basis 120ms;
+}
+.sb-rail:hover { color: var(--fg-bright); background: var(--bg2); }
+.sb-rail-icon { font-size: 0.68rem; line-height: 1; }
+.sb-rail-icon::before { content: '\25C0'; }   /* ◀ collapse */
+.sb-rail-label {
+  display: none;
+  font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase;
+  writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap;
+}
+@media (min-width: 701px) {
+  .sb-host.sb-collapsed > .sb-panel { display: none; }
+  .sb-host.sb-collapsed > .sb-rail { flex-basis: 28px; background: var(--bg2); }
+  .sb-host.sb-collapsed > .sb-rail:hover { background: var(--bg3); }
+  .sb-host.sb-collapsed > .sb-rail .sb-rail-icon::before { content: '\25B6'; }   /* ▶ expand */
+  .sb-host.sb-collapsed > .sb-rail .sb-rail-label { display: block; }
+}
+@media (max-width: 700px) { .sb-rail { display: none; } }
 /* Statistics tab — full-bleed sidebar + CDF panel */
 #panelStatistics.active { display: flex; flex-direction: column; }
 .stats-body {
@@ -5593,7 +5632,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 3083d76 — click to check for updates">3083d76</div>
+<div class="build-badge" id="buildBadge" title="build 8a04de0 — click to check for updates">8a04de0</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -16438,6 +16477,8 @@ function serializeProject() {
       focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null
     },
     tree: { open: catalogTreeOpen },
+    // C6-4a collapsed control sidebars (per-panel)
+    sidebars: { collapsed: (typeof SIDEBAR_COLLAPSED !== 'undefined') ? Array.from(SIDEBAR_COLLAPSED) : [] },
     // Rails workspace arrangement (C1b-2) — {v:1, rails: <serialized state>}
     layout: wsSerializeLayout(),
     // Drillhole-set recipe (A7 Phase 2, D8) — file identities + mapping +
@@ -16659,6 +16700,11 @@ async function applyProject(project) {
   // the coalesced re-render also re-aligns the tree rail's collapsed state
   catalogTreeOpen = (project.tree && project.tree.open !== undefined) ? project.tree.open : null;
   refreshCatalogTree();
+
+  // C6-4a: restore collapsed control sidebars
+  if (typeof wsApplySidebarCollapsed === 'function') {
+    wsApplySidebarCollapsed(project.sidebars && project.sidebars.collapsed);
+  }
 
   // Restore the rails workspace arrangement (missing/invalid → default)
   wsRestoreProjectLayout(project.layout);
@@ -28736,6 +28782,72 @@ function wsRestoreProjectLayout(layout) {
   wsResetLayout(true); // missing or invalid → default (autosave follows restore anyway)
 }
 
+// ── C6-4a: whole-sidebar collapse ─────────────────────────────────────────
+// Every analysis surface's control sidebar can collapse to hand the full
+// width to the results. A permanent slim chevron rail (a body child, so it
+// survives the sidebar's own innerHTML re-renders) holds the affordance:
+// ◀ collapses; when collapsed the rail becomes a labeled ▶ strip to re-open.
+// Charts redraw through the C1b-0 width observers when the main area grows.
+// State is per-panel, persisted in the project (like the layout).
+var SIDEBAR_COLLAPSED = new Set();   // panel ids currently collapsed
+var WS_SB = {};                      // panelId → { body }
+
+function wsInitSidebar(panelId, body, label) {
+  if (!body || body.classList.contains('sb-host')) return;
+  var sidebar = body.firstElementChild;   // the sidebar is every X-body's first child
+  if (!sidebar) return;
+  sidebar.classList.add('sb-panel');
+  body.classList.add('sb-host');
+  WS_SB[panelId] = { body: body };
+
+  var rail = document.createElement('button');
+  rail.type = 'button';
+  rail.className = 'sb-rail';
+  rail.innerHTML = '<span class="sb-rail-icon"></span><span class="sb-rail-label">' + esc(label) + '</span>';
+  rail.addEventListener('click', function() { wsToggleSidebar(panelId); });
+  body.insertBefore(rail, sidebar);
+
+  if (SIDEBAR_COLLAPSED.has(panelId)) body.classList.add('sb-collapsed');
+  wsUpdateRail(panelId);
+}
+
+function wsUpdateRail(panelId) {
+  var rec = WS_SB[panelId]; if (!rec) return;
+  var collapsed = rec.body.classList.contains('sb-collapsed');
+  var rail = rec.body.querySelector(':scope > .sb-rail');
+  if (rail) {
+    rail.title = collapsed ? 'Show controls' : 'Hide controls';
+    rail.setAttribute('aria-expanded', String(!collapsed));
+  }
+}
+
+function wsToggleSidebar(panelId) {
+  var rec = WS_SB[panelId]; if (!rec) return;
+  var collapsed = !rec.body.classList.contains('sb-collapsed');
+  rec.body.classList.toggle('sb-collapsed', collapsed);
+  if (collapsed) SIDEBAR_COLLAPSED.add(panelId); else SIDEBAR_COLLAPSED.delete(panelId);
+  wsUpdateRail(panelId);
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+
+// Restore from the project (array of collapsed panel ids)
+function wsApplySidebarCollapsed(list) {
+  SIDEBAR_COLLAPSED = new Set(Array.isArray(list) ? list : []);
+  Object.keys(WS_SB).forEach(function(pid) {
+    WS_SB[pid].body.classList.toggle('sb-collapsed', SIDEBAR_COLLAPSED.has(pid));
+    wsUpdateRail(pid);
+  });
+}
+
+function wsInitSidebars() {
+  wsInitSidebar('statistics', document.getElementById('statsBody'), 'Variables');
+  wsInitSidebar('categories', document.getElementById('catBody'), 'Columns');
+  wsInitSidebar('statscat', document.querySelector('#panelStatsCat .statscat-body'), 'Group by');
+  wsInitSidebar('gt', document.querySelector('#panelGt .gt-body'), 'Grade-tonnage');
+  wsInitSidebar('swath', document.querySelector('#panelSwath .swath-body'), 'Directions');
+  wsInitSidebar('export', document.getElementById('exportBody'), 'Columns');
+}
+
 // Shell choice by viewport, re-evaluated on breakpoint crossing (C1b D5:
 // the legacy shell survives < 700px until C1c)
 var wsMql = window.matchMedia('(min-width: 701px)');
@@ -28747,6 +28859,7 @@ function wsSyncShell() {
   if (wsMql.addEventListener) wsMql.addEventListener('change', wsSyncShell);
   else if (wsMql.addListener) wsMql.addListener(wsSyncShell); // older Safari
   wsSyncShell();
+  wsInitSidebars();   // C6-4a — static bodies exist regardless of shell
 })();
 
 // ─── PWA glue: registration, build badge, update banner ──────────────

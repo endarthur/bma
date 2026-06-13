@@ -403,6 +403,8 @@ function serializeProject() {
       focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null
     },
     tree: { open: catalogTreeOpen },
+    // C6-4a collapsed control sidebars (per-panel)
+    sidebars: { collapsed: (typeof SIDEBAR_COLLAPSED !== 'undefined') ? Array.from(SIDEBAR_COLLAPSED) : [] },
     // Rails workspace arrangement (C1b-2) — {v:1, rails: <serialized state>}
     layout: wsSerializeLayout(),
     // Drillhole-set recipe (A7 Phase 2, D8) — file identities + mapping +
@@ -624,6 +626,11 @@ async function applyProject(project) {
   // the coalesced re-render also re-aligns the tree rail's collapsed state
   catalogTreeOpen = (project.tree && project.tree.open !== undefined) ? project.tree.open : null;
   refreshCatalogTree();
+
+  // C6-4a: restore collapsed control sidebars
+  if (typeof wsApplySidebarCollapsed === 'function') {
+    wsApplySidebarCollapsed(project.sidebars && project.sidebars.collapsed);
+  }
 
   // Restore the rails workspace arrangement (missing/invalid → default)
   wsRestoreProjectLayout(project.layout);

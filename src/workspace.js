@@ -570,6 +570,72 @@ function wsRestoreProjectLayout(layout) {
   wsResetLayout(true); // missing or invalid → default (autosave follows restore anyway)
 }
 
+// ── C6-4a: whole-sidebar collapse ─────────────────────────────────────────
+// Every analysis surface's control sidebar can collapse to hand the full
+// width to the results. A permanent slim chevron rail (a body child, so it
+// survives the sidebar's own innerHTML re-renders) holds the affordance:
+// ◀ collapses; when collapsed the rail becomes a labeled ▶ strip to re-open.
+// Charts redraw through the C1b-0 width observers when the main area grows.
+// State is per-panel, persisted in the project (like the layout).
+var SIDEBAR_COLLAPSED = new Set();   // panel ids currently collapsed
+var WS_SB = {};                      // panelId → { body }
+
+function wsInitSidebar(panelId, body, label) {
+  if (!body || body.classList.contains('sb-host')) return;
+  var sidebar = body.firstElementChild;   // the sidebar is every X-body's first child
+  if (!sidebar) return;
+  sidebar.classList.add('sb-panel');
+  body.classList.add('sb-host');
+  WS_SB[panelId] = { body: body };
+
+  var rail = document.createElement('button');
+  rail.type = 'button';
+  rail.className = 'sb-rail';
+  rail.innerHTML = '<span class="sb-rail-icon"></span><span class="sb-rail-label">' + esc(label) + '</span>';
+  rail.addEventListener('click', function() { wsToggleSidebar(panelId); });
+  body.insertBefore(rail, sidebar);
+
+  if (SIDEBAR_COLLAPSED.has(panelId)) body.classList.add('sb-collapsed');
+  wsUpdateRail(panelId);
+}
+
+function wsUpdateRail(panelId) {
+  var rec = WS_SB[panelId]; if (!rec) return;
+  var collapsed = rec.body.classList.contains('sb-collapsed');
+  var rail = rec.body.querySelector(':scope > .sb-rail');
+  if (rail) {
+    rail.title = collapsed ? 'Show controls' : 'Hide controls';
+    rail.setAttribute('aria-expanded', String(!collapsed));
+  }
+}
+
+function wsToggleSidebar(panelId) {
+  var rec = WS_SB[panelId]; if (!rec) return;
+  var collapsed = !rec.body.classList.contains('sb-collapsed');
+  rec.body.classList.toggle('sb-collapsed', collapsed);
+  if (collapsed) SIDEBAR_COLLAPSED.add(panelId); else SIDEBAR_COLLAPSED.delete(panelId);
+  wsUpdateRail(panelId);
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+
+// Restore from the project (array of collapsed panel ids)
+function wsApplySidebarCollapsed(list) {
+  SIDEBAR_COLLAPSED = new Set(Array.isArray(list) ? list : []);
+  Object.keys(WS_SB).forEach(function(pid) {
+    WS_SB[pid].body.classList.toggle('sb-collapsed', SIDEBAR_COLLAPSED.has(pid));
+    wsUpdateRail(pid);
+  });
+}
+
+function wsInitSidebars() {
+  wsInitSidebar('statistics', document.getElementById('statsBody'), 'Variables');
+  wsInitSidebar('categories', document.getElementById('catBody'), 'Columns');
+  wsInitSidebar('statscat', document.querySelector('#panelStatsCat .statscat-body'), 'Group by');
+  wsInitSidebar('gt', document.querySelector('#panelGt .gt-body'), 'Grade-tonnage');
+  wsInitSidebar('swath', document.querySelector('#panelSwath .swath-body'), 'Directions');
+  wsInitSidebar('export', document.getElementById('exportBody'), 'Columns');
+}
+
 // Shell choice by viewport, re-evaluated on breakpoint crossing (C1b D5:
 // the legacy shell survives < 700px until C1c)
 var wsMql = window.matchMedia('(min-width: 701px)');
@@ -581,4 +647,5 @@ function wsSyncShell() {
   if (wsMql.addEventListener) wsMql.addEventListener('change', wsSyncShell);
   else if (wsMql.addListener) wsMql.addListener(wsSyncShell); // older Safari
   wsSyncShell();
+  wsInitSidebars();   // C6-4a — static bodies exist regardless of shell
 })();
