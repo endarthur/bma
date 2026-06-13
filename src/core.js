@@ -88,6 +88,42 @@ function dsById(id) {
   return null;
 }
 
+// A10 phase 1: real per-dataset entries beyond the two singleton views. The
+// model (datasets[0]) and the first comparison ('aux', datasets[1]) keep
+// their legacy globals as backing (so existing code stays bit-identical);
+// additional comparison datasets are plain objects created here. id 'd2',
+// 'd3', … is the catalog namespace, project key, pack folder, and the
+// expression handle (rowVar) for that dataset. Design: docs/a10-n-datasets.md.
+var dsNextNum = 2;
+function dsCreate(opts) {
+  opts = opts || {};
+  return {
+    id: opts.id || ('d' + (dsNextNum++)),
+    kind: opts.kind || 'aux',
+    file: opts.file || null,
+    handle: opts.handle || null,
+    preflight: null,
+    complete: null,
+    stale: false,
+    filter: null,
+    calcolCode: '',
+    calcolMeta: [],
+    prefix: opts.prefix || 'data',
+    declus: null,
+    topcut: null,
+    view: 'preview',
+    source: opts.source || 'file',
+    get rowVar() { return this.id; }   // d2+ expressions reference columns as <id>.<col>
+  };
+}
+function dsAdd(ds) { datasets.push(ds); return ds; }
+function dsRemove(id) {
+  for (var i = 2; i < datasets.length; i++) {   // never the model/aux views (0,1)
+    if (datasets[i].id === id) { datasets.splice(i, 1); return true; }
+  }
+  return false;
+}
+
 var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
 
 // Fuzzy subsequence match — returns true if all chars in query appear in order within target.
