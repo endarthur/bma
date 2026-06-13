@@ -343,6 +343,12 @@ function buildRailsShell(host) {
       return p ? document.getElementById(p.el) : null;
     },
     onPanelDestroy: wsRehomePanel,
+    // C6-5 discoverability: a hint when every tab/rail has been closed
+    renderEmpty: function() {
+      var el = document.createElement('div');
+      el.innerHTML = 'Workspace is empty. Reopen panels from the <strong>View ▸ Panels</strong> menu, or drag a tab here.';
+      return el;
+    },
     // The tree rail hosts only the Data tab — no drops into it
     canDropOn: function(zone) {
       if (zone.stackId === WS_TREE_STACK) return false;

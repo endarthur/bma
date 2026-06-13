@@ -57,6 +57,13 @@ function renderCatalogTree(container) {
 
   var html = treeDatasetHtml('model', openState);
   if (auxFile && auxPreflightData) html += treeDatasetHtml('aux', openState);
+  // C6-5 discoverability footer: the variable context menu (C4) and tab
+  // splitting are both undiscoverable affordances — name them once results exist.
+  if (typeof lastCompleteData !== 'undefined' && lastCompleteData) {
+    var hint = 'Right-click a variable for actions';
+    if (typeof wsRails !== 'undefined' && wsRails) hint += ' · drag a tab edge to split the view';
+    html += '<div class="tree-foot-hint">' + hint + '</div>';
+  }
   $tree.innerHTML = html;
 }
 

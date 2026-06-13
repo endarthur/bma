@@ -91,6 +91,39 @@ serializes/applies layouts, a preset is canned JSON.
 
 ## Phase log
 
+- **C6-5 (trust + delight batch) ✅ (2026-06-13) — C6 BUILD WORK COMPLETE.**
+  Three pieces, per-commit:
+  - **C6-5a Data Health card** (`renderHealthCard` in project.js): the A7
+    drillhole consistency-report pattern promoted app-wide. A new
+    `#healthSection` on Summary (after Geometry) aggregates the scattered
+    A8/A9 counters — empty columns, non-numeric/parse-fail columns, ragged
+    rows, filter errors, calcol errors, invalid-weight rows, ignored
+    coordinates, group-cap overflow — into one card. Clean → green "✓ No
+    data-quality issues" + CLEAN badge; issues → one warn row each (count chip
+    + label + affected names/first-error + a per-tab **View →** link via
+    `showPanel`) + an "N checks" badge. Reads the analyze 'complete' message
+    (gotcha: `stats` is keyed by column index, not a dense array — iterate by
+    `header.length`). The scattered badges/notes stay; the card aggregates.
+  - **C6-5b uniform staleness**: `executeBtn`'s clean/orange "dim when done"
+    pattern generalized to every action button. `setGenStale(btnId, stale)`
+    (core.js) toggles `.gen-done` (subdued) + a sibling `.gen-stale-note`
+    ("↻ config changed — re-run"; explicit `display:block` since `''` falls
+    back to the CSS `none`). GT (`gtStale`) + Swath (`swathStale`) get a stale
+    flag set from the blanket sidebar change/input handlers **excluding the
+    controls that re-render client-side from cache** (GT: units/dp/grade-unit/
+    group-values/theoretical; Swath: statistic/display/y-scale/layout/units/
+    color-picker), cleared on a successful complete. Aux's Analyze dims on
+    success / returns to orange in `markAuxStale`.
+  - **C6-5c discoverability**: a `.tree-foot-hint` footer in the catalog tree
+    ("Right-click a variable for actions · drag a tab edge to split the view",
+    once results exist; the drag clause only on the rails shell) + a
+    `renderEmpty` callback on the rails instance (safety-net hint when every
+    tab/rail is closed — "reopen panels from View ▸ Panels").
+  - c6-smoke +5 asserts (health clean/badge, tree footer; plus the 5b/5c
+    shots). Full suite green; worker untouched (b1-differential 29/29
+    bit-identical). Shots: `experiments/c6-5{a,b,c}-shot.js`. **All of C6 is
+    now done — next: regen both manuals (every screenshot is stale post-C6)
+    then push + tag the release.**
 - **C6-4b (sidebar flow) ✅ (2026-06-13)** — **C6-4 complete.** The C5 sidebar
   flow executed on the new tokens: a shared collapsible-section primitive +
   per-tab order rethink + sticky action footers, landed per-surface.

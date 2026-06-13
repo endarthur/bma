@@ -4225,6 +4225,16 @@ table.stats tr.stats-delta-row td:first-child {
 .tree-row--coord .tree-name { color: var(--fg-dim); }
 .tree-row--stale { opacity: 0.45; }
 .tree-hint { color: var(--fg-dim); font-family: var(--sans); font-size: 0.72rem; padding: 0.4rem 0.3rem; }
+/* C6-5 discoverability footer at the bottom of the catalog tree */
+.tree-foot-hint {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.4rem 0.2rem;
+  border-top: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-family: var(--sans);
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
 @media (max-width: 700px) {
   /* proto-sheet until C1c: overlays the panels instead of squeezing them */
   #results.tree-open .catalog-tree {

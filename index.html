@@ -4240,6 +4240,16 @@ table.stats tr.stats-delta-row td:first-child {
 .tree-row--coord .tree-name { color: var(--fg-dim); }
 .tree-row--stale { opacity: 0.45; }
 .tree-hint { color: var(--fg-dim); font-family: var(--sans); font-size: 0.72rem; padding: 0.4rem 0.3rem; }
+/* C6-5 discoverability footer at the bottom of the catalog tree */
+.tree-foot-hint {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.4rem 0.2rem;
+  border-top: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-family: var(--sans);
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
 @media (max-width: 700px) {
   /* proto-sheet until C1c: overlays the panels instead of squeezing them */
   #results.tree-open .catalog-tree {
@@ -5768,7 +5778,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 607f073 — click to check for updates">607f073</div>
+<div class="build-badge" id="buildBadge" title="build 838180d — click to check for updates">838180d</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -27387,6 +27397,13 @@ function renderCatalogTree(container) {
 
   var html = treeDatasetHtml('model', openState);
   if (auxFile && auxPreflightData) html += treeDatasetHtml('aux', openState);
+  // C6-5 discoverability footer: the variable context menu (C4) and tab
+  // splitting are both undiscoverable affordances — name them once results exist.
+  if (typeof lastCompleteData !== 'undefined' && lastCompleteData) {
+    var hint = 'Right-click a variable for actions';
+    if (typeof wsRails !== 'undefined' && wsRails) hint += ' · drag a tab edge to split the view';
+    html += '<div class="tree-foot-hint">' + hint + '</div>';
+  }
   $tree.innerHTML = html;
 }
 
@@ -28943,6 +28960,12 @@ function buildRailsShell(host) {
       return p ? document.getElementById(p.el) : null;
     },
     onPanelDestroy: wsRehomePanel,
+    // C6-5 discoverability: a hint when every tab/rail has been closed
+    renderEmpty: function() {
+      var el = document.createElement('div');
+      el.innerHTML = 'Workspace is empty. Reopen panels from the <strong>View ▸ Panels</strong> menu, or drag a tab here.';
+      return el;
+    },
     // The tree rail hosts only the Data tab — no drops into it
     canDropOn: function(zone) {
       if (zone.stackId === WS_TREE_STACK) return false;
