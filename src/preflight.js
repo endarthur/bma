@@ -626,19 +626,19 @@ function renderPreflightSidebar(data) {
   const { header, autoTypes, typeOverrides, skipCols, colFilters } = data;
   const enabledCount = header.length - skipCols.size;
 
-  let html = `<div class="pf-sidebar-section">
+  let html = `<div class="pf-sidebar-section" data-sb="axes">
     <div class="pf-sidebar-section-title">Coordinate Axes</div>
     <div id="pfXyzWrap"></div>
   </div>`;
 
-  html += `<div class="pf-sidebar-section">
+  html += `<div class="pf-sidebar-section" data-sb="dims">
     <div class="pf-sidebar-section-title">Block Dimensions</div>
     <div id="pfDxyzWrap"></div>
   </div>`;
 
   // DM format options (only shown for .dm files)
   if (data.isDm) {
-    html += `<div class="pf-sidebar-section" id="pfDmOptions">
+    html += `<div class="pf-sidebar-section" id="pfDmOptions" data-sb="dm">
       <div class="pf-sidebar-section-title">DM Format</div>
       <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.3rem">
         <span style="font-size:0.8rem;color:var(--fg-dim)">Byte order</span>
@@ -733,6 +733,10 @@ function renderPreflightSidebar(data) {
 
 
   $preflightSidebar.innerHTML = html;
+
+  // C6-4b — config sections collapsible; default open (preflight is a review
+  // surface — inferred axes/dims/format stay visible, surface-everything rule)
+  if (typeof wsEnhanceSidebar === 'function') wsEnhanceSidebar('preflight', $preflightSidebar, {});
 
   // Build XYZ and DXYZ dropdowns and update counts
   rebuildPfXyz(data);

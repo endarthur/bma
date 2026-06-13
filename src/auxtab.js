@@ -41,37 +41,36 @@ function renderAuxConfig() {
       return '<option value="' + esc(z.name) + '"' + (z.name === d.selectedZipEntry ? ' selected' : '') + '>' + esc(z.name) + '</option>';
     }).join('');
     zipSection =
-      '<div class="pf-sidebar-section">' +
+      '<div class="pf-sidebar-section" data-sb="zip">' +
         '<div class="pf-sidebar-section-title">ZIP entry</div>' +
         '<select class="aux-select" id="auxZipEntry">' + zOpts + '</select>' +
       '</div>';
   }
   $auxSidebar.innerHTML = zipSection +
-    '<div class="pf-sidebar-section">' +
+    '<div class="pf-sidebar-section" data-sb="prefix">' +
       '<div class="pf-sidebar-section-title">Display prefix</div>' +
       '<input type="text" class="aux-input" id="auxPrefixInput" value="' + esc(auxPrefix) + '" placeholder="aux" spellcheck="false">' +
       '<div class="aux-hint">Label for aux variables in selection lists and plot labels (e.g. <code>' + esc(auxPrefix || 'aux') + ':Fe</code>). Cosmetic only.</div>' +
     '</div>' +
-    '<div class="pf-sidebar-section">' +
+    '<div class="pf-sidebar-section" data-sb="coords">' +
       '<div class="pf-sidebar-section-title">Coordinates</div>' +
       '<div class="aux-xyz-row"><label>X</label><select class="aux-select" id="auxX">' + auxColOptions(xyz.x) + '</select></div>' +
       '<div class="aux-xyz-row"><label>Y</label><select class="aux-select" id="auxY">' + auxColOptions(xyz.y) + '</select></div>' +
       '<div class="aux-xyz-row"><label>Z</label><select class="aux-select" id="auxZ">' + auxColOptions(xyz.z) + '</select></div>' +
       '<div class="aux-hint">Aux and the block model must share the same coordinate space for swath overlays to line up.</div>' +
     '</div>' +
-    '<div class="pf-sidebar-section">' +
+    '<div class="pf-sidebar-section" data-sb="auxfilter">' +
       '<div class="pf-sidebar-section-title">Aux filter</div>' +
       '<textarea class="aux-input aux-filter" id="auxFilterInput" rows="2" spellcheck="false" placeholder="aux.Au > 0">' + esc(auxFilter ? auxFilter.expression : '') + '</textarea>' +
       '<div class="aux-hint">Reference aux columns as <code>aux.</code>… — independent of the display prefix.</div>' +
     '</div>' +
-    '<div class="pf-sidebar-section">' +
+    '<div class="pf-sidebar-section" data-sb="weight">' +
       '<div class="pf-sidebar-section-title">Weight (optional)</div>' +
       '<select class="aux-select" id="auxWeightSel">' + auxWeightOptions() + '</select>' +
       '<div class="aux-hint">A weight column, or the computed declustering weights from below — applied to all aux statistics (Statistics, CDF, Swath). Rows with missing or ≤0 weight are excluded.</div>' +
     '</div>' +
     renderAuxDeclusSection() +
-    '<div class="pf-sidebar-section">' +
-      '<div class="pf-sidebar-section-title">Analysis</div>' +
+    '<div class="sb-footer">' +
       '<button class="swath-generate" id="auxAnalyzeBtn">Analyze</button>' +
       '<div class="aux-hint aux-analyze-status" id="auxAnalyzeStatus">' +
         (auxCompleteData
@@ -80,6 +79,9 @@ function renderAuxConfig() {
           : 'Run to compare aux statistics on the Statistics tab') +
       '</div>' +
     '</div>';
+
+  // C6-4b — collapsible config sections; cosmetic/advanced ones collapsed
+  wsEnhanceSidebar('aux', $auxSidebar, { prefix: 'collapsed', auxfilter: 'collapsed', declus: 'collapsed' });
 
   renderAuxPreview();
   if (typeof renderAuxView === 'function') renderAuxView();
@@ -301,7 +303,7 @@ function renderAuxDeclusSection() {
     varOpts += '<option value="' + esc(cn) + '"' + (cn === p.varName ? ' selected' : '') + '>' + esc(cn) + ' (calc)</option>';
   }
   function numVal(v) { return (v === null || v === undefined) ? '' : String(v); }
-  return '<div class="pf-sidebar-section">' +
+  return '<div class="pf-sidebar-section" data-sb="declus">' +
     '<div class="pf-sidebar-section-title">Declustering</div>' +
     '<div class="aux-xyz-row"><label>Var</label><select class="aux-select" id="auxDeclusVar">' + varOpts + '</select></div>' +
     '<div class="aux-xyz-row"><label>Cell</label>' +
