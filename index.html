@@ -5778,7 +5778,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 012c277 — click to check for updates">012c277</div>
+<div class="build-badge" id="buildBadge" title="build 1cffa60 — click to check for updates">1cffa60</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -27985,6 +27985,21 @@ function ctxResolveVariable(e) {
 }
 
 // ── Providers ──
+
+// A10: right-clicking a dataset header in the tree raises its import/config
+// panel (the reopen affordance — model → Import Block Model, aux → Aux). As
+// per-dataset instance panels land, this opens the dataset's own instance.
+CTX_PROVIDERS.push(function datasetProvider(e) {
+  var sum = e.target.closest && e.target.closest('summary');
+  if (!sum || !sum.parentElement || !sum.parentElement.classList.contains('tree-ds')) return null;
+  var key = sum.parentElement.dataset.key || '';
+  if (key.indexOf('ds:') !== 0) return null;
+  var ds = key.slice(3);
+  return [
+    { head: true, label: ds === 'model' ? 'Model' : (auxPrefix || 'aux') },
+    { label: 'Open import panel', action: function() { showPanel(ds === 'model' ? 'preflight' : 'aux'); } }
+  ];
+});
 
 CTX_PROVIDERS.push(function variableProvider(e) {
   var v = ctxResolveVariable(e);

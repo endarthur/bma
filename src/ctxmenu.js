@@ -91,6 +91,21 @@ function ctxResolveVariable(e) {
 
 // ── Providers ──
 
+// A10: right-clicking a dataset header in the tree raises its import/config
+// panel (the reopen affordance — model → Import Block Model, aux → Aux). As
+// per-dataset instance panels land, this opens the dataset's own instance.
+CTX_PROVIDERS.push(function datasetProvider(e) {
+  var sum = e.target.closest && e.target.closest('summary');
+  if (!sum || !sum.parentElement || !sum.parentElement.classList.contains('tree-ds')) return null;
+  var key = sum.parentElement.dataset.key || '';
+  if (key.indexOf('ds:') !== 0) return null;
+  var ds = key.slice(3);
+  return [
+    { head: true, label: ds === 'model' ? 'Model' : (auxPrefix || 'aux') },
+    { label: 'Open import panel', action: function() { showPanel(ds === 'model' ? 'preflight' : 'aux'); } }
+  ];
+});
+
 CTX_PROVIDERS.push(function variableProvider(e) {
   var v = ctxResolveVariable(e);
   if (!v || !v.name) return null;
