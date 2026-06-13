@@ -91,6 +91,48 @@ serializes/applies layouts, a preset is canned JSON.
 
 ## Phase log
 
+- **C6-4b (sidebar flow) ✅ (2026-06-13)** — **C6-4 complete.** The C5 sidebar
+  flow executed on the new tokens: a shared collapsible-section primitive +
+  per-tab order rethink + sticky action footers, landed per-surface.
+  - **Shared primitive** (`wsEnhanceSidebar(panelId, sidebar, defaults)`,
+    workspace.js): a section marked `data-sb="<key>"` has its first child (the
+    title) promoted to a clickable `.sb-sec-head` with a chevron; `.collapsed`
+    hides the body (`!important` so it beats the inline `display:flex` some
+    renderers set on conditional sub-wraps — GT density-const, custom
+    cutoff/units). Open/closed persists per `panelId:key` in `SB_SECTIONS`,
+    serialized as the project `sidebars.sections` key, restored in
+    `applyProject`. Re-run-safe (per-render markup gets fresh listeners; static
+    markup guarded by `data-sb-bound`); static (persistent-DOM) sidebars stamp
+    `data-sb-panel`/`-default` so `wsApplySidebarSections` re-resolves them on
+    restore (stored value, else the section's default). Generalizes tree.js's
+    `<details>` open-state convention; uses div+enhancer (not literal
+    `<details>`) so the flex `--grow` var-lists keep filling + scrolling.
+    Alt+V opens a collapsed section before focusing its search.
+  - **Sticky action footer** (`.sb-footer`, `position:sticky;bottom:0` +
+    `margin-top:auto`): Generate/Analyze pinned at the sidebar bottom, reachable
+    past a scrolling section wall. On Swath, GT, Aux.
+  - **Per surface**: **Swath** — advanced (Statistic/Display/Local Filter)
+    collapsed, primary (Directions/Variables) open, Generate→footer. **GT** (the
+    documented trigger) — the nine-section wall now leads with Grade Variables;
+    Density/Weight/Group/Volume/Units/Cutoffs/Filter/Theoretical collapse by
+    default, Generate→sticky footer (GT's sidebar scrolls). **Statistics** —
+    Percentiles/Weight/Metrics collapsible (Weight collapsed); **StatsCat** —
+    Group By collapsible; the grow var/value lists keep their primary role +
+    mobile accordion (which only targets `--grow`, so no double-bind).
+    **Categories**/**Export** left as-is (only a primary header among non-grow
+    sections; Categories got its layout pass in C6-4c). **Aux** — Display
+    prefix/Aux filter/Declustering collapsed, Coordinates/Weight open,
+    Analyze→sticky footer. **Preflight** — Coordinate Axes/Block Dimensions/DM
+    Format collapsible but **default open** (review surface — inferred config
+    stays visible, surface-everything rule).
+  - Smokes that click into now-collapsed sections expand them first
+    (gt-theo, declus-ui, topcut, sidebar-scroll-check — the C5-sanctioned
+    expand-before-click); `sidebar-scroll-check` now also proves the sticky
+    Analyze footer stays reachable while the aux sidebar scrolls. c6-smoke +6
+    section/footer asserts. Worker untouched (b1-differential 29/29
+    bit-identical). Shots: `experiments/c6-4b-shot.js` (swath/gt/stats/aux/
+    preflight, both themes). **C6-4 done; next: C6-5** (data-health /
+    staleness / discoverability), then manuals regen + release.
 - **C6-4c (Categories surface) ✅ (2026-06-13)** — the Categories tab reworked
   to be more useful + informative (Arthur: "make the categories tab more useful
   and informative overall"):
