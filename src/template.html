@@ -332,7 +332,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
       <div class="results-panel" id="panelStatistics" data-tab="statistics">
         <div class="stats-body" id="statsBody">
           <div class="stats-sidebar" id="statsSidebar">
-            <div class="stats-sidebar-section">
+            <div class="stats-sidebar-section" data-sb="percentiles">
               <div class="stats-sidebar-title">Percentiles</div>
               <div class="stats-preset-btns" id="statsPresetBtns">
                 <button class="stats-preset active" data-preset="quartiles">Quartiles</button>
@@ -342,12 +342,12 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
               </div>
               <input type="text" class="stats-custom-input" id="statsCustomPct" placeholder="e.g. 5,10,25,50,75,90,95" style="display:none" autocomplete="off" spellcheck="false">
             </div>
-            <div class="stats-sidebar-section">
+            <div class="stats-sidebar-section" data-sb="weight">
               <div class="stats-sidebar-title">Weight</div>
               <select class="stats-weight-select" id="statsWeightSel"><option value="">— none</option></select>
               <div class="stats-weight-note" id="statsWeightNote"></div>
             </div>
-            <div class="stats-sidebar-section">
+            <div class="stats-sidebar-section" data-sb="metrics">
               <div class="stats-sidebar-title">Metrics</div>
               <div class="stats-metric-toggles" id="statsMetricToggles"></div>
             </div>
@@ -424,7 +424,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
       <div class="results-panel" id="panelStatsCat" data-tab="statscat">
         <div class="statscat-body">
           <div class="statscat-sidebar">
-            <div class="statscat-sidebar-section">
+            <div class="statscat-sidebar-section" data-sb="groupby">
               <div class="statscat-sidebar-title">Group By <span class="badge" id="statsCatBadge"></span></div>
               <select class="statscat-select" id="statsCatGroupBy">
                 <option value="">— select grouping column —</option>

@@ -651,6 +651,10 @@ function wsEnhanceSidebar(panelId, sidebar, defaults) {
       if (sec.className.indexOf('--grow') >= 0) sec.classList.add('sb-sec--grow');
       head.classList.add('sb-sec-head');
       var full = panelId + ':' + key;
+      // stamp panel + default so wsApplySidebarSections can re-resolve static
+      // (persistent-DOM) sections on project restore
+      sec.dataset.sbPanel = panelId;
+      sec.dataset.sbDefault = (defaults[key] === 'collapsed') ? 'collapsed' : 'open';
       var collapsed = (full in SB_SECTIONS) ? SB_SECTIONS[full] : (defaults[key] === 'collapsed');
       sec.classList.toggle('collapsed', collapsed);
       if (!head.dataset.sbBound) {
@@ -674,9 +678,17 @@ function wsOpenSidebarSection(panelId, key) {
   if (sec) sec.classList.remove('collapsed');
 }
 
-// Restore from the project (object of "panelId:key" -> collapsed bool)
+// Restore from the project (object of "panelId:key" -> collapsed bool).
+// JS sidebars (gt/swath) re-read SB_SECTIONS when they next render; static
+// (persistent-DOM) sidebars are already enhanced, so re-resolve them now,
+// falling back to each section's stamped default for keys not in the project.
 function wsApplySidebarSections(obj) {
   SB_SECTIONS = (obj && typeof obj === 'object') ? Object.assign({}, obj) : {};
+  document.querySelectorAll('.sb-sec[data-sb-panel]').forEach(function(sec) {
+    var full = sec.dataset.sbPanel + ':' + sec.getAttribute('data-sb');
+    var collapsed = (full in SB_SECTIONS) ? SB_SECTIONS[full] : (sec.dataset.sbDefault === 'collapsed');
+    sec.classList.toggle('collapsed', collapsed);
+  });
 }
 
 function wsInitSidebars() {
@@ -686,6 +698,12 @@ function wsInitSidebars() {
   wsInitSidebar('gt', document.querySelector('#panelGt .gt-body'), 'Grade-tonnage');
   wsInitSidebar('swath', document.querySelector('#panelSwath .swath-body'), 'Directions');
   wsInitSidebar('export', document.getElementById('exportBody'), 'Columns');
+
+  // C6-4b — static sidebars: make the secondary config sections collapsible.
+  // Only non-grow sections (the grow var/value lists keep their primary role
+  // and the mobile accordion); these render live so there's no action footer.
+  wsEnhanceSidebar('statistics', document.getElementById('statsSidebar'), { weight: 'collapsed' });
+  wsEnhanceSidebar('statscat', document.querySelector('#panelStatsCat .statscat-sidebar'), {});
 }
 
 // Shell choice by viewport, re-evaluated on breakpoint crossing (C1b D5:

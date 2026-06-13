@@ -5382,7 +5382,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
       <div class="results-panel" id="panelStatistics" data-tab="statistics">
         <div class="stats-body" id="statsBody">
           <div class="stats-sidebar" id="statsSidebar">
-            <div class="stats-sidebar-section">
+            <div class="stats-sidebar-section" data-sb="percentiles">
               <div class="stats-sidebar-title">Percentiles</div>
               <div class="stats-preset-btns" id="statsPresetBtns">
                 <button class="stats-preset active" data-preset="quartiles">Quartiles</button>
@@ -5392,12 +5392,12 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
               </div>
               <input type="text" class="stats-custom-input" id="statsCustomPct" placeholder="e.g. 5,10,25,50,75,90,95" style="display:none" autocomplete="off" spellcheck="false">
             </div>
-            <div class="stats-sidebar-section">
+            <div class="stats-sidebar-section" data-sb="weight">
               <div class="stats-sidebar-title">Weight</div>
               <select class="stats-weight-select" id="statsWeightSel"><option value="">— none</option></select>
               <div class="stats-weight-note" id="statsWeightNote"></div>
             </div>
-            <div class="stats-sidebar-section">
+            <div class="stats-sidebar-section" data-sb="metrics">
               <div class="stats-sidebar-title">Metrics</div>
               <div class="stats-metric-toggles" id="statsMetricToggles"></div>
             </div>
@@ -5474,7 +5474,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
       <div class="results-panel" id="panelStatsCat" data-tab="statscat">
         <div class="statscat-body">
           <div class="statscat-sidebar">
-            <div class="statscat-sidebar-section">
+            <div class="statscat-sidebar-section" data-sb="groupby">
               <div class="statscat-sidebar-title">Group By <span class="badge" id="statsCatBadge"></span></div>
               <select class="statscat-select" id="statsCatGroupBy">
                 <option value="">— select grouping column —</option>
@@ -5697,7 +5697,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 50c98ac — click to check for updates">50c98ac</div>
+<div class="build-badge" id="buildBadge" title="build e0c5dc9 — click to check for updates">e0c5dc9</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -28993,6 +28993,10 @@ function wsEnhanceSidebar(panelId, sidebar, defaults) {
       if (sec.className.indexOf('--grow') >= 0) sec.classList.add('sb-sec--grow');
       head.classList.add('sb-sec-head');
       var full = panelId + ':' + key;
+      // stamp panel + default so wsApplySidebarSections can re-resolve static
+      // (persistent-DOM) sections on project restore
+      sec.dataset.sbPanel = panelId;
+      sec.dataset.sbDefault = (defaults[key] === 'collapsed') ? 'collapsed' : 'open';
       var collapsed = (full in SB_SECTIONS) ? SB_SECTIONS[full] : (defaults[key] === 'collapsed');
       sec.classList.toggle('collapsed', collapsed);
       if (!head.dataset.sbBound) {
@@ -29016,9 +29020,17 @@ function wsOpenSidebarSection(panelId, key) {
   if (sec) sec.classList.remove('collapsed');
 }
 
-// Restore from the project (object of "panelId:key" -> collapsed bool)
+// Restore from the project (object of "panelId:key" -> collapsed bool).
+// JS sidebars (gt/swath) re-read SB_SECTIONS when they next render; static
+// (persistent-DOM) sidebars are already enhanced, so re-resolve them now,
+// falling back to each section's stamped default for keys not in the project.
 function wsApplySidebarSections(obj) {
   SB_SECTIONS = (obj && typeof obj === 'object') ? Object.assign({}, obj) : {};
+  document.querySelectorAll('.sb-sec[data-sb-panel]').forEach(function(sec) {
+    var full = sec.dataset.sbPanel + ':' + sec.getAttribute('data-sb');
+    var collapsed = (full in SB_SECTIONS) ? SB_SECTIONS[full] : (sec.dataset.sbDefault === 'collapsed');
+    sec.classList.toggle('collapsed', collapsed);
+  });
 }
 
 function wsInitSidebars() {
@@ -29028,6 +29040,12 @@ function wsInitSidebars() {
   wsInitSidebar('gt', document.querySelector('#panelGt .gt-body'), 'Grade-tonnage');
   wsInitSidebar('swath', document.querySelector('#panelSwath .swath-body'), 'Directions');
   wsInitSidebar('export', document.getElementById('exportBody'), 'Columns');
+
+  // C6-4b — static sidebars: make the secondary config sections collapsible.
+  // Only non-grow sections (the grow var/value lists keep their primary role
+  // and the mobile accordion); these render live so there's no action footer.
+  wsEnhanceSidebar('statistics', document.getElementById('statsSidebar'), { weight: 'collapsed' });
+  wsEnhanceSidebar('statscat', document.querySelector('#panelStatsCat .statscat-sidebar'), {});
 }
 
 // Shell choice by viewport, re-evaluated on breakpoint crossing (C1b D5:
