@@ -477,7 +477,7 @@ function dhOpenReportModal() {
 
 // Provenance banner in the aux config header — called from renderAuxConfig
 function renderDhProvenance() {
-  var $head = document.getElementById('auxHead');
+  var $head = auxQ('#auxHead');
   if (!$head) return;
   var old = document.getElementById('dhProvenance');
   if (old) old.remove();

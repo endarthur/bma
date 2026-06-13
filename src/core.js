@@ -124,6 +124,16 @@ function dsRemove(id) {
   return false;
 }
 
+// A10 phase 1 — dataset config panels resolve their DOM through a per-dataset
+// ROOT rather than the document, so N instance panels can coexist (slice 1g).
+// Today the single aux dataset's panel is the static #panelAux element. This
+// slice (1e) only centralizes the lookup PATH: ids are still unique, so a
+// scoped querySelector resolves the same single live element — behavior is
+// bit-identical (the seam is inert until 1f flips the ids to classes). All
+// aux-panel code (auxtab/topcut/drillhole) reads through auxQ from here on.
+function auxPanelRoot() { return document.getElementById('panelAux'); }
+function auxQ(sel) { var r = auxPanelRoot(); return r ? r.querySelector(sel) : null; }
+
 var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
 
 // Fuzzy subsequence match — returns true if all chars in query appear in order within target.

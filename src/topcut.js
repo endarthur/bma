@@ -40,7 +40,7 @@ function renderAuxView() {
   var showSummary = hasAux && auxView === 'summary';
   if ($auxPreview) $auxPreview.style.display = (showTopcut || showSummary) ? 'none' : '';
   if ($auxTopcut) $auxTopcut.style.display = showTopcut ? '' : 'none';
-  var $auxSummary = document.getElementById('auxSummary');
+  var $auxSummary = auxQ('#auxSummary');
   if ($auxSummary) $auxSummary.style.display = showSummary ? '' : 'none';
   if (showTopcut) renderAuxTopcut();
   if (showSummary && typeof renderAuxSummary === 'function') renderAuxSummary();
@@ -355,12 +355,12 @@ function auxTopcutPositionCaps() {
     txt.textContent = formatNum(t.cap);
     txt.setAttribute('text-anchor', x > P.W * 0.8 ? 'end' : (x < P.W * 0.2 ? 'start' : 'middle'));
   });
-  var strip = document.getElementById('auxTopcutStats');
+  var strip = auxQ('#auxTopcutStats');
   if (strip) {
     var un = auxTopcutCappedStats(t.values[t.values.length - 1]);
     strip.innerHTML = auxTopcutStatsHtml(un, auxTopcutCappedStats(t.cap));
   }
-  var inp = document.getElementById('auxTopcutCapInput');
+  var inp = auxQ('#auxTopcutCapInput');
   if (inp && document.activeElement !== inp) inp.value = formatNum(t.cap);
 }
 
@@ -375,10 +375,10 @@ function auxTopcutSetCap(c, save) {
 
 function loadAuxTopcut() {
   if (!auxFile || !auxPreflightData) return;
-  var sel = document.getElementById('auxTopcutVar');
+  var sel = auxQ('#auxTopcutVar');
   var varName = sel ? sel.value : (auxTopcut && auxTopcut.varName);
   if (!varName) return;
-  var $st = document.getElementById('auxTopcutStatus');
+  var $st = auxQ('#auxTopcutStatus');
   function tfail(msg) {
     if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
     if (auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} auxTopcutWorker = null; }
@@ -453,7 +453,7 @@ function auxTopcutCopyCalcol() {
   if (!t || t.cap == null) return;
   var safe = t.varName.replace(/[^\w]/g, '_');
   var code = 'aux.' + safe + '_cap = cap(aux.' + t.varName + ', ' + formatNum(t.cap) + ');';
-  var done = document.getElementById('auxTopcutCopied');
+  var done = auxQ('#auxTopcutCopied');
   function ok() { if (done) { done.textContent = 'copied — paste in Calc (Aux mode)'; setTimeout(function() { if (done) done.textContent = ''; }, 3000); } }
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(code).then(ok, function() { if (done) done.textContent = code; });

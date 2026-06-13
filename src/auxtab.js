@@ -96,8 +96,8 @@ function runAuxAnalysis() {
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
   auxWorker = new Worker(workerUrl);
 
-  var $btn = document.getElementById('auxAnalyzeBtn');
-  var $status = document.getElementById('auxAnalyzeStatus');
+  var $btn = auxQ('#auxAnalyzeBtn');
+  var $status = auxQ('#auxAnalyzeStatus');
   if ($btn) $btn.disabled = true;
   if ($status) { $status.textContent = '0%'; $status.style.color = ''; }
 
@@ -202,7 +202,7 @@ function auxWeightOptions() {
 // Refresh just the weight select (e.g. after aux calcols change) without
 // rebuilding the sidebar — preserves focus elsewhere
 function renderAuxWeightOptions() {
-  var sel = document.getElementById('auxWeightSel');
+  var sel = auxQ('#auxWeightSel');
   if (sel) sel.innerHTML = auxWeightOptions();
 }
 
@@ -220,7 +220,7 @@ function renderAuxPreview() {
 // (shared computeHealthItems). The point/drillhole analogue of the model's
 // Grid Geometry summary — no grid params, since this data isn't gridded.
 function renderAuxSummary() {
-  var $s = document.getElementById('auxSummary');
+  var $s = auxQ('#auxSummary');
   if (!$s) return;
   if (!auxCompleteData) {
     $s.innerHTML = '<div class="aux-hint" style="padding:1rem">Run Analyze to see the dataset summary — bounding box and row health.</div>';
@@ -269,7 +269,7 @@ function renderAuxSummary() {
     '<div class="section" style="margin:0.7rem"><div class="section-head">Data Health ' + hBadge + '</div>' +
       '<div class="section-body">' + healthHtml + '</div></div>';
 
-  var $obj = document.getElementById('auxExportObjBtn');
+  var $obj = auxQ('#auxExportObjBtn');
   if ($obj && haveBox && typeof downloadBboxObj === 'function') {
     $obj.addEventListener('click', function() {
       downloadBboxObj({ xMin: sx.min, xMax: sx.max, yMin: sy.min, yMax: sy.max, zMin: sz.min, zMax: sz.max },
@@ -288,13 +288,13 @@ function onAuxConfigChange(e) {
     if (typeof autoSaveProject === 'function') autoSaveProject();
     return;
   }
-  var p = document.getElementById('auxPrefixInput');
+  var p = auxQ('#auxPrefixInput');
   if (p) auxPrefix = p.value.trim() || 'aux';
-  var x = document.getElementById('auxX'), y = document.getElementById('auxY'), z = document.getElementById('auxZ');
+  var x = auxQ('#auxX'), y = auxQ('#auxY'), z = auxQ('#auxZ');
   if (x && y && z) auxPreflightData.xyz = { x: parseInt(x.value), y: parseInt(y.value), z: parseInt(z.value) };
-  var f = document.getElementById('auxFilterInput');
+  var f = auxQ('#auxFilterInput');
   if (f) { var v = f.value.trim(); auxFilter = v ? { expression: v } : null; }
-  var wSel = document.getElementById('auxWeightSel');
+  var wSel = auxQ('#auxWeightSel');
   if (wSel) catSetRole('aux', 'weight', wSel.value || null);
   markAuxStale();
   // Live-update the prefix hint without a full re-render (keeps focus/caret)
@@ -311,7 +311,7 @@ function markAuxStale() {
   if (!auxCompleteData || auxStale) return;
   auxStale = true;
   if (typeof setGenStale === 'function') setGenStale('auxAnalyzeBtn', true);  // C6-5: back to orange call-to-action
-  var $st = document.getElementById('auxAnalyzeStatus');
+  var $st = auxQ('#auxAnalyzeStatus');
   if ($st) { $st.textContent = '↻ config changed — re-run Analyze'; $st.style.color = 'var(--warn)'; }
 }
 
@@ -337,13 +337,13 @@ function auxDeclusFresh() {
 
 function auxDeclusParamsFromUI() {
   function num(id) {
-    var el = document.getElementById(id);
+    var el = auxQ('#' + id);
     if (!el || el.value === '') return null;
     var v = parseFloat(el.value);
     return isFinite(v) ? v : null;
   }
-  var sel = document.getElementById('auxDeclusVar');
-  var crit = document.getElementById('auxDeclusCrit');
+  var sel = auxQ('#auxDeclusVar');
+  var crit = auxQ('#auxDeclusCrit');
   var prev = (auxDeclus && auxDeclus.params) || {};
   return {
     varName: sel ? sel.value : (prev.varName || null),
@@ -523,8 +523,8 @@ function auxDeclusUpdateCursor(svg, pt) {
 
 function runAuxDeclus() {
   if (!auxFile || !auxPreflightData) return;
-  var $st = document.getElementById('auxDeclusStatus');
-  var $runBtn = document.getElementById('auxDeclusRunBtn');
+  var $st = auxQ('#auxDeclusStatus');
+  var $runBtn = auxQ('#auxDeclusRunBtn');
   function dfail(msg) {
     if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
     if ($runBtn) $runBtn.disabled = false;
@@ -611,9 +611,9 @@ function applyAuxRestore(saved) {
 // as aux candidates (e.g. a zip holding both the model and its composites)
 function renderAuxFromMain() {
   // C6-3: name the model in the "Add a dataset" intro (runs on model load + clearAux)
-  var mn = document.getElementById('dsModelName');
+  var mn = auxQ('#dsModelName');
   if (mn) mn.textContent = (currentFile && currentFile.name) ? currentFile.name : 'your block model';
-  var $wrap = document.getElementById('auxFromMain');
+  var $wrap = auxQ('#auxFromMain');
   if (!$wrap) return;
   if (auxFile || !currentFile || !preflightData || !preflightData.zipEntries || preflightData.zipEntries.length < 2) {
     $wrap.innerHTML = '';
@@ -630,10 +630,10 @@ function renderAuxFromMain() {
       '<select class="aux-select" id="auxFromMainSel" style="flex:1">' + opts + '</select>' +
       '<button class="aux-from-main-btn" id="auxFromMainBtn">Use entry</button>' +
     '</div>';
-  var sel = document.getElementById('auxFromMainSel');
+  var sel = auxQ('#auxFromMainSel');
   var firstFree = preflightData.zipEntries.find(function(z) { return z.name !== preflightData.selectedZipEntry; });
   if (firstFree) sel.value = firstFree.name;
-  document.getElementById('auxFromMainBtn').addEventListener('click', function() {
+  auxQ('#auxFromMainBtn').addEventListener('click', function() {
     loadAuxFile(currentFile, null, sel.value);
   });
 }
@@ -641,7 +641,7 @@ function renderAuxFromMain() {
 function loadAuxFile(file, handle, zipEntryName) {
   auxFile = file;
   auxHandle = handle || null;
-  var e0 = document.getElementById('auxLoadError');
+  var e0 = auxQ('#auxLoadError');
   if (e0) e0.textContent = '';
   $auxFileInfo.textContent = 'Loading ' + file.name + '…';
   $auxEmpty.style.display = 'none';
@@ -669,7 +669,7 @@ function loadAuxFile(file, handle, zipEntryName) {
     $auxConfig.style.display = 'none';
     $auxEmpty.style.display = '';
     $auxFileInfo.textContent = '';
-    var errEl = document.getElementById('auxLoadError');
+    var errEl = auxQ('#auxLoadError');
     if (errEl) errEl.textContent = 'Dataset load failed: ' + err.message;
   });
 }
@@ -782,12 +782,12 @@ if ($auxDropzone) {
     // Curve scrubbing: crosshair with cell size, declustered mean and Δ%
     $auxSidebar.addEventListener('pointermove', function(e) {
       var svg = e.target && e.target.closest ? e.target.closest('#auxDeclusCurveSvg') : null;
-      var anySvg = document.getElementById('auxDeclusCurveSvg');
+      var anySvg = auxQ('#auxDeclusCurveSvg');
       if (!svg) { if (anySvg) auxDeclusUpdateCursor(anySvg, null); return; }
       auxDeclusUpdateCursor(svg, auxDeclusNearestPt(svg, e));
     });
     $auxSidebar.addEventListener('pointerleave', function() {
-      var svg = document.getElementById('auxDeclusCurveSvg');
+      var svg = auxQ('#auxDeclusCurveSvg');
       if (svg) auxDeclusUpdateCursor(svg, null);
     });
     // Zip entry switch — re-read header/types/xyz from the chosen entry
@@ -804,6 +804,6 @@ if ($auxDropzone) {
       }
     });
   }
-  var $auxClearBtn = document.getElementById('auxClear');
+  var $auxClearBtn = auxQ('#auxClear');
   if ($auxClearBtn) $auxClearBtn.addEventListener('click', clearAux);
 }
