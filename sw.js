@@ -5,10 +5,10 @@
 // carries the build hash, so every deploy auto-busts old caches — no manual
 // version bumps to forget.
 //
-// This file is a BUILD INPUT: build.js substitutes 083b662 and writes
+// This file is a BUILD INPUT: build.js substitutes 3083d76 and writes
 // the root sw.js. Don't edit the root copy.
 
-const CACHE = 'bma-shell-083b662';
+const CACHE = 'bma-shell-3083d76';
 const SHELL = [
   './',
   './index.html',

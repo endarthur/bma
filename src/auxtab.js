@@ -537,6 +537,9 @@ function applyAuxRestore(saved) {
 // When the primary file is a multi-entry archive, offer its other entries
 // as aux candidates (e.g. a zip holding both the model and its composites)
 function renderAuxFromMain() {
+  // C6-3: name the model in the "Add a dataset" intro (runs on model load + clearAux)
+  var mn = document.getElementById('dsModelName');
+  if (mn) mn.textContent = (currentFile && currentFile.name) ? currentFile.name : 'your block model';
   var $wrap = document.getElementById('auxFromMain');
   if (!$wrap) return;
   if (auxFile || !currentFile || !preflightData || !preflightData.zipEntries || preflightData.zipEntries.length < 2) {
@@ -565,6 +568,8 @@ function renderAuxFromMain() {
 function loadAuxFile(file, handle, zipEntryName) {
   auxFile = file;
   auxHandle = handle || null;
+  var e0 = document.getElementById('auxLoadError');
+  if (e0) e0.textContent = '';
   $auxFileInfo.textContent = 'Loading ' + file.name + '…';
   $auxEmpty.style.display = 'none';
   $auxConfig.style.display = '';
@@ -591,8 +596,8 @@ function loadAuxFile(file, handle, zipEntryName) {
     $auxConfig.style.display = 'none';
     $auxEmpty.style.display = '';
     $auxFileInfo.textContent = '';
-    var hint = $auxEmpty.querySelector('.aux-empty-hint');
-    if (hint) hint.innerHTML = '<span style="color:var(--red)">Aux load failed: ' + esc(err.message) + '</span>';
+    var errEl = document.getElementById('auxLoadError');
+    if (errEl) errEl.textContent = 'Dataset load failed: ' + err.message;
   });
 }
 

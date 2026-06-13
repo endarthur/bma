@@ -91,6 +91,23 @@ serializes/applies layouts, a preset is canned JSON.
 
 ## Phase log
 
+- **C6-3 (add-dataset surface) ✅ (2026-06-13)** — the aux empty state
+  ("three floating blocks in a void") rebuilt as the **Add a dataset**
+  surface, designed against [`a10-n-datasets.md`](a10-n-datasets.md) so it's
+  architecturally right when the registry lands: a Barlow `<h2>` + intro line
+  (names the loaded model via `#dsModelName`, set in `renderAuxFromMain`) over
+  **two equal peer cards** — **Point data** (the dropzone + the from-zip-entry
+  affordance) and **Drillhole set** (the existing `#dhCard`, now a `.ds-card`
+  peer sharing the `.ds-card-head` shell; its standalone box CSS dropped). The
+  surface is top-aligned + scrollable, cards `flex 1 1 360px` (wrap on narrow).
+  Load errors moved from the deleted `.aux-empty-hint` wall to `#auxLoadError`.
+  Drillhole ingestion untouched (all `#dh*` ids + `.dh-slot` preserved; drillhole
+  smoke green). **Deferred with reasons** (noted for follow-up): a load-example-
+  composites button (the example samples only match the example model's
+  coordinates — misleading against a real model) and recent-aux quick-load
+  (recents store keys/metadata, not file bytes — can't re-read without a
+  handle). The C8 "project home" landing redesign stays C8's. Suite 18/18
+  (c6-smoke +3 add-dataset asserts); both modes shot (`experiments/c6-3-shot.js`).
 - **C6-2 (menubar) ✅ (2026-06-13)** — desktop top-left command bar via the
   already-vendored `@gcu/menu` `MenuBar` (`src/workspace.js`), mounted on
   `#appMenubar` in `buildRailsShell()`, destroyed in `wsExitRails()` (rails

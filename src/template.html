@@ -181,24 +181,36 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
 
       <div class="results-panel" id="panelAux" data-tab="aux">
         <div class="aux-empty" id="auxEmpty">
-          <div class="dropzone aux-dropzone" id="auxDropzone">
-            <div class="label">Drop an auxiliary dataset, or <strong>click to browse</strong></div>
-            <div class="hint">A second CSV/.dm with X, Y, Z columns — e.g. the composites/samples behind this block model</div>
-            <input type="file" id="auxFileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM">
-          </div>
-          <div class="aux-from-main" id="auxFromMain"></div>
-          <div class="dh-card" id="dhCard">
-            <div class="dh-card-head">
-              <span class="dh-card-title">Drillhole set</span>
-              <span class="dh-card-sub">collar + survey + intervals → desurveyed, composited samples</span>
-              <button class="dh-clear-btn" id="dhClearBtn" title="Clear the drillhole set" style="display:none">✕ Clear</button>
+          <div class="ds-add">
+            <h2 class="ds-add-title">Add a dataset</h2>
+            <p class="ds-add-intro">Compare a second dataset against <strong id="dsModelName">your block model</strong> — drill-hole composites, a previous estimate, or a check run. It rides through <strong>Statistics</strong>, <strong>CDF</strong>, and <strong>Swath</strong> under its own prefix, held up beside the model. Comparison is statistical and spatial only — no geometry, export, or per-row joins.</p>
+            <div class="ds-add-error" id="auxLoadError"></div>
+            <div class="ds-cards">
+              <div class="ds-card">
+                <div class="ds-card-head">
+                  <span class="ds-card-title">Point data</span>
+                  <span class="ds-card-sub">a CSV or .dm with X, Y, Z — composites, samples, or another model's block centroids</span>
+                </div>
+                <div class="dropzone aux-dropzone" id="auxDropzone">
+                  <div class="label">Drop a file, or <strong>click to browse</strong></div>
+                  <div class="hint">.csv · .txt · .dat · .zip · .dm</div>
+                  <input type="file" id="auxFileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM">
+                </div>
+                <div class="aux-from-main" id="auxFromMain"></div>
+              </div>
+              <div class="ds-card dh-card" id="dhCard">
+                <div class="ds-card-head">
+                  <span class="ds-card-title">Drillhole set</span>
+                  <span class="ds-card-sub">collar + survey + intervals → desurveyed, composited samples</span>
+                  <button class="dh-clear-btn" id="dhClearBtn" title="Clear the drillhole set" style="display:none">✕ Clear</button>
+                </div>
+                <div class="dh-slots" id="dhSlots"></div>
+                <div class="dh-mapping" id="dhMapping"></div>
+                <div class="dh-report" id="dhReportInline"></div>
+                <input type="file" id="dhFileInput" multiple accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP" style="display:none">
+              </div>
             </div>
-            <div class="dh-slots" id="dhSlots"></div>
-            <div class="dh-mapping" id="dhMapping"></div>
-            <div class="dh-report" id="dhReportInline"></div>
-            <input type="file" id="dhFileInput" multiple accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP" style="display:none">
           </div>
-          <div class="aux-empty-hint">Aux variables appear across Statistics, CDF, and Swath with a <strong>prefix</strong> so you can compare them against the block model. No geometry, export, or per-row joins — comparison is statistical/spatial only.</div>
         </div>
         <div class="aux-config" id="auxConfig" style="display:none">
           <div class="preflight-head" id="auxHead">

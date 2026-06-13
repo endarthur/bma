@@ -3720,14 +3720,45 @@ table.cat-values td.cat-pct-cell {
 
 /* ─── Aux dataset tab ─────────────────────────────────────────────── */
 #panelAux.active { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+/* C6-3: the empty state is the "Add a dataset" surface — a Barlow intro
+   then two peer cards (point data / drillhole set), top-aligned and
+   scrollable, designed to grow into the A10 N-dataset list. */
 .aux-empty {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 1rem; padding: 2rem; height: 100%; text-align: center;
+  display: block; overflow-y: auto; height: 100%; padding: 1.5rem;
 }
+.ds-add { max-width: 940px; margin: 0 auto; }
+.ds-add-title {
+  font: 600 1.15rem var(--sans); color: var(--fg-bright);
+  margin-bottom: 0.35rem;
+}
+.ds-add-intro {
+  font-family: var(--sans); font-size: 0.85rem; color: var(--fg-dim);
+  line-height: 1.55; max-width: 72ch; margin-bottom: 1.2rem;
+}
+.ds-add-intro strong { color: var(--fg); font-weight: 600; }
+.ds-add-error { color: var(--red); font: 0.78rem var(--mono); margin-bottom: 0.8rem; }
+.ds-add-error:empty { display: none; }
+.ds-cards {
+  display: flex; gap: 1rem; flex-wrap: wrap; align-items: stretch;
+}
+.ds-card {
+  flex: 1 1 360px; min-width: 320px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg1); padding: 0.9rem 1rem 1rem;
+  display: flex; flex-direction: column; text-align: left;
+}
+.ds-card-head { margin-bottom: 0.7rem; display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+.ds-card-title {
+  font: 600 0.92rem var(--sans); color: var(--fg-bright);
+  letter-spacing: 0.01em;
+}
+.ds-card-sub {
+  flex: 1 1 100%; color: var(--fg-dim);
+  font-family: var(--sans); font-size: 0.74rem; line-height: 1.4;
+}
+.ds-card .aux-dropzone { max-width: none; width: 100%; }
+.ds-card .aux-from-main { max-width: none; width: 100%; }
 .aux-dropzone { max-width: 520px; width: 100%; }
-.aux-empty-hint {
-  max-width: 520px; color: var(--fg-dim); font-family: var(--sans); font-size: 0.85rem; line-height: 1.5; opacity: 0.8;
-}
 .aux-from-main { max-width: 520px; width: 100%; }
 .aux-from-main:empty { display: none; }
 .aux-from-main-row {
@@ -4836,18 +4867,8 @@ table.stats tr.stats-delta-row td:first-child {
 .save-beat.on { opacity: 1; }
 
 /* ─── Drillhole set ingestion (A7 Phase 1) ───────────────────────────── */
-.dh-card {
-  max-width: 760px;
-  margin: 1.2rem auto 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg1);
-  padding: 0.8rem 1rem 1rem;
-  text-align: left;
-}
-.dh-card-head { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.6rem; }
-.dh-card-title { color: var(--fg); font-weight: 600; font-size: 0.8rem; letter-spacing: 0.04em; }
-.dh-card-sub { color: var(--fg-dim); font-family: var(--sans); font-size: 0.75rem; flex: 1; }
+/* The card box is now provided by .ds-card (C6-3 peer layout); the clear
+   button rides in the shared .ds-card-head. */
 .dh-clear-btn {
   background: none; border: 1px solid var(--border); border-radius: 3px;
   color: var(--fg-dim); font: 0.65rem var(--mono); padding: 0.15rem 0.45rem; cursor: pointer;
@@ -5110,24 +5131,36 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
 
       <div class="results-panel" id="panelAux" data-tab="aux">
         <div class="aux-empty" id="auxEmpty">
-          <div class="dropzone aux-dropzone" id="auxDropzone">
-            <div class="label">Drop an auxiliary dataset, or <strong>click to browse</strong></div>
-            <div class="hint">A second CSV/.dm with X, Y, Z columns — e.g. the composites/samples behind this block model</div>
-            <input type="file" id="auxFileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM">
-          </div>
-          <div class="aux-from-main" id="auxFromMain"></div>
-          <div class="dh-card" id="dhCard">
-            <div class="dh-card-head">
-              <span class="dh-card-title">Drillhole set</span>
-              <span class="dh-card-sub">collar + survey + intervals → desurveyed, composited samples</span>
-              <button class="dh-clear-btn" id="dhClearBtn" title="Clear the drillhole set" style="display:none">✕ Clear</button>
+          <div class="ds-add">
+            <h2 class="ds-add-title">Add a dataset</h2>
+            <p class="ds-add-intro">Compare a second dataset against <strong id="dsModelName">your block model</strong> — drill-hole composites, a previous estimate, or a check run. It rides through <strong>Statistics</strong>, <strong>CDF</strong>, and <strong>Swath</strong> under its own prefix, held up beside the model. Comparison is statistical and spatial only — no geometry, export, or per-row joins.</p>
+            <div class="ds-add-error" id="auxLoadError"></div>
+            <div class="ds-cards">
+              <div class="ds-card">
+                <div class="ds-card-head">
+                  <span class="ds-card-title">Point data</span>
+                  <span class="ds-card-sub">a CSV or .dm with X, Y, Z — composites, samples, or another model's block centroids</span>
+                </div>
+                <div class="dropzone aux-dropzone" id="auxDropzone">
+                  <div class="label">Drop a file, or <strong>click to browse</strong></div>
+                  <div class="hint">.csv · .txt · .dat · .zip · .dm</div>
+                  <input type="file" id="auxFileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM">
+                </div>
+                <div class="aux-from-main" id="auxFromMain"></div>
+              </div>
+              <div class="ds-card dh-card" id="dhCard">
+                <div class="ds-card-head">
+                  <span class="ds-card-title">Drillhole set</span>
+                  <span class="ds-card-sub">collar + survey + intervals → desurveyed, composited samples</span>
+                  <button class="dh-clear-btn" id="dhClearBtn" title="Clear the drillhole set" style="display:none">✕ Clear</button>
+                </div>
+                <div class="dh-slots" id="dhSlots"></div>
+                <div class="dh-mapping" id="dhMapping"></div>
+                <div class="dh-report" id="dhReportInline"></div>
+                <input type="file" id="dhFileInput" multiple accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP" style="display:none">
+              </div>
             </div>
-            <div class="dh-slots" id="dhSlots"></div>
-            <div class="dh-mapping" id="dhMapping"></div>
-            <div class="dh-report" id="dhReportInline"></div>
-            <input type="file" id="dhFileInput" multiple accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP" style="display:none">
           </div>
-          <div class="aux-empty-hint">Aux variables appear across Statistics, CDF, and Swath with a <strong>prefix</strong> so you can compare them against the block model. No geometry, export, or per-row joins — comparison is statistical/spatial only.</div>
         </div>
         <div class="aux-config" id="auxConfig" style="display:none">
           <div class="preflight-head" id="auxHead">
@@ -5560,7 +5593,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 083b662 — click to check for updates">083b662</div>
+<div class="build-badge" id="buildBadge" title="build 3083d76 — click to check for updates">3083d76</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -14582,6 +14615,9 @@ function applyAuxRestore(saved) {
 // When the primary file is a multi-entry archive, offer its other entries
 // as aux candidates (e.g. a zip holding both the model and its composites)
 function renderAuxFromMain() {
+  // C6-3: name the model in the "Add a dataset" intro (runs on model load + clearAux)
+  var mn = document.getElementById('dsModelName');
+  if (mn) mn.textContent = (currentFile && currentFile.name) ? currentFile.name : 'your block model';
   var $wrap = document.getElementById('auxFromMain');
   if (!$wrap) return;
   if (auxFile || !currentFile || !preflightData || !preflightData.zipEntries || preflightData.zipEntries.length < 2) {
@@ -14610,6 +14646,8 @@ function renderAuxFromMain() {
 function loadAuxFile(file, handle, zipEntryName) {
   auxFile = file;
   auxHandle = handle || null;
+  var e0 = document.getElementById('auxLoadError');
+  if (e0) e0.textContent = '';
   $auxFileInfo.textContent = 'Loading ' + file.name + '…';
   $auxEmpty.style.display = 'none';
   $auxConfig.style.display = '';
@@ -14636,8 +14674,8 @@ function loadAuxFile(file, handle, zipEntryName) {
     $auxConfig.style.display = 'none';
     $auxEmpty.style.display = '';
     $auxFileInfo.textContent = '';
-    var hint = $auxEmpty.querySelector('.aux-empty-hint');
-    if (hint) hint.innerHTML = '<span style="color:var(--red)">Aux load failed: ' + esc(err.message) + '</span>';
+    var errEl = document.getElementById('auxLoadError');
+    if (errEl) errEl.textContent = 'Dataset load failed: ' + err.message;
   });
 }
 

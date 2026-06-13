@@ -3705,14 +3705,45 @@ table.cat-values td.cat-pct-cell {
 
 /* ─── Aux dataset tab ─────────────────────────────────────────────── */
 #panelAux.active { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+/* C6-3: the empty state is the "Add a dataset" surface — a Barlow intro
+   then two peer cards (point data / drillhole set), top-aligned and
+   scrollable, designed to grow into the A10 N-dataset list. */
 .aux-empty {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 1rem; padding: 2rem; height: 100%; text-align: center;
+  display: block; overflow-y: auto; height: 100%; padding: 1.5rem;
 }
+.ds-add { max-width: 940px; margin: 0 auto; }
+.ds-add-title {
+  font: 600 1.15rem var(--sans); color: var(--fg-bright);
+  margin-bottom: 0.35rem;
+}
+.ds-add-intro {
+  font-family: var(--sans); font-size: 0.85rem; color: var(--fg-dim);
+  line-height: 1.55; max-width: 72ch; margin-bottom: 1.2rem;
+}
+.ds-add-intro strong { color: var(--fg); font-weight: 600; }
+.ds-add-error { color: var(--red); font: 0.78rem var(--mono); margin-bottom: 0.8rem; }
+.ds-add-error:empty { display: none; }
+.ds-cards {
+  display: flex; gap: 1rem; flex-wrap: wrap; align-items: stretch;
+}
+.ds-card {
+  flex: 1 1 360px; min-width: 320px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg1); padding: 0.9rem 1rem 1rem;
+  display: flex; flex-direction: column; text-align: left;
+}
+.ds-card-head { margin-bottom: 0.7rem; display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+.ds-card-title {
+  font: 600 0.92rem var(--sans); color: var(--fg-bright);
+  letter-spacing: 0.01em;
+}
+.ds-card-sub {
+  flex: 1 1 100%; color: var(--fg-dim);
+  font-family: var(--sans); font-size: 0.74rem; line-height: 1.4;
+}
+.ds-card .aux-dropzone { max-width: none; width: 100%; }
+.ds-card .aux-from-main { max-width: none; width: 100%; }
 .aux-dropzone { max-width: 520px; width: 100%; }
-.aux-empty-hint {
-  max-width: 520px; color: var(--fg-dim); font-family: var(--sans); font-size: 0.85rem; line-height: 1.5; opacity: 0.8;
-}
 .aux-from-main { max-width: 520px; width: 100%; }
 .aux-from-main:empty { display: none; }
 .aux-from-main-row {
@@ -4821,18 +4852,8 @@ table.stats tr.stats-delta-row td:first-child {
 .save-beat.on { opacity: 1; }
 
 /* ─── Drillhole set ingestion (A7 Phase 1) ───────────────────────────── */
-.dh-card {
-  max-width: 760px;
-  margin: 1.2rem auto 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg1);
-  padding: 0.8rem 1rem 1rem;
-  text-align: left;
-}
-.dh-card-head { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.6rem; }
-.dh-card-title { color: var(--fg); font-weight: 600; font-size: 0.8rem; letter-spacing: 0.04em; }
-.dh-card-sub { color: var(--fg-dim); font-family: var(--sans); font-size: 0.75rem; flex: 1; }
+/* The card box is now provided by .ds-card (C6-3 peer layout); the clear
+   button rides in the shared .ds-card-head. */
 .dh-clear-btn {
   background: none; border: 1px solid var(--border); border-radius: 3px;
   color: var(--fg-dim); font: 0.65rem var(--mono); padding: 0.15rem 0.45rem; cursor: pointer;
