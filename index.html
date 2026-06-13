@@ -5310,24 +5310,24 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
         </div>
       </div>
 
-      <div class="results-panel" id="panelAux" data-tab="aux">
-        <div class="aux-empty" id="auxEmpty">
+      <div class="results-panel ds-panel" id="panelAux" data-tab="aux" data-ds="aux">
+        <div class="aux-empty" id="auxEmpty" data-aux="empty">
           <div class="ds-add">
             <h2 class="ds-add-title">Add a dataset</h2>
-            <p class="ds-add-intro">Compare a second dataset against <strong id="dsModelName">your block model</strong> — drill-hole composites, a previous estimate, or a check run. It rides through <strong>Statistics</strong>, <strong>CDF</strong>, and <strong>Swath</strong> under its own prefix, held up beside the model. Comparison is statistical and spatial only — no geometry, export, or per-row joins.</p>
-            <div class="ds-add-error" id="auxLoadError"></div>
+            <p class="ds-add-intro">Compare a second dataset against <strong id="dsModelName" data-aux="modelName">your block model</strong> — drill-hole composites, a previous estimate, or a check run. It rides through <strong>Statistics</strong>, <strong>CDF</strong>, and <strong>Swath</strong> under its own prefix, held up beside the model. Comparison is statistical and spatial only — no geometry, export, or per-row joins.</p>
+            <div class="ds-add-error" id="auxLoadError" data-aux="loadError"></div>
             <div class="ds-cards">
               <div class="ds-card">
                 <div class="ds-card-head">
                   <span class="ds-card-title">Point data</span>
                   <span class="ds-card-sub">a CSV or .dm with X, Y, Z — composites, samples, or another model's block centroids</span>
                 </div>
-                <div class="dropzone aux-dropzone" id="auxDropzone">
+                <div class="dropzone aux-dropzone" id="auxDropzone" data-aux="dropzone">
                   <div class="label">Drop a file, or <strong>click to browse</strong></div>
                   <div class="hint">.csv · .txt · .dat · .zip · .dm</div>
-                  <input type="file" id="auxFileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM">
+                  <input type="file" id="auxFileInput" data-aux="fileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM">
                 </div>
-                <div class="aux-from-main" id="auxFromMain"></div>
+                <div class="aux-from-main" id="auxFromMain" data-aux="fromMain"></div>
               </div>
               <div class="ds-card dh-card" id="dhCard">
                 <div class="ds-card-head">
@@ -5343,22 +5343,22 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
             </div>
           </div>
         </div>
-        <div class="aux-config" id="auxConfig" style="display:none">
-          <div class="preflight-head" id="auxHead">
-            <span class="preflight-zip" id="auxFileInfo"></span>
-            <button class="aux-remove-btn" id="auxClear" title="Remove aux dataset">✕ Remove</button>
+        <div class="aux-config" id="auxConfig" data-aux="config" style="display:none">
+          <div class="preflight-head" id="auxHead" data-aux="head">
+            <span class="preflight-zip" id="auxFileInfo" data-aux="fileInfo"></span>
+            <button class="aux-remove-btn" id="auxClear" data-aux="clear" title="Remove aux dataset">✕ Remove</button>
           </div>
           <div class="preflight-body">
-            <div class="preflight-sidebar" id="auxSidebar"></div>
+            <div class="preflight-sidebar" id="auxSidebar" data-aux="sidebar"></div>
             <div class="preflight-preview-wrap">
-              <div class="aux-view-toggle" id="auxViewToggle">
+              <div class="aux-view-toggle" id="auxViewToggle" data-aux="viewToggle">
                 <button class="aux-view-btn active" data-auxview="preview">Preview</button>
                 <button class="aux-view-btn" data-auxview="summary">Summary</button>
                 <button class="aux-view-btn" data-auxview="topcut">Top-cut</button>
               </div>
-              <div class="preflight-preview" id="auxPreview"></div>
-              <div class="aux-summary" id="auxSummary" style="display:none"></div>
-              <div class="aux-topcut" id="auxTopcut" style="display:none"></div>
+              <div class="preflight-preview" id="auxPreview" data-aux="preview"></div>
+              <div class="aux-summary" id="auxSummary" data-aux="summaryView" style="display:none"></div>
+              <div class="aux-topcut" id="auxTopcut" data-aux="topcutView" style="display:none"></div>
             </div>
           </div>
         </div>
@@ -5788,7 +5788,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build c23476e — click to check for updates">c23476e</div>
+<div class="build-badge" id="buildBadge" title="build def6550 — click to check for updates">def6550</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8395,8 +8395,20 @@ function dsRemove(id) {
 // scoped querySelector resolves the same single live element — behavior is
 // bit-identical (the seam is inert until 1f flips the ids to classes). All
 // aux-panel code (auxtab/topcut/drillhole) reads through auxQ from here on.
+// dsConfigRoot(ds) → the config-panel ROOT element for a dataset. The model
+// and the legacy aux are static panels; d2+ instances (1g-c) are rails-built
+// clones tagged `.ds-panel[data-ds="<id>"]`. auxQ(sel, root) scopes a lookup
+// to a root (defaults to the aux panel) — pass an explicit root to address an
+// instance's DOM. (1g-b parameterizes the render/handlers by (ds, root); for
+// now everything resolves the single aux panel, behavior unchanged.)
+function dsConfigRoot(ds) {
+  if (!ds) return null;
+  if (ds.id === 'aux') return document.getElementById('panelAux');
+  if (ds.id === 'model') return document.getElementById('panelPreflight');
+  return document.querySelector('.ds-panel[data-ds="' + ds.id + '"]');
+}
 function auxPanelRoot() { return document.getElementById('panelAux'); }
-function auxQ(sel) { var r = auxPanelRoot(); return r ? r.querySelector(sel) : null; }
+function auxQ(sel, root) { var r = root || auxPanelRoot(); return r ? r.querySelector(sel) : null; }
 
 var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
 

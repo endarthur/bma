@@ -131,8 +131,20 @@ function dsRemove(id) {
 // scoped querySelector resolves the same single live element — behavior is
 // bit-identical (the seam is inert until 1f flips the ids to classes). All
 // aux-panel code (auxtab/topcut/drillhole) reads through auxQ from here on.
+// dsConfigRoot(ds) → the config-panel ROOT element for a dataset. The model
+// and the legacy aux are static panels; d2+ instances (1g-c) are rails-built
+// clones tagged `.ds-panel[data-ds="<id>"]`. auxQ(sel, root) scopes a lookup
+// to a root (defaults to the aux panel) — pass an explicit root to address an
+// instance's DOM. (1g-b parameterizes the render/handlers by (ds, root); for
+// now everything resolves the single aux panel, behavior unchanged.)
+function dsConfigRoot(ds) {
+  if (!ds) return null;
+  if (ds.id === 'aux') return document.getElementById('panelAux');
+  if (ds.id === 'model') return document.getElementById('panelPreflight');
+  return document.querySelector('.ds-panel[data-ds="' + ds.id + '"]');
+}
 function auxPanelRoot() { return document.getElementById('panelAux'); }
-function auxQ(sel) { var r = auxPanelRoot(); return r ? r.querySelector(sel) : null; }
+function auxQ(sel, root) { var r = root || auxPanelRoot(); return r ? r.querySelector(sel) : null; }
 
 var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
 

@@ -139,6 +139,68 @@ Each dataset panel carries a summary appropriate to its kind:
 | 5 | **Drillhole sets as instances** (multiple), per-dataset declustering/top-cut targeting |
 | 6 | **Persistence + pack** (`datasets` key, `referenceId`, legacy `aux`/`drillholes` migration; C8-shaped); smoke `a10-smoke.js`; **manuals regen (both languages) → RELEASE** |
 
+### Phase-1 implementation log + the C9 instance contract (2026-06-13)
+
+Phase 1 is being executed as fine slices (B1/C1a playbook — de-risk first):
+
+- **1e ✅ (f3c4d30)** — root seam: `auxPanelRoot()`/`auxQ(sel)` in core.js; every
+  aux-panel DOM lookup routes through the per-dataset root, not the document.
+  Inert (ids unchanged), behavior bit-identical, all aux smokes pass unchanged.
+- **1f ✅ (ade2133)** — flipped the *rendered* controls off unique ids onto
+  collision-free identity attrs (`data-act` on buttons, `data-aux` on
+  inputs/selects/spans; styling classes untouched). Handlers key on
+  `e.target.dataset`; `setGenStale()` takes an element or id. Sweep curve/cursor
+  use `.aux-declus-curve`/`.aux-declus-cursor`. Shell elements still keep their
+  template ids (become per-root in 1g). Smokes + shot drivers updated.
+
+**The rails instance contract (verified against vendor-rails.js, 2026-06-13).**
+The dataset config panel is the first *cloneable* C9 panel. Rails supports this
+with no new vendor code:
+
+- `getPanel(inst, tab)` (rails internal) calls `callbacks.renderPanel(tab)`
+  **once per tab id, lazily**, wraps the returned element in a `.rails-panel`
+  wrapper, appends to `contentLayer`, and caches it in `inst.panels` (Map by
+  tab id). renderPanel is never called again while the tab is live.
+- `addTab({id, title, closeable:true}, target)` adds a tab (dup id throws);
+  `updateTab(id, {title})` renames (for "Import: ⟨prefix⟩" tracking the prefix);
+  `closeTab(id)` → `destroyPanel` → `onPanelDestroy(tab, wrap)` (wrap = the
+  `.rails-panel`, `wrap.firstElementChild` = the panel body).
+- **All dataset panel state lives in the `ds` object, not the DOM**, so close =
+  destroy, reopen = renderPanel-rebuilds-from-`ds` — no `preserveOnClose` needed.
+
+Design for the remaining phase-1 work:
+
+- **1g-a (foundation, behavior-identical)** — make the shell access root-relative:
+  `auxPanelRoot()` (and the cached `$aux*` shell consts → root-relative
+  accessors) take a root; parameterize `renderAuxConfig`/`runAuxAnalysis`/preview/
+  summary/declus/topcut by an explicit `(ds, root)`. Extract the load-time wiring
+  (listeners on the sidebar/topcut/view-toggle + clear button) into
+  `wireDatasetPanel(root, ds)` and call it for the static `#panelAux` (ds=aux).
+  Single instance still = `#panelAux`; aux smokes stay green.
+- **1g-b** — per-`ds` state + worker handles: read `ds.file/preflight/filter/
+  prefix/calcolCode/declus/topcut/view/complete/stale` instead of the `aux*`
+  globals (aux is `datasets[1]`, a getter-view, so reading `ds.*` ≡ today —
+  bit-identical); move `auxWorker`/`auxDeclusWorker`/`auxTopcutWorker` onto the
+  `ds` object (`ds._worker` etc.) so datasets analyze concurrently. `rowVarOverride
+  = ds.rowVar` ('aux' for the legacy aux, the id for d2+); catalog namespace =
+  `ds.id`.
+- **1g-c (instances live)** — `renderPanel` dispatch: data → tree; `wsPanelById`
+  → static singleton (incl. aux); else `dsById(tab.id)` → `wsBuildDatasetPanel(ds)`
+  (clone a **config-shell template** — scoped, no unique ids, no dh card; set
+  `root.dataset.ds=id`; `wireDatasetPanel(root, ds)`; initial `renderAuxConfig(ds,
+  root)`). `onPanelDestroy` guards: re-home only `wsPanelById` singletons; a clone
+  is just discarded (state survives in `ds`). "Add point dataset" = `dsCreate` +
+  `loadAuxFile(...)` into the new ds + `addTab({id, title:'Import: '+prefix})`.
+  Add `a10-smoke.js` proving two point datasets coexist + analyze independently.
+  Instance tabs are NOT persisted until phase 6 (wsApplyLayout sanitize drops a
+  `d*` tab whose dataset is absent on restore).
+
+Note on the older "scope to class selectors / migrate ~8 files" sketch: the
+phase-1 DOM scoping used **data-act/data-aux + the auxQ root** (not bare classes);
+the statistics/swath/gt/project/ctxmenu files read aux* as *state* (not DOM) and
+are converted by the 1g-b `ds`-parameterization, with the singleton aux view
+keeping them bit-identical.
+
 The original "single Datasets tab" generalization (below) is kept for the
 data-model/reference/pairing/persistence reasoning, which is unchanged — only
 the surface (tab → tree + instance panels) is superseded by the above.
