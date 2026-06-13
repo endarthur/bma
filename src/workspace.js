@@ -627,6 +627,58 @@ function wsApplySidebarCollapsed(list) {
   });
 }
 
+// ─── C6-4b: collapsible sidebar sections ────────────────────────────────
+// Each control-sidebar section is marked data-sb="<key>" in its renderer;
+// wsEnhanceSidebar promotes the section's first child (the title) to a
+// clickable header and applies the persisted/default open state. Built on
+// the tree.js open-state pattern, shared across every sidebar renderer.
+// State is per panel:key, persisted in the project (sidebars.sections).
+var SB_SECTIONS = {};   // "panelId:key" -> true when COLLAPSED
+
+// defaults: { key: 'collapsed' } — keys absent default to open. Called after
+// each (re)render; safe to re-run (per-render markup gets fresh listeners,
+// static markup is guarded by data-sb-bound).
+function wsEnhanceSidebar(panelId, sidebar, defaults) {
+  if (!sidebar) return;
+  defaults = defaults || {};
+  var secs = sidebar.querySelectorAll(':scope > [data-sb]');
+  for (var i = 0; i < secs.length; i++) {
+    (function(sec) {
+      var key = sec.getAttribute('data-sb');
+      var head = sec.firstElementChild;
+      if (!head) return;
+      sec.classList.add('sb-sec');
+      if (sec.className.indexOf('--grow') >= 0) sec.classList.add('sb-sec--grow');
+      head.classList.add('sb-sec-head');
+      var full = panelId + ':' + key;
+      var collapsed = (full in SB_SECTIONS) ? SB_SECTIONS[full] : (defaults[key] === 'collapsed');
+      sec.classList.toggle('collapsed', collapsed);
+      if (!head.dataset.sbBound) {
+        head.dataset.sbBound = '1';
+        head.addEventListener('click', function() {
+          var now = !sec.classList.contains('collapsed');
+          sec.classList.toggle('collapsed', now);
+          SB_SECTIONS[panelId + ':' + key] = now;
+          if (typeof autoSaveProject === 'function') autoSaveProject();
+        });
+      }
+    })(secs[i]);
+  }
+}
+
+// Force a section open (e.g. Alt+V focusing a collapsed var search) and
+// remember it. panelId:key must match the section's data-sb.
+function wsOpenSidebarSection(panelId, key) {
+  SB_SECTIONS[panelId + ':' + key] = false;
+  var sec = document.querySelector('[data-sb="' + key + '"]');
+  if (sec) sec.classList.remove('collapsed');
+}
+
+// Restore from the project (object of "panelId:key" -> collapsed bool)
+function wsApplySidebarSections(obj) {
+  SB_SECTIONS = (obj && typeof obj === 'object') ? Object.assign({}, obj) : {};
+}
+
 function wsInitSidebars() {
   wsInitSidebar('statistics', document.getElementById('statsBody'), 'Variables');
   wsInitSidebar('categories', document.getElementById('catBody'), 'Columns');

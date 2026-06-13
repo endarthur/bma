@@ -893,7 +893,17 @@ document.addEventListener('keydown', function(e) {
     var searchId = _tabSearchMap[activeTab.dataset.tab];
     if (searchId) {
       var el = document.getElementById(searchId);
-      if (el) { el.focus(); el.select(); }
+      if (el) {
+        // C6-4b: the search may live in a collapsed section — open it first
+        var sec = el.closest('.sb-sec');
+        if (sec && sec.classList.contains('collapsed')) {
+          sec.classList.remove('collapsed');
+          if (typeof SB_SECTIONS !== 'undefined' && sec.dataset.sb) {
+            SB_SECTIONS[activeTab.dataset.tab + ':' + sec.dataset.sb] = false;
+          }
+        }
+        el.focus(); el.select();
+      }
     }
     return;
   }

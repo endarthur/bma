@@ -403,8 +403,11 @@ function serializeProject() {
       focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null
     },
     tree: { open: catalogTreeOpen },
-    // C6-4a collapsed control sidebars (per-panel)
-    sidebars: { collapsed: (typeof SIDEBAR_COLLAPSED !== 'undefined') ? Array.from(SIDEBAR_COLLAPSED) : [] },
+    // C6-4a collapsed control sidebars (per-panel) + C6-4b collapsed sections
+    sidebars: {
+      collapsed: (typeof SIDEBAR_COLLAPSED !== 'undefined') ? Array.from(SIDEBAR_COLLAPSED) : [],
+      sections: (typeof SB_SECTIONS !== 'undefined') ? Object.assign({}, SB_SECTIONS) : {}
+    },
     // Rails workspace arrangement (C1b-2) — {v:1, rails: <serialized state>}
     layout: wsSerializeLayout(),
     // Drillhole-set recipe (A7 Phase 2, D8) — file identities + mapping +
@@ -630,6 +633,10 @@ async function applyProject(project) {
   // C6-4a: restore collapsed control sidebars
   if (typeof wsApplySidebarCollapsed === 'function') {
     wsApplySidebarCollapsed(project.sidebars && project.sidebars.collapsed);
+  }
+  // C6-4b: restore collapsed sidebar sections (applied at next render)
+  if (typeof wsApplySidebarSections === 'function') {
+    wsApplySidebarSections(project.sidebars && project.sidebars.sections);
   }
 
   // Restore the rails workspace arrangement (missing/invalid → default)

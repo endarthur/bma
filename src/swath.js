@@ -250,7 +250,7 @@ function renderSwathConfig(data) {
   }).join('');
 
   $sidebar.innerHTML =
-    '<div class="swath-sidebar-section">' +
+    '<div class="swath-sidebar-section" data-sb="dir">' +
       '<div class="swath-sidebar-title">Directions</div>' +
       '<select class="swath-select" id="swathDirMode">' +
         '<option value="ortho">Orthogonal X/Y/Z</option>' +
@@ -274,7 +274,7 @@ function renderSwathConfig(data) {
         '<div class="swath-dir-hint">U: rake direction in the dipdir/dip plane \u00b7 V: in-plane \u22a5 U \u00b7 W: pole</div>' +
       '</div>' +
     '</div>' +
-    '<div class="swath-sidebar-section">' +
+    '<div class="swath-sidebar-section" data-sb="stat">' +
       '<div class="swath-sidebar-title">Statistic</div>' +
       '<select class="swath-select" id="swathStat">' +
         '<option value="mean_std">Mean \u00b1 Std</option>' +
@@ -288,7 +288,7 @@ function renderSwathConfig(data) {
         '</select>' +
       '</div>' +
     '</div>' +
-    '<div class="swath-sidebar-section">' +
+    '<div class="swath-sidebar-section" data-sb="display">' +
       '<div class="swath-sidebar-title">Display</div>' +
       '<label class="swath-display-opt"><input type="checkbox" id="swathShowBands" checked> Show bands</label>' +
       '<label class="swath-display-opt"><input type="checkbox" id="swathShowCounts" checked> Show count bars</label>' +
@@ -302,7 +302,11 @@ function renderSwathConfig(data) {
         '<select class="swath-select" id="swathLayout"><option value="overlay">Overlay</option><option value="split">Split</option></select>' +
       '</div>' +
     '</div>' +
-    '<div class="swath-sidebar-section--grow">' +
+    '<div class="swath-sidebar-section" data-sb="filter">' +
+      '<div class="swath-sidebar-title">Local Filter</div>' +
+      '<input type="text" class="swath-search" id="swathLocalFilter" placeholder="e.g. r.zone == 1" autocomplete="off" spellcheck="false">' +
+    '</div>' +
+    '<div class="swath-sidebar-section--grow" data-sb="vars">' +
       '<div class="swath-sidebar-title">Variables</div>' +
       '<input type="text" class="swath-search" id="swathVarSearch" placeholder="search\u2026" autocomplete="off" spellcheck="false">' +
       '<div class="swath-var-btns">' +
@@ -311,11 +315,7 @@ function renderSwathConfig(data) {
       '</div>' +
       '<div class="swath-var-list" id="swathVarList">' + varItems + '<div id="swathAuxVars"></div></div>' +
     '</div>' +
-    '<div class="swath-sidebar-section">' +
-      '<div class="swath-sidebar-title">Local Filter</div>' +
-      '<input type="text" class="swath-search" id="swathLocalFilter" placeholder="e.g. r.zone == 1" autocomplete="off" spellcheck="false">' +
-    '</div>' +
-    '<div class="swath-sidebar-section">' +
+    '<div class="sb-footer">' +
       '<button class="swath-generate" id="swathGenerate">Generate</button>' +
       '<div class="swath-progress" id="swathProgress">' +
         '<div class="swath-progress-bar"><div class="swath-progress-fill" id="swathProgressFill"></div></div>' +
@@ -323,6 +323,9 @@ function renderSwathConfig(data) {
       '</div>' +
     '</div>' +
     '<div class="swath-color-picker" id="swathColorPicker"></div>';
+
+  // C6-4b \u2014 promote sections to collapsible; advanced ones collapsed by default
+  wsEnhanceSidebar('swath', $sidebar, { stat: 'collapsed', display: 'collapsed', filter: 'collapsed' });
 
   $content.innerHTML = '<div class="swath-hint">Select variables and click Generate to create swath plots.</div>';
 

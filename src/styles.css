@@ -886,6 +886,43 @@ header .logo-mark {
   .sb-host.sb-collapsed > .sb-rail .sb-rail-label { display: block; }
 }
 @media (max-width: 700px) { .sb-rail { display: none; } }
+
+/* ─── C6-4b: collapsible sidebar sections + sticky action footer ──────────
+   Any control-sidebar section marked [data-sb] has its first child (the
+   X-sidebar-title) promoted to a clickable header with a chevron; .collapsed
+   hides the body. Generalizes tree.js's <details> open-state convention
+   across every sidebar renderer. Open/closed persists per panel:key in the
+   project. The action button (Generate/Analyze) lives in a .sb-footer pinned
+   at the sidebar bottom so it stays reachable past collapsed walls. */
+.sb-sec-head {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+.sb-sec-head::after {
+  content: '\25BE';                /* ▾ open */
+  font-size: 0.62em;
+  color: var(--fg-dim);
+  flex-shrink: 0;
+  transition: color 80ms;
+}
+.sb-sec-head:hover { color: var(--fg-bright); }
+.sb-sec-head:hover::after { color: var(--fg-bright); }
+.sb-sec.collapsed > .sb-sec-head::after { content: '\25B8'; }   /* ▸ collapsed */
+.sb-sec.collapsed > .sb-sec-head { margin-bottom: 0; }
+.sb-sec.collapsed > *:not(.sb-sec-head) { display: none; }
+.sb-sec--grow.collapsed { flex: none; min-height: 0; overflow: visible; }
+
+.sb-footer {
+  flex-shrink: 0;
+  margin-top: auto;                /* float to bottom when room above */
+  padding: 0.5rem 0.7rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg1);
+}
 /* Statistics tab — full-bleed sidebar + CDF panel */
 #panelStatistics.active { display: flex; flex-direction: column; }
 .stats-body {

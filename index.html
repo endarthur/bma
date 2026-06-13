@@ -901,6 +901,43 @@ header .logo-mark {
   .sb-host.sb-collapsed > .sb-rail .sb-rail-label { display: block; }
 }
 @media (max-width: 700px) { .sb-rail { display: none; } }
+
+/* ─── C6-4b: collapsible sidebar sections + sticky action footer ──────────
+   Any control-sidebar section marked [data-sb] has its first child (the
+   X-sidebar-title) promoted to a clickable header with a chevron; .collapsed
+   hides the body. Generalizes tree.js's <details> open-state convention
+   across every sidebar renderer. Open/closed persists per panel:key in the
+   project. The action button (Generate/Analyze) lives in a .sb-footer pinned
+   at the sidebar bottom so it stays reachable past collapsed walls. */
+.sb-sec-head {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+.sb-sec-head::after {
+  content: '\25BE';                /* ▾ open */
+  font-size: 0.62em;
+  color: var(--fg-dim);
+  flex-shrink: 0;
+  transition: color 80ms;
+}
+.sb-sec-head:hover { color: var(--fg-bright); }
+.sb-sec-head:hover::after { color: var(--fg-bright); }
+.sb-sec.collapsed > .sb-sec-head::after { content: '\25B8'; }   /* ▸ collapsed */
+.sb-sec.collapsed > .sb-sec-head { margin-bottom: 0; }
+.sb-sec.collapsed > *:not(.sb-sec-head) { display: none; }
+.sb-sec--grow.collapsed { flex: none; min-height: 0; overflow: visible; }
+
+.sb-footer {
+  flex-shrink: 0;
+  margin-top: auto;                /* float to bottom when room above */
+  padding: 0.5rem 0.7rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg1);
+}
 /* Statistics tab — full-bleed sidebar + CDF panel */
 #panelStatistics.active { display: flex; flex-direction: column; }
 .stats-body {
@@ -5655,7 +5692,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 3b54bea — click to check for updates">3b54bea</div>
+<div class="build-badge" id="buildBadge" title="build 56f7d92 — click to check for updates">56f7d92</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -9024,7 +9061,17 @@ document.addEventListener('keydown', function(e) {
     var searchId = _tabSearchMap[activeTab.dataset.tab];
     if (searchId) {
       var el = document.getElementById(searchId);
-      if (el) { el.focus(); el.select(); }
+      if (el) {
+        // C6-4b: the search may live in a collapsed section — open it first
+        var sec = el.closest('.sb-sec');
+        if (sec && sec.classList.contains('collapsed')) {
+          sec.classList.remove('collapsed');
+          if (typeof SB_SECTIONS !== 'undefined' && sec.dataset.sb) {
+            SB_SECTIONS[activeTab.dataset.tab + ':' + sec.dataset.sb] = false;
+          }
+        }
+        el.focus(); el.select();
+      }
     }
     return;
   }
@@ -16500,8 +16547,11 @@ function serializeProject() {
       focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null
     },
     tree: { open: catalogTreeOpen },
-    // C6-4a collapsed control sidebars (per-panel)
-    sidebars: { collapsed: (typeof SIDEBAR_COLLAPSED !== 'undefined') ? Array.from(SIDEBAR_COLLAPSED) : [] },
+    // C6-4a collapsed control sidebars (per-panel) + C6-4b collapsed sections
+    sidebars: {
+      collapsed: (typeof SIDEBAR_COLLAPSED !== 'undefined') ? Array.from(SIDEBAR_COLLAPSED) : [],
+      sections: (typeof SB_SECTIONS !== 'undefined') ? Object.assign({}, SB_SECTIONS) : {}
+    },
     // Rails workspace arrangement (C1b-2) — {v:1, rails: <serialized state>}
     layout: wsSerializeLayout(),
     // Drillhole-set recipe (A7 Phase 2, D8) — file identities + mapping +
@@ -16727,6 +16777,10 @@ async function applyProject(project) {
   // C6-4a: restore collapsed control sidebars
   if (typeof wsApplySidebarCollapsed === 'function') {
     wsApplySidebarCollapsed(project.sidebars && project.sidebars.collapsed);
+  }
+  // C6-4b: restore collapsed sidebar sections (applied at next render)
+  if (typeof wsApplySidebarSections === 'function') {
+    wsApplySidebarSections(project.sidebars && project.sidebars.sections);
   }
 
   // Restore the rails workspace arrangement (missing/invalid → default)
@@ -20943,7 +20997,7 @@ function renderSwathConfig(data) {
   }).join('');
 
   $sidebar.innerHTML =
-    '<div class="swath-sidebar-section">' +
+    '<div class="swath-sidebar-section" data-sb="dir">' +
       '<div class="swath-sidebar-title">Directions</div>' +
       '<select class="swath-select" id="swathDirMode">' +
         '<option value="ortho">Orthogonal X/Y/Z</option>' +
@@ -20967,7 +21021,7 @@ function renderSwathConfig(data) {
         '<div class="swath-dir-hint">U: rake direction in the dipdir/dip plane \u00b7 V: in-plane \u22a5 U \u00b7 W: pole</div>' +
       '</div>' +
     '</div>' +
-    '<div class="swath-sidebar-section">' +
+    '<div class="swath-sidebar-section" data-sb="stat">' +
       '<div class="swath-sidebar-title">Statistic</div>' +
       '<select class="swath-select" id="swathStat">' +
         '<option value="mean_std">Mean \u00b1 Std</option>' +
@@ -20981,7 +21035,7 @@ function renderSwathConfig(data) {
         '</select>' +
       '</div>' +
     '</div>' +
-    '<div class="swath-sidebar-section">' +
+    '<div class="swath-sidebar-section" data-sb="display">' +
       '<div class="swath-sidebar-title">Display</div>' +
       '<label class="swath-display-opt"><input type="checkbox" id="swathShowBands" checked> Show bands</label>' +
       '<label class="swath-display-opt"><input type="checkbox" id="swathShowCounts" checked> Show count bars</label>' +
@@ -20995,7 +21049,11 @@ function renderSwathConfig(data) {
         '<select class="swath-select" id="swathLayout"><option value="overlay">Overlay</option><option value="split">Split</option></select>' +
       '</div>' +
     '</div>' +
-    '<div class="swath-sidebar-section--grow">' +
+    '<div class="swath-sidebar-section" data-sb="filter">' +
+      '<div class="swath-sidebar-title">Local Filter</div>' +
+      '<input type="text" class="swath-search" id="swathLocalFilter" placeholder="e.g. r.zone == 1" autocomplete="off" spellcheck="false">' +
+    '</div>' +
+    '<div class="swath-sidebar-section--grow" data-sb="vars">' +
       '<div class="swath-sidebar-title">Variables</div>' +
       '<input type="text" class="swath-search" id="swathVarSearch" placeholder="search\u2026" autocomplete="off" spellcheck="false">' +
       '<div class="swath-var-btns">' +
@@ -21004,11 +21062,7 @@ function renderSwathConfig(data) {
       '</div>' +
       '<div class="swath-var-list" id="swathVarList">' + varItems + '<div id="swathAuxVars"></div></div>' +
     '</div>' +
-    '<div class="swath-sidebar-section">' +
-      '<div class="swath-sidebar-title">Local Filter</div>' +
-      '<input type="text" class="swath-search" id="swathLocalFilter" placeholder="e.g. r.zone == 1" autocomplete="off" spellcheck="false">' +
-    '</div>' +
-    '<div class="swath-sidebar-section">' +
+    '<div class="sb-footer">' +
       '<button class="swath-generate" id="swathGenerate">Generate</button>' +
       '<div class="swath-progress" id="swathProgress">' +
         '<div class="swath-progress-bar"><div class="swath-progress-fill" id="swathProgressFill"></div></div>' +
@@ -21016,6 +21070,9 @@ function renderSwathConfig(data) {
       '</div>' +
     '</div>' +
     '<div class="swath-color-picker" id="swathColorPicker"></div>';
+
+  // C6-4b \u2014 promote sections to collapsible; advanced ones collapsed by default
+  wsEnhanceSidebar('swath', $sidebar, { stat: 'collapsed', display: 'collapsed', filter: 'collapsed' });
 
   $content.innerHTML = '<div class="swath-hint">Select variables and click Generate to create swath plots.</div>';
 
@@ -28898,6 +28955,58 @@ function wsApplySidebarCollapsed(list) {
     WS_SB[pid].body.classList.toggle('sb-collapsed', SIDEBAR_COLLAPSED.has(pid));
     wsUpdateRail(pid);
   });
+}
+
+// ─── C6-4b: collapsible sidebar sections ────────────────────────────────
+// Each control-sidebar section is marked data-sb="<key>" in its renderer;
+// wsEnhanceSidebar promotes the section's first child (the title) to a
+// clickable header and applies the persisted/default open state. Built on
+// the tree.js open-state pattern, shared across every sidebar renderer.
+// State is per panel:key, persisted in the project (sidebars.sections).
+var SB_SECTIONS = {};   // "panelId:key" -> true when COLLAPSED
+
+// defaults: { key: 'collapsed' } — keys absent default to open. Called after
+// each (re)render; safe to re-run (per-render markup gets fresh listeners,
+// static markup is guarded by data-sb-bound).
+function wsEnhanceSidebar(panelId, sidebar, defaults) {
+  if (!sidebar) return;
+  defaults = defaults || {};
+  var secs = sidebar.querySelectorAll(':scope > [data-sb]');
+  for (var i = 0; i < secs.length; i++) {
+    (function(sec) {
+      var key = sec.getAttribute('data-sb');
+      var head = sec.firstElementChild;
+      if (!head) return;
+      sec.classList.add('sb-sec');
+      if (sec.className.indexOf('--grow') >= 0) sec.classList.add('sb-sec--grow');
+      head.classList.add('sb-sec-head');
+      var full = panelId + ':' + key;
+      var collapsed = (full in SB_SECTIONS) ? SB_SECTIONS[full] : (defaults[key] === 'collapsed');
+      sec.classList.toggle('collapsed', collapsed);
+      if (!head.dataset.sbBound) {
+        head.dataset.sbBound = '1';
+        head.addEventListener('click', function() {
+          var now = !sec.classList.contains('collapsed');
+          sec.classList.toggle('collapsed', now);
+          SB_SECTIONS[panelId + ':' + key] = now;
+          if (typeof autoSaveProject === 'function') autoSaveProject();
+        });
+      }
+    })(secs[i]);
+  }
+}
+
+// Force a section open (e.g. Alt+V focusing a collapsed var search) and
+// remember it. panelId:key must match the section's data-sb.
+function wsOpenSidebarSection(panelId, key) {
+  SB_SECTIONS[panelId + ':' + key] = false;
+  var sec = document.querySelector('[data-sb="' + key + '"]');
+  if (sec) sec.classList.remove('collapsed');
+}
+
+// Restore from the project (object of "panelId:key" -> collapsed bool)
+function wsApplySidebarSections(obj) {
+  SB_SECTIONS = (obj && typeof obj === 'object') ? Object.assign({}, obj) : {};
 }
 
 function wsInitSidebars() {
