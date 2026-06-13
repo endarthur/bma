@@ -543,7 +543,8 @@ const GRADE_UNITS = [
 // badge these instead of silently dropping their series.
 const EMPTY_COL_TITLE = 'no valid values in the last analysis — column is empty or every value was filtered out';
 function colIsEmpty(ds, idx) {
-  const d = ds === 'aux' ? auxCompleteData : lastCompleteData;
+  const e = (typeof dsById === 'function') ? dsById(ds) : null;
+  const d = e ? e.complete : (ds === 'aux' ? auxCompleteData : lastCompleteData);
   if (!d || !d.stats || idx == null) return false;
   const s = d.stats[idx];
   return !!s && s.count === 0;
@@ -552,7 +553,8 @@ function colIsEmpty(ds, idx) {
 // A9 F2: values in a numeric column that failed to parse as numbers in the
 // last analysis (counted apart from sentinel nulls) — mixed-type signal
 function colParseFails(ds, idx) {
-  const d = ds === 'aux' ? auxCompleteData : lastCompleteData;
+  const e = (typeof dsById === 'function') ? dsById(ds) : null;
+  const d = e ? e.complete : (ds === 'aux' ? auxCompleteData : lastCompleteData);
   if (!d || !d.stats || idx == null) return 0;
   const s = d.stats[idx];
   return s && s.parseFails ? s.parseFails : 0;

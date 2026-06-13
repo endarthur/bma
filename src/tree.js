@@ -55,8 +55,13 @@ function renderCatalogTree(container) {
     openState[d.dataset.key] = d.open;
   });
 
+  // Model node always; then every comparison dataset that has been loaded
+  // (preflight present). Iterating the registry makes this N-ready.
   var html = treeDatasetHtml('model', openState);
-  if (auxFile && auxPreflightData) html += treeDatasetHtml('aux', openState);
+  for (var di = 0; di < datasets.length; di++) {
+    if (datasets[di].id === 'model') continue;
+    if (datasets[di].preflight) html += treeDatasetHtml(datasets[di].id, openState);
+  }
   // C6-5 discoverability footer: the variable context menu (C4) and tab
   // splitting are both undiscoverable affordances — name them once results exist.
   if (typeof lastCompleteData !== 'undefined' && lastCompleteData) {
@@ -87,13 +92,21 @@ function treeDatasetVars(ds) {
       countNote: d.rowCount != null ? d.rowCount.toLocaleString() + ' rows' : ''
     };
   }
-  // aux: preflight header + calcols (analysis optional)
-  var ph = auxPreflightData;
+  // point dataset (aux, d2, …): preflight header + calcols (analysis optional).
+  // Read from the registry entry so this generalizes past the single aux; the
+  // 'aux' entry's getters return the legacy aux* globals (bit-identical).
+  var e = (typeof dsById === 'function') ? dsById(ds) : null;
+  var ph = e ? e.preflight : auxPreflightData;
+  if (!ph) return null;
+  var cmeta = e ? e.calcolMeta : auxCalcolMeta;
+  var comp = e ? e.complete : auxCompleteData;
+  var pfx = e ? e.prefix : auxPrefix;
+  var fil = e ? e.file : auxFile;
   var header = ph.header.slice();
   var colTypes = (ph.autoTypes || []).slice();
-  for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
-    header.push(auxCalcolMeta[ci].name);
-    colTypes.push(auxCalcolMeta[ci].type);
+  for (var ci = 0; ci < cmeta.length; ci++) {
+    header.push(cmeta[ci].name);
+    colTypes.push(cmeta[ci].type);
   }
   var axyz = ph.xyz || { x: -1, y: -1, z: -1 };
   var auxCoordIdx = {};
@@ -101,10 +114,10 @@ function treeDatasetVars(ds) {
   delete auxCoordIdx[-1];
   return {
     header: header, colTypes: colTypes, origColCount: ph.header.length,
-    coordIdx: auxCoordIdx, categories: auxCompleteData ? auxCompleteData.categories : null,
-    label: auxPrefix || 'aux', fileName: auxFile ? auxFile.name : '',
-    countNote: auxCompleteData && auxCompleteData.rowCount != null
-      ? auxCompleteData.rowCount.toLocaleString() + ' rows' : 'not analyzed'
+    coordIdx: auxCoordIdx, categories: comp ? comp.categories : null,
+    label: pfx || 'aux', fileName: fil ? fil.name : '',
+    countNote: comp && comp.rowCount != null
+      ? comp.rowCount.toLocaleString() + ' rows' : 'not analyzed'
   };
 }
 
@@ -143,7 +156,8 @@ function treeDatasetHtml(ds, openState) {
   var v = treeDatasetVars(ds);
   var dsKey = 'ds:' + ds;
   var dsOpen = openState[dsKey] !== undefined ? openState[dsKey] : true;
-  var head = '<summary><span class="tree-ds-label">' + esc(ds === 'model' ? 'Model' : (auxPrefix || 'aux')) + '</span>' +
+  var dsLabel = ds === 'model' ? 'Model' : ((typeof dsById === 'function' && dsById(ds) && dsById(ds).prefix) || auxPrefix || 'aux');
+  var head = '<summary><span class="tree-ds-label">' + esc(dsLabel) + '</span>' +
     (v && v.fileName ? '<span class="tree-ds-file" title="' + esc(v.fileName) + '">' + esc(v.fileName) + '</span>' : '') +
     (v && v.countNote ? '<span class="tree-ds-count">' + esc(v.countNote) + '</span>' : '') +
     '</summary>';
