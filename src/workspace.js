@@ -264,7 +264,8 @@ function wsDataMenuItems() {
     { label: 'Filter…', action: 'filter' },
     { label: 'Calculated columns…', action: 'calcols' },
     '---',
-    { label: 'Datasets…', action: 'datasets' },
+    { label: 'Add point dataset…', action: 'addPoint' },
+    { label: 'Add drillhole set…', action: 'addDrillhole' },
   ];
 }
 function wsHelpMenuItems() {
@@ -319,7 +320,8 @@ function wsMenuAction(a) {
     case 'analyze': executeAnalysis(); break;
     case 'filter': wsFocusFilter(); break;
     case 'calcols': showPanel('calcols'); break;
-    case 'datasets': showPanel('aux'); break;
+    case 'addPoint': { showPanel('aux'); var afi = document.getElementById('auxFileInput'); if (afi) afi.click(); break; }
+    case 'addDrillhole': { showPanel('aux'); var dh = document.getElementById('dhCard'); if (dh && dh.scrollIntoView) dh.scrollIntoView({ block: 'nearest' }); break; }
     case 'help': toggleHelp(); break;
     case 'example': { var ex = document.getElementById('exampleDownload'); if (ex) ex.click(); break; }
     case 'about': wsShowAbout(); break;

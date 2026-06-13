@@ -5788,7 +5788,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 6669dcb — click to check for updates">6669dcb</div>
+<div class="build-badge" id="buildBadge" title="build 0317fbc — click to check for updates">0317fbc</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -28094,10 +28094,15 @@ CTX_PROVIDERS.push(function datasetProvider(e) {
   var key = sum.parentElement.dataset.key || '';
   if (key.indexOf('ds:') !== 0) return null;
   var ds = key.slice(3);
-  return [
+  var items = [
     { head: true, label: ds === 'model' ? 'Model' : (auxPrefix || 'aux') },
     { label: 'Open import panel', action: function() { showPanel(ds === 'model' ? 'preflight' : 'aux'); } }
   ];
+  if (ds === 'aux' && typeof clearAux === 'function') {
+    items.push({ sep: true });
+    items.push({ label: 'Remove dataset', danger: true, action: function() { clearAux(); } });
+  }
+  return items;
 });
 
 CTX_PROVIDERS.push(function variableProvider(e) {
@@ -29039,7 +29044,8 @@ function wsDataMenuItems() {
     { label: 'Filter…', action: 'filter' },
     { label: 'Calculated columns…', action: 'calcols' },
     '---',
-    { label: 'Datasets…', action: 'datasets' },
+    { label: 'Add point dataset…', action: 'addPoint' },
+    { label: 'Add drillhole set…', action: 'addDrillhole' },
   ];
 }
 function wsHelpMenuItems() {
@@ -29094,7 +29100,8 @@ function wsMenuAction(a) {
     case 'analyze': executeAnalysis(); break;
     case 'filter': wsFocusFilter(); break;
     case 'calcols': showPanel('calcols'); break;
-    case 'datasets': showPanel('aux'); break;
+    case 'addPoint': { showPanel('aux'); var afi = document.getElementById('auxFileInput'); if (afi) afi.click(); break; }
+    case 'addDrillhole': { showPanel('aux'); var dh = document.getElementById('dhCard'); if (dh && dh.scrollIntoView) dh.scrollIntoView({ block: 'nearest' }); break; }
     case 'help': toggleHelp(); break;
     case 'example': { var ex = document.getElementById('exampleDownload'); if (ex) ex.click(); break; }
     case 'about': wsShowAbout(); break;

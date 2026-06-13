@@ -100,10 +100,15 @@ CTX_PROVIDERS.push(function datasetProvider(e) {
   var key = sum.parentElement.dataset.key || '';
   if (key.indexOf('ds:') !== 0) return null;
   var ds = key.slice(3);
-  return [
+  var items = [
     { head: true, label: ds === 'model' ? 'Model' : (auxPrefix || 'aux') },
     { label: 'Open import panel', action: function() { showPanel(ds === 'model' ? 'preflight' : 'aux'); } }
   ];
+  if (ds === 'aux' && typeof clearAux === 'function') {
+    items.push({ sep: true });
+    items.push({ label: 'Remove dataset', danger: true, action: function() { clearAux(); } });
+  }
+  return items;
 });
 
 CTX_PROVIDERS.push(function variableProvider(e) {
