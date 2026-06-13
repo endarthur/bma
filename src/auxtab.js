@@ -82,6 +82,8 @@ function renderAuxConfig() {
 
   // C6-4b — collapsible config sections; cosmetic/advanced ones collapsed
   wsEnhanceSidebar('aux', $auxSidebar, { prefix: 'collapsed', auxfilter: 'collapsed', declus: 'collapsed' });
+  // C6-5 — dim the Analyze button when the current result is fresh
+  if (typeof setGenStale === 'function') setGenStale('auxAnalyzeBtn', !(auxCompleteData && !auxStale));
 
   renderAuxPreview();
   if (typeof renderAuxView === 'function') renderAuxView();
@@ -156,6 +158,7 @@ function runAuxAnalysis() {
       auxCompleteData = { header: m.header, colTypes: m.colTypes, stats: m.stats, categories: m.categories, rowCount: m.rowCount };
       auxStale = false;
       if ($btn) $btn.disabled = false;
+      if (typeof setGenStale === 'function') setGenStale('auxAnalyzeBtn', false);  // C6-5 dim-when-done
       if ($status) { $status.textContent = m.rowCount.toLocaleString() + ' rows analyzed'; $status.style.color = ''; }
       auxWorker.terminate();
       auxWorker = null;
@@ -240,8 +243,9 @@ function onAuxConfigChange(e) {
 function markAuxStale() {
   if (!auxCompleteData || auxStale) return;
   auxStale = true;
+  if (typeof setGenStale === 'function') setGenStale('auxAnalyzeBtn', true);  // C6-5: back to orange call-to-action
   var $st = document.getElementById('auxAnalyzeStatus');
-  if ($st) { $st.textContent = 'Config changed — re-run Analyze'; $st.style.color = 'var(--warn)'; }
+  if ($st) { $st.textContent = '↻ config changed — re-run Analyze'; $st.style.color = 'var(--warn)'; }
 }
 
 // ─── Cell declustering (GSLIB DECLUS in the worker) ────────────────────

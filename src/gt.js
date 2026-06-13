@@ -27,6 +27,15 @@ const GT_GRADE_UNITS = GRADE_UNITS.concat([{ label: 'Custom\u2026', symbol: null
 let gtNumCols = [];
 let gtCatCols = [];
 let gtTableCollapsed = new Set(); // collapsed table sections by column name (C6-0)
+let gtStale = false;              // result no longer matches the sidebar (C6-5)
+
+// Mark the GT result stale (config changed since the last Generate). Live
+// re-render controls (units/dp/group-values) are excluded by the callers.
+function gtMarkStale() {
+  if (gtStale || !lastGtData) return;
+  gtStale = true;
+  if (typeof setGenStale === 'function') setGenStale('gtGenerate', true);
+}
 
 function renderGtConfig(data) {
   var $sidebar = document.getElementById('gtSidebar');
@@ -206,6 +215,7 @@ function renderGtConfig(data) {
     '</div>' +
     '<div class="sb-footer">' +
       '<button class="gt-generate" id="gtGenerate">Generate</button>' +
+      '<div class="gen-stale-note">↻ config changed — re-run</div>' +
       '<div class="gt-progress" id="gtProgress">' +
         '<div class="gt-progress-bar"><div class="gt-progress-fill" id="gtProgressFill"></div></div>' +
         '<div class="gt-progress-label" id="gtProgressLabel"></div>' +
@@ -221,10 +231,22 @@ function renderGtConfig(data) {
 
   $content.innerHTML = '<div class="gt-hint">Select grade variables and click Generate.</div>';
 
-  // Wire events — autosave on any sidebar change
-  $sidebar.addEventListener('change', function() { autoSaveProject(); });
+  // Wire events — autosave on any sidebar change; mark the result stale on
+  // changes that need a worker re-run. Units/dp/grade-unit and group-value
+  // toggles re-render client-side from cache (excluded below).
+  var GT_LIVE_IDS = ['gtTonnageUnit', 'gtMetalUnit', 'gtTonnageDp', 'gtGradeDp', 'gtMetalDp',
+    'gtCustomTonnageSym', 'gtCustomTonnageDiv', 'gtCustomMetalSym', 'gtCustomMetalDiv', 'gtGrpAll', 'gtGrpNone', 'gtVarSearch',
+    'gtTheoEnabled', 'gtTheoEngine', 'gtTheoF', 'gtTheoFNum'];  // theo re-renders client-side from cache
+  function gtIsLiveTarget(t) {
+    return !t || GT_LIVE_IDS.indexOf(t.id) >= 0 || t.classList.contains('gt-var-unit') || (t.closest && t.closest('#gtGrpList'));
+  }
+  $sidebar.addEventListener('change', function(e) {
+    autoSaveProject();
+    if (!gtIsLiveTarget(e.target)) gtMarkStale();
+  });
   $sidebar.addEventListener('input', function(e) {
     if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox' && e.target.type !== 'radio') autoSaveProject();
+    if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && !gtIsLiveTarget(e.target)) gtMarkStale();
   });
 
   var $tonnageUnit = document.getElementById('gtTonnageUnit');
@@ -575,6 +597,8 @@ function runGt() {
       setTimeout(function() { $progress.classList.remove('active'); }, 800);
       if ($btn) $btn.disabled = false;
       lastGtData = m;
+      gtStale = false;
+      if (typeof setGenStale === 'function') setGenStale('gtGenerate', false);
       renderGtOutput();
       // Update tab badge with number of selected grade variables
       if (m.gradeResults) wsTabBadge('gt', 'GT', m.gradeResults.length);

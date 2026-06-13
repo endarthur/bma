@@ -3683,6 +3683,22 @@ table.cat-values td.cat-pct-cell {
   color: var(--fg-dim);
 }
 .execute-btn.clean:hover { border-color: var(--fg-dim); color: var(--fg); }
+/* C6-5: shared "done" (subdued) state for the per-tab Generate/Analyze
+   buttons — mirrors .execute-btn.clean. Removed → button returns to its
+   orange call-to-action; the .gen-stale-note appears alongside. */
+.gen-done {
+  background: none !important;
+  border: 1px solid var(--border) !important;
+  color: var(--fg-dim) !important;
+}
+.gen-done:hover { border-color: var(--fg-dim) !important; color: var(--fg) !important; }
+.gen-stale-note {
+  display: none;
+  margin-top: 0.35rem;
+  font-size: 0.66rem;
+  font-family: var(--sans);
+  color: var(--warn);
+}
 .filter-section { display: none; flex: 1; min-width: 0; }
 .filter-section.active { display: flex; justify-content: flex-end; }
 .filter-editor-body {

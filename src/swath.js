@@ -2,6 +2,13 @@
 
 let swathNumCols = [];
 let swathTableCollapsed = false; // table section collapse, survives re-renders (C6-0)
+let swathStale = false;          // result no longer matches the sidebar (C6-5)
+
+function swathMarkStale() {
+  if (swathStale || !lastSwathData) return;
+  swathStale = true;
+  if (typeof setGenStale === 'function') setGenStale('swathGenerate', true);
+}
 var _swathChartParams = null; // stored for crosshair
 var swathAuxWorker = null;          // second worker for the aux dataset pass
 var pendingSwathAuxRestore = null;  // { checked: [names], units: {name: unitIdx} } from project restore
@@ -317,6 +324,7 @@ function renderSwathConfig(data) {
     '</div>' +
     '<div class="sb-footer">' +
       '<button class="swath-generate" id="swathGenerate">Generate</button>' +
+      '<div class="gen-stale-note">↻ config changed — re-run</div>' +
       '<div class="swath-progress" id="swathProgress">' +
         '<div class="swath-progress-bar"><div class="swath-progress-fill" id="swathProgressFill"></div></div>' +
         '<div class="swath-progress-label" id="swathProgressLabel"></div>' +
@@ -457,10 +465,22 @@ function renderSwathConfig(data) {
     }
   });
 
-  // Autosave on any sidebar change
-  $sidebar.addEventListener('change', function() { autoSaveProject(); });
+  // Autosave on any sidebar change; mark stale on changes needing a re-run.
+  // Statistic, display options, Y-scale, layout and per-variable units all
+  // re-render client-side from cache (excluded below).
+  var SWATH_LIVE_IDS = ['swathStat', 'swathShowBands', 'swathShowCounts', 'swathShowTable',
+    'swathYScale', 'swathLayout', 'swathVarSearch'];
+  function swathIsLiveTarget(t) {
+    return !t || SWATH_LIVE_IDS.indexOf(t.id) >= 0 || t.classList.contains('swath-var-unit') ||
+      (t.closest && t.closest('.swath-color-picker'));  // color edits re-render, no re-run
+  }
+  $sidebar.addEventListener('change', function(e) {
+    autoSaveProject();
+    if (!swathIsLiveTarget(e.target)) swathMarkStale();
+  });
   $sidebar.addEventListener('input', function(e) {
     if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') autoSaveProject();
+    if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && !swathIsLiveTarget(e.target)) swathMarkStale();
   });
 
   renderSwathAuxVars();
@@ -675,6 +695,8 @@ function runSwath() {
       weightExcluded: out.weightExcluded || 0, auxWeightExcluded: out.auxWeightExcluded || 0,
       activeKey: dcfg.dirs.some(function(d) { return d.key === prevKey; }) ? prevKey : dcfg.dirs[0].key
     };
+    swathStale = false;
+    if (typeof setGenStale === 'function') setGenStale('swathGenerate', false);
     renderSwathOutput(stat);
     // Update tab badge: max bin count across directions and variables
     var totalBins = 0;

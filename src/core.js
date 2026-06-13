@@ -77,6 +77,20 @@ function wireSearchShortcuts(input, allBtn, noneBtn) {
   });
 }
 
+// C6-5: uniform "dim when done / re-run when stale" treatment for the
+// per-tab action buttons (Generate/Analyze), generalizing executeBtn's
+// clean/orange pattern. stale=false → button subdued (.gen-done), its
+// .gen-stale-note (if any) hidden; stale=true → orange call-to-action +
+// the note. The main #executeBtn keeps its own .clean toggle.
+function setGenStale(btnId, stale) {
+  var btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.classList.toggle('gen-done', !stale);
+  var host = btn.closest('.sb-footer') || btn.parentElement;
+  var note = host ? host.querySelector('.gen-stale-note') : null;
+  if (note) note.style.display = stale ? 'block' : 'none';
+}
+
 const $dropzone = document.getElementById('dropzone');
 const $fileInput = document.getElementById('fileInput');
 const $recentFiles = document.getElementById('recentFiles');

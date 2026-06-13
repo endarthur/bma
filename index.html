@@ -3698,6 +3698,22 @@ table.cat-values td.cat-pct-cell {
   color: var(--fg-dim);
 }
 .execute-btn.clean:hover { border-color: var(--fg-dim); color: var(--fg); }
+/* C6-5: shared "done" (subdued) state for the per-tab Generate/Analyze
+   buttons — mirrors .execute-btn.clean. Removed → button returns to its
+   orange call-to-action; the .gen-stale-note appears alongside. */
+.gen-done {
+  background: none !important;
+  border: 1px solid var(--border) !important;
+  color: var(--fg-dim) !important;
+}
+.gen-done:hover { border-color: var(--fg-dim) !important; color: var(--fg) !important; }
+.gen-stale-note {
+  display: none;
+  margin-top: 0.35rem;
+  font-size: 0.66rem;
+  font-family: var(--sans);
+  color: var(--warn);
+}
 .filter-section { display: none; flex: 1; min-width: 0; }
 .filter-section.active { display: flex; justify-content: flex-end; }
 .filter-editor-body {
@@ -5752,7 +5768,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build f1bf99a — click to check for updates">f1bf99a</div>
+<div class="build-badge" id="buildBadge" title="build 607f073 — click to check for updates">607f073</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8303,6 +8319,20 @@ function wireSearchShortcuts(input, allBtn, noneBtn) {
       else { if (allBtn) allBtn.click(); }
     }
   });
+}
+
+// C6-5: uniform "dim when done / re-run when stale" treatment for the
+// per-tab action buttons (Generate/Analyze), generalizing executeBtn's
+// clean/orange pattern. stale=false → button subdued (.gen-done), its
+// .gen-stale-note (if any) hidden; stale=true → orange call-to-action +
+// the note. The main #executeBtn keeps its own .clean toggle.
+function setGenStale(btnId, stale) {
+  var btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.classList.toggle('gen-done', !stale);
+  var host = btn.closest('.sb-footer') || btn.parentElement;
+  var note = host ? host.querySelector('.gen-stale-note') : null;
+  if (note) note.style.display = stale ? 'block' : 'none';
 }
 
 const $dropzone = document.getElementById('dropzone');
@@ -14333,6 +14363,8 @@ function renderAuxConfig() {
 
   // C6-4b — collapsible config sections; cosmetic/advanced ones collapsed
   wsEnhanceSidebar('aux', $auxSidebar, { prefix: 'collapsed', auxfilter: 'collapsed', declus: 'collapsed' });
+  // C6-5 — dim the Analyze button when the current result is fresh
+  if (typeof setGenStale === 'function') setGenStale('auxAnalyzeBtn', !(auxCompleteData && !auxStale));
 
   renderAuxPreview();
   if (typeof renderAuxView === 'function') renderAuxView();
@@ -14407,6 +14439,7 @@ function runAuxAnalysis() {
       auxCompleteData = { header: m.header, colTypes: m.colTypes, stats: m.stats, categories: m.categories, rowCount: m.rowCount };
       auxStale = false;
       if ($btn) $btn.disabled = false;
+      if (typeof setGenStale === 'function') setGenStale('auxAnalyzeBtn', false);  // C6-5 dim-when-done
       if ($status) { $status.textContent = m.rowCount.toLocaleString() + ' rows analyzed'; $status.style.color = ''; }
       auxWorker.terminate();
       auxWorker = null;
@@ -14491,8 +14524,9 @@ function onAuxConfigChange(e) {
 function markAuxStale() {
   if (!auxCompleteData || auxStale) return;
   auxStale = true;
+  if (typeof setGenStale === 'function') setGenStale('auxAnalyzeBtn', true);  // C6-5: back to orange call-to-action
   var $st = document.getElementById('auxAnalyzeStatus');
-  if ($st) { $st.textContent = 'Config changed — re-run Analyze'; $st.style.color = 'var(--warn)'; }
+  if ($st) { $st.textContent = '↻ config changed — re-run Analyze'; $st.style.color = 'var(--warn)'; }
 }
 
 // ─── Cell declustering (GSLIB DECLUS in the worker) ────────────────────
@@ -20932,6 +20966,13 @@ function restoreExportSettings(es) {
 
 let swathNumCols = [];
 let swathTableCollapsed = false; // table section collapse, survives re-renders (C6-0)
+let swathStale = false;          // result no longer matches the sidebar (C6-5)
+
+function swathMarkStale() {
+  if (swathStale || !lastSwathData) return;
+  swathStale = true;
+  if (typeof setGenStale === 'function') setGenStale('swathGenerate', true);
+}
 var _swathChartParams = null; // stored for crosshair
 var swathAuxWorker = null;          // second worker for the aux dataset pass
 var pendingSwathAuxRestore = null;  // { checked: [names], units: {name: unitIdx} } from project restore
@@ -21247,6 +21288,7 @@ function renderSwathConfig(data) {
     '</div>' +
     '<div class="sb-footer">' +
       '<button class="swath-generate" id="swathGenerate">Generate</button>' +
+      '<div class="gen-stale-note">↻ config changed — re-run</div>' +
       '<div class="swath-progress" id="swathProgress">' +
         '<div class="swath-progress-bar"><div class="swath-progress-fill" id="swathProgressFill"></div></div>' +
         '<div class="swath-progress-label" id="swathProgressLabel"></div>' +
@@ -21387,10 +21429,22 @@ function renderSwathConfig(data) {
     }
   });
 
-  // Autosave on any sidebar change
-  $sidebar.addEventListener('change', function() { autoSaveProject(); });
+  // Autosave on any sidebar change; mark stale on changes needing a re-run.
+  // Statistic, display options, Y-scale, layout and per-variable units all
+  // re-render client-side from cache (excluded below).
+  var SWATH_LIVE_IDS = ['swathStat', 'swathShowBands', 'swathShowCounts', 'swathShowTable',
+    'swathYScale', 'swathLayout', 'swathVarSearch'];
+  function swathIsLiveTarget(t) {
+    return !t || SWATH_LIVE_IDS.indexOf(t.id) >= 0 || t.classList.contains('swath-var-unit') ||
+      (t.closest && t.closest('.swath-color-picker'));  // color edits re-render, no re-run
+  }
+  $sidebar.addEventListener('change', function(e) {
+    autoSaveProject();
+    if (!swathIsLiveTarget(e.target)) swathMarkStale();
+  });
   $sidebar.addEventListener('input', function(e) {
     if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') autoSaveProject();
+    if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && !swathIsLiveTarget(e.target)) swathMarkStale();
   });
 
   renderSwathAuxVars();
@@ -21605,6 +21659,8 @@ function runSwath() {
       weightExcluded: out.weightExcluded || 0, auxWeightExcluded: out.auxWeightExcluded || 0,
       activeKey: dcfg.dirs.some(function(d) { return d.key === prevKey; }) ? prevKey : dcfg.dirs[0].key
     };
+    swathStale = false;
+    if (typeof setGenStale === 'function') setGenStale('swathGenerate', false);
     renderSwathOutput(stat);
     // Update tab badge: max bin count across directions and variables
     var totalBins = 0;
@@ -22715,6 +22771,15 @@ const GT_GRADE_UNITS = GRADE_UNITS.concat([{ label: 'Custom\u2026', symbol: null
 let gtNumCols = [];
 let gtCatCols = [];
 let gtTableCollapsed = new Set(); // collapsed table sections by column name (C6-0)
+let gtStale = false;              // result no longer matches the sidebar (C6-5)
+
+// Mark the GT result stale (config changed since the last Generate). Live
+// re-render controls (units/dp/group-values) are excluded by the callers.
+function gtMarkStale() {
+  if (gtStale || !lastGtData) return;
+  gtStale = true;
+  if (typeof setGenStale === 'function') setGenStale('gtGenerate', true);
+}
 
 function renderGtConfig(data) {
   var $sidebar = document.getElementById('gtSidebar');
@@ -22894,6 +22959,7 @@ function renderGtConfig(data) {
     '</div>' +
     '<div class="sb-footer">' +
       '<button class="gt-generate" id="gtGenerate">Generate</button>' +
+      '<div class="gen-stale-note">↻ config changed — re-run</div>' +
       '<div class="gt-progress" id="gtProgress">' +
         '<div class="gt-progress-bar"><div class="gt-progress-fill" id="gtProgressFill"></div></div>' +
         '<div class="gt-progress-label" id="gtProgressLabel"></div>' +
@@ -22909,10 +22975,22 @@ function renderGtConfig(data) {
 
   $content.innerHTML = '<div class="gt-hint">Select grade variables and click Generate.</div>';
 
-  // Wire events — autosave on any sidebar change
-  $sidebar.addEventListener('change', function() { autoSaveProject(); });
+  // Wire events — autosave on any sidebar change; mark the result stale on
+  // changes that need a worker re-run. Units/dp/grade-unit and group-value
+  // toggles re-render client-side from cache (excluded below).
+  var GT_LIVE_IDS = ['gtTonnageUnit', 'gtMetalUnit', 'gtTonnageDp', 'gtGradeDp', 'gtMetalDp',
+    'gtCustomTonnageSym', 'gtCustomTonnageDiv', 'gtCustomMetalSym', 'gtCustomMetalDiv', 'gtGrpAll', 'gtGrpNone', 'gtVarSearch',
+    'gtTheoEnabled', 'gtTheoEngine', 'gtTheoF', 'gtTheoFNum'];  // theo re-renders client-side from cache
+  function gtIsLiveTarget(t) {
+    return !t || GT_LIVE_IDS.indexOf(t.id) >= 0 || t.classList.contains('gt-var-unit') || (t.closest && t.closest('#gtGrpList'));
+  }
+  $sidebar.addEventListener('change', function(e) {
+    autoSaveProject();
+    if (!gtIsLiveTarget(e.target)) gtMarkStale();
+  });
   $sidebar.addEventListener('input', function(e) {
     if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox' && e.target.type !== 'radio') autoSaveProject();
+    if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && !gtIsLiveTarget(e.target)) gtMarkStale();
   });
 
   var $tonnageUnit = document.getElementById('gtTonnageUnit');
@@ -23263,6 +23341,8 @@ function runGt() {
       setTimeout(function() { $progress.classList.remove('active'); }, 800);
       if ($btn) $btn.disabled = false;
       lastGtData = m;
+      gtStale = false;
+      if (typeof setGenStale === 'function') setGenStale('gtGenerate', false);
       renderGtOutput();
       // Update tab badge with number of selected grade variables
       if (m.gradeResults) wsTabBadge('gt', 'GT', m.gradeResults.length);
