@@ -184,8 +184,8 @@ function tcAxis(x0, x1, xlog) {
 
 function tcFrame(title, yLabel) {
   var P = TC_PLOT;
-  return '<text x="' + (P.W / 2) + '" y="11" text-anchor="middle" fill="#6a737d" font-size="9.5">' + title + '</text>' +
-    (yLabel ? '<text x="10" y="' + ((P.padT + P.H - P.padB) / 2) + '" text-anchor="middle" fill="#6a737d" font-size="9" transform="rotate(-90, 10, ' + ((P.padT + P.H - P.padB) / 2) + ')">' + yLabel + '</text>' : '');
+  return '<text x="' + (P.W / 2) + '" y="11" text-anchor="middle" fill="var(--chart-ink)" font-size="9.5">' + title + '</text>' +
+    (yLabel ? '<text x="10" y="' + ((P.padT + P.H - P.padB) / 2) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="9" transform="rotate(-90, 10, ' + ((P.padT + P.H - P.padB) / 2) + ')">' + yLabel + '</text>' : '');
 }
 
 function tcCapMarker(ax) {
@@ -200,8 +200,8 @@ function tcXTicks(ax, x0, x1, xlog) {
   for (var i = 0; i <= 4; i++) {
     var v = xlog ? Math.pow(10, Math.log10(x0) + (Math.log10(x1) - Math.log10(x0)) * i / 4) : x0 + (x1 - x0) * i / 4;
     var x = ax.sx(v);
-    out += '<line x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + P.padT + '" y2="' + (P.H - P.padB) + '" stroke="#1e2228"/>' +
-      '<text x="' + x.toFixed(1) + '" y="' + (P.H - P.padB + 13) + '" text-anchor="middle" fill="#6a737d" font-size="8.5">' + formatNum(v) + '</text>';
+    out += '<line x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + P.padT + '" y2="' + (P.H - P.padB) + '" stroke="var(--chart-grid)"/>' +
+      '<text x="' + x.toFixed(1) + '" y="' + (P.H - P.padB + 13) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="8.5">' + formatNum(v) + '</text>';
   }
   return out;
 }
@@ -251,8 +251,8 @@ function auxTopcutLogProbSvg() {
   var grid = '';
   [0.01, 0.1, 0.5, 0.9, 0.99].forEach(function(p) {
     var y = sy(p).toFixed(1);
-    grid += '<line x1="' + P.padL + '" x2="' + (P.W - P.padR) + '" y1="' + y + '" y2="' + y + '" stroke="#1e2228"/>' +
-      '<text x="' + (P.padL - 4) + '" y="' + (+y + 3) + '" text-anchor="end" fill="#6a737d" font-size="8">' + (p * 100) + '%</text>';
+    grid += '<line x1="' + P.padL + '" x2="' + (P.W - P.padR) + '" y1="' + y + '" y2="' + y + '" stroke="var(--chart-grid)"/>' +
+      '<text x="' + (P.padL - 4) + '" y="' + (+y + 3) + '" text-anchor="end" fill="var(--chart-ink)" font-size="8">' + (p * 100) + '%</text>';
   });
   // Cumulative probability is weight-cumulative in declustered mode
   var step = Math.max(1, Math.floor(m / 360));
@@ -263,7 +263,7 @@ function auxTopcutLogProbSvg() {
       ? (t.prefixW[i] + t.weights[i] / 2) / W
       : (i + 0.5) / m;
     if (p < pLo || p > pHi) continue;
-    pts += '<circle cx="' + ax.sx(v[i]).toFixed(1) + '" cy="' + sy(p).toFixed(1) + '" r="1.2" fill="var(--amber)" opacity="0.7"/>';
+    pts += '<circle cx="' + ax.sx(v[i]).toFixed(1) + '" cy="' + sy(p).toFixed(1) + '" r="1.2" fill="var(--action)" opacity="0.7"/>';
   }
   return tcSvgOpen(ax) + grid + tcXTicks(ax, x0, x1, xlog) + pts + tcCapMarker(ax) +
     tcFrame((xlog ? 'Log-probability' : 'Probability (linear X)') + (t.weights ? ' · declustered' : ''), 'cum %') + '</svg>';
@@ -293,11 +293,11 @@ function auxTopcutMeanCvSvg() {
   function syC(y) { return P.padT + (1 - (y - cvLo) / (cvHi - cvLo)) * plotH; }
   var pM = means.map(function(p2, i2) { return (i2 ? 'L' : 'M') + ax.sx(p2[0]).toFixed(1) + ',' + syM(p2[1]).toFixed(1); }).join('');
   var pC = cvs.filter(function(p2) { return p2[1] != null; }).map(function(p2, i2) { return (i2 ? 'L' : 'M') + ax.sx(p2[0]).toFixed(1) + ',' + syC(p2[1]).toFixed(1); }).join('');
-  var legend = '<text x="' + (P.padL + 4) + '" y="' + (P.padT + 9) + '" fill="var(--amber)" font-size="8.5">mean</text>' +
-    '<text x="' + (P.padL + 34) + '" y="' + (P.padT + 9) + '" fill="#56b6c2" font-size="8.5">CV</text>';
+  var legend = '<text x="' + (P.padL + 4) + '" y="' + (P.padT + 9) + '" fill="var(--action)" font-size="8.5">mean</text>' +
+    '<text x="' + (P.padL + 34) + '" y="' + (P.padT + 9) + '" fill="var(--info)" font-size="8.5">CV</text>';
   return tcSvgOpen(ax) + tcXTicks(ax, x0, x1, xlog) +
-    '<path d="' + pM + '" fill="none" stroke="var(--amber)" stroke-width="1.4"/>' +
-    '<path d="' + pC + '" fill="none" stroke="#56b6c2" stroke-width="1.2"/>' +
+    '<path d="' + pM + '" fill="none" stroke="var(--action)" stroke-width="1.4"/>' +
+    '<path d="' + pC + '" fill="none" stroke="var(--info)" stroke-width="1.2"/>' +
     legend + tcCapMarker(ax) + tcFrame('Mean & CV vs cap' + (xlog ? ' (log X)' : ''), '') + '</svg>';
 }
 
@@ -324,11 +324,11 @@ function auxTopcutMetalSvg() {
   var grid = '';
   for (var gi = 0; gi <= 3; gi++) {
     var gy = yMax * gi / 3;
-    grid += '<line x1="' + P.padL + '" x2="' + (P.W - P.padR) + '" y1="' + sy(gy).toFixed(1) + '" y2="' + sy(gy).toFixed(1) + '" stroke="#1e2228"/>' +
-      '<text x="' + (P.padL - 4) + '" y="' + (sy(gy) + 3).toFixed(1) + '" text-anchor="end" fill="#6a737d" font-size="8">' + gy.toFixed(1) + '%</text>';
+    grid += '<line x1="' + P.padL + '" x2="' + (P.W - P.padR) + '" y1="' + sy(gy).toFixed(1) + '" y2="' + sy(gy).toFixed(1) + '" stroke="var(--chart-grid)"/>' +
+      '<text x="' + (P.padL - 4) + '" y="' + (sy(gy) + 3).toFixed(1) + '" text-anchor="end" fill="var(--chart-ink)" font-size="8">' + gy.toFixed(1) + '%</text>';
   }
   return tcSvgOpen(ax) + grid + tcXTicks(ax, x0, x1, xlog) +
-    '<path d="' + path + '" fill="none" stroke="var(--amber)" stroke-width="1.4"/>' +
+    '<path d="' + path + '" fill="none" stroke="var(--action)" stroke-width="1.4"/>' +
     tcCapMarker(ax) + tcFrame('Metal removed by cap' + (xlog ? ' (log X)' : ''), '') + '</svg>';
 }
 

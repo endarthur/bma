@@ -101,11 +101,9 @@ function applyTheme(name) {
       css += '  --fg: ' + ct.fg + ';\n';
       css += '  --fg-dim: ' + ct.fgDim + ';\n';
       css += '  --fg-bright: ' + ct.fgBright + ';\n';
-      css += '  --amber: ' + ct.accent + ';\n';
-      css += '  --amber-dim: ' + ct.accentDim + ';\n';
-      css += '  --amber-glow: ' + ct.accent + '30;\n';
       // C6-1b: post-triage the custom accent drives action + brand too
-      // (sel/warn/info/go/fault stay on the Switchboard dark base)
+      // (sel/warn/info/go/fault stay on the Switchboard dark base; chart
+      // chrome --chart-ink/grid inherit the dark --au-* values)
       css += '  --action: ' + ct.accent + ';\n';
       css += '  --action-soft: ' + ct.accent + '30;\n';
       css += '  --brand: ' + ct.accent + ';\n';
@@ -119,6 +117,7 @@ function applyTheme(name) {
       customStyle.textContent = css;
       updateThemeColor(ct.bg);
     }
+    reRenderChartsForTheme();   // C6-1c: palette + chart chrome follow the theme
     return;
   }
 
@@ -128,6 +127,7 @@ function applyTheme(name) {
   if (mode === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
   else document.documentElement.removeAttribute('data-theme');
   updateThemeColor(THEME_META_COLORS[mode]);
+  reRenderChartsForTheme();     // C6-1c: palette + chart chrome follow the theme
 }
 
 function updateThemeColor(color) {

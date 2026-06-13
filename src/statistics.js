@@ -519,16 +519,16 @@ function renderStatsQqSvg(entries) {
     var v = isLog ? Math.pow(10, lLo + ((lHi - lLo) * ti / nTicks)) : (lo + ((hi - lo) * ti / nTicks));
     var label = Math.abs(v) >= 1e5 || (Math.abs(v) < 0.01 && v !== 0) ? v.toExponential(1) : v.toFixed(Math.abs(v) < 10 ? 2 : 0);
     var x = sx(v), y = sy(v);
-    gridSvg += '<line x1="' + x.toFixed(1) + '" y1="' + pad.top + '" x2="' + x.toFixed(1) + '" y2="' + (pad.top + plotH) + '" stroke="#1e2228" stroke-width="1"/>';
-    gridSvg += '<text x="' + x.toFixed(1) + '" y="' + (pad.top + plotH + 16) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + label + '</text>';
-    gridSvg += '<line x1="' + pad.left + '" y1="' + y.toFixed(1) + '" x2="' + (pad.left + plotW) + '" y2="' + y.toFixed(1) + '" stroke="#1e2228" stroke-width="1"/>';
-    gridSvg += '<text x="' + (pad.left - 8) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" fill="#6a737d" font-size="10">' + label + '</text>';
+    gridSvg += '<line x1="' + x.toFixed(1) + '" y1="' + pad.top + '" x2="' + x.toFixed(1) + '" y2="' + (pad.top + plotH) + '" stroke="var(--chart-grid)" stroke-width="1"/>';
+    gridSvg += '<text x="' + x.toFixed(1) + '" y="' + (pad.top + plotH + 16) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="10">' + label + '</text>';
+    gridSvg += '<line x1="' + pad.left + '" y1="' + y.toFixed(1) + '" x2="' + (pad.left + plotW) + '" y2="' + y.toFixed(1) + '" stroke="var(--chart-grid)" stroke-width="1"/>';
+    gridSvg += '<text x="' + (pad.left - 8) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" fill="var(--chart-ink)" font-size="10">' + label + '</text>';
   }
 
   // 45° identity line
   var idSvg = '<line x1="' + sx(isLog ? Math.pow(10, lLo) : lo) + '" y1="' + sy(isLog ? Math.pow(10, lLo) : lo) +
     '" x2="' + sx(isLog ? Math.pow(10, lHi) : hi) + '" y2="' + sy(isLog ? Math.pow(10, lHi) : hi) +
-    '" stroke="#6a737d" stroke-width="1" stroke-dasharray="5,4" opacity="0.7"/>';
+    '" stroke="var(--chart-ink)" stroke-width="1" stroke-dasharray="5,4" opacity="0.7"/>';
 
   // Points — emphasized deciles, native <title> tooltips
   var ptsSvg = '';
@@ -558,16 +558,16 @@ function renderStatsQqSvg(entries) {
     legendSvg += s.isAux
       ? '<circle cx="' + (lx + 6) + '" cy="' + (ly + 5) + '" r="3.4" fill="none" stroke="' + s.color + '" stroke-width="1.4"/>'
       : '<circle cx="' + (lx + 6) + '" cy="' + (ly + 5) + '" r="3.4" fill="' + s.color + '"/>';
-    legendSvg += '<text x="' + (lx + 16) + '" y="' + (ly + 9) + '" fill="#6a737d" font-size="9.5">' + esc(s.name) + '</text>';
+    legendSvg += '<text x="' + (lx + 16) + '" y="' + (ly + 9) + '" fill="var(--chart-ink)" font-size="9.5">' + esc(s.name) + '</text>';
   });
 
   var scaleLabel = isLog ? ' (log–log)' : '';
   return '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)" id="statsCdfSvg">' +
     '<rect width="' + W + '" height="' + H + '" fill="var(--bg)" rx="4"/>' +
     gridSvg + idSvg + ptsSvg +
-    '<text x="' + (W / 2) + '" y="' + (plotBaseH - 18) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + esc(entries[0][0]) + ' quantiles' + scaleLabel + '</text>' +
-    '<text x="14" y="' + (pad.top + plotH / 2) + '" text-anchor="middle" fill="#6a737d" font-size="10" transform="rotate(-90, 14, ' + (pad.top + plotH / 2) + ')">compared quantiles</text>' +
-    '<text x="' + (W / 2) + '" y="' + (plotBaseH - 4) + '" text-anchor="middle" fill="#6a737d" font-size="9" opacity="0.7">P1–P99 · large dots at deciles · dashed = identity (no bias)</text>' +
+    '<text x="' + (W / 2) + '" y="' + (plotBaseH - 18) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="10">' + esc(entries[0][0]) + ' quantiles' + scaleLabel + '</text>' +
+    '<text x="14" y="' + (pad.top + plotH / 2) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="10" transform="rotate(-90, 14, ' + (pad.top + plotH / 2) + ')">compared quantiles</text>' +
+    '<text x="' + (W / 2) + '" y="' + (plotBaseH - 4) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="9" opacity="0.7">P1–P99 · large dots at deciles · dashed = identity (no bias)</text>' +
     legendSvg +
     '</svg>';
 }
@@ -645,8 +645,8 @@ function renderStatsCdfSvg(entries) {
     var ytLabel = probScale
       ? (yt * 100 < 1 || yt * 100 > 99 ? (yt * 100).toFixed(1) : (yt * 100).toFixed(0))
       : (yt * 100).toFixed(0);
-    gridSvg += '<line x1="' + pad.left + '" y1="' + y + '" x2="' + (W - pad.right) + '" y2="' + y + '" stroke="#1e2228" stroke-width="1"/>';
-    gridSvg += '<text x="' + (pad.left - 8) + '" y="' + (y + 3.5) + '" text-anchor="end" fill="#6a737d" font-size="10">' + ytLabel + '%</text>';
+    gridSvg += '<line x1="' + pad.left + '" y1="' + y + '" x2="' + (W - pad.right) + '" y2="' + y + '" stroke="var(--chart-grid)" stroke-width="1"/>';
+    gridSvg += '<text x="' + (pad.left - 8) + '" y="' + (y + 3.5) + '" text-anchor="end" fill="var(--chart-ink)" font-size="10">' + ytLabel + '%</text>';
   }
   var nxTicks = 6;
   for (var xi = 0; xi <= nxTicks; xi++) {
@@ -657,9 +657,9 @@ function renderStatsCdfSvg(entries) {
       v = globalMin + ((globalMax - globalMin || 1) * xi / nxTicks);
     }
     var x = sx(v);
-    gridSvg += '<line x1="' + x + '" y1="' + pad.top + '" x2="' + x + '" y2="' + (plotBaseH - pad.bottom) + '" stroke="#1e2228" stroke-width="1"/>';
+    gridSvg += '<line x1="' + x + '" y1="' + pad.top + '" x2="' + x + '" y2="' + (plotBaseH - pad.bottom) + '" stroke="var(--chart-grid)" stroke-width="1"/>';
     var label = Math.abs(v) >= 1e5 || (Math.abs(v) < 0.01 && v !== 0) ? v.toExponential(1) : v.toFixed(Math.abs(v) < 10 ? 2 : 0);
-    gridSvg += '<text x="' + x + '" y="' + (plotBaseH - pad.bottom + 16) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + label + '</text>';
+    gridSvg += '<text x="' + x + '" y="' + (plotBaseH - pad.bottom + 16) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="10">' + label + '</text>';
   }
 
   var curvesSvg = '';
@@ -704,7 +704,7 @@ function renderStatsCdfSvg(entries) {
     var lx = pad.left + col * colW;
     var ly = legTop + row * legRowH;
     legendSvg += '<line x1="' + lx + '" y1="' + (ly + 5) + '" x2="' + (lx + 18) + '" y2="' + (ly + 5) + '" stroke="' + lColor + '" stroke-width="2.5"' + (entries[li][2] ? ' stroke-dasharray="4,3"' : '') + '/>';
-    legendSvg += '<text x="' + (lx + 24) + '" y="' + (ly + 9) + '" fill="#6a737d" font-size="9.5">' + esc(lName) + '</text>';
+    legendSvg += '<text x="' + (lx + 24) + '" y="' + (ly + 9) + '" fill="var(--chart-ink)" font-size="9.5">' + esc(lName) + '</text>';
   }
 
   // Store params for tooltip interaction
@@ -718,7 +718,7 @@ function renderStatsCdfSvg(entries) {
   };
 
   // Overlay elements for tooltip interaction
-  var overlaySvg = '<line id="statsCdfCrosshair" x1="0" y1="' + pad.top + '" x2="0" y2="' + (plotBaseH - pad.bottom) + '" stroke="var(--amber)" stroke-width="1" stroke-dasharray="3,2" visibility="hidden"/>';
+  var overlaySvg = '<line id="statsCdfCrosshair" x1="0" y1="' + pad.top + '" x2="0" y2="' + (plotBaseH - pad.bottom) + '" stroke="var(--action)" stroke-width="1" stroke-dasharray="3,2" visibility="hidden"/>';
   for (var di = 0; di < entries.length; di++) {
     var dColor = STATSCAT_PALETTE[di % STATSCAT_PALETTE.length];
     overlaySvg += '<circle class="cdf-dot" data-idx="' + di + '" cx="0" cy="0" r="3.5" fill="' + dColor + '" stroke="var(--bg)" stroke-width="1" visibility="hidden"/>';
@@ -731,8 +731,8 @@ function renderStatsCdfSvg(entries) {
   return '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)" id="statsCdfSvg">' +
     '<rect width="' + W + '" height="' + H + '" fill="var(--bg)" rx="4"/>' +
     gridSvg + meansSvg + curvesSvg + overlaySvg +
-    '<text x="' + (W / 2) + '" y="' + (plotBaseH - 4) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + titleLabel + '</text>' +
-    '<text x="12" y="' + (plotBaseH / 2) + '" text-anchor="middle" fill="#6a737d" font-size="10" transform="rotate(-90, 12, ' + (plotBaseH / 2) + ')">' + yAxisLabel + '</text>' +
+    '<text x="' + (W / 2) + '" y="' + (plotBaseH - 4) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="10">' + titleLabel + '</text>' +
+    '<text x="12" y="' + (plotBaseH / 2) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="10" transform="rotate(-90, 12, ' + (plotBaseH / 2) + ')">' + yAxisLabel + '</text>' +
     legendSvg +
     '</svg>';
 }
@@ -1061,8 +1061,8 @@ function cleanSvgForExport(svgEl) {
   clone.querySelectorAll('.cdf-dot').forEach(function(d) { d.remove(); });
   var svgData = new XMLSerializer().serializeToString(clone);
   svgData = svgData.replace(/fill="var\(--bg\)"/g, 'fill="white"');
-  svgData = svgData.replace(/fill="#6a737d"/g, 'fill="#333"');
-  svgData = svgData.replace(/stroke="#1e2228"/g, 'stroke="#ddd"');
+  svgData = svgData.replace(/fill="var(--chart-ink)"/g, 'fill="#555"');
+  svgData = svgData.replace(/stroke="var(--chart-grid)"/g, 'stroke="#ddd"');
   svgData = svgData.replace(/style="font-family:var\(--mono\)"/g, 'style="font-family:monospace"');
   return svgData;
 }

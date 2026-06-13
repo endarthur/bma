@@ -2478,8 +2478,8 @@ function renderOverlaidCDF(entries, varName) {
   let gridSvg = '';
   for (const yt of yTicks) {
     const y = sy(yt);
-    gridSvg += '<line x1="' + pad.left + '" y1="' + y + '" x2="' + (W - pad.right) + '" y2="' + y + '" stroke="#1e2228" stroke-width="1"/>';
-    gridSvg += '<text x="' + (pad.left - 8) + '" y="' + (y + 3.5) + '" text-anchor="end" fill="#6a737d" font-size="10">' + (yt * 100).toFixed(0) + '%</text>';
+    gridSvg += '<line x1="' + pad.left + '" y1="' + y + '" x2="' + (W - pad.right) + '" y2="' + y + '" stroke="var(--chart-grid)" stroke-width="1"/>';
+    gridSvg += '<text x="' + (pad.left - 8) + '" y="' + (y + 3.5) + '" text-anchor="end" fill="var(--chart-ink)" font-size="10">' + (yt * 100).toFixed(0) + '%</text>';
   }
   const nxTicks = 6;
   for (let i = 0; i <= nxTicks; i++) {
@@ -2490,9 +2490,9 @@ function renderOverlaidCDF(entries, varName) {
       v = globalMin + ((globalMax - globalMin || 1) * i / nxTicks);
     }
     const x = sx(v);
-    gridSvg += '<line x1="' + x + '" y1="' + pad.top + '" x2="' + x + '" y2="' + (plotBaseH - pad.bottom) + '" stroke="#1e2228" stroke-width="1"/>';
+    gridSvg += '<line x1="' + x + '" y1="' + pad.top + '" x2="' + x + '" y2="' + (plotBaseH - pad.bottom) + '" stroke="var(--chart-grid)" stroke-width="1"/>';
     const label = Math.abs(v) >= 1e5 || (Math.abs(v) < 0.01 && v !== 0) ? v.toExponential(1) : v.toFixed(Math.abs(v) < 10 ? 2 : 0);
-    gridSvg += '<text x="' + x + '" y="' + (plotBaseH - pad.bottom + 16) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + label + '</text>';
+    gridSvg += '<text x="' + x + '" y="' + (plotBaseH - pad.bottom + 16) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="10">' + label + '</text>';
   }
 
   let curvesSvg = '';
@@ -2534,15 +2534,15 @@ function renderOverlaidCDF(entries, varName) {
     const lx = pad.left + col * colW;
     const ly = legTop + row * legRowH;
     legendSvg += '<line x1="' + lx + '" y1="' + (ly + 5) + '" x2="' + (lx + 18) + '" y2="' + (ly + 5) + '" stroke="' + color + '" stroke-width="2.5"/>';
-    legendSvg += '<text x="' + (lx + 24) + '" y="' + (ly + 9) + '" fill="#6a737d" font-size="9.5">' + esc(gv || '(empty)') + '</text>';
+    legendSvg += '<text x="' + (lx + 24) + '" y="' + (ly + 9) + '" fill="var(--chart-ink)" font-size="9.5">' + esc(gv || '(empty)') + '</text>';
   }
 
   const scaleLabel = isLog ? ' (log)' : '';
   const svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)" id="statsCatCdfSvg">' +
     '<rect width="' + W + '" height="' + H + '" fill="var(--bg)" rx="4"/>' +
     gridSvg + meansSvg + curvesSvg +
-    '<text x="' + (W / 2) + '" y="' + (plotBaseH - 4) + '" text-anchor="middle" fill="#6a737d" font-size="10">CDF' + scaleLabel + ' \u2014 ' + esc(varName) + '</text>' +
-    '<text x="12" y="' + (plotBaseH / 2) + '" text-anchor="middle" fill="#6a737d" font-size="10" transform="rotate(-90, 12, ' + (plotBaseH / 2) + ')">Cumulative %</text>' +
+    '<text x="' + (W / 2) + '" y="' + (plotBaseH - 4) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="10">CDF' + scaleLabel + ' \u2014 ' + esc(varName) + '</text>' +
+    '<text x="12" y="' + (plotBaseH / 2) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="10" transform="rotate(-90, 12, ' + (plotBaseH / 2) + ')">Cumulative %</text>' +
     legendSvg +
     '</svg>';
 
@@ -2606,8 +2606,8 @@ function wireStatsCatCdfToolbar() {
       let svgData = new XMLSerializer().serializeToString(svgEl);
       // Retheme for light background: white bg, dark text/lines
       svgData = svgData.replace(/fill="var\(--bg\)"/g, 'fill="white"');
-      svgData = svgData.replace(/fill="#6a737d"/g, 'fill="#333"');
-      svgData = svgData.replace(/stroke="#1e2228"/g, 'stroke="#ddd"');
+      svgData = svgData.replace(/fill="var(--chart-ink)"/g, 'fill="#555"');
+      svgData = svgData.replace(/stroke="var(--chart-grid)"/g, 'stroke="#ddd"');
       svgData = svgData.replace(/style="font-family:var\(--mono\)"/g, 'style="font-family:monospace"');
       const canvas = document.createElement('canvas');
       const scale = 2;

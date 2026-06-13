@@ -388,18 +388,18 @@ function auxDeclusCurveSvg(d) {
   }
   var svg = '<svg class="aux-declus-curve" id="auxDeclusCurveSvg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" data-pts="' + esc(JSON.stringify(pts)) + '">' +
     '<line x1="' + padL + '" y1="' + sy(d.naiveMean).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + sy(d.naiveMean).toFixed(1) + '" stroke="var(--fg-dim)" stroke-dasharray="3,3" stroke-width="0.75"/>' +
-    '<polyline points="' + poly + '" fill="none" stroke="var(--amber)" stroke-width="1.3"/>';
+    '<polyline points="' + poly + '" fill="none" stroke="var(--action)" stroke-width="1.3"/>';
   // Sweep points — visible click targets
   for (var k = 0; k < pts.length; k++) {
     if (pts[k][2] <= 0) continue;
-    svg += '<circle cx="' + pts[k][0] + '" cy="' + pts[k][1] + '" r="1.7" fill="var(--amber)" opacity="0.55"/>';
+    svg += '<circle cx="' + pts[k][0] + '" cy="' + pts[k][1] + '" r="1.7" fill="var(--action)" opacity="0.55"/>';
   }
   if (d.pinned) {
     var pxp = sx(d.pinned), pyp = sy(d.declusteredMean);
     svg += '<line x1="' + pxp.toFixed(1) + '" y1="' + padT + '" x2="' + pxp.toFixed(1) + '" y2="' + (H - padB) + '" stroke="var(--fg-bright)" stroke-dasharray="2,2" stroke-width="0.75"/>' +
       '<rect x="' + (pxp - 3.2).toFixed(1) + '" y="' + (pyp - 3.2).toFixed(1) + '" width="6.4" height="6.4" transform="rotate(45 ' + pxp.toFixed(1) + ' ' + pyp.toFixed(1) + ')" fill="var(--fg-bright)"/>';
   } else if (d.optCellSize > 0) {
-    svg += '<circle cx="' + sx(d.optCellSize).toFixed(1) + '" cy="' + sy(d.declusteredMean).toFixed(1) + '" r="3.2" fill="var(--amber)"/>';
+    svg += '<circle cx="' + sx(d.optCellSize).toFixed(1) + '" cy="' + sy(d.declusteredMean).toFixed(1) + '" r="3.2" fill="var(--action)"/>';
   }
   // Hover cursor (positioned by the delegated pointermove handler)
   svg += '<g id="auxDeclusCursor" style="display:none">' +

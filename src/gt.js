@@ -1000,15 +1000,15 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
   for (var i = 0; i <= nxTicks; i++) {
     var v = xMin + (xRange * i / nxTicks);
     var x = sx(v);
-    svg += '<line x1="' + x.toFixed(1) + '" y1="' + pad.top + '" x2="' + x.toFixed(1) + '" y2="' + (H - pad.bottom) + '" stroke="#1e2228" stroke-width="1"/>';
-    svg += '<text x="' + x.toFixed(1) + '" y="' + (H - pad.bottom + 14) + '" text-anchor="middle" fill="#6a737d" font-size="9">' + gtFmt(v, units.gradeDp) + '</text>';
+    svg += '<line x1="' + x.toFixed(1) + '" y1="' + pad.top + '" x2="' + x.toFixed(1) + '" y2="' + (H - pad.bottom) + '" stroke="var(--chart-grid)" stroke-width="1"/>';
+    svg += '<text x="' + x.toFixed(1) + '" y="' + (H - pad.bottom + 14) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="9">' + gtFmt(v, units.gradeDp) + '</text>';
   }
   var nyTicks = 6;
   for (var j = 0; j <= nyTicks; j++) {
     var tv = tMin + ((tMax - tMin) * j / nyTicks);
     var y = syT(tv);
-    svg += '<line x1="' + pad.left + '" y1="' + y.toFixed(1) + '" x2="' + (W - pad.right) + '" y2="' + y.toFixed(1) + '" stroke="#1e2228" stroke-width="1"/>';
-    svg += '<text x="' + (pad.left - 6) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end" fill="var(--amber)" font-size="9">' + gtFmt(tv, units.tonnageDp) + '</text>';
+    svg += '<line x1="' + pad.left + '" y1="' + y.toFixed(1) + '" x2="' + (W - pad.right) + '" y2="' + y.toFixed(1) + '" stroke="var(--chart-grid)" stroke-width="1"/>';
+    svg += '<text x="' + (pad.left - 6) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end" fill="var(--action)" font-size="9">' + gtFmt(tv, units.tonnageDp) + '</text>';
     var gv = gMin + ((gMax - gMin) * j / nyTicks);
     svg += '<text x="' + (W - pad.right + 6) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="start" fill="var(--blue)" font-size="9">' + gtFmt(gv, units.gradeDp) + '</text>';
   }
@@ -1028,7 +1028,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
           gTotalP += (gTotalP ? 'L' : 'M') + sx(points[ti].cutoff).toFixed(1) + ',' + syG(points[ti].grade).toFixed(1);
         }
       }
-      svg += '<path d="' + tTotalP + '" fill="none" stroke="var(--amber)" stroke-width="2.5" opacity="0.7"/>';
+      svg += '<path d="' + tTotalP + '" fill="none" stroke="var(--action)" stroke-width="2.5" opacity="0.7"/>';
       if (gTotalP) svg += '<path d="' + gTotalP + '" fill="none" stroke="var(--blue)" stroke-width="2" stroke-dasharray="4,3" opacity="0.7"/>';
     }
     // Grouped overlay: draw tonnage + grade per group with colors
@@ -1062,7 +1062,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
     for (var k = 0; k < points.length; k++) {
       tPath += (k === 0 ? 'M' : 'L') + sx(points[k].cutoff).toFixed(1) + ',' + syT(points[k].tonnage).toFixed(1);
     }
-    svg += '<path d="' + tPath + '" fill="none" stroke="var(--amber)" stroke-width="2"/>';
+    svg += '<path d="' + tPath + '" fill="none" stroke="var(--action)" stroke-width="2"/>';
 
     var gPath = '';
     for (var l = 0; l < points.length; l++) {
@@ -1088,7 +1088,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
         thT += (th === 0 ? 'M' : 'L') + sx(tp.cutoff).toFixed(1) + ',' + syT(tp.tonnage).toFixed(1);
         if (tp.tonnage > 0) thG += (thG ? 'L' : 'M') + sx(tp.cutoff).toFixed(1) + ',' + syG(tp.grade).toFixed(1);
       }
-      svg += '<path d="' + thT + '" fill="none" stroke="var(--amber)" stroke-width="1.3" stroke-dasharray="7,4" opacity="0.9"/>';
+      svg += '<path d="' + thT + '" fill="none" stroke="var(--action)" stroke-width="1.3" stroke-dasharray="7,4" opacity="0.9"/>';
       if (thG) svg += '<path d="' + thG + '" fill="none" stroke="var(--blue)" stroke-width="1.3" stroke-dasharray="7,4" opacity="0.9"/>';
     }
   }
@@ -1096,16 +1096,16 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
   svg += '</g>'; // close clip group
 
   // Axis labels
-  svg += '<text x="' + (W / 2) + '" y="' + (H - 6) + '" text-anchor="middle" fill="#6a737d" font-size="10">Cutoff' + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') + '</text>';
-  svg += '<text x="12" y="' + (H / 2) + '" text-anchor="middle" fill="var(--amber)" font-size="10" transform="rotate(-90, 12, ' + (H / 2) + ')">Tonnage (' + esc(units.tonnageSymbol) + ')</text>';
+  svg += '<text x="' + (W / 2) + '" y="' + (H - 6) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="10">Cutoff' + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') + '</text>';
+  svg += '<text x="12" y="' + (H / 2) + '" text-anchor="middle" fill="var(--action)" font-size="10" transform="rotate(-90, 12, ' + (H / 2) + ')">Tonnage (' + esc(units.tonnageSymbol) + ')</text>';
   svg += '<text x="' + (W - 8) + '" y="' + (H / 2) + '" text-anchor="middle" fill="var(--blue)" font-size="10" transform="rotate(90, ' + (W - 8) + ', ' + (H / 2) + ')">Grade' + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') + '</text>';
 
   // Legend
   if (groupNames.length > 0 || (isGrouped && showTotal)) {
     var legY = pad.top + 6;
     if (showTotal) {
-      svg += '<rect x="' + (pad.left + 10) + '" y="' + legY + '" width="10" height="3" fill="var(--amber)" rx="1" opacity="0.7"/>';
-      svg += '<text x="' + (pad.left + 24) + '" y="' + (legY + 4) + '" fill="var(--amber)" font-size="7">Total</text>';
+      svg += '<rect x="' + (pad.left + 10) + '" y="' + legY + '" width="10" height="3" fill="var(--action)" rx="1" opacity="0.7"/>';
+      svg += '<text x="' + (pad.left + 24) + '" y="' + (legY + 4) + '" fill="var(--action)" font-size="7">Total</text>';
       legY += 11;
     }
     for (var gi = 0; gi < Math.min(groupNames.length, 15); gi++) {
@@ -1120,14 +1120,14 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
       svg += '<text x="' + (pad.left + 24) + '" y="' + (legY + 4) + '" fill="var(--fg-dim)" font-size="7">+' + (groupNames.length - 15) + ' more</text>';
     }
   } else {
-    svg += '<rect x="' + (pad.left + 10) + '" y="' + (pad.top + 6) + '" width="10" height="3" fill="var(--amber)" rx="1"/>';
-    svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 10) + '" fill="var(--amber)" font-size="8">Tonnage</text>';
+    svg += '<rect x="' + (pad.left + 10) + '" y="' + (pad.top + 6) + '" width="10" height="3" fill="var(--action)" rx="1"/>';
+    svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 10) + '" fill="var(--action)" font-size="8">Tonnage</text>';
     svg += '<rect x="' + (pad.left + 10) + '" y="' + (pad.top + 18) + '" width="10" height="3" fill="var(--blue)" rx="1"/>';
     svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 22) + '" fill="var(--blue)" font-size="8">Grade</text>';
     svg += '<line x1="' + (pad.left + 10) + '" y1="' + (pad.top + 31.5) + '" x2="' + (pad.left + 20) + '" y2="' + (pad.top + 31.5) + '" stroke="var(--green)" stroke-width="1.5" stroke-dasharray="3,2"/>';
     svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 34) + '" fill="var(--green)" font-size="8">Metal (' + esc(units.metalSymbol) + ')</text>';
     if (theo) {
-      svg += '<line x1="' + (pad.left + 10) + '" y1="' + (pad.top + 43.5) + '" x2="' + (pad.left + 20) + '" y2="' + (pad.top + 43.5) + '" stroke="var(--amber)" stroke-width="1.3" stroke-dasharray="5,3"/>';
+      svg += '<line x1="' + (pad.left + 10) + '" y1="' + (pad.top + 43.5) + '" x2="' + (pad.left + 20) + '" y2="' + (pad.top + 43.5) + '" stroke="var(--action)" stroke-width="1.3" stroke-dasharray="5,3"/>';
       svg += '<line x1="' + (pad.left + 10) + '" y1="' + (pad.top + 47.5) + '" x2="' + (pad.left + 20) + '" y2="' + (pad.top + 47.5) + '" stroke="var(--blue)" stroke-width="1.3" stroke-dasharray="5,3"/>';
       svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 48) + '" fill="var(--fg-dim)" font-size="8">Theoretical (samples, affine f=' + theo.f.toFixed(2) + ', scaled to model total)</text>';
     }
@@ -1146,7 +1146,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
     'data-pad-left="' + pad.left + '" data-pad-right="' + pad.right + '" data-pad-top="' + pad.top + '" data-pad-bottom="' + pad.bottom + '" ' +
     'data-w="' + W + '" data-h="' + H + '" data-xmin="' + xMin + '" data-xmax="' + xMax + '">' +
     '<rect width="' + W + '" height="' + H + '" fill="var(--bg)" rx="4"/>' +
-    '<text x="' + (W / 2) + '" y="17" text-anchor="middle" fill="#6a737d" font-size="11" font-weight="600">' + chartTitle + '</text>' +
+    '<text x="' + (W / 2) + '" y="17" text-anchor="middle" fill="var(--chart-ink)" font-size="11" font-weight="600">' + chartTitle + '</text>' +
     svg +
     '</svg>';
 }
@@ -1174,7 +1174,7 @@ function downloadGtPng(chartIdx, colName) {
   // Resolve series colors from the live theme, retheme neutrals for light bg
   var cs = getComputedStyle(document.documentElement);
   function cssVar(name, fallback) { var v = cs.getPropertyValue(name).trim(); return v || fallback; }
-  svgData = svgData.replace(/var\(--amber\)/g, cssVar('--amber', '#b87333'));
+  svgData = svgData.replace(/var\(--action\)/g, cssVar('--action', '#b54e1a'));
   svgData = svgData.replace(/var\(--blue\)/g, cssVar('--blue', '#2563eb'));
   svgData = svgData.replace(/var\(--green\)/g, cssVar('--green', '#1a7a52'));
   svgData = svgData.replace(/fill="var\(--bg\)"/g, 'fill="white"');
@@ -1182,8 +1182,8 @@ function downloadGtPng(chartIdx, colName) {
   svgData = svgData.replace(/var\(--fg-dim\)/g, '#555');
   svgData = svgData.replace(/var\(--fg\)/g, '#333');
   svgData = svgData.replace(/var\(--border\)/g, '#ddd');
-  svgData = svgData.replace(/fill="#6a737d"/g, 'fill="#333"');
-  svgData = svgData.replace(/stroke="#1e2228"/g, 'stroke="#ddd"');
+  svgData = svgData.replace(/fill="var(--chart-ink)"/g, 'fill="#555"');
+  svgData = svgData.replace(/stroke="var(--chart-grid)"/g, 'stroke="#ddd"');
   svgData = svgData.replace(/style="font-family:var\(--mono\)[^"]*"/g, 'style="font-family:monospace"');
   var canvas = document.createElement('canvas');
   var scale = 2;

@@ -255,12 +255,12 @@ function renderCatBarChart() {
       var py = paretoPoints[pi].y;
       pPath += (pi === 0 ? 'M' : 'L') + px.toFixed(1) + ',' + py.toFixed(1);
     }
-    svg += '<path d="' + pPath + '" fill="none" stroke="var(--amber)" stroke-width="1.5" opacity="0.6" stroke-dasharray="4,3"/>';
+    svg += '<path d="' + pPath + '" fill="none" stroke="var(--action)" stroke-width="1.5" opacity="0.6" stroke-dasharray="4,3"/>';
     // Mark 80% line if it fits
     var line80y1 = 0, line80y2 = paretoPoints[paretoPoints.length - 1].y;
     var line80x = labelW + 0.8 * barAreaW;
-    svg += '<line x1="' + line80x.toFixed(1) + '" y1="' + line80y1 + '" x2="' + line80x.toFixed(1) + '" y2="' + line80y2.toFixed(1) + '" stroke="var(--amber)" stroke-width="0.5" opacity="0.3" stroke-dasharray="2,4"/>';
-    svg += '<text x="' + line80x.toFixed(1) + '" y="' + (line80y2 + 14) + '" text-anchor="middle" fill="var(--amber)" font-size="8" opacity="0.5">80%</text>';
+    svg += '<line x1="' + line80x.toFixed(1) + '" y1="' + line80y1 + '" x2="' + line80x.toFixed(1) + '" y2="' + line80y2.toFixed(1) + '" stroke="var(--action)" stroke-width="0.5" opacity="0.3" stroke-dasharray="2,4"/>';
+    svg += '<text x="' + line80x.toFixed(1) + '" y="' + (line80y2 + 14) + '" text-anchor="middle" fill="var(--action)" font-size="8" opacity="0.5">80%</text>';
   }
 
   svg += '</svg>';

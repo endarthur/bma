@@ -389,12 +389,47 @@ let sectionExprController = null;
 let pendingProjectRestore = null;
 let autoSaveTimer = null;
 
-const STATSCAT_PALETTE = [
-  '#4a9eff','#34d399','#f87171','#a78bfa','#fb923c',
-  '#22d3ee','#f472b6','#facc15','#818cf8','#2dd4bf',
-  '#e879f9','#84cc16','#f97316','#38bdf8','#c084fc',
-  '#a3e635','#fb7185','#67e8f9','#d946ef','#fbbf24'
-];
+// C6-1c chart series palette — theme-aware (dual-tuned, colorblind-aware,
+// eye-comfort): darker/saturated for equipment gray, lighter for basalt.
+// Ordered blue→orange→green→… for max distinctness in the common 2–3 series
+// case; red demoted off the lead so a plain series doesn't read as a fault.
+// STATSCAT_PALETTE is the LIVE binding, repointed by refreshChartPalette() on
+// every applyTheme(); charts redraw through reRenderChartsForTheme().
+const CHART_PALETTE_LIGHT = ['#2C66B0','#C0571E','#3C7D44','#7A4C9E','#B23636','#1C7480','#A84784','#8A6A1B'];
+const CHART_PALETTE_DARK  = ['#5B9BE0','#E2823E','#5FA85F','#B287D6','#E06A60','#46A9B3','#D67BB4','#C9A14B'];
+let STATSCAT_PALETTE = CHART_PALETTE_DARK;
+function refreshChartPalette() {
+  // base on the resolved DOM attribute (set by the head snippet + applyTheme),
+  // so custom themes (forced data-theme="dark") get the dark variant too
+  var dark = typeof document !== 'undefined' &&
+    document.documentElement.getAttribute('data-theme') === 'dark';
+  STATSCAT_PALETTE = dark ? CHART_PALETTE_DARK : CHART_PALETTE_LIGHT;
+}
+refreshChartPalette();
+
+// Resolve a CSS custom property to a concrete value — canvas 2D can't read
+// var() the way inline SVG can. Falls back if unset / pre-DOM.
+function cssVal(name, fallback) {
+  try {
+    var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  } catch (e) { return fallback; }
+}
+
+// C6-1c theme-change hook: repoint the palette and redraw every cached chart
+// (series colors + chrome tokens both shift on a Light/Dark flip). Reuses the
+// same guarded cached-data renders as the chart-width observers (C1b-0); each
+// guard makes an early applyTheme (before any analysis) a no-op.
+function reRenderChartsForTheme() {
+  refreshChartPalette();
+  try { if (typeof lastCompleteData !== 'undefined' && lastCompleteData && typeof renderStatsCdfPanel === 'function') renderStatsCdfPanel(); } catch (e) {}
+  try { if (typeof lastCompleteData !== 'undefined' && lastCompleteData && typeof currentGroupBy !== 'undefined' && currentGroupBy !== null && typeof renderStatsCatContent === 'function') renderStatsCatContent(); } catch (e) {}
+  try { if (typeof lastGtData !== 'undefined' && lastGtData && typeof renderGtOutput === 'function') renderGtOutput(); } catch (e) {}
+  try { if (typeof lastSwathData !== 'undefined' && lastSwathData && typeof renderSwathOutput === 'function') renderSwathOutput(); } catch (e) {}
+  try { if (typeof _catData !== 'undefined' && _catData && typeof catFocusedCol !== 'undefined' && catFocusedCol !== null && typeof renderCatMain === 'function') renderCatMain(); } catch (e) {}
+  try { if (typeof auxView !== 'undefined' && auxView === 'topcut' && typeof renderAuxTopcut === 'function') renderAuxTopcut(); } catch (e) {}
+  try { if (typeof refreshCatalogTree === 'function') refreshCatalogTree(); } catch (e) {}
+}
 
 const GRADE_UNITS = [
   { label: '(raw)',  symbol: '',     factor: 1 },

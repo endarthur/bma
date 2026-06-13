@@ -91,8 +91,9 @@
      "bright" emphasis is carried by weight
    - --brand binds swatch-level (--sw-amber) on purpose: brand shares the
      amber hue but is NOT the caution semantic
-   - --amber/-dim/-glow survive as CHART-INTERIM tokens — JS chart code
-     (SVG strokes/fills) still reads them; retired by the C6-1c chart pass */
+   - chart series colors are JS-side (theme-aware STATSCAT_PALETTE in core.js);
+     chart chrome (axis/grid) reads --chart-ink/--chart-grid below. The C6-1b
+     --amber/-dim/-glow interim tokens were retired in C6-1c. */
 :root {
   --bg: var(--au-surface-deep);
   --bg1: var(--au-surface);
@@ -117,10 +118,9 @@
   --border: var(--au-border);
   --mono: var(--au-font-mono);
   --sans: var(--au-font-sans);
-  /* chart-interim (C6-1c retires) */
-  --amber: var(--au-action);
-  --amber-dim: var(--au-action);
-  --amber-glow: var(--au-action-soft);
+  /* chart chrome (C6-1c) — theme-aware via --au-*, baked on SVG export */
+  --chart-ink: var(--au-fg-muted);
+  --chart-grid: var(--au-border);
   /* syntax highlight — light set (from the retired light theme) */
   --hl-keyword: #a626a4;
   --hl-string: #50a14f;

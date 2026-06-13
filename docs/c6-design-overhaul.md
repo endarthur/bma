@@ -91,6 +91,40 @@ serializes/applies layouts, a preset is canned JSON.
 
 ## Phase log
 
+- **C6-1c (chart colors) ✅ (2026-06-13)** — the muddy light-surface charts
+  fixed; **C6-1 foundation complete** bar the UI-scale setting (carried to a
+  follow-up):
+  - **Theme-aware series palette**: `STATSCAT_PALETTE` was one fixed set of
+    dark-theme neon hexes — fine on basalt, washed to pastel on equipment
+    gray, and three translucent neon bands stacked into mud. Replaced with
+    dual-tuned `CHART_PALETTE_LIGHT`/`DARK` (8 colors, colorblind-aware,
+    Switchboard eye-comfort character), ordered blue→orange→green→purple→
+    red→teal→magenta→gold so the common 2–3-series swath is maximally
+    distinct and red is off the lead (a plain series shouldn't read as a
+    fault). `STATSCAT_PALETTE` is now a **live binding** repointed by
+    `refreshChartPalette()` (keys off the resolved `data-theme` attribute, so
+    custom themes get the dark variant). Arthur approved the palette from a
+    both-surfaces render (`experiments/c6-1c-palette.js`).
+  - **Chart chrome tokens**: the near-black `#1e2228` grid (heavy on light)
+    → `--chart-grid` (`--au-border`); the `#6a737d` axis/title/legend labels
+    → `--chart-ink` (`--au-fg-muted`) — both theme-aware, baked on SVG/PNG
+    export (export-bake regex literals rewritten to match). Stray `#56b6c2`
+    (top-cut CV) and `#58a6ff` (section mean marker) → `--info`.
+  - **`--amber` chart-interim retired**: every `var(--amber)` chart stroke
+    (GT tonnage, top-cut mean, categories pareto, section CDF, aux declus
+    curve, stats crosshair) → `var(--action)`; the `--amber/-dim/-glow`
+    `:root` definitions deleted and dropped from the custom-theme emit. Zero
+    `--amber`/`#6a737d`/`#1e2228` left in chart code (asserted).
+  - **Theme-change re-render hook**: `applyTheme()` calls
+    `reRenderChartsForTheme()` (both built-in and custom paths) — repoints the
+    palette and redraws every cached chart through the same guarded renders
+    the C1b-0 width-observers use, so a Light/Dark flip recolors live instead
+    of waiting for the next Generate. Canvas 2D (section) reads colors via a
+    new `cssVal()` resolver since it can't consume `var()`.
+  - Suite 18/18; worker untouched (b1-differential bit-identical); both modes
+    re-shot. Sweep tool kept: `experiments/c6-1c-charts.js`. **Leftover: the
+    UI-scale setting** (root font-size in Settings) — small, slots into C6-2
+    or a quick follow-up.
 - **C6-1b ✅ (2026-06-12)** — the three C6-1a leftovers landed:
   - **Accent triage (D1)**: ~160 styles.css sites + 10 non-chart JS inline
     sites split off the interim all-amber binding. The mapping: primary

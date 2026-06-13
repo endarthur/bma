@@ -1072,8 +1072,8 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
   for (var i = 0; i <= nxTicks; i++) {
     var v = xMin + (xRange * i / nxTicks);
     var x = sx(v);
-    svg += '<line x1="' + x.toFixed(1) + '" y1="' + pad.top + '" x2="' + x.toFixed(1) + '" y2="' + (pad.top + plotH) + '" stroke="#1e2228" stroke-width="1"/>';
-    svg += '<text x="' + x.toFixed(1) + '" y="' + (pad.top + plotH + 14) + '" text-anchor="middle" fill="#6a737d" font-size="9">' + formatNum(v) + '</text>';
+    svg += '<line x1="' + x.toFixed(1) + '" y1="' + pad.top + '" x2="' + x.toFixed(1) + '" y2="' + (pad.top + plotH) + '" stroke="var(--chart-grid)" stroke-width="1"/>';
+    svg += '<text x="' + x.toFixed(1) + '" y="' + (pad.top + plotH + 14) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="9">' + formatNum(v) + '</text>';
   }
 
   // Y grid from first variable only
@@ -1095,7 +1095,7 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
   }
   for (var i = 0; i < yGridVals.length; i++) {
     var y = sy0(yGridVals[i]);
-    svg += '<line x1="' + pad.left + '" y1="' + y.toFixed(1) + '" x2="' + (pad.left + plotW) + '" y2="' + y.toFixed(1) + '" stroke="#1e2228" stroke-width="1"/>';
+    svg += '<line x1="' + pad.left + '" y1="' + y.toFixed(1) + '" x2="' + (pad.left + plotW) + '" y2="' + y.toFixed(1) + '" stroke="var(--chart-grid)" stroke-width="1"/>';
   }
 
   // Per-variable ribbons and lines (aux series dashed, lighter ribbon)
@@ -1202,12 +1202,12 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
 
   // Direction labels
   var dirLabels = getSwathDirectionLabels(swathData);
-  svg += '<text x="' + (pad.left + 4) + '" y="' + (pad.top - 8) + '" fill="#6a737d" font-size="10">' + dirLabels.left + ' (' + formatNum(xMin) + ')</text>';
-  svg += '<text x="' + (pad.left + plotW - 4) + '" y="' + (pad.top - 8) + '" text-anchor="end" fill="#6a737d" font-size="10">' + dirLabels.right + ' (' + formatNum(xMax) + ')</text>';
+  svg += '<text x="' + (pad.left + 4) + '" y="' + (pad.top - 8) + '" fill="var(--chart-ink)" font-size="10">' + dirLabels.left + ' (' + formatNum(xMin) + ')</text>';
+  svg += '<text x="' + (pad.left + plotW - 4) + '" y="' + (pad.top - 8) + '" text-anchor="end" fill="var(--chart-ink)" font-size="10">' + dirLabels.right + ' (' + formatNum(xMax) + ')</text>';
 
   // X axis label
   var statLabels = { mean_std: 'Mean \u00b1 Std', p25_50_75: 'P25/P50/P75', p10_50_90: 'P10/P50/P90' };
-  svg += '<text x="' + (pad.left + plotW / 2) + '" y="' + (barTop + countBarH + 14) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + getSwathXAxisLabel(swathData) + ' (' + (statLabels[stat] || stat) + ')</text>';
+  svg += '<text x="' + (pad.left + plotW / 2) + '" y="' + (barTop + countBarH + 14) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="10">' + getSwathXAxisLabel(swathData) + ' (' + (statLabels[stat] || stat) + ')</text>';
 
   // Legend — 3 columns; aux entries get a dashed line marker
   var legendTop = barTop + countBarH + 24;
@@ -1335,8 +1335,8 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
 
   // Direction labels on top of first sub-chart
   var dirLabels = getSwathDirectionLabels(swathData);
-  svg += '<text x="' + (pad.left + 4) + '" y="' + (pad.top - 6) + '" fill="#6a737d" font-size="10">' + dirLabels.left + ' (' + formatNum(xMin) + ')</text>';
-  svg += '<text x="' + (pad.left + plotW - 4) + '" y="' + (pad.top - 6) + '" text-anchor="end" fill="#6a737d" font-size="10">' + dirLabels.right + ' (' + formatNum(xMax) + ')</text>';
+  svg += '<text x="' + (pad.left + 4) + '" y="' + (pad.top - 6) + '" fill="var(--chart-ink)" font-size="10">' + dirLabels.left + ' (' + formatNum(xMin) + ')</text>';
+  svg += '<text x="' + (pad.left + plotW - 4) + '" y="' + (pad.top - 6) + '" text-anchor="end" fill="var(--chart-ink)" font-size="10">' + dirLabels.right + ' (' + formatNum(xMax) + ')</text>';
 
   // Render each sub-chart (one per scale group; member series overlay in it)
   for (var gi = 0; gi < numGroups; gi++) {
@@ -1353,7 +1353,7 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
     for (var i = 0; i <= nxTicks; i++) {
       var v = xMin + (xRange * i / nxTicks);
       var x = sx(v);
-      svg += '<line x1="' + x.toFixed(1) + '" y1="' + st + '" x2="' + x.toFixed(1) + '" y2="' + (st + subH) + '" stroke="#1e2228" stroke-width="1"/>';
+      svg += '<line x1="' + x.toFixed(1) + '" y1="' + st + '" x2="' + x.toFixed(1) + '" y2="' + (st + subH) + '" stroke="var(--chart-grid)" stroke-width="1"/>';
     }
 
     // Y grid lines
@@ -1364,13 +1364,13 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
       for (var p = lFloor; p <= lCeil; p++) {
         var gv = Math.pow(10, p);
         var gy = sy(gv);
-        svg += '<line x1="' + pad.left + '" y1="' + gy.toFixed(1) + '" x2="' + (pad.left + plotW) + '" y2="' + gy.toFixed(1) + '" stroke="#1e2228" stroke-width="1"/>';
+        svg += '<line x1="' + pad.left + '" y1="' + gy.toFixed(1) + '" x2="' + (pad.left + plotW) + '" y2="' + gy.toFixed(1) + '" stroke="var(--chart-grid)" stroke-width="1"/>';
       }
     } else {
       for (var i = 0; i <= nyTicks; i++) {
         var v = yMins[gi] + (yr * i / nyTicks);
         var gy = sy(v);
-        svg += '<line x1="' + pad.left + '" y1="' + gy.toFixed(1) + '" x2="' + (pad.left + plotW) + '" y2="' + gy.toFixed(1) + '" stroke="#1e2228" stroke-width="1"/>';
+        svg += '<line x1="' + pad.left + '" y1="' + gy.toFixed(1) + '" x2="' + (pad.left + plotW) + '" y2="' + gy.toFixed(1) + '" stroke="var(--chart-grid)" stroke-width="1"/>';
       }
     }
 
@@ -1464,10 +1464,10 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
   for (var i = 0; i <= nxLabels; i++) {
     var v = xMin + (xRange * i / nxLabels);
     var x = sx(v);
-    svg += '<text x="' + x.toFixed(1) + '" y="' + xLabelY + '" text-anchor="middle" fill="#6a737d" font-size="9">' + formatNum(v) + '</text>';
+    svg += '<text x="' + x.toFixed(1) + '" y="' + xLabelY + '" text-anchor="middle" fill="var(--chart-ink)" font-size="9">' + formatNum(v) + '</text>';
   }
   var statLabels = { mean_std: 'Mean \u00b1 Std', p25_50_75: 'P25/P50/P75', p10_50_90: 'P10/P50/P90' };
-  svg += '<text x="' + (pad.left + plotW / 2) + '" y="' + (xLabelY + 14) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + getSwathXAxisLabel(swathData) + ' (' + (statLabels[stat] || stat) + ')</text>';
+  svg += '<text x="' + (pad.left + plotW / 2) + '" y="' + (xLabelY + 14) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="10">' + getSwathXAxisLabel(swathData) + ' (' + (statLabels[stat] || stat) + ')</text>';
 
   // Crosshair overlay — spans all sub-charts
   var crosshairTop = pad.top;
@@ -1680,8 +1680,8 @@ function wireSwathChartActions() {
       // Retheme for light background
       svgData = svgData.replace(/fill="var\(--bg\)"/g, 'fill="white"');
       svgData = svgData.replace(/fill="var\(--bg1\)"/g, 'fill="#f5f5f5"');
-      svgData = svgData.replace(/fill="#6a737d"/g, 'fill="#333"');
-      svgData = svgData.replace(/stroke="#1e2228"/g, 'stroke="#ddd"');
+      svgData = svgData.replace(/fill="var(--chart-ink)"/g, 'fill="#555"');
+      svgData = svgData.replace(/stroke="var(--chart-grid)"/g, 'stroke="#ddd"');
       svgData = svgData.replace(/fill="var\(--fg-dim\)"/g, 'fill="#666"');
       svgData = svgData.replace(/fill="var\(--fg\)"/g, 'fill="#333"');
       svgData = svgData.replace(/stroke="var\(--fg-dim\)"/g, 'stroke="#999"');

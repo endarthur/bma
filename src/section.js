@@ -272,7 +272,7 @@ function renderSection() {
       const t = (b.val - valMin) / valRange;
       ctx.fillStyle = colormap(t, colorScale);
     } else {
-      ctx.fillStyle = '#333';
+      ctx.fillStyle = cssVal('--chart-ink', '#888');
     }
     ctx.fillRect(sx, sy, sw, sh);
     if (drawBorder) {
@@ -357,7 +357,7 @@ function renderSection() {
   }
 
   // Axis labels
-  ctx.fillStyle = '#6a737d';
+  ctx.fillStyle = cssVal('--chart-ink', '#888');
   ctx.font = '11px ' + (getComputedStyle(document.documentElement).getPropertyValue('--mono').trim() || 'monospace');
   ctx.textAlign = 'center';
   // H-axis ticks
@@ -404,7 +404,7 @@ function renderColorbar(valMin, valMax, scale) {
   const mkLabel = (text, top) => {
     const span = document.createElement('span');
     span.className = 'cb-label';
-    span.style.cssText = 'position:absolute;right:24px;font-size:9px;color:#6a737d;' + (top ? 'top:0' : 'bottom:0');
+    span.style.cssText = 'position:absolute;right:24px;font-size:9px;color:var(--chart-ink);' + (top ? 'top:0' : 'bottom:0');
     span.textContent = text;
     $cbWrap.appendChild(span);
   };
@@ -526,17 +526,17 @@ function renderCDFModal(s, name) {
   let gridSvg = '';
   for (const yt of yTicks) {
     const y = sy(yt);
-    gridSvg += '<line x1="' + pad.left + '" y1="' + y + '" x2="' + (W - pad.right) + '" y2="' + y + '" stroke="#1e2228" stroke-width="1"/>';
-    gridSvg += '<text x="' + (pad.left - 8) + '" y="' + (y + 3.5) + '" text-anchor="end" fill="#6a737d" font-size="10">' + (yt * 100).toFixed(0) + '%</text>';
+    gridSvg += '<line x1="' + pad.left + '" y1="' + y + '" x2="' + (W - pad.right) + '" y2="' + y + '" stroke="var(--chart-grid)" stroke-width="1"/>';
+    gridSvg += '<text x="' + (pad.left - 8) + '" y="' + (y + 3.5) + '" text-anchor="end" fill="var(--chart-ink)" font-size="10">' + (yt * 100).toFixed(0) + '%</text>';
   }
 
   const nxTicks = 6;
   for (let i = 0; i <= nxTicks; i++) {
     const v = xMin + (xRange * i / nxTicks);
     const x = sx(v);
-    gridSvg += '<line x1="' + x + '" y1="' + pad.top + '" x2="' + x + '" y2="' + (H - pad.bottom) + '" stroke="#1e2228" stroke-width="1"/>';
+    gridSvg += '<line x1="' + x + '" y1="' + pad.top + '" x2="' + x + '" y2="' + (H - pad.bottom) + '" stroke="var(--chart-grid)" stroke-width="1"/>';
     const label = Math.abs(v) >= 1e5 || (Math.abs(v) < 0.01 && v !== 0) ? v.toExponential(1) : v.toFixed(Math.abs(v) < 10 ? 2 : 0);
-    gridSvg += '<text x="' + x + '" y="' + (H - pad.bottom + 16) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + label + '</text>';
+    gridSvg += '<text x="' + x + '" y="' + (H - pad.bottom + 16) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="10">' + label + '</text>';
   }
 
   const q = s.quantiles;
@@ -557,17 +557,17 @@ function renderCDFModal(s, name) {
   }
   if (s.mean !== null) {
     const mx = sx(s.mean);
-    markerSvg += '<line x1="' + mx + '" y1="' + pad.top + '" x2="' + mx + '" y2="' + (H - pad.bottom) + '" stroke="#58a6ff" stroke-width="1" stroke-dasharray="4,3"/>';
-    markerSvg += '<text x="' + mx + '" y="' + (H - pad.bottom + 30) + '" text-anchor="middle" fill="#58a6ff" font-size="9">mean</text>';
+    markerSvg += '<line x1="' + mx + '" y1="' + pad.top + '" x2="' + mx + '" y2="' + (H - pad.bottom) + '" stroke="var(--info)" stroke-width="1" stroke-dasharray="4,3"/>';
+    markerSvg += '<text x="' + mx + '" y="' + (H - pad.bottom + 30) + '" text-anchor="middle" fill="var(--info)" font-size="9">mean</text>';
   }
 
   const svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)">' +
     '<rect width="' + W + '" height="' + H + '" fill="var(--bg)" rx="4"/>' +
     gridSvg +
-    '<path d="' + pathD + '" fill="none" stroke="var(--amber)" stroke-width="1.5"/>' +
+    '<path d="' + pathD + '" fill="none" stroke="var(--action)" stroke-width="1.5"/>' +
     markerSvg +
-    '<text x="' + (W / 2) + '" y="' + (H - 4) + '" text-anchor="middle" fill="#6a737d" font-size="10">' + esc(name) + '</text>' +
-    '<text x="12" y="' + (H / 2) + '" text-anchor="middle" fill="#6a737d" font-size="10" transform="rotate(-90, 12, ' + (H / 2) + ')">Cumulative %</text>' +
+    '<text x="' + (W / 2) + '" y="' + (H - 4) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="10">' + esc(name) + '</text>' +
+    '<text x="12" y="' + (H / 2) + '" text-anchor="middle" fill="var(--chart-ink)" font-size="10" transform="rotate(-90, 12, ' + (H / 2) + ')">Cumulative %</text>' +
     '</svg>';
 
   const cv = (s.mean && s.std && s.mean !== 0) ? Math.abs(s.std / s.mean * 100) : null;
