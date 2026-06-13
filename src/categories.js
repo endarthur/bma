@@ -6,7 +6,7 @@ function renderCategoriesTab(categories, header, origColCount, rowCount) {
   _catData = { categories, header, origColCount, rowCount };
   const catCols = Object.keys(categories).map(Number).sort(function(a,b){return a-b;});
 
-  $catBadge.textContent = catCols.length + ' columns';
+  $catBadge.textContent = catCols.length;   // title already says "Columns"
 
   if (catCols.length === 0) {
     $catColList.innerHTML = '';
@@ -64,6 +64,7 @@ function renderCatSidebar() {
 function renderCatMain() {
   if (!_catData || catFocusedCol === null) return;
   renderCatToolbar();
+  renderCatSortGroup();
   renderCatBarChart();
   renderCatValueTable();
 }
@@ -121,21 +122,37 @@ function getCatSortedEntries(colIdx) {
   return entries;
 }
 
+// Sort controls \u2014 rendered next to the value table they reorder (C6-4c; they
+// used to sit in the toolbar above the chart, far from the table).
+function renderCatSortGroup() {
+  var grp = document.getElementById('catSortGroup');
+  if (!grp || !_catData || catFocusedCol === null) return;
+  var colName = _catData.header[catFocusedCol];
+  var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
+  var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
+  grp.innerHTML =
+    '<span class="cat-sort-label">Sort</span>' +
+    '<button class="cat-sort-btn' + (mode === 'count-desc' ? ' active' : '') + '" data-sort="count-desc" title="Sort by count descending">Count\u2193</button>' +
+    '<button class="cat-sort-btn' + (mode === 'count-asc' ? ' active' : '') + '" data-sort="count-asc" title="Sort by count ascending">Count\u2191</button>' +
+    '<button class="cat-sort-btn' + (mode === 'alpha' ? ' active' : '') + '" data-sort="alpha" title="Sort alphabetically">A\u2013Z</button>' +
+    '<button class="cat-sort-btn' + (mode === 'custom' ? ' active' : '') + '" data-sort="custom" title="Custom drag order">Custom</button>';
+}
+
 function renderCatToolbar() {
   if (!_catData || catFocusedCol === null) return;
   var header = _catData.header;
   var origColCount = _catData.origColCount;
   var colName = header[catFocusedCol];
   var isCalcol = catFocusedCol >= origColCount;
-  var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
-  var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
 
-  // Meta info
   var cat = _catData.categories[catFocusedCol];
   var entries = Object.entries(cat.counts);
   var uniqueCount = entries.length + (cat.overflow ? '+' : '');
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
   var nullCount = _catData.rowCount - total;
+  var nullPct = _catData.rowCount > 0 ? (nullCount / _catData.rowCount * 100) : 0;
+
+  // Shannon entropy \u2192 diversity (0% = one value dominates, 100% = even spread)
   var entropy = 0;
   if (total > 0) {
     for (var ei = 0; ei < entries.length; ei++) {
@@ -148,28 +165,37 @@ function renderCatToolbar() {
   var maxEntropy = entries.length > 1 ? Math.log2(entries.length) : 0;
   var normPct = maxEntropy > 0 ? Math.round((entropy / maxEntropy) * 100) : 0;
 
-  var html = '<div class="cat-toolbar-title">' + esc(colName);
-  if (isCalcol) html += ' <span class="calcol-tag">CALC</span>';
-  html += '</div>';
-
-  // Meta badges
+  // Dominant value + concentration (how many categories cover 80% of rows)
+  var byCount = entries.slice().sort(function(a, b){ return b[1] - a[1]; });
+  var dom = byCount.length ? byCount[0] : null;
+  var domPct = dom && total > 0 ? (dom[1] / total * 100) : 0;
+  var cov80 = 0, cum = 0;
+  if (total > 0) {
+    for (var ki = 0; ki < byCount.length; ki++) { cum += byCount[ki][1]; cov80++; if (cum / total >= 0.8) break; }
+  }
   var auxCat = getCatAuxCounts(colName);
-  html += '<span style="font-size:0.65rem;color:var(--fg-dim)">' + uniqueCount + ' unique';
-  if (nullCount > 0) html += ' \u00B7 ' + nullCount.toLocaleString() + ' null';
-  if (maxEntropy > 0) html += ' \u00B7 H=' + entropy.toFixed(2) + ' (' + normPct + '%)';
-  if (auxCat) html += ' \u00B7 vs ' + esc((auxPrefix || 'aux') + ':' + colName) + ' (' + auxCat.total.toLocaleString() + (auxCat.overflow ? '+' : '') + ')';
-  html += '</span>';
 
-  // Sort buttons
-  html += '<div class="cat-sort-group">';
-  html += '<button class="cat-sort-btn' + (mode === 'count-desc' ? ' active' : '') + '" data-sort="count-desc" title="Sort by count descending">Count\u2193</button>';
-  html += '<button class="cat-sort-btn' + (mode === 'count-asc' ? ' active' : '') + '" data-sort="count-asc" title="Sort by count ascending">Count\u2191</button>';
-  html += '<button class="cat-sort-btn' + (mode === 'alpha' ? ' active' : '') + '" data-sort="alpha" title="Sort alphabetically">A-Z</button>';
-  html += '<button class="cat-sort-btn' + (mode === 'custom' ? ' active' : '') + '" data-sort="custom" title="Custom drag order">Custom</button>';
+  function stat(label, value, title) {
+    return '<div class="cat-stat"' + (title ? ' title="' + esc(title) + '"' : '') + '>' +
+      '<span class="cat-stat-label">' + label + '</span>' +
+      '<span class="cat-stat-value">' + value + '</span></div>';
+  }
+  function trunc(s) { return s.length > 16 ? esc(s.slice(0, 15)) + '\u2026' : esc(s); }
+
+  var html = '<div class="cat-toolbar-row">';
+  html += '<div class="cat-toolbar-title">' + esc(colName) + (isCalcol ? ' <span class="calcol-tag">CALC</span>' : '') + '</div>';
+  html += '<button class="cat-copy-btn" id="catCopyBtn" title="Copy value table (TSV)">Copy</button>';
   html += '</div>';
 
-  // Copy button
-  html += '<button class="cat-copy-btn" id="catCopyBtn" title="Copy as table">Copy</button>';
+  html += '<div class="cat-stats">';
+  html += stat('Categories', uniqueCount, cat.overflow ? 'value count capped during analysis (overflow)' : 'distinct non-null values');
+  html += stat('Rows', total.toLocaleString(), 'rows with a value in this column');
+  html += stat('Null', nullCount > 0 ? nullCount.toLocaleString() + ' <span class="cat-stat-sub">' + nullPct.toFixed(1) + '%</span>' : '0', 'rows with no value (blank / sentinel / filtered)');
+  if (dom) html += stat('Dominant', trunc(dom[0]) + ' <span class="cat-stat-sub">' + domPct.toFixed(1) + '%</span>', dom[0] + ' \u2014 most frequent value');
+  if (maxEntropy > 0) html += stat('Diversity', normPct + '%', 'normalized Shannon entropy (H=' + entropy.toFixed(2) + ' / ' + maxEntropy.toFixed(2) + ') \u2014 0% one value dominates, 100% even spread');
+  if (total > 0 && byCount.length > 1) html += stat('80% in', cov80 + (cov80 === 1 ? ' cat' : ' cats'), 'categories making up 80% of the rows (concentration)');
+  if (auxCat) html += stat('vs ' + esc(auxPrefix || 'aux'), auxCat.total.toLocaleString() + (auxCat.overflow ? '+' : ''), 'paired ' + (auxPrefix || 'aux') + ':' + colName + ' \u2014 rows compared');
+  html += '</div>';
 
   $catToolbar.innerHTML = html;
 }
@@ -295,7 +321,9 @@ function renderCatValueTable() {
 
   var html = '<thead><tr>';
   html += '<th></th>'; // drag handle column — always present (C6: dragging sets Custom order)
-  html += '<th></th><th></th><th>Value</th><th>Count</th><th>%</th>';
+  html += '<th title="Category colour">·</th>';
+  html += '<th class="cat-cb-head"><input type="checkbox" id="catSelectAll" title="Select all / none — ticked values filter the model"></th>';
+  html += '<th>Value</th><th>Count</th><th>%</th>';
   if (auxCat) html += '<th title="' + esc(auxLabel) + '">aux n</th><th title="' + esc(auxLabel) + '">aux %</th>';
   html += '</tr></thead><tbody>';
 
@@ -335,8 +363,7 @@ function renderCatValueTable() {
       var aOnly = auxCat.counts[av];
       var aOnlyPct = auxCat.total > 0 ? (aOnly / auxCat.total * 100).toFixed(1) : '0.0';
       html += '<tr class="cat-aux-only" data-val="' + esc(av) + '">';
-      if (isCustom) html += '<td></td>';
-      html += '<td></td><td></td>';
+      html += '<td></td><td></td><td></td>';   // drag / swatch / checkbox columns (always present)
       html += '<td class="cat-val-cell">' + esc(av) + ' <span class="cat-aux-only-tag">aux only</span></td>';
       html += '<td class="cat-count-cell">\u2014</td><td class="cat-pct-cell">\u2014</td>';
       html += '<td class="cat-count-cell cat-aux-cell">' + aOnly.toLocaleString() + '</td>';
@@ -346,7 +373,7 @@ function renderCatValueTable() {
   }
 
   if (entries.length > 500) {
-    var colSpan = (isCustom ? 7 : 6) + (auxCat ? 2 : 0);
+    var colSpan = 6 + (auxCat ? 2 : 0);   // drag/swatch/cb/value/count/% (+aux n/%)
     html += '<tr><td colspan="' + colSpan + '" style="color:var(--fg-dim);text-align:center;font-size:0.65rem;padding:0.4rem;">Showing 500 of ' + entries.length + ' values</td></tr>';
   }
 
@@ -424,35 +451,35 @@ function wireCatEventsOnce() {
   });
   wireSearchShortcuts($catColSearch, null, null);
 
-  // Sort buttons (delegated on toolbar)
-  $catToolbar.addEventListener('click', function(e) {
+  // Sort buttons (delegated on the sort group beside the value table — C6-4c)
+  var catSortGroupEl = document.getElementById('catSortGroup');
+  if (catSortGroupEl) catSortGroupEl.addEventListener('click', function(e) {
     var sortBtn = e.target.closest('.cat-sort-btn');
-    if (sortBtn) {
-      var colName = _catData.header[catFocusedCol];
-      var newMode = sortBtn.dataset.sort;
-      catVar('model', colName).sortMode = newMode;
-      if (newMode === 'custom') initCustomOrder(colName);
-      renderCatToolbar();
-      renderCatBarChart();
-      renderCatValueTable();
-      autoSaveProject();
-      return;
-    }
+    if (!sortBtn) return;
+    var colName = _catData.header[catFocusedCol];
+    var newMode = sortBtn.dataset.sort;
+    catVar('model', colName).sortMode = newMode;
+    if (newMode === 'custom') initCustomOrder(colName);
+    renderCatSortGroup();
+    renderCatBarChart();
+    renderCatValueTable();
+    autoSaveProject();
+  });
 
-    // Copy button
+  // Copy button (delegated on the toolbar)
+  $catToolbar.addEventListener('click', function(e) {
     var copyBtn = e.target.closest('#catCopyBtn');
-    if (copyBtn) {
-      var entries = getCatSortedEntries(catFocusedCol);
-      var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
-      var lines = ['Value\tCount\t%'];
-      for (var i = 0; i < entries.length; i++) {
-        var pct = total > 0 ? (entries[i][1] / total * 100).toFixed(1) : '0.0';
-        lines.push(entries[i][0] + '\t' + entries[i][1] + '\t' + pct + '%');
-      }
-      navigator.clipboard.writeText(lines.join('\n'));
-      copyBtn.textContent = 'Copied!';
-      setTimeout(function(){ copyBtn.textContent = 'Copy'; }, 1500);
+    if (!copyBtn) return;
+    var entries = getCatSortedEntries(catFocusedCol);
+    var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
+    var lines = ['Value\tCount\t%'];
+    for (var i = 0; i < entries.length; i++) {
+      var pct = total > 0 ? (entries[i][1] / total * 100).toFixed(1) : '0.0';
+      lines.push(entries[i][0] + '\t' + entries[i][1] + '\t' + pct + '%');
     }
+    navigator.clipboard.writeText(lines.join('\n'));
+    copyBtn.textContent = 'Copied!';
+    setTimeout(function(){ copyBtn.textContent = 'Copy'; }, 1500);
   });
 
   // Chart toggle (delegated on chart area)
@@ -482,6 +509,16 @@ function wireCatEventsOnce() {
     // Checkbox change
     var cb = e.target.closest('input[type="checkbox"]');
     if (cb) {
+      // Header select-all → toggle every visible value checkbox, then filter
+      if (cb.id === 'catSelectAll') {
+        var on = cb.checked;
+        $catValueTable.querySelectorAll('.cat-cb-cell input[type="checkbox"]').forEach(function(b) {
+          b.checked = on;
+          var r = b.closest('tr'); if (r) r.classList.toggle('active', on);
+        });
+        rebuildFilterExpression();
+        return;
+      }
       var tr = cb.closest('tr');
       if (tr) tr.classList.toggle('active', cb.checked);
       rebuildFilterExpression();
@@ -572,7 +609,7 @@ function wireCatEventsOnce() {
       // nobody found
       rec.valueOrder = getCatSortedEntries(catFocusedCol).map(function(e) { return e[0]; });
       rec.sortMode = 'custom';
-      renderCatToolbar();
+      renderCatSortGroup();
     } else {
       initCustomOrder(colName);
     }

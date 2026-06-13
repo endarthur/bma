@@ -1,8 +1,9 @@
 // ─── Filter Expression System ────────────────────────────────────────
 function rebuildFilterExpression() {
-  // Gather checked values grouped by column
+  // Gather checked values grouped by column (body cells only — the C6-4c
+  // header select-all has no data-col and must not pollute the filter)
   const groups = {};
-  $catValueTable.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
+  $catValueTable.querySelectorAll('.cat-cb-cell input[type="checkbox"]:checked').forEach(cb => {
     const col = cb.dataset.col;
     if (!groups[col]) groups[col] = [];
     groups[col].push(cb.dataset.val);

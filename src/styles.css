@@ -2300,18 +2300,20 @@ table.stats tr:hover td:first-child { background: var(--bg2); }
   min-width: 0;
   position: relative;
 }
+/* Categories header (C6-4c): title row + an informative stat strip; sort
+   controls moved down beside the value table they reorder. */
 .cat-toolbar {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.8rem;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.5rem 0.8rem;
   border-bottom: 1px solid var(--border);
   background: var(--bg1);
   flex-shrink: 0;
-  flex-wrap: wrap;
 }
+.cat-toolbar-row { display: flex; align-items: center; gap: 0.6rem; }
 .cat-toolbar-title {
-  font-size: 0.82rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--fg-bright);
   margin-right: auto;
@@ -2319,10 +2321,27 @@ table.stats tr:hover td:first-child { background: var(--bg2); }
   align-items: center;
   gap: 0.4rem;
 }
+.cat-stats { display: flex; flex-wrap: wrap; gap: 0.25rem 1.4rem; }
+.cat-stat { display: flex; flex-direction: column; line-height: 1.25; }
+.cat-stat-label {
+  font: 0.6rem var(--mono); text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--fg-dim);
+}
+.cat-stat-value { font: 0.8rem var(--mono); color: var(--fg-bright); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cat-stat-sub { color: var(--fg-dim); }
+/* search + sort group, sitting directly above the value table */
+.cat-table-bar { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.35rem; }
+.cat-table-bar .cat-value-search { margin-bottom: 0; flex: 1; min-width: 0; }
+.cat-sort-label { font: 0.6rem var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-dim); }
+.cat-filter-hint { font-family: var(--sans); font-size: 0.72rem; color: var(--fg-dim); margin-bottom: 0.4rem; opacity: 0.85; }
+.cat-cb-head { text-align: center; }
 .cat-sort-group {
   display: flex;
   gap: 0;
+  align-items: center;
+  flex-shrink: 0;
 }
+.cat-sort-group .cat-sort-label { margin-right: 0.35rem; }
 .cat-sort-btn {
   font-size: 0.65rem;
   font-family: var(--mono);
@@ -2332,8 +2351,8 @@ table.stats tr:hover td:first-child { background: var(--bg2); }
   color: var(--fg-dim);
   cursor: pointer;
 }
-.cat-sort-btn:first-child { border-radius: 3px 0 0 3px; }
-.cat-sort-btn:last-child { border-radius: 0 3px 3px 0; }
+.cat-sort-btn:first-of-type { border-radius: 3px 0 0 3px; }
+.cat-sort-btn:last-of-type { border-radius: 0 3px 3px 0; }
 .cat-sort-btn + .cat-sort-btn { border-left: 0; }
 .cat-sort-btn.active {
   background: var(--sel);

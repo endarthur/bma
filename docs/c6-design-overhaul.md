@@ -91,6 +91,27 @@ serializes/applies layouts, a preset is canned JSON.
 
 ## Phase log
 
+- **C6-4c (Categories surface) ✅ (2026-06-13)** — the Categories tab reworked
+  to be more useful + informative (Arthur: "make the categories tab more useful
+  and informative overall"):
+  - **Header rethink → informative stat strip**: the cramped one-line mono meta
+    badge becomes a labeled readout — Categories / Rows / Null (n + %) /
+    Dominant (top value + share) / Diversity (normalized Shannon entropy) / 80%
+    in (categories covering 80% of rows = concentration) / vs aux. Title row
+    carries the name + Copy.
+  - **Sort controls moved beside the value table** they reorder (were in the
+    header far above, past the chart): a `#catSortGroup` in a new `.cat-table-bar`
+    next to the value search. Buttons keep `.cat-sort-btn[data-sort]` + `.active`
+    (smoke-stable); handler rebound to the group; drag-to-custom updates it.
+  - **Value-checkbox column labeled**: a select-all checkbox in the column
+    header + a "Tick values to filter the model…" hint. Select-all toggles all
+    visible value boxes and rebuilds the filter; `rebuildFilterExpression`
+    rescoped to `.cat-cb-cell` so the header box never pollutes the expression.
+    Fixed a latent aux-only-row cell-misalignment (always 3 leading cells now).
+  - Sidebar badge trimmed ("Columns 1 columns" → "1").
+  - Suite 18/18 (c6-smoke +4 asserts; `experiments/c6-4c-shot.js`). **C6-4
+    remaining: 4b** (C5 sidebar flow — collapsible sections + reorder + sticky
+    Generate), saved for a fresh session.
 - **C6-4a (whole-sidebar collapse) ✅ (2026-06-13)** — first C6-4 sub-slice
   (the piece Arthur added to C5's scope). Every analysis surface's control
   sidebar collapses to hand the results the full width: a permanent slim

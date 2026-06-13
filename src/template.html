@@ -408,7 +408,11 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
             <div class="cat-main-content" id="catMainContent">
               <div class="cat-chart" id="catChart"></div>
               <div class="cat-value-table-wrap" id="catValueTableWrap">
-                <input type="text" class="cat-value-search" id="catValueSearch" placeholder="Search values..." autocomplete="off" spellcheck="false">
+                <div class="cat-table-bar">
+                  <input type="text" class="cat-value-search" id="catValueSearch" placeholder="Search values..." autocomplete="off" spellcheck="false">
+                  <div class="cat-sort-group" id="catSortGroup"></div>
+                </div>
+                <div class="cat-filter-hint">Tick values to filter the model to them — the header box selects all / none.</div>
                 <table class="cat-values" id="catValueTable"><tbody></tbody></table>
               </div>
             </div>
