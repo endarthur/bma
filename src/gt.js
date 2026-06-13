@@ -114,13 +114,13 @@ function renderGtConfig(data) {
   }
 
   $sidebar.innerHTML =
-    '<div class="gt-sidebar-section--grow">' +
+    '<div class="gt-sidebar-section--grow" data-sb="vars">' +
       '<div class="gt-sidebar-title">Grade Variables</div>' +
       '<input type="text" class="gt-input gt-var-search" id="gtVarSearch" placeholder="search\u2026" spellcheck="false">' +
       '<div class="gt-var-btns"><button id="gtVarAll">All</button><button id="gtVarNone">None</button></div>' +
       '<div class="gt-var-list" id="gtVarList">' + varItems + '</div>' +
     '</div>' +
-    '<div class="gt-sidebar-section">' +
+    '<div class="gt-sidebar-section" data-sb="density">' +
       '<div class="gt-sidebar-title">Density (optional)</div>' +
       '<select class="gt-select" id="gtDensityCol">' + densityOpts + '</select>' +
       '<div id="gtDensityConstWrap" style="display:none;margin-top:0.3rem;align-items:center;gap:0.3rem">' +
@@ -128,11 +128,11 @@ function renderGtConfig(data) {
         '<span style="font-size:0.62rem;color:var(--fg-dim);white-space:nowrap">t/m³</span>' +
       '</div>' +
     '</div>' +
-    '<div class="gt-sidebar-section">' +
+    '<div class="gt-sidebar-section" data-sb="weight">' +
       '<div class="gt-sidebar-title">Weight (optional)</div>' +
       '<select class="gt-select" id="gtWeightCol">' + weightOpts + '</select>' +
     '</div>' +
-    '<div class="gt-sidebar-section">' +
+    '<div class="gt-sidebar-section" data-sb="group">' +
       '<div class="gt-sidebar-title">Group by (optional)</div>' +
       '<select class="gt-select" id="gtGroupBy">' + groupByOpts + '</select>' +
       '<div class="gt-group-values" id="gtGroupValues" style="display:none">' +
@@ -140,7 +140,7 @@ function renderGtConfig(data) {
         '<div class="gt-var-list" id="gtGrpList"></div>' +
       '</div>' +
     '</div>' +
-    '<div class="gt-sidebar-section">' +
+    '<div class="gt-sidebar-section" data-sb="volume">' +
       '<div class="gt-sidebar-title">Block Volume</div>' +
       '<div class="gt-vol-display" id="gtVolDisplay">' + volDisplay + '</div>' +
       '<div style="display:flex;gap:0.3rem;align-items:center;margin-top:0.2rem">' +
@@ -148,7 +148,7 @@ function renderGtConfig(data) {
         '<input type="number" class="gt-input" id="gtVolOverride" value="' + volValue + '" min="0" step="any" placeholder="auto">' +
       '</div>' +
     '</div>' +
-    '<div class="gt-sidebar-section">' +
+    '<div class="gt-sidebar-section" data-sb="units">' +
       '<div class="gt-sidebar-title">Units &amp; Format</div>' +
       '<div class="gt-unit-row"><span class="gt-unit-label">Tonnage</span><select class="gt-select" id="gtTonnageUnit">' + tonnageUnitOpts + '</select><select class="gt-select gt-dp-select" id="gtTonnageDp" title="Decimal places">' + dpOpts + '</select></div>' +
       '<div id="gtCustomTonnageWrap" style="display:none;margin-bottom:0.3rem">' +
@@ -166,7 +166,7 @@ function renderGtConfig(data) {
       '</div>' +
       '<div class="gt-unit-row"><span class="gt-unit-label">Grade</span><span class="gt-unit-note">unit set per variable</span><select class="gt-select gt-dp-select" id="gtGradeDp" title="Decimal places">' + dpOpts + '</select></div>' +
     '</div>' +
-    '<div class="gt-sidebar-section">' +
+    '<div class="gt-sidebar-section" data-sb="cutoffs">' +
       '<div class="gt-sidebar-title">Cutoffs</div>' +
       '<div style="margin-bottom:0.3rem">' +
         '<label class="gt-radio-label"><input type="radio" name="gtCutoffMode" value="range" checked> Range</label>' +
@@ -186,11 +186,11 @@ function renderGtConfig(data) {
         '<input type="text" class="gt-input" id="gtCutoffCustomText" placeholder="0.2, 0.5, 1.0, 2.0, 5.0" spellcheck="false">' +
       '</div>' +
     '</div>' +
-    '<div class="gt-sidebar-section">' +
+    '<div class="gt-sidebar-section" data-sb="filter">' +
       '<div class="gt-sidebar-title">Local Filter</div>' +
       '<input type="text" class="gt-input" id="gtLocalFilter" placeholder="e.g. r.zone == 1" autocomplete="off" spellcheck="false">' +
     '</div>' +
-    '<div class="gt-sidebar-section">' +
+    '<div class="gt-sidebar-section" data-sb="theo">' +
       '<div class="gt-sidebar-title">Theoretical (samples)</div>' +
       '<label class="gt-radio-label" style="display:block"><input type="checkbox" id="gtTheoEnabled"> Overlay theoretical GT</label>' +
       '<select class="gt-select" id="gtTheoEngine" style="margin-top:0.25rem">' +
@@ -204,13 +204,20 @@ function renderGtConfig(data) {
       '</div>' +
       '<div class="gt-theo-status" id="gtTheoStatus"></div>' +
     '</div>' +
-    '<div class="gt-sidebar-section">' +
+    '<div class="sb-footer">' +
       '<button class="gt-generate" id="gtGenerate">Generate</button>' +
       '<div class="gt-progress" id="gtProgress">' +
         '<div class="gt-progress-bar"><div class="gt-progress-fill" id="gtProgressFill"></div></div>' +
         '<div class="gt-progress-label" id="gtProgressLabel"></div>' +
       '</div>' +
     '</div>';
+
+  // C6-4b — collapsible sections; everything past Grade Variables collapsed
+  // by default (the "nine sections in a wall" fix), Generate in a sticky footer
+  wsEnhanceSidebar('gt', $sidebar, {
+    density: 'collapsed', weight: 'collapsed', group: 'collapsed', volume: 'collapsed',
+    units: 'collapsed', cutoffs: 'collapsed', filter: 'collapsed', theo: 'collapsed'
+  });
 
   $content.innerHTML = '<div class="gt-hint">Select grade variables and click Generate.</div>';
 

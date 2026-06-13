@@ -913,10 +913,15 @@ header .logo-mark {
 .sb-sec-head:hover::after { color: var(--fg-bright); }
 .sb-sec.collapsed > .sb-sec-head::after { content: '\25B8'; }   /* ▸ collapsed */
 .sb-sec.collapsed > .sb-sec-head { margin-bottom: 0; }
-.sb-sec.collapsed > *:not(.sb-sec-head) { display: none; }
+/* collapse must beat the inline display:flex some renderers set on
+   conditional sub-wraps (e.g. GT's density-const / custom-cutoff blocks) */
+.sb-sec.collapsed > *:not(.sb-sec-head) { display: none !important; }
 .sb-sec--grow.collapsed { flex: none; min-height: 0; overflow: visible; }
 
 .sb-footer {
+  position: sticky;                /* pin past a scrolling section wall (GT) */
+  bottom: 0;
+  z-index: 1;
   flex-shrink: 0;
   margin-top: auto;                /* float to bottom when room above */
   padding: 0.5rem 0.7rem;
