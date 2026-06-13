@@ -172,8 +172,10 @@ function wireSearchShortcuts(input, allBtn, noneBtn) {
 // clean/orange pattern. stale=false → button subdued (.gen-done), its
 // .gen-stale-note (if any) hidden; stale=true → orange call-to-action +
 // the note. The main #executeBtn keeps its own .clean toggle.
-function setGenStale(btnId, stale) {
-  var btn = document.getElementById(btnId);
+function setGenStale(btnOrId, stale) {
+  // Accepts an element (per-instance buttons with no unique id — A10) or an
+  // id string (the singleton gt/swath Generate buttons).
+  var btn = (btnOrId && btnOrId.nodeType) ? btnOrId : document.getElementById(btnOrId);
   if (!btn) return;
   btn.classList.toggle('gen-done', !stale);
   var host = btn.closest('.sb-footer') || btn.parentElement;

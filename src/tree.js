@@ -426,7 +426,7 @@ function treeToggleRole(t, role) {
       if ($swsel) $swsel.value = newVal;
       markAnalysisStale();
     } else {
-      var $asel = document.getElementById('auxWeightSel');
+      var $asel = (typeof auxQ === 'function') ? auxQ('[data-aux="weight"]') : null;
       if ($asel) $asel.value = newVal;
       markAuxStale();
     }

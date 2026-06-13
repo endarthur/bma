@@ -43,36 +43,36 @@ function renderAuxConfig() {
     zipSection =
       '<div class="pf-sidebar-section" data-sb="zip">' +
         '<div class="pf-sidebar-section-title">ZIP entry</div>' +
-        '<select class="aux-select" id="auxZipEntry">' + zOpts + '</select>' +
+        '<select class="aux-select" data-aux="zipEntry">' + zOpts + '</select>' +
       '</div>';
   }
   $auxSidebar.innerHTML = zipSection +
     '<div class="pf-sidebar-section" data-sb="prefix">' +
       '<div class="pf-sidebar-section-title">Display prefix</div>' +
-      '<input type="text" class="aux-input" id="auxPrefixInput" value="' + esc(auxPrefix) + '" placeholder="aux" spellcheck="false">' +
+      '<input type="text" class="aux-input" data-aux="prefix" value="' + esc(auxPrefix) + '" placeholder="aux" spellcheck="false">' +
       '<div class="aux-hint">Label for aux variables in selection lists and plot labels (e.g. <code>' + esc(auxPrefix || 'aux') + ':Fe</code>). Cosmetic only.</div>' +
     '</div>' +
     '<div class="pf-sidebar-section" data-sb="coords">' +
       '<div class="pf-sidebar-section-title">Coordinates</div>' +
-      '<div class="aux-xyz-row"><label>X</label><select class="aux-select" id="auxX">' + auxColOptions(xyz.x) + '</select></div>' +
-      '<div class="aux-xyz-row"><label>Y</label><select class="aux-select" id="auxY">' + auxColOptions(xyz.y) + '</select></div>' +
-      '<div class="aux-xyz-row"><label>Z</label><select class="aux-select" id="auxZ">' + auxColOptions(xyz.z) + '</select></div>' +
+      '<div class="aux-xyz-row"><label>X</label><select class="aux-select" data-aux="x">' + auxColOptions(xyz.x) + '</select></div>' +
+      '<div class="aux-xyz-row"><label>Y</label><select class="aux-select" data-aux="y">' + auxColOptions(xyz.y) + '</select></div>' +
+      '<div class="aux-xyz-row"><label>Z</label><select class="aux-select" data-aux="z">' + auxColOptions(xyz.z) + '</select></div>' +
       '<div class="aux-hint">Aux and the block model must share the same coordinate space for swath overlays to line up.</div>' +
     '</div>' +
     '<div class="pf-sidebar-section" data-sb="auxfilter">' +
       '<div class="pf-sidebar-section-title">Aux filter</div>' +
-      '<textarea class="aux-input aux-filter" id="auxFilterInput" rows="2" spellcheck="false" placeholder="aux.Au > 0">' + esc(auxFilter ? auxFilter.expression : '') + '</textarea>' +
+      '<textarea class="aux-input aux-filter" data-aux="filter" rows="2" spellcheck="false" placeholder="aux.Au > 0">' + esc(auxFilter ? auxFilter.expression : '') + '</textarea>' +
       '<div class="aux-hint">Reference aux columns as <code>aux.</code>… — independent of the display prefix.</div>' +
     '</div>' +
     '<div class="pf-sidebar-section" data-sb="weight">' +
       '<div class="pf-sidebar-section-title">Weight (optional)</div>' +
-      '<select class="aux-select" id="auxWeightSel">' + auxWeightOptions() + '</select>' +
+      '<select class="aux-select" data-aux="weight">' + auxWeightOptions() + '</select>' +
       '<div class="aux-hint">A weight column, or the computed declustering weights from below — applied to all aux statistics (Statistics, CDF, Swath). Rows with missing or ≤0 weight are excluded.</div>' +
     '</div>' +
     renderAuxDeclusSection() +
     '<div class="sb-footer">' +
-      '<button class="swath-generate" id="auxAnalyzeBtn">Analyze</button>' +
-      '<div class="aux-hint aux-analyze-status" id="auxAnalyzeStatus">' +
+      '<button class="swath-generate" data-act="auxAnalyze">Analyze</button>' +
+      '<div class="aux-hint aux-analyze-status" data-aux="analyzeStatus">' +
         (auxCompleteData
           ? (auxStale ? 'Config changed — re-run Analyze' : auxCompleteData.rowCount.toLocaleString() + ' rows analyzed' +
               (auxCompleteData.filterErrors || auxCompleteData.calcolErrors ? ' · ⚠ filter/calc row errors — see Statistics' : ''))
@@ -83,7 +83,7 @@ function renderAuxConfig() {
   // C6-4b — collapsible config sections; cosmetic/advanced ones collapsed
   wsEnhanceSidebar('aux', $auxSidebar, { prefix: 'collapsed', auxfilter: 'collapsed', declus: 'collapsed' });
   // C6-5 — dim the Analyze button when the current result is fresh
-  if (typeof setGenStale === 'function') setGenStale('auxAnalyzeBtn', !(auxCompleteData && !auxStale));
+  if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]'), !(auxCompleteData && !auxStale));
 
   renderAuxPreview();
   if (typeof renderAuxView === 'function') renderAuxView();
@@ -96,8 +96,8 @@ function runAuxAnalysis() {
   if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
   auxWorker = new Worker(workerUrl);
 
-  var $btn = auxQ('#auxAnalyzeBtn');
-  var $status = auxQ('#auxAnalyzeStatus');
+  var $btn = auxQ('[data-act="auxAnalyze"]');
+  var $status = auxQ('[data-aux="analyzeStatus"]');
   if ($btn) $btn.disabled = true;
   if ($status) { $status.textContent = '0%'; $status.style.color = ''; }
 
@@ -161,7 +161,7 @@ function runAuxAnalysis() {
         raggedRows: m.raggedRows || 0, coordInvalidCells: m.coordInvalidCells || 0, weightExcluded: m.weightExcluded || 0 };
       auxStale = false;
       if ($btn) $btn.disabled = false;
-      if (typeof setGenStale === 'function') setGenStale('auxAnalyzeBtn', false);  // C6-5 dim-when-done
+      if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]'), false);  // C6-5 dim-when-done
       if ($status) { $status.textContent = m.rowCount.toLocaleString() + ' rows analyzed'; $status.style.color = ''; }
       auxWorker.terminate();
       auxWorker = null;
@@ -202,7 +202,7 @@ function auxWeightOptions() {
 // Refresh just the weight select (e.g. after aux calcols change) without
 // rebuilding the sidebar — preserves focus elsewhere
 function renderAuxWeightOptions() {
-  var sel = auxQ('#auxWeightSel');
+  var sel = auxQ('[data-aux="weight"]');
   if (sel) sel.innerHTML = auxWeightOptions();
 }
 
@@ -242,7 +242,7 @@ function renderAuxSummary() {
     }
     bboxHtml = '<table class="aux-bbox-table"><thead><tr><th></th><th>Min</th><th>Max</th><th>Extent</th></tr></thead><tbody>' +
       boxRow('X', sx) + boxRow('Y', sy) + boxRow('Z', sz) + '</tbody></table>' +
-      '<button class="copy-table-btn" id="auxExportObjBtn" style="margin-top:0.5rem">Export OBJ</button>';
+      '<button class="copy-table-btn" data-act="auxExportObj" style="margin-top:0.5rem">Export OBJ</button>';
   } else {
     bboxHtml = '<div class="aux-hint">Assign X / Y / Z in the sidebar and re-run Analyze to compute the bounding box.</div>';
   }
@@ -269,7 +269,7 @@ function renderAuxSummary() {
     '<div class="section" style="margin:0.7rem"><div class="section-head">Data Health ' + hBadge + '</div>' +
       '<div class="section-body">' + healthHtml + '</div></div>';
 
-  var $obj = auxQ('#auxExportObjBtn');
+  var $obj = auxQ('[data-act="auxExportObj"]');
   if ($obj && haveBox && typeof downloadBboxObj === 'function') {
     $obj.addEventListener('click', function() {
       downloadBboxObj({ xMin: sx.min, xMax: sx.max, yMin: sy.min, yMax: sy.max, zMin: sz.min, zMax: sz.max },
@@ -282,19 +282,19 @@ function onAuxConfigChange(e) {
   if (!auxPreflightData) return;
   // Declustering params only gate the (separately fingerprinted) declus run —
   // they don't invalidate the aux analysis config
-  if (e && e.target && e.target.id && e.target.id.indexOf('auxDeclus') === 0) {
+  if (e && e.target && e.target.dataset && e.target.dataset.aux && e.target.dataset.aux.indexOf('declus') === 0) {
     auxDeclus = auxDeclus || {};
     auxDeclus.params = auxDeclusParamsFromUI();
     if (typeof autoSaveProject === 'function') autoSaveProject();
     return;
   }
-  var p = auxQ('#auxPrefixInput');
+  var p = auxQ('[data-aux="prefix"]');
   if (p) auxPrefix = p.value.trim() || 'aux';
-  var x = auxQ('#auxX'), y = auxQ('#auxY'), z = auxQ('#auxZ');
+  var x = auxQ('[data-aux="x"]'), y = auxQ('[data-aux="y"]'), z = auxQ('[data-aux="z"]');
   if (x && y && z) auxPreflightData.xyz = { x: parseInt(x.value), y: parseInt(y.value), z: parseInt(z.value) };
-  var f = auxQ('#auxFilterInput');
+  var f = auxQ('[data-aux="filter"]');
   if (f) { var v = f.value.trim(); auxFilter = v ? { expression: v } : null; }
-  var wSel = auxQ('#auxWeightSel');
+  var wSel = auxQ('[data-aux="weight"]');
   if (wSel) catSetRole('aux', 'weight', wSel.value || null);
   markAuxStale();
   // Live-update the prefix hint without a full re-render (keeps focus/caret)
@@ -310,8 +310,8 @@ function onAuxConfigChange(e) {
 function markAuxStale() {
   if (!auxCompleteData || auxStale) return;
   auxStale = true;
-  if (typeof setGenStale === 'function') setGenStale('auxAnalyzeBtn', true);  // C6-5: back to orange call-to-action
-  var $st = auxQ('#auxAnalyzeStatus');
+  if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]'), true);  // C6-5: back to orange call-to-action
+  var $st = auxQ('[data-aux="analyzeStatus"]');
   if ($st) { $st.textContent = '↻ config changed — re-run Analyze'; $st.style.color = 'var(--warn)'; }
 }
 
@@ -336,23 +336,23 @@ function auxDeclusFresh() {
 }
 
 function auxDeclusParamsFromUI() {
-  function num(id) {
-    var el = auxQ('#' + id);
+  function num(key) {
+    var el = auxQ('[data-aux="' + key + '"]');
     if (!el || el.value === '') return null;
     var v = parseFloat(el.value);
     return isFinite(v) ? v : null;
   }
-  var sel = auxQ('#auxDeclusVar');
-  var crit = auxQ('#auxDeclusCrit');
+  var sel = auxQ('[data-aux="declusVar"]');
+  var crit = auxQ('[data-aux="declusCrit"]');
   var prev = (auxDeclus && auxDeclus.params) || {};
   return {
     varName: sel ? sel.value : (prev.varName || null),
-    cellMin: num('auxDeclusCellMin'),
-    cellMax: num('auxDeclusCellMax'),
-    ncell: num('auxDeclusNCell') || 24,
-    noff: num('auxDeclusNoff') || 8,
-    anisy: num('auxDeclusAnisY') || 1,
-    anisz: num('auxDeclusAnisZ') || 1,
+    cellMin: num('declusCellMin'),
+    cellMax: num('declusCellMax'),
+    ncell: num('declusNCell') || 24,
+    noff: num('declusNoff') || 8,
+    anisy: num('declusAnisY') || 1,
+    anisz: num('declusAnisZ') || 1,
     criterion: crit ? crit.value : (prev.criterion || 'min'),
     pinned: prev.pinned || null  // set by clicking the curve, cleared by Run
   };
@@ -376,26 +376,26 @@ function renderAuxDeclusSection() {
   function numVal(v) { return (v === null || v === undefined) ? '' : String(v); }
   return '<div class="pf-sidebar-section" data-sb="declus">' +
     '<div class="pf-sidebar-section-title">Declustering</div>' +
-    '<div class="aux-xyz-row"><label>Var</label><select class="aux-select" id="auxDeclusVar">' + varOpts + '</select></div>' +
+    '<div class="aux-xyz-row"><label>Var</label><select class="aux-select" data-aux="declusVar">' + varOpts + '</select></div>' +
     '<div class="aux-xyz-row"><label>Cell</label>' +
-      '<input type="text" class="aux-input" id="auxDeclusCellMin" value="' + numVal(p.cellMin) + '" placeholder="min (auto)" spellcheck="false">' +
-      '<input type="text" class="aux-input" id="auxDeclusCellMax" value="' + numVal(p.cellMax) + '" placeholder="max (auto)" spellcheck="false">' +
+      '<input type="text" class="aux-input" data-aux="declusCellMin" value="' + numVal(p.cellMin) + '" placeholder="min (auto)" spellcheck="false">' +
+      '<input type="text" class="aux-input" data-aux="declusCellMax" value="' + numVal(p.cellMax) + '" placeholder="max (auto)" spellcheck="false">' +
     '</div>' +
     '<div class="aux-xyz-row"><label>Sweep</label>' +
-      '<input type="text" class="aux-input" id="auxDeclusNCell" value="' + numVal(p.ncell) + '" placeholder="24 sizes" spellcheck="false" title="number of cell sizes">' +
-      '<input type="text" class="aux-input" id="auxDeclusNoff" value="' + numVal(p.noff) + '" placeholder="8 offsets" spellcheck="false" title="origin offsets">' +
+      '<input type="text" class="aux-input" data-aux="declusNCell" value="' + numVal(p.ncell) + '" placeholder="24 sizes" spellcheck="false" title="number of cell sizes">' +
+      '<input type="text" class="aux-input" data-aux="declusNoff" value="' + numVal(p.noff) + '" placeholder="8 offsets" spellcheck="false" title="origin offsets">' +
     '</div>' +
     '<div class="aux-xyz-row"><label>Anis</label>' +
-      '<input type="text" class="aux-input" id="auxDeclusAnisY" value="' + numVal(p.anisy) + '" placeholder="Y 1" spellcheck="false" title="Y cell anisotropy (Ysize = size × YAnis)">' +
-      '<input type="text" class="aux-input" id="auxDeclusAnisZ" value="' + numVal(p.anisz) + '" placeholder="Z 1" spellcheck="false" title="Z cell anisotropy (Zsize = size × ZAnis)">' +
+      '<input type="text" class="aux-input" data-aux="declusAnisY" value="' + numVal(p.anisy) + '" placeholder="Y 1" spellcheck="false" title="Y cell anisotropy (Ysize = size × YAnis)">' +
+      '<input type="text" class="aux-input" data-aux="declusAnisZ" value="' + numVal(p.anisz) + '" placeholder="Z 1" spellcheck="false" title="Z cell anisotropy (Zsize = size × ZAnis)">' +
     '</div>' +
-    '<div class="aux-xyz-row"><label>Find</label><select class="aux-select" id="auxDeclusCrit">' +
+    '<div class="aux-xyz-row"><label>Find</label><select class="aux-select" data-aux="declusCrit">' +
       '<option value="min"' + (p.criterion !== 'max' ? ' selected' : '') + '>minimum declustered mean</option>' +
       '<option value="max"' + (p.criterion === 'max' ? ' selected' : '') + '>maximum declustered mean</option>' +
     '</select></div>' +
     '<div class="aux-hint">GSLIB cell declustering: sweeps cell sizes, weights ∝ 1/(samples per cell), averaged over origin offsets. Use min for data clustered in high grades, max for low.</div>' +
-    '<button class="swath-generate" id="auxDeclusRunBtn">Run declustering</button>' +
-    '<div class="aux-hint aux-analyze-status" id="auxDeclusStatus"></div>' +
+    '<button class="swath-generate" data-act="auxDeclusRun">Run declustering</button>' +
+    '<div class="aux-hint aux-analyze-status" data-aux="declusStatus"></div>' +
     renderAuxDeclusResults() +
   '</div>';
 }
@@ -424,7 +424,7 @@ function renderAuxDeclusResults() {
     html += auxDeclusCurveSvg(d);
   }
   if (catRole('aux', 'weight') === AUX_DECLUS_WEIGHT) html += '<div class="aux-hint">In use as the aux weight.</div>';
-  else if (fresh) html += '<button class="aux-from-main-btn" id="auxDeclusUseBtn" style="margin-top:0.3rem">Use as aux weight</button>';
+  else if (fresh) html += '<button class="aux-from-main-btn" data-act="auxDeclusUse" style="margin-top:0.3rem">Use as aux weight</button>';
   return html + '</div>';
 }
 
@@ -459,7 +459,7 @@ function auxDeclusCurveSvg(d) {
     poly += (j ? ' ' : '') + px.toFixed(1) + ',' + py.toFixed(1);
     pts.push([+px.toFixed(1), +py.toFixed(1), d.curve[j][0], d.curve[j][1]]);
   }
-  var svg = '<svg class="aux-declus-curve" id="auxDeclusCurveSvg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" data-pts="' + esc(JSON.stringify(pts)) + '">' +
+  var svg = '<svg class="aux-declus-curve" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" data-pts="' + esc(JSON.stringify(pts)) + '">' +
     '<line x1="' + padL + '" y1="' + sy(d.naiveMean).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + sy(d.naiveMean).toFixed(1) + '" stroke="var(--fg-dim)" stroke-dasharray="3,3" stroke-width="0.75"/>' +
     '<polyline points="' + poly + '" fill="none" stroke="var(--action)" stroke-width="1.3"/>';
   // Sweep points — visible click targets
@@ -475,7 +475,7 @@ function auxDeclusCurveSvg(d) {
     svg += '<circle cx="' + sx(d.optCellSize).toFixed(1) + '" cy="' + sy(d.declusteredMean).toFixed(1) + '" r="3.2" fill="var(--action)"/>';
   }
   // Hover cursor (positioned by the delegated pointermove handler)
-  svg += '<g id="auxDeclusCursor" style="display:none">' +
+  svg += '<g class="aux-declus-cursor" style="display:none">' +
     '<line y1="' + padT + '" y2="' + (H - padB) + '" stroke="var(--fg-dim)" stroke-width="0.6"/>' +
     '<circle r="2.6" fill="none" stroke="var(--fg-bright)" stroke-width="1"/>' +
     '<text y="' + (padT + 8) + '" fill="var(--fg-bright)" font-size="9"></text>' +
@@ -503,7 +503,7 @@ function auxDeclusNearestPt(svg, e) {
 }
 
 function auxDeclusUpdateCursor(svg, pt) {
-  var g = svg.querySelector('#auxDeclusCursor');
+  var g = svg.querySelector('.aux-declus-cursor');
   if (!g) return;
   if (!pt) { g.style.display = 'none'; return; }
   g.style.display = '';
@@ -523,8 +523,8 @@ function auxDeclusUpdateCursor(svg, pt) {
 
 function runAuxDeclus() {
   if (!auxFile || !auxPreflightData) return;
-  var $st = auxQ('#auxDeclusStatus');
-  var $runBtn = auxQ('#auxDeclusRunBtn');
+  var $st = auxQ('[data-aux="declusStatus"]');
+  var $runBtn = auxQ('[data-act="auxDeclusRun"]');
   function dfail(msg) {
     if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
     if ($runBtn) $runBtn.disabled = false;
@@ -627,13 +627,13 @@ function renderAuxFromMain() {
   $wrap.innerHTML =
     '<div class="aux-from-main-row">or use an entry from <strong>' + esc(currentFile.name) + '</strong>:</div>' +
     '<div class="aux-from-main-row">' +
-      '<select class="aux-select" id="auxFromMainSel" style="flex:1">' + opts + '</select>' +
-      '<button class="aux-from-main-btn" id="auxFromMainBtn">Use entry</button>' +
+      '<select class="aux-select" data-aux="fromMainSel" style="flex:1">' + opts + '</select>' +
+      '<button class="aux-from-main-btn" data-act="auxFromMain">Use entry</button>' +
     '</div>';
-  var sel = auxQ('#auxFromMainSel');
+  var sel = auxQ('[data-aux="fromMainSel"]');
   var firstFree = preflightData.zipEntries.find(function(z) { return z.name !== preflightData.selectedZipEntry; });
   if (firstFree) sel.value = firstFree.name;
-  auxQ('#auxFromMainBtn').addEventListener('click', function() {
+  auxQ('[data-act="auxFromMain"]').addEventListener('click', function() {
     loadAuxFile(currentFile, null, sel.value);
   });
 }
@@ -756,19 +756,20 @@ if ($auxDropzone) {
     $auxSidebar.addEventListener('change', onAuxConfigChange);
     $auxSidebar.addEventListener('click', function(e) {
       if (!e.target) return;
-      if (e.target.id === 'auxAnalyzeBtn') runAuxAnalysis();
-      else if (e.target.id === 'auxDeclusRunBtn') {
+      var act = e.target.dataset ? e.target.dataset.act : null;
+      if (act === 'auxAnalyze') runAuxAnalysis();
+      else if (act === 'auxDeclusRun') {
         // Run = fresh sweep; an existing pin is released
         if (auxDeclus && auxDeclus.params) auxDeclus.params.pinned = null;
         runAuxDeclus();
-      } else if (e.target.id === 'auxDeclusUseBtn') {
+      } else if (act === 'auxDeclusUse') {
         catSetRole('aux', 'weight', AUX_DECLUS_WEIGHT);
         markAuxStale();
         renderAuxConfig();
         if (typeof autoSaveProject === 'function') autoSaveProject();
       } else {
         // Click on the sweep curve: pin the nearest cell size and recompute
-        var svg = e.target.closest ? e.target.closest('#auxDeclusCurveSvg') : null;
+        var svg = e.target.closest ? e.target.closest('.aux-declus-curve') : null;
         if (svg && auxDeclus) {
           var pt = auxDeclusNearestPt(svg, e);
           if (pt && pt[2] > 0) {
@@ -781,18 +782,18 @@ if ($auxDropzone) {
     });
     // Curve scrubbing: crosshair with cell size, declustered mean and Δ%
     $auxSidebar.addEventListener('pointermove', function(e) {
-      var svg = e.target && e.target.closest ? e.target.closest('#auxDeclusCurveSvg') : null;
-      var anySvg = auxQ('#auxDeclusCurveSvg');
+      var svg = e.target && e.target.closest ? e.target.closest('.aux-declus-curve') : null;
+      var anySvg = auxQ('.aux-declus-curve');
       if (!svg) { if (anySvg) auxDeclusUpdateCursor(anySvg, null); return; }
       auxDeclusUpdateCursor(svg, auxDeclusNearestPt(svg, e));
     });
     $auxSidebar.addEventListener('pointerleave', function() {
-      var svg = auxQ('#auxDeclusCurveSvg');
+      var svg = auxQ('.aux-declus-curve');
       if (svg) auxDeclusUpdateCursor(svg, null);
     });
     // Zip entry switch — re-read header/types/xyz from the chosen entry
     $auxSidebar.addEventListener('change', async function(e) {
-      if (!e.target || e.target.id !== 'auxZipEntry' || !auxFile || !auxPreflightData) return;
+      if (!e.target || !e.target.dataset || e.target.dataset.aux !== 'zipEntry' || !auxFile || !auxPreflightData) return;
       try {
         await loadZipEntryIntoPreflight(auxFile, auxPreflightData, e.target.value);
         renderAuxConfig();

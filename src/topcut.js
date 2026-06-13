@@ -97,9 +97,9 @@ function renderAuxTopcut() {
 
   var html = '<div class="tc-toolbar">' +
     '<label>Variable</label>' +
-    '<select class="aux-select" id="auxTopcutVar" style="width:auto;min-width:120px">' + varOpts + '</select>' +
-    '<button class="aux-from-main-btn" id="auxTopcutLoadBtn">' + (auxTopcutFresh() ? 'Reload' : 'Load distribution') + '</button>' +
-    '<span class="aux-hint" id="auxTopcutStatus" style="margin:0"></span>' +
+    '<select class="aux-select" data-aux="topcutVar" style="width:auto;min-width:120px">' + varOpts + '</select>' +
+    '<button class="aux-from-main-btn" data-act="auxTopcutLoad">' + (auxTopcutFresh() ? 'Reload' : 'Load distribution') + '</button>' +
+    '<span class="aux-hint" data-aux="topcutStatus" style="margin:0"></span>' +
   '</div>';
 
   if (!auxTopcutFresh()) {
@@ -124,21 +124,21 @@ function renderAuxTopcut() {
 
   var canLog = vMin > 0;
   if (!canLog) t.xlog = false;
-  html += '<div class="tc-stats" id="auxTopcutStats">' + auxTopcutStatsHtml(un, cs) + '</div>';
+  html += '<div class="tc-stats" data-aux="topcutStats">' + auxTopcutStatsHtml(un, cs) + '</div>';
   html += '<div class="tc-caprow">' +
     '<label>Cap</label>' +
-    '<input type="text" class="aux-input" id="auxTopcutCapInput" value="' + formatNum(t.cap) + '" spellcheck="false" style="width:90px">' +
-    '<button class="aux-from-main-btn" id="auxTopcutCopyBtn" title="copy a capping calcol for the Calc tab (Aux mode)">Copy calcol</button>' +
-    '<span class="aux-hint" id="auxTopcutCopied" style="margin:0"></span>' +
+    '<input type="text" class="aux-input" data-aux="topcutCap" value="' + formatNum(t.cap) + '" spellcheck="false" style="width:90px">' +
+    '<button class="aux-from-main-btn" data-act="auxTopcutCopy" title="copy a capping calcol for the Calc tab (Aux mode)">Copy calcol</button>' +
+    '<span class="aux-hint" data-aux="topcutCopied" style="margin:0"></span>' +
     '<span style="margin-left:auto;display:flex;gap:0.25rem">' +
-      '<button class="aux-view-btn' + (!t.useDeclus ? ' active' : '') + '" id="auxTopcutWRaw" title="raw sample distribution — the capping convention">Raw</button>' +
-      '<button class="aux-view-btn' + (t.useDeclus ? ' active' : '') + '" id="auxTopcutWDeclus"' +
+      '<button class="aux-view-btn' + (!t.useDeclus ? ' active' : '') + '" data-act="auxTopcutWRaw" title="raw sample distribution — the capping convention">Raw</button>' +
+      '<button class="aux-view-btn' + (t.useDeclus ? ' active' : '') + '" data-act="auxTopcutWDeclus"' +
         (typeof auxDeclusFresh === 'function' && auxDeclusFresh()
           ? ' title="weight every statistic by the declustering weights — capped means/metal unbiased by drilling pattern"'
           : ' disabled title="run Declustering on the sidebar first (weights missing or stale)"') + '>Declustered</button>' +
       '<span style="width:0.4rem"></span>' +
-      '<button class="aux-view-btn' + (!t.xlog ? ' active' : '') + '" id="auxTopcutXLin">Linear</button>' +
-      '<button class="aux-view-btn' + (t.xlog ? ' active' : '') + '" id="auxTopcutXLog"' +
+      '<button class="aux-view-btn' + (!t.xlog ? ' active' : '') + '" data-act="auxTopcutXLin">Linear</button>' +
+      '<button class="aux-view-btn' + (t.xlog ? ' active' : '') + '" data-act="auxTopcutXLog"' +
         (canLog ? ' title="log value axis on all four plots"' : ' disabled title="log X needs all values > 0 (min here is ' + formatNum(vMin) + ')"') + '>Log</button>' +
     '</span>' +
   '</div>';
@@ -355,12 +355,12 @@ function auxTopcutPositionCaps() {
     txt.textContent = formatNum(t.cap);
     txt.setAttribute('text-anchor', x > P.W * 0.8 ? 'end' : (x < P.W * 0.2 ? 'start' : 'middle'));
   });
-  var strip = auxQ('#auxTopcutStats');
+  var strip = auxQ('[data-aux="topcutStats"]');
   if (strip) {
     var un = auxTopcutCappedStats(t.values[t.values.length - 1]);
     strip.innerHTML = auxTopcutStatsHtml(un, auxTopcutCappedStats(t.cap));
   }
-  var inp = auxQ('#auxTopcutCapInput');
+  var inp = auxQ('[data-aux="topcutCap"]');
   if (inp && document.activeElement !== inp) inp.value = formatNum(t.cap);
 }
 
@@ -375,10 +375,10 @@ function auxTopcutSetCap(c, save) {
 
 function loadAuxTopcut() {
   if (!auxFile || !auxPreflightData) return;
-  var sel = auxQ('#auxTopcutVar');
+  var sel = auxQ('[data-aux="topcutVar"]');
   var varName = sel ? sel.value : (auxTopcut && auxTopcut.varName);
   if (!varName) return;
-  var $st = auxQ('#auxTopcutStatus');
+  var $st = auxQ('[data-aux="topcutStatus"]');
   function tfail(msg) {
     if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
     if (auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} auxTopcutWorker = null; }
@@ -453,7 +453,7 @@ function auxTopcutCopyCalcol() {
   if (!t || t.cap == null) return;
   var safe = t.varName.replace(/[^\w]/g, '_');
   var code = 'aux.' + safe + '_cap = cap(aux.' + t.varName + ', ' + formatNum(t.cap) + ');';
-  var done = auxQ('#auxTopcutCopied');
+  var done = auxQ('[data-aux="topcutCopied"]');
   function ok() { if (done) { done.textContent = 'copied — paste in Calc (Aux mode)'; setTimeout(function() { if (done) done.textContent = ''; }, 3000); } }
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(code).then(ok, function() { if (done) done.textContent = code; });
@@ -474,11 +474,12 @@ if ($auxViewToggle) {
 }
 if ($auxTopcut) {
   $auxTopcut.addEventListener('click', function(e) {
-    if (e.target.id === 'auxTopcutLoadBtn') loadAuxTopcut();
-    else if (e.target.id === 'auxTopcutCopyBtn') auxTopcutCopyCalcol();
-    else if (e.target.id === 'auxTopcutWRaw' || e.target.id === 'auxTopcutWDeclus') {
+    var act = e.target.dataset ? e.target.dataset.act : null;
+    if (act === 'auxTopcutLoad') loadAuxTopcut();
+    else if (act === 'auxTopcutCopy') auxTopcutCopyCalcol();
+    else if (act === 'auxTopcutWRaw' || act === 'auxTopcutWDeclus') {
       if (!auxTopcut) return;
-      var wantDeclus = e.target.id === 'auxTopcutWDeclus';
+      var wantDeclus = act === 'auxTopcutWDeclus';
       if (wantDeclus && !(typeof auxDeclusFresh === 'function' && auxDeclusFresh())) return; // disabled anyway
       if (!!auxTopcut.useDeclus !== wantDeclus) {
         auxTopcut.useDeclus = wantDeclus;
@@ -487,9 +488,9 @@ if ($auxTopcut) {
         if (typeof autoSaveProject === 'function') autoSaveProject();
       }
     }
-    else if (e.target.id === 'auxTopcutXLin' || e.target.id === 'auxTopcutXLog') {
+    else if (act === 'auxTopcutXLin' || act === 'auxTopcutXLog') {
       if (!auxTopcut || !auxTopcut.values) return;
-      var wantLog = e.target.id === 'auxTopcutXLog';
+      var wantLog = act === 'auxTopcutXLog';
       if (wantLog && !(auxTopcut.values[0] > 0)) return; // disabled anyway
       if (!!auxTopcut.xlog !== wantLog) {
         auxTopcut.xlog = wantLog;
@@ -499,14 +500,15 @@ if ($auxTopcut) {
     }
   });
   $auxTopcut.addEventListener('change', function(e) {
-    if (e.target.id === 'auxTopcutVar') {
+    var dx = e.target.dataset ? e.target.dataset.aux : null;
+    if (dx === 'topcutVar') {
       // Variable switch invalidates the loaded distribution (weight mode carries over)
       if (auxTopcut && auxTopcut.varName !== e.target.value) {
         auxTopcut = { varName: e.target.value, cap: null, values: null, useDeclus: !!auxTopcut.useDeclus };
         renderAuxTopcut();
         if (typeof autoSaveProject === 'function') autoSaveProject();
       }
-    } else if (e.target.id === 'auxTopcutCapInput') {
+    } else if (dx === 'topcutCap') {
       var c = parseFloat(e.target.value);
       if (isFinite(c)) auxTopcutSetCap(c, true);
     }
