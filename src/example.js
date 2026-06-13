@@ -310,7 +310,7 @@ var EXAMPLE_TUTORIAL = [
 '',
 '## 1. Load the model',
 '',
-'Drop bma-example-model.csv on the landing page. Preflight detects the',
+'Drop bma-example-model.csv on the landing page. Import Block Model detects the',
 'delimiter, types, and X/Y/Z automatically — just hit Execute (bottom right).',
 'Check Summary: 10 m blocks, 24 x 24 x 10 grid, fill ratio 100%.',
 '',
