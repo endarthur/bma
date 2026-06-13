@@ -84,6 +84,65 @@ other dataset" means here), seeded case-insensitively per dataset, edited in
 the tree/popover exactly as today. Cross-aux pairing is explicitly out of
 scope (no use case until someone shows one).
 
+## UI decision — datasets as tree + per-dataset instance panels (Arthur, 2026-06-13)
+
+Supersedes the "single Datasets tab" sketch below. The workspace becomes
+**a tree of datasets + on-demand per-dataset panels** — no standing Aux tab,
+no fixed "Import Points/Drillholes" tabs:
+
+- **Adding a dataset is a menu action** — Data ▸ *Add point dataset…* /
+  *Add drillhole set…* (each triggers the file load and registers a dataset).
+  The drillhole add-path opens the A7 mapping/composite flow, producing a
+  point dataset (`source: 'drillholes'`), exactly as today.
+- **The catalog tree is the registry** — datasets are its top-level nodes
+  (already true visually); the tree gains per-dataset row actions in its
+  right-click menu (Open import/config, ★ make reference, Remove).
+- **Each dataset's import + config + summary is its own panel** — a **C9
+  instance** keyed by dataset id, titled "Import: ⟨prefix⟩", dockable, and
+  independently closeable. **Several open side by side.** The block model's
+  instance is the renamed **"Import Block Model"** (today's Preflight, with
+  geometry); point/drillhole instances skip geometry and show a bbox + row
+  summary instead.
+- **Closed → re-raise from the tree right-click menu** (and View ▸ Panels) —
+  reusing the C1b-3 reopen + C4 context-menu machinery verbatim.
+- **Preflight is renamed "Import Block Model"** and is just the model's
+  dataset panel — the rename falls out of the unification, not a separate
+  cosmetic pass.
+
+This folds a focused slice of **C9 (panel instances)** into A10: the dataset
+panel is the first cloneable panel type (state object keyed by dataset id,
+scoped DOM with no unique ids, serialized title). C9's other adopters (Swath,
+GT, Table) follow later; this is where the instance contract is born.
+
+### Per-dataset summary (skip block params; bbox + Export OBJ + rows)
+
+Each dataset panel carries a summary appropriate to its kind:
+- **model**: today's grid geometry (origin/block size/grid count/fill/loop
+  order) — unchanged.
+- **point / drillhole**: **no grid params** (they aren't gridded). Instead a
+  **bounding-box readout** — a few modes (axis-aligned XYZ extent at least;
+  rotated/oriented bbox later) — wired to the existing **Export OBJ** infra so
+  the box exports like the model's, plus a **row/health report** (reuse the
+  C6-5 Data Health card: rows, nulls, ragged, filter/calcol errors, ignored
+  coords). Datasets stop borrowing the block-model geometry card they don't
+  fit.
+
+## Phasing (revised 2026-06-13 — merges the C9 dataset-panel instance)
+
+| Phase | Scope |
+|---|---|
+| 0 | **Registry under the hood**: `datasets[]` + accessors; `aux*` globals become facades over `datasets[1]`; zero behavior change, full suite green + b1-differential bit-identical. The de-risking move (B1/C1a-step-1 playbook) |
+| 1 | **Dataset panel as a C9 instance**: factor the aux sidebar/config into an instance keyed by dataset id (scoped DOM, no unique ids); Preflight → "Import Block Model" = the model's instance; register with the workspace so it docks/closes/reopens |
+| 2 | **Menu add + tree registry**: Data ▸ Add point/drillhole; tree row actions (Open config / ★ reference / Remove); reopen via tree ctx menu + View ▸ Panels; second point dataset loadable |
+| 3 | **Per-dataset summary**: bbox modes + Export OBJ + C6-5 health for point/drillhole; model keeps geometry |
+| 4 | **N datasets live**: stats/CDF/swath/GT iterate `datasets`; reference-★ semantics (Δ% under reference, theo/declus/top-cut follow ★); soft cap 4 |
+| 5 | **Drillhole sets as instances** (multiple), per-dataset declustering/top-cut targeting |
+| 6 | **Persistence + pack** (`datasets` key, `referenceId`, legacy `aux`/`drillholes` migration; C8-shaped); smoke `a10-smoke.js`; **manuals regen (both languages) → RELEASE** |
+
+The original "single Datasets tab" generalization (below) is kept for the
+data-model/reference/pairing/persistence reasoning, which is unchanged — only
+the surface (tab → tree + instance panels) is superseded by the above.
+
 ## UI generalization (joint with C6-3)
 
 - **The Aux tab becomes the Datasets tab**: a list of loaded datasets

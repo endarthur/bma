@@ -44,6 +44,50 @@ let statsAuxSelected = null;       // Set of aux col indices shown in the stats 
 let statsCdfAuxSelected = new Set(); // aux col indices with CDF curves
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes
 
+// ─── A10 dataset registry (phase 0) ──────────────────────────────────────
+// The registry that replaces the model+aux singleton split. Phase 0 changes
+// NO behavior: the model (current*/lastCompleteData) and aux (aux*) globals
+// stay canonical, and `datasets` is a getter/setter VIEW over them so
+// registry-aware code can read/write datasets[i] uniformly. Later phases
+// migrate consumers onto datasets[] and make it the backing store, then
+// generalize past the two fixed entries. Design: docs/a10-n-datasets.md.
+// (Getters reference later-declared globals — currentCalcolCode/Meta,
+// lastCompleteData — which is safe: they resolve at access time, post-load.)
+const datasets = [
+  {
+    id: 'model', kind: 'model',
+    get file()       { return currentFile; },        set file(v)       { currentFile = v; },
+    get preflight()  { return preflightData; },       set preflight(v)  { preflightData = v; },
+    get complete()   { return lastCompleteData; },    set complete(v)   { lastCompleteData = v; },
+    get filter()     { return currentFilter; },       set filter(v)     { currentFilter = v; },
+    get calcolCode() { return currentCalcolCode; },   set calcolCode(v) { currentCalcolCode = v; },
+    get calcolMeta() { return currentCalcolMeta; },   set calcolMeta(v) { currentCalcolMeta = v; },
+    get prefix()     { return null; },
+    get rowVar()     { return currentRowVar; },
+    get source()     { return 'file'; }
+  },
+  {
+    id: 'aux', kind: 'aux',
+    get file()       { return auxFile; },             set file(v)       { auxFile = v; },
+    get handle()     { return auxHandle; },           set handle(v)     { auxHandle = v; },
+    get preflight()  { return auxPreflightData; },     set preflight(v)  { auxPreflightData = v; },
+    get complete()   { return auxCompleteData; },      set complete(v)   { auxCompleteData = v; },
+    get stale()      { return auxStale; },             set stale(v)      { auxStale = v; },
+    get filter()     { return auxFilter; },            set filter(v)     { auxFilter = v; },
+    get calcolCode() { return auxCalcolCode; },        set calcolCode(v) { auxCalcolCode = v; },
+    get calcolMeta() { return auxCalcolMeta; },        set calcolMeta(v) { auxCalcolMeta = v; },
+    get prefix()     { return auxPrefix; },            set prefix(v)     { auxPrefix = v; },
+    get declus()     { return auxDeclus; },            set declus(v)     { auxDeclus = v; },
+    get topcut()     { return auxTopcut; },            set topcut(v)     { auxTopcut = v; },
+    get view()       { return auxView; },              set view(v)       { auxView = v; },
+    get rowVar()     { return AUX_ROW_VAR; }
+  }
+];
+function dsById(id) {
+  for (var i = 0; i < datasets.length; i++) if (datasets[i].id === id) return datasets[i];
+  return null;
+}
+
 var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
 
 // Fuzzy subsequence match — returns true if all chars in query appear in order within target.
