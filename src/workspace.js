@@ -65,7 +65,7 @@ function wsActivateInRails(tabId) {
   // Closed dataset INSTANCE (d2+): renderPanel rebuilds its panel from the ds
   // (A10 1g-c — state lives in the ds object, the clone is throwaway).
   var ds = (typeof dsById === 'function') ? dsById(tabId) : null;
-  if (ds && ds.kind !== 'model') {
+  if (ds && ds.id !== 'model') {
     wsRails.addTab({ id: ds.id, title: 'Import: ' + (ds.prefix || 'data'), closeable: true }, wsMainTarget());
   }
 }
@@ -445,7 +445,7 @@ function buildRailsShell(host) {
       if (p) return document.getElementById(p.el);
       // A10 1g-c: a dataset instance tab (d2+) → build its panel from the ds
       var ds = (typeof dsById === 'function') ? dsById(tab.id) : null;
-      if (ds && ds.kind !== 'model') return wsBuildDatasetPanel(ds);
+      if (ds && ds.id !== 'model') return wsBuildDatasetPanel(ds);
       return null;
     },
     onPanelDestroy: wsRehomePanel,

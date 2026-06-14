@@ -101,9 +101,8 @@ CTX_PROVIDERS.push(function datasetProvider(e) {
   if (key.indexOf('ds:') !== 0) return null;
   var ds = key.slice(3);
   var dsObj = (typeof dsById === 'function') ? dsById(ds) : null;
-  var dsLabel = ds === 'model' ? 'Model' : ((dsObj && dsObj.prefix) || auxPrefix || 'aux');
   var items = [
-    { head: true, label: dsLabel },
+    { head: true, label: dsLabel(ds) },
     // A10 1g-c: instance ids open their own panel (showPanel(ds) → activate-or-rebuild)
     { label: 'Open import panel', action: function() { showPanel(ds === 'model' ? 'preflight' : ds); } }
   ];
@@ -121,8 +120,7 @@ CTX_PROVIDERS.push(function variableProvider(e) {
   var v = ctxResolveVariable(e);
   if (!v || !v.name) return null;
   var x = e.clientX, y = e.clientY;
-  var vDsLabel = v.ds === 'model' ? 'Model' : ((typeof dsById === 'function' && dsById(v.ds) && dsById(v.ds).prefix) || auxPrefix || 'aux');
-  var items = [{ head: true, label: vDsLabel + ':' + v.name }];
+  var items = [{ head: true, label: dsLabel(v.ds) + ':' + v.name }];
 
   // Coordinate rows: axis info + where to change it (C6-0 — these rows
   // previously fell through to the native browser menu)

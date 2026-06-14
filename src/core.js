@@ -55,7 +55,7 @@ let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } appl
 // lastCompleteData — which is safe: they resolve at access time, post-load.)
 const datasets = [
   {
-    id: 'model', kind: 'model',
+    id: 'model',
     get file()       { return currentFile; },        set file(v)       { currentFile = v; },
     get preflight()  { return preflightData; },       set preflight(v)  { preflightData = v; },
     get complete()   { return lastCompleteData; },    set complete(v)   { lastCompleteData = v; },
@@ -67,7 +67,7 @@ const datasets = [
     get source()     { return 'file'; }
   },
   {
-    id: 'aux', kind: 'aux',
+    id: 'aux',
     get file()       { return auxFile; },             set file(v)       { auxFile = v; },
     get handle()     { return auxHandle; },           set handle(v)     { auxHandle = v; },
     get preflight()  { return auxPreflightData; },     set preflight(v)  { auxPreflightData = v; },
@@ -99,7 +99,6 @@ function dsCreate(opts) {
   opts = opts || {};
   return {
     id: opts.id || ('d' + (dsNextNum++)),
-    kind: opts.kind || 'aux',
     file: opts.file || null,
     handle: opts.handle || null,
     preflight: null,
@@ -145,6 +144,26 @@ function dsConfigRoot(ds) {
 }
 function auxPanelRoot() { return document.getElementById('panelAux'); }
 function auxQ(sel, root) { var r = root || auxPanelRoot(); return r ? r.querySelector(sel) : null; }
+
+// ─── A10 4b: datasets are peers — capabilities are FACETS, not a kind ──────
+// "model" is no longer a privileged type; it is simply the dataset that (today)
+// carries a block geometry. Grid-dependent features feature-detect via
+// dsHasGrid instead of id==='model', so a grid-detected comparison dataset
+// (after import unification, 4f) gets geometry/GT/Export too, and a grid-free
+// session is legal. dsLabel centralizes the display label so call sites stop
+// hardcoding the model-vs-prefix branch. Design: docs/a10-n-datasets.md.
+function dsLabel(id) {
+  if (id === 'model') return 'Model';
+  var ds = dsById(id);
+  return (ds && ds.prefix) || auxPrefix || 'aux';
+}
+// A dataset's block geometry when it has one (the worker's geometry result on
+// its last analysis), else null. Only the model produces geometry today.
+function dsGrid(ds) {
+  var g = ds && ds.complete && ds.complete.geometry;
+  return (g && g.x && g.y && g.z && g.x.blockSize && g.y.blockSize && g.z.blockSize) ? g : null;
+}
+function dsHasGrid(ds) { return !!dsGrid(ds); }
 
 var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
 

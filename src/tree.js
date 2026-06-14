@@ -156,8 +156,7 @@ function treeDatasetHtml(ds, openState) {
   var v = treeDatasetVars(ds);
   var dsKey = 'ds:' + ds;
   var dsOpen = openState[dsKey] !== undefined ? openState[dsKey] : true;
-  var dsLabel = ds === 'model' ? 'Model' : ((typeof dsById === 'function' && dsById(ds) && dsById(ds).prefix) || auxPrefix || 'aux');
-  var head = '<summary><span class="tree-ds-label">' + esc(dsLabel) + '</span>' +
+  var head = '<summary><span class="tree-ds-label">' + esc(dsLabel(ds)) + '</span>' +
     (v && v.fileName ? '<span class="tree-ds-file" title="' + esc(v.fileName) + '">' + esc(v.fileName) + '</span>' : '') +
     (v && v.countNote ? '<span class="tree-ds-count">' + esc(v.countNote) + '</span>' : '') +
     '</summary>';
@@ -342,7 +341,7 @@ function renderTreePopover() {
   var $p = treePopoverEl();
   if (!t || !$p) return;
   var ds = t.ds, name = t.name;
-  var html = '<div class="tree-pop-head">' + esc(ds === 'model' ? 'Model' : (auxPrefix || 'aux')) + ':' + esc(name) + '</div>';
+  var html = '<div class="tree-pop-head">' + esc(dsLabel(ds)) + ':' + esc(name) + '</div>';
 
   if (t.kind === 'num') {
     // Series color — explicit override or "auto" (palette / pair-inherited)
