@@ -1,0 +1,37 @@
+Track,Item,Title,Status,Depends on,Ref,Notes
+Release,v1.1.0,Pushed + tagged (B1 / t-digest / C1a / context menus),Done,,df83db4..6e68c22,Live on GitHub Pages
+Release,v-next,Push + tag everything since v1.1.0 (all local),Planned,A10 new track; manuals,,The release gate
+Release,Manuals,Regen both languages — every screenshot stale post-C6/A10,Planned,A10 lands,,pt-BR + EN HTML->PDF + bma.html offline copy
+C6,C6-0..5c,Design overhaul (tokens / menubar / aux empty / sidebar flow / trust),Done,,fd4456a..2162ee8,Gated the release; fully complete
+C,C1a,Property catalog (catalog.vars/roles/pairs),Done,,1d39088,Becomes the Properties layer in the new track
+C,C1b,Rails docking shells (rails >=701px / legacy <700px),Done,,2024106..09ee6a1,
+C,C4,Menu unification (@gcu/menu),Done,,c041902,
+C,C1c-pre,Pointer-events migration (touch-ready),Done,,eea462d,
+C,Ctxmenu,Provider-based context menus,Done,,1b4e8cf,
+C,C1c,Mobile pager shell,Planned,,,Two shells; touch done, pager TBD
+C,C9,Panel instances (cloneable contract),Active,A10 1g-c,42379c3,Born in A10; now folded into the A10 new track (P4e)
+C,C8,Project system (projects as IDB objects; Save-as; project home),Planned,A10 registry shape,,datasets serialization IS the C8 object
+C,C7,Report panel (dockable; snapshots + provenance; export to PDF/HTML),Planned,A10; C8,,The evidence thesis
+A,A1..A6a,Stats delta% / swath / declus / logprob CDF / top-cut / affine GT,Done,,,Shipped through v1.1.0 + local
+A,A7,Drillhole ingestion (phases 0-3),Done,,73f46a9,Desurvey + composite + example + manuals
+A,A8,Empty-column warnings (+ real worker bug fix),Done,,,
+A,A9,Data-fidelity pass (zero silent loss; F1-F8),Done,,431cc08..7e86181,
+A10,Phase 0,Dataset registry getter-view over model+aux,Done,,01f02e4,
+A10,Phase 1,Instances live (registry factory / datasetize tree / DOM seam / parameterize / clone+spawn),Done,,b3323ed..42379c3,1c/1d/1e/1f/1g-a/1g-b/1g-c + 2a + phase 3 (summary)
+A10,Phase 4a,Properties layer (named equivalence classes; display moves onto property; subsumes vars+pairs),Next,Phase 1,,Auto-seed by name; merge/rename/split popover; singleton = unmatched column
+A10,Phase 4b,De-privilege model (no kind; grid geometry an optional facet; panels feature-detect),Planned,4a,,Reference-hub + gridded/point split removed
+A10,Phase 4c,Per-panel selection (datasets x properties chips; progressive disclosure at 3+ datasets),Planned,4a; 4b,,
+A10,Phase 4d,Per-panel reference (delta% denominator is instance state; NO global star),Planned,4c,,
+A10,Phase 4e,Multi-instance spawn (tab [+] / Duplicate; scope-derived titles; serialize),Planned,4c; C9,,
+A10,Phase 4f,Import unification (grid-detect any dataset; geometry section conditional),Planned,4b,,Merges model-preflight with aux-import; biggest new surface
+A10,Phase 4g,GT feature-detect (theoretical any dataset; empirical when a volume source exists),Planned,4b,,Volume source = grid geometry OR tonnage/volume column
+A10,Phase 4h,Export generalize to any dataset (rows / bbox / OBJ),Planned,4b,,Points + drillholes emit the same shape
+A10,Phase 5,Drillhole sets as instances (multiple); per-dataset declus/top-cut targeting,Planned,Phase 4,,
+A10,Phase 6,Persistence + pack (datasets key; legacy migration; C8-shaped) + a10 persistence smoke,Planned,Phase 4; C8,,Un-drop d* tabs in layout sanitize
+A,A6b,DGM Hermite GT engine,Planned,,,gstlearn cross-check; RGeostats avoid
+A,A11,Multi-table drillholes,Planned,A7,,
+A,A12,Contact analysis,Planned,A10,,
+A,A13,Mesh selection / proportions (@gcu/winding + @gcu/peel),Planned,A10,,Door marked on roadmap
+B,B0/B1/tdigest,hyparquet verify / row-source split / t-digest fix,Done,,8e27375; 33ddb50,
+B,B2,Parquet platform (hyparquet everywhere),Planned,B1,,
+B,B4,Parallel chunk scans,Planned,B1,,Gates the t-digest parallel-scan leftover
