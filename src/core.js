@@ -389,6 +389,27 @@ function catSeedPairs(auxNames, modelNames) {
   }
 }
 
+// ─── Properties (A10 phase 4a) ──────────────────────────────────────────
+// A "property" is a named measured quantity instantiated by columns across
+// datasets — the equivalence class that will subsume C1a's per-`ds:name`
+// vars + hub pairs (docs/a10-n-datasets.md "Converged model"). 4a-i is the
+// inert SEAM: these delegate to the current catVar*/catUnit/catPair logic, so
+// behavior is bit-identical. 4a-ii migrates consumers onto them; 4a-iii flips
+// storage to catalog.properties (display on the property) + merge/rename/split.
+//
+// catPropId(ds, name) → the id of the property this column belongs to. Today
+// the model var name anchors the property (the hub); a paired aux column joins
+// its model var's property, an unpaired/instance column anchors its own.
+function catPropId(ds, name) {
+  if (ds === 'model') return 'model:' + name;
+  if (ds === 'aux') { const m = catPair(name); return m ? 'model:' + m : 'aux:' + name; }
+  return ds + ':' + name; // instances (d2+): own property until 4c generalizes grouping
+}
+// Property display — same resolution as the per-variable accessors for now
+// (explicit override → paired-primary inheritance → palette / raw).
+function catPropColor(ds, name, fallbackIdx) { return catVarColor(ds, name, fallbackIdx); }
+function catPropUnit(ds, name) { return catUnit(ds, name); }
+
 // Categorical value color: explicit override → palette by value position
 function getCategoryColor(colName, value, fallbackIdx) {
   const rec = catVarPeek('model', colName);

@@ -246,6 +246,35 @@ Each dataset panel carries a summary appropriate to its kind:
 > See the **Converged model** section at the top. Granularity here mirrors
 > `docs/roadmap-tracker.csv`.
 
+### Phase 4a slicing (properties layer — de-risk playbook)
+
+Today display lives per `ds:name` (`catalog.vars`) with hub-style inheritance
+baked into the accessors (`catVarColor`/`catUnit`: an aux var with no override
+inherits its *paired model* var's color/unit). Target: display lives on the
+**property** (the equivalence class), one place, no hub. Slices:
+
+- **4a-i (inert seam)** — introduce property-oriented accessors
+  (`catPropId(ds,name)` = the property a column belongs to; `catPropColor` /
+  `catPropUnit`) that **delegate to the current `catVar*`/`catUnit`/`catPair`
+  logic** → bit-identical. Mirrors the `auxQ`/`dsConfigRoot` seam moves. No
+  storage change; establishes the API surface consumers will use.
+  `catPropId`: model → `model:<name>`; aux → its paired model property
+  (`model:<pair>`) or its own (`aux:<name>`); instances → own (`<id>:<name>`)
+  until 4c generalizes grouping.
+- **4a-ii (migrate consumers)** — repoint the ~8 display reads
+  (statistics/swath/gt/categories/tree colors + units) off `catVarColor`/
+  `catUnit` onto `catPropColor`/`catPropUnit`. Still delegating → bit-identical
+  (verified by the full smoke suite). After this, no consumer reads per-`ds:name`
+  display directly.
+- **4a-iii (flip storage + editing)** — make `catalog.properties[propId] =
+  {name, color, unit, scale, valueColors, valueOrder, members:[{ds,col}]}`
+  canonical; migrate `vars`+`pairs` → `properties` (seed members by normalized
+  name); repoint `catPropColor`/`catPropUnit` to read the property; generalize
+  the tree pairing popover to **merge / rename / split** group membership; drop
+  per-member display overrides. This is the only behavior-changing slice, and
+  it's localized behind the 4a-i API. Project migration: legacy `catalog`
+  (`vars`+`pairs`) → `properties` in `migrateLegacyCatalog()`.
+
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
 Phase 1 is being executed as fine slices (B1/C1a playbook — de-risk first):
