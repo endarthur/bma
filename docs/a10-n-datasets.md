@@ -11,6 +11,88 @@ Written **before implementation begins** so C6-3 (the "Add dataset" surface)
 is designed against the real model rather than the aux singleton. The
 refactor itself can land after C6.
 
+---
+
+## Converged model (2026-06-13, Arthur) — DESIGN OF RECORD
+
+> This section supersedes **Data model**, **Reference semantics**, **Pairing**,
+> **UI generalization**, and **Decisions** below (kept for history). Phase 1
+> shipped on the older frame (registry + instances) and is bit-identical-safe;
+> Phase 4+ is built on the model here. Tracked in `docs/roadmap-tracker.csv`.
+
+Phase 1 landed N dataset *instances* (the model + aux + d2/d3 panels coexist,
+analyze independently). Working through Phase 4, Arthur removed every remaining
+privileged role. The result is simpler than the hub-and-spoke sketch below:
+
+**1. Datasets are peers — no "model", no `kind`.** What made the block model
+special was never an identity, only a *capability*: a regular grid geometry.
+So grid geometry becomes **one optional facet** of a dataset, alongside coords
+and per-dataset column-roles (weight / density / volume). A dataset is just
+`rows + columns + optional {coords, grid, roles}`. This makes legal what was
+artificial before: **two gridded datasets** (new vs previous model, both real
+grids), and **zero gridded datasets** (composites vs samples vs check, no block
+model at all). Panels **feature-detect** what they can offer rather than gating
+on a type.
+
+**2. No global dataset-roles — not even a reference ★.** The reference (Δ%'s
+denominator) is **per-panel-instance state**: each Statistics copy picks which
+of *its* shown datasets is the reference. Two Stats tabs can disagree; that's
+the point. There is therefore **no global ★, no global "subject/model".**
+Sensible defaults (first-loaded, or the lone gridded one) keep the common case
+zero-config, but they are defaults, not roles.
+
+**3. Grouping = properties, not pairs.** A **property** is a named measured
+quantity (e.g. `Fe`) that dataset columns *instantiate* — an equivalence class
+over `(dataset, column)`. This is what the C1a "property catalog" should have
+meant. Cases collapse:
+- a 1-member property = an unmatched / dataset-specific column,
+- a 2-member property = today's "pair",
+- an N-member property = the N-dataset group.
+
+No hub, no transitive closure. Membership auto-seeds by normalized name
+(case-insensitive, as today); editing is **merge / rename / split** in the
+generalized pairing popover. Crucially, **display identity moves onto the
+property** — color, unit, log-scale, categorical value→color map live on `Fe`
+*once*, replacing the per-`ds:name` smearing of `catalog.vars`+`pairs`.
+
+**4. Selection is a grid, identical on every comparison panel.** Per-panel:
+`(datasets ✓) × (properties ✓)`. A property with no member in a selected
+dataset just yields no series there (∅). Progressive disclosure: the dataset
+row is hidden at ≤2 datasets (today's comfort), appears at 3+. An instance's
+serializable state is `{ datasets:[…], reference, properties:[…], params,
+title }` — exactly what C8 saves and C7 snapshots.
+
+**5. Feature-detection per panel (no grid lock):**
+- **GT** — theoretical curve runs off any distribution (affine now, Hermite
+  later); empirical tonnage runs when a *volume source* exists: grid geometry
+  **or** a volume/tonnage-factor column. So GT works on points/drillholes too.
+- **Export** — any dataset (rows out; bbox/OBJ already generalized in phase 3).
+- **Import unifies** — every dataset's import panel runs grid-detection and
+  shows the geometry section *iff* a grid is found. "Import Block Model" stops
+  being special; it's an import that detected a grid. (Merging today's rich
+  model-preflight with aux-import is the biggest new surface — Phase 4f.)
+- **Section** — ground-up redesign, out of scope here.
+
+**The clean separation (the consistency payoff):**
+
+| Lives on… | What |
+|---|---|
+| **Property** (global) | name, color, unit, scale, value-colors, membership |
+| **Dataset** (global, per-ds) | facets (coords, grid), filter, calcols, column-roles (weight/density/volume) |
+| **Panel instance** (per-view) | which datasets visible, **reference**, which properties, grid source, params, title |
+
+You never re-decide *meaning* per panel — only *visibility*. That is what lets
+several Stats/Swath copies coexist without contradicting each other.
+
+**Decisions (Arthur, 2026-06-13):** D1 properties replace `vars`+`pairs` (display
+on the property) — YES. D2 de-privilege fully (no kind, feature-detect) — YES,
+designing for N grids, ship single-grid first to bound the release. D3 this is a
+new track and grows the release (a bigger A10 before tag) — YES. D4 reference is
+per-panel-instance, no global ★ — YES. D5 GT/Export feature-detect, not grid-
+locked — YES.
+
+---
+
 ## Where we already are
 
 The C1a catalog anticipated this deliberately:
@@ -29,6 +111,11 @@ across auxtab.js, statistics.js, swath.js, gt.js, topcut.js, drillhole.js,
 tree.js, project.js (persistence + pack), ctxmenu.js.
 
 ## Data model
+
+> ⚠ SUPERSEDED by the Converged model — no `kind`/`model`; grid geometry is an
+> optional dataset facet; no `referenceId` (reference is per-panel). The
+> registry shape (`datasets[]` of `{id, file, preflight, complete, filter,
+> calcolCode, …}`) otherwise stands.
 
 ```js
 // the registry (replaces the aux singleton)
@@ -58,6 +145,9 @@ referenceId = 'd2'   // the measurement standard — see Reference semantics
 
 ### Reference semantics (the key product decision)
 
+> ⚠ SUPERSEDED by the Converged model — there is **no global reference ★**;
+> the reference is per-panel-instance state (each Stats copy picks its own).
+
 Today "aux" plays two roles at once: *comparison series* and *measurement
 standard* (Δ% denominators, theoretical-GT source distribution, declustering
 target). With N datasets these separate:
@@ -76,6 +166,10 @@ target). With N datasets these separate:
   statistically/spatially, never re-exported.
 
 ### Pairing generalizes hub-and-spoke
+
+> ⚠ SUPERSEDED by the Converged model — there is **no hub**. Pairing becomes
+> **properties** (named equivalence classes over `(ds,column)`); a pair is just
+> a 2-member property, an unmatched column a singleton.
 
 `catalog.pairs` today maps aux-name → model-name. It becomes per-dataset:
 `catalog.pairs[dsId][name] → model name | null`. The model stays the hub —
@@ -135,9 +229,22 @@ Each dataset panel carries a summary appropriate to its kind:
 | 1 | **Dataset panel as a C9 instance**: factor the aux sidebar/config into an instance keyed by dataset id (scoped DOM, no unique ids); Preflight → "Import Block Model" = the model's instance; register with the workspace so it docks/closes/reopens |
 | 2 | **Menu add + tree registry**: Data ▸ Add point/drillhole; tree row actions (Open config / ★ reference / Remove); reopen via tree ctx menu + View ▸ Panels; second point dataset loadable |
 | 3 | **Per-dataset summary**: bbox modes + Export OBJ + C6-5 health for point/drillhole; model keeps geometry |
-| 4 | **N datasets live**: stats/CDF/swath/GT iterate `datasets`; reference-★ semantics (Δ% under reference, theo/declus/top-cut follow ★); soft cap 4 |
+| 4a | **Properties layer**: `catalog.properties` (named equivalence classes over `(ds,column)`); display (color/unit/scale/value-colors) moves onto the property; auto-seed by name; merge/rename/split popover. Subsumes `catalog.vars`+`pairs` (singleton = unmatched, pair = 2-member). The keystone — everything below depends on it |
+| 4b | **De-privilege model**: drop `kind`; grid geometry becomes an optional dataset facet; replace `id==='model'` checks with feature-detection. Reference-hub + gridded/point split removed |
+| 4c | **Per-panel selection**: dataset chips × property checkboxes on Stats/CDF/Swath/Categories; progressive disclosure at 3+ datasets |
+| 4d | **Per-panel reference**: Δ% denominator is instance state (no global ★); each Stats copy picks its own reference |
+| 4e | **Multi-instance spawn**: tab-strip `[+]` / Duplicate; scope-derived titles; instance state `{datasets, reference, properties, params, title}` serialized (C9 contract) |
+| 4f | **Import unification**: grid-detect any dataset's import; geometry section conditional; "Import Block Model" stops being special |
+| 4g | **GT feature-detect**: theoretical curve any dataset; empirical tonnage when a volume source exists (grid geometry OR volume/tonnage column) |
+| 4h | **Export generalize**: any dataset (rows / bbox / OBJ) |
 | 5 | **Drillhole sets as instances** (multiple), per-dataset declustering/top-cut targeting |
-| 6 | **Persistence + pack** (`datasets` key, `referenceId`, legacy `aux`/`drillholes` migration; C8-shaped); smoke `a10-smoke.js`; **manuals regen (both languages) → RELEASE** |
+| 6 | **Persistence + pack** (`datasets` + `properties` keys, legacy `aux`/`drillholes`/`vars`/`pairs` migration; C8-shaped; un-drop `d*` tabs in layout sanitize); persistence smoke; **manuals regen (both languages) → RELEASE** |
+
+> Phase 4 was a single "N datasets live, reference-★, iterate `datasets`" row;
+> the 2026-06-13 converged model expanded it into 4a–4h (properties, peers,
+> per-panel selection + reference, spawn, import-unify, GT/Export feature-detect).
+> See the **Converged model** section at the top. Granularity here mirrors
+> `docs/roadmap-tracker.csv`.
 
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
@@ -280,6 +387,10 @@ the surface (tab → tree + instance panels) is superseded by the above.
 | 3 | Smoke (`a10-smoke.js`: 3 datasets incl. one drillhole-derived, ★ switch, Δ% follows, restore round-trip), manuals |
 
 ## Decisions (proposed defaults — Arthur to veto)
+
+> ⚠ SUPERSEDED — see the dated decisions in the Converged model section. D1
+> (model is the hub) is REVERSED; D2 (cap 4) stands; D3 (declus/top-cut default
+> to reference) becomes "default to a per-panel choice".
 
 - **D1**: model is always the hub/Δ% subject; reference is the denominator.
   Model-vs-model = previous model loaded as point dataset. *(default: yes)*
