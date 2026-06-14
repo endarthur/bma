@@ -193,16 +193,35 @@ Phase-1g slices:
   delta-row/drillhole/gt-theo/logprob/tree/sidebar-scroll + a9/empty-col/rails/c6);
   worker.js untouched. (topcut-smoke's two direct `auxTopcutCappedStats(c)` calls
   updated to pass the state object — the only smoke change.)
-- **1g-c (instances live)** — `renderPanel` dispatch: data → tree; `wsPanelById`
-  → static singleton (incl. aux); else `dsById(tab.id)` → `wsBuildDatasetPanel(ds)`
-  (clone a **config-shell template** — scoped, no unique ids, no dh card; set
-  `root.dataset.ds=id`; `wireDatasetPanel(root, ds)`; initial `renderAuxConfig(ds,
-  root)`). `onPanelDestroy` guards: re-home only `wsPanelById` singletons; a clone
-  is just discarded (state survives in `ds`). "Add point dataset" = `dsCreate` +
-  `loadAuxFile(...)` into the new ds + `addTab({id, title:'Import: '+prefix})`.
-  Add `a10-smoke.js` proving two point datasets coexist + analyze independently.
-  Instance tabs are NOT persisted until phase 6 (wsApplyLayout sanitize drops a
-  `d*` tab whose dataset is absent on restore).
+- **1g-c ✅ (42379c3) — PHASE 1 COMPLETE** — instances live. `renderPanel`
+  dispatch: data → tree; `wsPanelById` → static singleton (incl. aux); else
+  `dsById(tab.id)` → `wsBuildDatasetPanel(ds)` (clones **#panelAux**, strips
+  every id so the panel resolves DOM by data-aux/data-act via auxQ, drops the
+  drillhole card, tags `data-ds=<id>`, adds `.active`, `wireDatasetPanel(el,
+  ds)`, initial `renderAuxConfig`/`renderAuxFromMain(ds, el)`). `onPanelDestroy`
+  (`wsRehomePanel`) re-homes only the singletons + tree; instance clones are
+  discarded (state survives on the ds). Per-ds workers: `auxWorker`/
+  `auxDeclusWorker`/`auxTopcutWorker` globals → `ds._worker`/`_declusWorker`/
+  `_topcutWorker` (the 3 globals deleted from core.js). New workspace fns:
+  `wsAddPointDataset` (Data ▸ Add point dataset → `dsCreate`+`dsAdd`+`addTab`+
+  activate the empty import panel; the panel's own dropzone loads the file —
+  the file gesture happens IN the panel, not a pre-picker), `wsRemoveInstance`
+  (terminate workers + `closeTab` + `dsRemove` + refresh), `wsSetDatasetTabTitle`
+  (`updateTab` title tracks the prefix); `wsActivateInRails` rebuilds a closed
+  instance; `wsSyncLegacyTabbar` no-ops on instance ids (no legacy button) so
+  `getActiveTabId` stays stable. auxtab.js: the panel ✕ REMOVES an instance
+  (vs RESET for aux), `loadAuxFile` seeds an instance prefix from the filename +
+  sets the title, `renderDhProvenance` stays aux-only (drillhole instances are
+  phase 5). ctxmenu.js: tree dataset/variable menus open `showPanel(ds)` for
+  instances + Remove via `wsRemoveInstance`, labels use the ds prefix. Instance
+  tabs NOT persisted yet — `wsSanitizeLayout` already drops any tab id not in
+  `WS_PANELS` on restore (phase 6 adds real persistence). **Consumers
+  (Statistics/CDF/Swath/GT) still read the aux singleton — iterating `datasets[]`
+  is phase 4.** worker.js untouched. Smoke `experiments/a10-smoke.js` (20
+  asserts): aux + a d2 instance coexist + analyze INDEPENDENTLY (560/5760
+  concurrently, separate worker handles), clone has no dup ids/no dh card,
+  prefix→title, d2 in the tree, close→reopen survives (clone discarded, ds
+  state kept), Remove drops cleanly. Full aux suite green.
 
 Note on the older "scope to class selectors / migrate ~8 files" sketch: the
 phase-1 DOM scoping used **data-act/data-aux + the auxQ root** (not bare classes);
