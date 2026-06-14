@@ -92,16 +92,18 @@ function renderAuxConfig(ds, root) {
 
   renderAuxPreview(ds, root);
   if (typeof renderAuxView === 'function') renderAuxView(ds, root);
-  // drillhole-derived aux: provenance banner + report/re-composite links (A7)
-  if (typeof renderDhProvenance === 'function') renderDhProvenance();
+  // drillhole-derived aux: provenance banner + report/re-composite links (A7).
+  // Drillhole sets are aux-scoped until phase 5, so only the singleton aux's
+  // panel carries the banner (renderDhProvenance resolves the singleton head).
+  if (ds.id === 'aux' && typeof renderDhProvenance === 'function') renderDhProvenance();
 }
 
 function runAuxAnalysis(ds, root) {
   ds = ds || dsById('aux');
   root = root || dsConfigRoot(ds);
   if (!ds.file || !ds.preflight) return;
-  if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
-  auxWorker = new Worker(workerUrl);
+  if (ds._worker) { try { ds._worker.terminate(); } catch (e) {} ds._worker = null; }
+  ds._worker = new Worker(workerUrl);
 
   var $btn = auxQ('[data-act="auxAnalyze"]', root);
   var $status = auxQ('[data-aux="analyzeStatus"]', root);
@@ -111,7 +113,7 @@ function runAuxAnalysis(ds, root) {
   function fail(msg) {
     if ($btn) $btn.disabled = false;
     if ($status) { $status.textContent = 'Error: ' + msg; $status.style.color = 'var(--red)'; }
-    if (auxWorker) { auxWorker.terminate(); auxWorker = null; }
+    if (ds._worker) { ds._worker.terminate(); ds._worker = null; }
   }
 
   var xyz = ds.preflight.xyz || { x: -1, y: -1, z: -1 };
@@ -131,7 +133,7 @@ function runAuxAnalysis(ds, root) {
     if (ds.declus.fingerprint !== auxDeclusFingerprintNow(ds)) { fail('Aux config changed since declustering — re-run Declustering.'); return; }
     declusWeights = ds.declus.weights;
   }
-  auxWorker.postMessage({
+  ds._worker.postMessage({
     file: ds.file,
     xyzOverride: xyz.x >= 0 && xyz.y >= 0 && xyz.z >= 0 ? xyz : null,
     filter: ds.filter ? { expression: ds.filter.expression } : null,
@@ -152,8 +154,8 @@ function runAuxAnalysis(ds, root) {
     weightArrayLabel: declusWeights ? 'declustered (cell ' + formatNum(ds.declus.optCellSize) + ')' : null
   });
 
-  auxWorker.onerror = function(e) { fail(e.message || 'unknown error'); };
-  auxWorker.onmessage = function(e) {
+  ds._worker.onerror = function(e) { fail(e.message || 'unknown error'); };
+  ds._worker.onmessage = function(e) {
     var m = e.data;
     if (m.type === 'progress') {
       if ($status) $status.textContent = Math.min(99, m.percent).toFixed(0) + '%';
@@ -170,8 +172,8 @@ function runAuxAnalysis(ds, root) {
       if ($btn) $btn.disabled = false;
       if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]', root), false);  // C6-5 dim-when-done
       if ($status) { $status.textContent = m.rowCount.toLocaleString() + ' rows analyzed'; $status.style.color = ''; }
-      auxWorker.terminate();
-      auxWorker = null;
+      ds._worker.terminate();
+      ds._worker = null;
       if (typeof applyStatsAuxRestore === 'function') applyStatsAuxRestore();
       if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
         renderStatsSidebar();
@@ -318,6 +320,8 @@ function onAuxConfigChange(e, ds, root) {
   var sidebar = auxQ('[data-aux="sidebar"]', root);
   var hint = sidebar && sidebar.querySelector('.pf-sidebar-section .aux-hint code');
   if (hint && p) hint.textContent = (ds.prefix || 'aux') + ':Fe';
+  // A10 1g-c: an instance's tab title tracks its prefix
+  if (typeof wsSetDatasetTabTitle === 'function') wsSetDatasetTabTitle(ds);
   // Keep the swath sidebar's aux rows in sync (prefix labels, xyz exclusions);
   // check/unit state is preserved by name across the rebuild
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
@@ -557,7 +561,7 @@ function runAuxDeclus(ds, root) {
   function dfail(msg) {
     if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
     if ($runBtn) $runBtn.disabled = false;
-    if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
+    if (ds._declusWorker) { try { ds._declusWorker.terminate(); } catch (e) {} ds._declusWorker = null; }
   }
   var xyz = ds.preflight.xyz || { x: -1, y: -1, z: -1 };
   if (xyz.x < 0 || xyz.y < 0) { dfail('Assign X and Y coordinates first (Z optional).'); return; }
@@ -565,12 +569,12 @@ function runAuxDeclus(ds, root) {
   if (!params.varName) { dfail('No numeric variable to decluster on.'); return; }
   if (params.cellMin !== null && params.cellMax !== null && params.cellMax < params.cellMin) { dfail('Cell max must be ≥ cell min.'); return; }
 
-  if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} }
-  auxDeclusWorker = new Worker(workerUrl);
+  if (ds._declusWorker) { try { ds._declusWorker.terminate(); } catch (e) {} }
+  ds._declusWorker = new Worker(workerUrl);
   if ($st) { $st.textContent = '0%'; $st.style.color = ''; }
   if ($runBtn) $runBtn.disabled = true;
 
-  auxDeclusWorker.postMessage({
+  ds._declusWorker.postMessage({
     mode: 'declus',
     file: ds.file,
     zipEntry: ds.preflight.selectedZipEntry || null,
@@ -589,16 +593,16 @@ function runAuxDeclus(ds, root) {
     dmEndianness: ds.preflight.dmEndianness || null,
     dmFormat: ds.preflight.dmFormat || null
   });
-  auxDeclusWorker.onerror = function(e) { dfail(e.message || 'unknown error'); };
-  auxDeclusWorker.onmessage = function(e) {
+  ds._declusWorker.onerror = function(e) { dfail(e.message || 'unknown error'); };
+  ds._declusWorker.onmessage = function(e) {
     var m = e.data;
     if (m.type === 'declus-progress') {
       if ($st) $st.textContent = Math.min(99, m.percent).toFixed(0) + '%';
     } else if (m.type === 'error') {
       dfail(m.message);
     } else if (m.type === 'declus-complete') {
-      auxDeclusWorker.terminate();
-      auxDeclusWorker = null;
+      ds._declusWorker.terminate();
+      ds._declusWorker = null;
       ds.declus = {
         params: params,
         weights: m.weights, n: m.n, located: m.located,
@@ -696,7 +700,13 @@ function loadAuxFile(file, handle, zipEntryName, ds, root) {
       }
       applyAuxRestore(savedAux, ds);
     }
+    // A10 1g-c: instance datasets seed their display prefix from the filename
+    // (the singleton aux keeps its 'aux' default — bit-identical behavior).
+    if (ds.id !== 'aux' && ds.id !== 'model' && (!ds.prefix || ds.prefix === 'data')) {
+      ds.prefix = (file.name || 'data').replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '').slice(0, 24) || 'data';
+    }
     renderAuxConfig(ds, root);
+    if (typeof wsSetDatasetTabTitle === 'function') wsSetDatasetTabTitle(ds);
     if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
     if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
     if (typeof autoSaveProject === 'function') autoSaveProject();
@@ -731,12 +741,12 @@ function clearAux(ds, root) {
   ds.calcolMeta = [];
   catSetRole(ds.id, 'weight', null);
   ds.declus = null;
-  if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
+  if (ds._declusWorker) { try { ds._declusWorker.terminate(); } catch (e) {} ds._declusWorker = null; }
   ds.topcut = null;
   ds.view = 'preview';
-  if (typeof auxTopcutWorker !== 'undefined' && auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} auxTopcutWorker = null; }
+  if (ds._topcutWorker) { try { ds._topcutWorker.terminate(); } catch (e) {} ds._topcutWorker = null; }
   if (typeof renderAuxView === 'function') renderAuxView(ds, root);
-  if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
+  if (ds._worker) { try { ds._worker.terminate(); } catch (e) {} ds._worker = null; }
   if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
   var configEl = auxQ('[data-aux="config"]', root);
   if (configEl) configEl.style.display = 'none';
@@ -868,7 +878,12 @@ function wireDatasetPanel(root, ds) {
   }
 
   var clearBtn = auxQ('[data-aux="clear"]', root);
-  if (clearBtn) clearBtn.addEventListener('click', function() { clearAux(ds, root); });
+  if (clearBtn) clearBtn.addEventListener('click', function() {
+    // The singleton aux RESETS to its empty state (clearAux); an instance
+    // (d2+) is fully REMOVED — tab closed + dropped from the registry (1g-c).
+    if (ds.id !== 'aux' && ds.id !== 'model' && typeof wsRemoveInstance === 'function') wsRemoveInstance(ds);
+    else clearAux(ds, root);
+  });
 
   // Top-cut + view-toggle listeners live in topcut.js (loaded later)
   if (typeof wireDatasetTopcut === 'function') wireDatasetTopcut(root, ds);

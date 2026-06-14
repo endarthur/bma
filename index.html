@@ -5788,7 +5788,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 1dad8ad — click to check for updates">1dad8ad</div>
+<div class="build-badge" id="buildBadge" title="build c6cee8f — click to check for updates">c6cee8f</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8284,7 +8284,9 @@ let auxCompleteData = null;    // snapshot of the last aux analysis (parallel to
 let auxData = null;            // aux stats object for comparison rendering
 let auxPrefix = 'aux';         // display-only label prefix for aux pseudo-columns (e.g. "aux:Fe")
 let auxFilter = null;          // { expression } — references aux columns via the fixed AUX_ROW_VAR handle
-let auxWorker = null;          // worker handle for the aux analysis pass
+// A10 1g-c: the analysis/declus/topcut worker handles live PER-DATASET on the
+// ds object (ds._worker / ds._declusWorker / ds._topcutWorker) so instance
+// datasets analyze concurrently without clobbering each other's worker.
 let pendingAuxRestore = null;  // aux config from a loaded project, applied once the aux file is (re)loaded
 const AUX_ROW_VAR = 'aux';     // fixed code handle for aux filter/calc expressions (NOT the display prefix)
 let auxStale = false;              // aux config changed since last aux analysis
@@ -8298,12 +8300,10 @@ const AUX_DECLUS_WEIGHT = '__declus__'; // aux weight sentinel: use computed dec
 let auxDeclus = null;              // cell-declustering state: { params, weights (Float64Array|null),
                                    //   curve, optCellSize, declusteredMean, naiveMean, n, located,
                                    //   wtMin, wtMax, usedRange, fingerprint } — weights NOT persisted
-let auxDeclusWorker = null;        // worker handle for the declustering pass
 let auxView = 'preview';           // aux main-area view: 'preview' | 'topcut'
 let auxTopcut = null;              // top-cut analysis state: { varName, cap, values (sorted
                                    //   Float64Array)|null, prefixS, prefixSS, n, finite,
                                    //   fingerprint } — values NOT persisted (re-loaded on demand)
-let auxTopcutWorker = null;        // worker handle for the column-values pass
 let statsAuxSelected = null;       // Set of aux col indices shown in the stats table (null = defaults)
 let statsCdfAuxSelected = new Set(); // aux col indices with CDF curves
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes
@@ -14499,16 +14499,18 @@ function renderAuxConfig(ds, root) {
 
   renderAuxPreview(ds, root);
   if (typeof renderAuxView === 'function') renderAuxView(ds, root);
-  // drillhole-derived aux: provenance banner + report/re-composite links (A7)
-  if (typeof renderDhProvenance === 'function') renderDhProvenance();
+  // drillhole-derived aux: provenance banner + report/re-composite links (A7).
+  // Drillhole sets are aux-scoped until phase 5, so only the singleton aux's
+  // panel carries the banner (renderDhProvenance resolves the singleton head).
+  if (ds.id === 'aux' && typeof renderDhProvenance === 'function') renderDhProvenance();
 }
 
 function runAuxAnalysis(ds, root) {
   ds = ds || dsById('aux');
   root = root || dsConfigRoot(ds);
   if (!ds.file || !ds.preflight) return;
-  if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
-  auxWorker = new Worker(workerUrl);
+  if (ds._worker) { try { ds._worker.terminate(); } catch (e) {} ds._worker = null; }
+  ds._worker = new Worker(workerUrl);
 
   var $btn = auxQ('[data-act="auxAnalyze"]', root);
   var $status = auxQ('[data-aux="analyzeStatus"]', root);
@@ -14518,7 +14520,7 @@ function runAuxAnalysis(ds, root) {
   function fail(msg) {
     if ($btn) $btn.disabled = false;
     if ($status) { $status.textContent = 'Error: ' + msg; $status.style.color = 'var(--red)'; }
-    if (auxWorker) { auxWorker.terminate(); auxWorker = null; }
+    if (ds._worker) { ds._worker.terminate(); ds._worker = null; }
   }
 
   var xyz = ds.preflight.xyz || { x: -1, y: -1, z: -1 };
@@ -14538,7 +14540,7 @@ function runAuxAnalysis(ds, root) {
     if (ds.declus.fingerprint !== auxDeclusFingerprintNow(ds)) { fail('Aux config changed since declustering — re-run Declustering.'); return; }
     declusWeights = ds.declus.weights;
   }
-  auxWorker.postMessage({
+  ds._worker.postMessage({
     file: ds.file,
     xyzOverride: xyz.x >= 0 && xyz.y >= 0 && xyz.z >= 0 ? xyz : null,
     filter: ds.filter ? { expression: ds.filter.expression } : null,
@@ -14559,8 +14561,8 @@ function runAuxAnalysis(ds, root) {
     weightArrayLabel: declusWeights ? 'declustered (cell ' + formatNum(ds.declus.optCellSize) + ')' : null
   });
 
-  auxWorker.onerror = function(e) { fail(e.message || 'unknown error'); };
-  auxWorker.onmessage = function(e) {
+  ds._worker.onerror = function(e) { fail(e.message || 'unknown error'); };
+  ds._worker.onmessage = function(e) {
     var m = e.data;
     if (m.type === 'progress') {
       if ($status) $status.textContent = Math.min(99, m.percent).toFixed(0) + '%';
@@ -14577,8 +14579,8 @@ function runAuxAnalysis(ds, root) {
       if ($btn) $btn.disabled = false;
       if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]', root), false);  // C6-5 dim-when-done
       if ($status) { $status.textContent = m.rowCount.toLocaleString() + ' rows analyzed'; $status.style.color = ''; }
-      auxWorker.terminate();
-      auxWorker = null;
+      ds._worker.terminate();
+      ds._worker = null;
       if (typeof applyStatsAuxRestore === 'function') applyStatsAuxRestore();
       if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
         renderStatsSidebar();
@@ -14725,6 +14727,8 @@ function onAuxConfigChange(e, ds, root) {
   var sidebar = auxQ('[data-aux="sidebar"]', root);
   var hint = sidebar && sidebar.querySelector('.pf-sidebar-section .aux-hint code');
   if (hint && p) hint.textContent = (ds.prefix || 'aux') + ':Fe';
+  // A10 1g-c: an instance's tab title tracks its prefix
+  if (typeof wsSetDatasetTabTitle === 'function') wsSetDatasetTabTitle(ds);
   // Keep the swath sidebar's aux rows in sync (prefix labels, xyz exclusions);
   // check/unit state is preserved by name across the rebuild
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
@@ -14964,7 +14968,7 @@ function runAuxDeclus(ds, root) {
   function dfail(msg) {
     if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
     if ($runBtn) $runBtn.disabled = false;
-    if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
+    if (ds._declusWorker) { try { ds._declusWorker.terminate(); } catch (e) {} ds._declusWorker = null; }
   }
   var xyz = ds.preflight.xyz || { x: -1, y: -1, z: -1 };
   if (xyz.x < 0 || xyz.y < 0) { dfail('Assign X and Y coordinates first (Z optional).'); return; }
@@ -14972,12 +14976,12 @@ function runAuxDeclus(ds, root) {
   if (!params.varName) { dfail('No numeric variable to decluster on.'); return; }
   if (params.cellMin !== null && params.cellMax !== null && params.cellMax < params.cellMin) { dfail('Cell max must be ≥ cell min.'); return; }
 
-  if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} }
-  auxDeclusWorker = new Worker(workerUrl);
+  if (ds._declusWorker) { try { ds._declusWorker.terminate(); } catch (e) {} }
+  ds._declusWorker = new Worker(workerUrl);
   if ($st) { $st.textContent = '0%'; $st.style.color = ''; }
   if ($runBtn) $runBtn.disabled = true;
 
-  auxDeclusWorker.postMessage({
+  ds._declusWorker.postMessage({
     mode: 'declus',
     file: ds.file,
     zipEntry: ds.preflight.selectedZipEntry || null,
@@ -14996,16 +15000,16 @@ function runAuxDeclus(ds, root) {
     dmEndianness: ds.preflight.dmEndianness || null,
     dmFormat: ds.preflight.dmFormat || null
   });
-  auxDeclusWorker.onerror = function(e) { dfail(e.message || 'unknown error'); };
-  auxDeclusWorker.onmessage = function(e) {
+  ds._declusWorker.onerror = function(e) { dfail(e.message || 'unknown error'); };
+  ds._declusWorker.onmessage = function(e) {
     var m = e.data;
     if (m.type === 'declus-progress') {
       if ($st) $st.textContent = Math.min(99, m.percent).toFixed(0) + '%';
     } else if (m.type === 'error') {
       dfail(m.message);
     } else if (m.type === 'declus-complete') {
-      auxDeclusWorker.terminate();
-      auxDeclusWorker = null;
+      ds._declusWorker.terminate();
+      ds._declusWorker = null;
       ds.declus = {
         params: params,
         weights: m.weights, n: m.n, located: m.located,
@@ -15103,7 +15107,13 @@ function loadAuxFile(file, handle, zipEntryName, ds, root) {
       }
       applyAuxRestore(savedAux, ds);
     }
+    // A10 1g-c: instance datasets seed their display prefix from the filename
+    // (the singleton aux keeps its 'aux' default — bit-identical behavior).
+    if (ds.id !== 'aux' && ds.id !== 'model' && (!ds.prefix || ds.prefix === 'data')) {
+      ds.prefix = (file.name || 'data').replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '').slice(0, 24) || 'data';
+    }
     renderAuxConfig(ds, root);
+    if (typeof wsSetDatasetTabTitle === 'function') wsSetDatasetTabTitle(ds);
     if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
     if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
     if (typeof autoSaveProject === 'function') autoSaveProject();
@@ -15138,12 +15148,12 @@ function clearAux(ds, root) {
   ds.calcolMeta = [];
   catSetRole(ds.id, 'weight', null);
   ds.declus = null;
-  if (auxDeclusWorker) { try { auxDeclusWorker.terminate(); } catch (e) {} auxDeclusWorker = null; }
+  if (ds._declusWorker) { try { ds._declusWorker.terminate(); } catch (e) {} ds._declusWorker = null; }
   ds.topcut = null;
   ds.view = 'preview';
-  if (typeof auxTopcutWorker !== 'undefined' && auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} auxTopcutWorker = null; }
+  if (ds._topcutWorker) { try { ds._topcutWorker.terminate(); } catch (e) {} ds._topcutWorker = null; }
   if (typeof renderAuxView === 'function') renderAuxView(ds, root);
-  if (auxWorker) { try { auxWorker.terminate(); } catch (e) {} auxWorker = null; }
+  if (ds._worker) { try { ds._worker.terminate(); } catch (e) {} ds._worker = null; }
   if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
   var configEl = auxQ('[data-aux="config"]', root);
   if (configEl) configEl.style.display = 'none';
@@ -15275,7 +15285,12 @@ function wireDatasetPanel(root, ds) {
   }
 
   var clearBtn = auxQ('[data-aux="clear"]', root);
-  if (clearBtn) clearBtn.addEventListener('click', function() { clearAux(ds, root); });
+  if (clearBtn) clearBtn.addEventListener('click', function() {
+    // The singleton aux RESETS to its empty state (clearAux); an instance
+    // (d2+) is fully REMOVED — tab closed + dropped from the registry (1g-c).
+    if (ds.id !== 'aux' && ds.id !== 'model' && typeof wsRemoveInstance === 'function') wsRemoveInstance(ds);
+    else clearAux(ds, root);
+  });
 
   // Top-cut + view-toggle listeners live in topcut.js (loaded later)
   if (typeof wireDatasetTopcut === 'function') wireDatasetTopcut(root, ds);
@@ -15974,9 +15989,10 @@ function dhReset() {
 // the plots are the evidence, the user moves the line. Applying a cap is a
 // one-click calcol (cap() already lives in the Math preamble).
 //
-// A10 phase 1g-b: parameterized by (ds, root) like auxtab.js. The svg
+// A10 phase 1g-b/c: parameterized by (ds, root) like auxtab.js. The svg
 // builders take the topcut state object t (= ds.topcut) directly; the worker
-// handle (auxTopcutWorker) stays global for the single aux dataset.
+// handle lives per-dataset on ds._topcutWorker (1g-c) so instances analyze
+// concurrently.
 
 function auxTopcutFingerprintNow(ds) {
   ds = ds || dsById('aux');
@@ -16365,7 +16381,7 @@ function loadAuxTopcut(ds, root) {
   var $st = auxQ('[data-aux="topcutStatus"]', root);
   function tfail(msg) {
     if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
-    if (auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} auxTopcutWorker = null; }
+    if (ds._topcutWorker) { try { ds._topcutWorker.terminate(); } catch (e) {} ds._topcutWorker = null; }
   }
   // Declustered mode: weights ride per-row, fingerprint-gated like every
   // other consumer of the declus weights
@@ -16375,10 +16391,10 @@ function loadAuxTopcut(ds, root) {
     if (typeof auxDeclusFresh === 'function' && auxDeclusFresh(ds)) declusWeights = ds.declus.weights;
     else { tfail('declustered weights missing or stale — run Declustering on the sidebar'); return; }
   }
-  if (auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} }
-  auxTopcutWorker = new Worker(workerUrl);
+  if (ds._topcutWorker) { try { ds._topcutWorker.terminate(); } catch (e) {} }
+  ds._topcutWorker = new Worker(workerUrl);
   if ($st) { $st.textContent = '0%'; $st.style.color = ''; }
-  auxTopcutWorker.postMessage({
+  ds._topcutWorker.postMessage({
     mode: 'colvalues',
     file: ds.file,
     zipEntry: ds.preflight.selectedZipEntry || null,
@@ -16392,16 +16408,16 @@ function loadAuxTopcut(ds, root) {
     dmEndianness: ds.preflight.dmEndianness || null,
     dmFormat: ds.preflight.dmFormat || null
   });
-  auxTopcutWorker.onerror = function(e) { tfail(e.message || 'unknown error'); };
-  auxTopcutWorker.onmessage = function(e) {
+  ds._topcutWorker.onerror = function(e) { tfail(e.message || 'unknown error'); };
+  ds._topcutWorker.onmessage = function(e) {
     var msg = e.data;
     if (msg.type === 'colvalues-progress') {
       if ($st) $st.textContent = Math.min(99, msg.percent).toFixed(0) + '%';
     } else if (msg.type === 'error') {
       tfail(msg.message);
     } else if (msg.type === 'colvalues-complete') {
-      auxTopcutWorker.terminate();
-      auxTopcutWorker = null;
+      ds._topcutWorker.terminate();
+      ds._topcutWorker = null;
       if (msg.finite < 2) { tfail('Not enough numeric values.'); return; }
       var m = msg.values.length;
       // Prefix sums of w, w·v, w·v² (w = 1 in raw mode)
@@ -28274,13 +28290,19 @@ CTX_PROVIDERS.push(function datasetProvider(e) {
   var key = sum.parentElement.dataset.key || '';
   if (key.indexOf('ds:') !== 0) return null;
   var ds = key.slice(3);
+  var dsObj = (typeof dsById === 'function') ? dsById(ds) : null;
+  var dsLabel = ds === 'model' ? 'Model' : ((dsObj && dsObj.prefix) || auxPrefix || 'aux');
   var items = [
-    { head: true, label: ds === 'model' ? 'Model' : (auxPrefix || 'aux') },
-    { label: 'Open import panel', action: function() { showPanel(ds === 'model' ? 'preflight' : 'aux'); } }
+    { head: true, label: dsLabel },
+    // A10 1g-c: instance ids open their own panel (showPanel(ds) → activate-or-rebuild)
+    { label: 'Open import panel', action: function() { showPanel(ds === 'model' ? 'preflight' : ds); } }
   ];
   if (ds === 'aux' && typeof clearAux === 'function') {
     items.push({ sep: true });
     items.push({ label: 'Remove dataset', danger: true, action: function() { clearAux(); } });
+  } else if (ds !== 'model' && dsObj && typeof wsRemoveInstance === 'function') {
+    items.push({ sep: true });
+    items.push({ label: 'Remove dataset', danger: true, action: function() { wsRemoveInstance(dsObj); } });
   }
   return items;
 });
@@ -28289,14 +28311,15 @@ CTX_PROVIDERS.push(function variableProvider(e) {
   var v = ctxResolveVariable(e);
   if (!v || !v.name) return null;
   var x = e.clientX, y = e.clientY;
-  var items = [{ head: true, label: (v.ds === 'model' ? 'Model' : (auxPrefix || 'aux')) + ':' + v.name }];
+  var vDsLabel = v.ds === 'model' ? 'Model' : ((typeof dsById === 'function' && dsById(v.ds) && dsById(v.ds).prefix) || auxPrefix || 'aux');
+  var items = [{ head: true, label: vDsLabel + ':' + v.name }];
 
   // Coordinate rows: axis info + where to change it (C6-0 — these rows
   // previously fell through to the native browser menu)
   if (v.kind === 'coord') {
     items[0].label += ' — ' + (v.axis || '?') + ' axis';
     items.push({ label: 'Change axis assignment…', action: function() {
-      showPanel(v.ds === 'aux' ? 'aux' : 'preflight');
+      showPanel(v.ds === 'model' ? 'preflight' : v.ds);
     } });
     items.push({ label: 'Copy column name', action: function() {
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v.name);
@@ -29013,13 +29036,21 @@ function showPanel(tabId) {
 function wsActivateInRails(tabId) {
   if (!wsRails) return;
   if (findTab(wsRails.state, tabId)) { wsRails.activateTab(tabId); return; }
-  // Closed panel: re-add it to the main workspace. Panels are singletons —
-  // renderPanel re-fetches the same element it re-homed at close.
+  // Closed singleton panel: re-add it to the main workspace. Singletons are
+  // re-homed at close, so renderPanel re-fetches the same element.
   var p = wsPanelById(tabId);
-  if (!p) return;
-  wsRails.addTab({ id: p.id, title: p.title }, wsMainTarget());
-  wsSyncBadgesFromLegacy();
-  wsSyncLegacyTabbar(tabId); // addTab activates without emitting tab:activate
+  if (p) {
+    wsRails.addTab({ id: p.id, title: p.title }, wsMainTarget());
+    wsSyncBadgesFromLegacy();
+    wsSyncLegacyTabbar(tabId); // addTab activates without emitting tab:activate
+    return;
+  }
+  // Closed dataset INSTANCE (d2+): renderPanel rebuilds its panel from the ds
+  // (A10 1g-c — state lives in the ds object, the clone is throwaway).
+  var ds = (typeof dsById === 'function') ? dsById(tabId) : null;
+  if (ds && ds.kind !== 'model') {
+    wsRails.addTab({ id: ds.id, title: 'Import: ' + (ds.prefix || 'data'), closeable: true }, wsMainTarget());
+  }
 }
 
 // Where re-added (or re-opened) tabs land: the first stack of the first
@@ -29078,6 +29109,10 @@ function wsDefaultLayout(activeId) {
 function wsRehomePanel(tab, wrapper) {
   var el = wrapper && wrapper.firstElementChild;
   if (!el) return;
+  // A10 1g-c: instance dataset panels (d2+) are throwaway clones — their state
+  // lives in the ds object and renderPanel rebuilds on reopen, so discard them
+  // (re-home only the static singletons + the tree).
+  if (tab.id !== 'data' && !wsPanelById(tab.id)) return;
   var main = document.getElementById('resultsMain');
   var panels = main ? main.querySelector('.results-panels') : null;
   if (!panels) return;
@@ -29085,13 +29120,101 @@ function wsRehomePanel(tab, wrapper) {
   else panels.appendChild(el);
 }
 
+// ─── A10 1g-c: dataset instance panels (d2+) ───────────────────────────────
+// The first comparison dataset is the singleton #panelAux; further datasets
+// (a 3rd/4th comparison — new vs composites vs previous model vs check) are
+// C9 instances: per-id panels cloned from #panelAux, dockable + closeable.
+// All per-dataset state lives in the ds registry object, so a closed instance
+// rebuilds from scratch on reopen (no preserveOnClose). renderPanel routes
+// instance ids here.
+
+// Build an instance's config panel. #panelAux is the template: clone it, strip
+// every id (no duplicates — the panel resolves DOM by data-aux/data-act via
+// auxQ), drop the drillhole card (drillhole sets are their own add path), tag
+// the root data-ds=<id>, and wire it for this ds.
+function wsBuildDatasetPanel(ds) {
+  var tmpl = document.getElementById('panelAux');
+  if (!tmpl || !ds) return null;
+  var el = tmpl.cloneNode(true);
+  el.removeAttribute('id');
+  el.dataset.ds = ds.id;
+  el.dataset.tab = ds.id;
+  el.classList.add('active');   // wrapper controls visibility; class keeps display rules
+  el.querySelectorAll('[id]').forEach(function(n) { n.removeAttribute('id'); });
+  var dh = el.querySelector('.dh-card');
+  if (dh) dh.remove();
+  var emptyEl = el.querySelector('[data-aux="empty"]');
+  var configEl = el.querySelector('[data-aux="config"]');
+  if (ds.preflight) {
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (configEl) configEl.style.display = '';
+  } else {
+    // Fresh instance: clear any state the clone copied from a loaded aux,
+    // show the empty import surface.
+    ['[data-aux="sidebar"]', '[data-aux="preview"]', '[data-aux="summaryView"]',
+     '[data-aux="topcutView"]', '[data-aux="fileInfo"]'].forEach(function(sel) {
+      var n = el.querySelector(sel); if (n) n.innerHTML = '';
+    });
+    if (emptyEl) emptyEl.style.display = '';
+    if (configEl) configEl.style.display = 'none';
+  }
+  if (typeof wireDatasetPanel === 'function') wireDatasetPanel(el, ds);
+  if (ds.preflight && typeof renderAuxConfig === 'function') renderAuxConfig(ds, el);
+  else if (typeof renderAuxFromMain === 'function') renderAuxFromMain(ds, el);
+  return el;
+}
+
+// Data ▸ Add point dataset… — spawn a new instance and activate its (empty)
+// import panel; the panel's own dropzone/picker loads the file into the ds.
+function wsAddPointDataset() {
+  if (!wsRails) {
+    // Legacy/mobile shell has no instance tabs — fall back to the singleton aux
+    showPanel('aux');
+    var afi = document.getElementById('auxFileInput');
+    if (afi) afi.click();
+    return;
+  }
+  if (typeof dsCreate !== 'function') return;
+  var ds = dsCreate({ prefix: 'data' });
+  dsAdd(ds);
+  wsRails.addTab({ id: ds.id, title: 'Import: ' + ds.prefix, closeable: true }, wsMainTarget());
+  wsRails.activateTab(ds.id);   // renderPanel → wsBuildDatasetPanel (empty import surface)
+}
+
+// Track the prefix in the tab title (loadAuxFile on load, onAuxConfigChange on edit)
+function wsSetDatasetTabTitle(ds) {
+  if (!wsRails || !ds || ds.id === 'aux' || ds.id === 'model') return;
+  if (findTab(wsRails.state, ds.id)) wsRails.updateTab(ds.id, { title: 'Import: ' + (ds.prefix || 'data') });
+}
+
+// Fully remove an instance: terminate its workers, close its tab (→
+// onPanelDestroy discards the clone), drop it from the registry, refresh the
+// dataset-listing views. (The singleton aux uses clearAux instead — reset, not remove.)
+function wsRemoveInstance(ds) {
+  if (!ds || ds.id === 'aux' || ds.id === 'model') return;
+  ['_worker', '_declusWorker', '_topcutWorker'].forEach(function(k) {
+    if (ds[k]) { try { ds[k].terminate(); } catch (e) {} ds[k] = null; }
+  });
+  if (wsRails && findTab(wsRails.state, ds.id)) wsRails.closeTab(ds.id);
+  if (typeof dsRemove === 'function') dsRemove(ds.id);
+  if (typeof refreshCatalogTree === 'function') refreshCatalogTree();
+  if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
+    renderStatsSidebar(); renderStatsTable(); renderStatsCdfPanel();
+  }
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+
 // Mirror the legacy tab bar's .active to the rails-focused panel — project
 // serialization (activeTab), getActiveTabId(), Alt+V and the smokes all
 // read `.results-tab.active`
 function wsSyncLegacyTabbar(tabId) {
-  $resultsTabs.querySelectorAll('.results-tab').forEach(function(t) {
-    t.classList.toggle('active', t.dataset.tab === tabId);
-  });
+  var tabs = $resultsTabs.querySelectorAll('.results-tab');
+  // Instance tabs (d2+) have no legacy button — leave the last real active in
+  // place so getActiveTabId() doesn't fall back while an instance is focused.
+  var hasBtn = false;
+  tabs.forEach(function(t) { if (t.dataset.tab === tabId) hasBtn = true; });
+  if (!hasBtn) return;
+  tabs.forEach(function(t) { t.classList.toggle('active', t.dataset.tab === tabId); });
 }
 
 // #results.tree-open + toggle-button state follow catalogTreeOpen on both
@@ -29280,7 +29403,7 @@ function wsMenuAction(a) {
     case 'analyze': executeAnalysis(); break;
     case 'filter': wsFocusFilter(); break;
     case 'calcols': showPanel('calcols'); break;
-    case 'addPoint': { showPanel('aux'); var afi = document.getElementById('auxFileInput'); if (afi) afi.click(); break; }
+    case 'addPoint': wsAddPointDataset(); break;
     case 'addDrillhole': { showPanel('aux'); var dh = document.getElementById('dhCard'); if (dh && dh.scrollIntoView) dh.scrollIntoView({ block: 'nearest' }); break; }
     case 'help': toggleHelp(); break;
     case 'example': { var ex = document.getElementById('exampleDownload'); if (ex) ex.click(); break; }
@@ -29302,7 +29425,11 @@ function buildRailsShell(host) {
     renderPanel: function(tab) {
       if (tab.id === 'data') return document.getElementById('catalogTree');
       var p = wsPanelById(tab.id);
-      return p ? document.getElementById(p.el) : null;
+      if (p) return document.getElementById(p.el);
+      // A10 1g-c: a dataset instance tab (d2+) → build its panel from the ds
+      var ds = (typeof dsById === 'function') ? dsById(tab.id) : null;
+      if (ds && ds.kind !== 'model') return wsBuildDatasetPanel(ds);
+      return null;
     },
     onPanelDestroy: wsRehomePanel,
     // C6-5 discoverability: a hint when every tab/rail has been closed

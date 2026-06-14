@@ -100,13 +100,19 @@ CTX_PROVIDERS.push(function datasetProvider(e) {
   var key = sum.parentElement.dataset.key || '';
   if (key.indexOf('ds:') !== 0) return null;
   var ds = key.slice(3);
+  var dsObj = (typeof dsById === 'function') ? dsById(ds) : null;
+  var dsLabel = ds === 'model' ? 'Model' : ((dsObj && dsObj.prefix) || auxPrefix || 'aux');
   var items = [
-    { head: true, label: ds === 'model' ? 'Model' : (auxPrefix || 'aux') },
-    { label: 'Open import panel', action: function() { showPanel(ds === 'model' ? 'preflight' : 'aux'); } }
+    { head: true, label: dsLabel },
+    // A10 1g-c: instance ids open their own panel (showPanel(ds) → activate-or-rebuild)
+    { label: 'Open import panel', action: function() { showPanel(ds === 'model' ? 'preflight' : ds); } }
   ];
   if (ds === 'aux' && typeof clearAux === 'function') {
     items.push({ sep: true });
     items.push({ label: 'Remove dataset', danger: true, action: function() { clearAux(); } });
+  } else if (ds !== 'model' && dsObj && typeof wsRemoveInstance === 'function') {
+    items.push({ sep: true });
+    items.push({ label: 'Remove dataset', danger: true, action: function() { wsRemoveInstance(dsObj); } });
   }
   return items;
 });
@@ -115,14 +121,15 @@ CTX_PROVIDERS.push(function variableProvider(e) {
   var v = ctxResolveVariable(e);
   if (!v || !v.name) return null;
   var x = e.clientX, y = e.clientY;
-  var items = [{ head: true, label: (v.ds === 'model' ? 'Model' : (auxPrefix || 'aux')) + ':' + v.name }];
+  var vDsLabel = v.ds === 'model' ? 'Model' : ((typeof dsById === 'function' && dsById(v.ds) && dsById(v.ds).prefix) || auxPrefix || 'aux');
+  var items = [{ head: true, label: vDsLabel + ':' + v.name }];
 
   // Coordinate rows: axis info + where to change it (C6-0 — these rows
   // previously fell through to the native browser menu)
   if (v.kind === 'coord') {
     items[0].label += ' — ' + (v.axis || '?') + ' axis';
     items.push({ label: 'Change axis assignment…', action: function() {
-      showPanel(v.ds === 'aux' ? 'aux' : 'preflight');
+      showPanel(v.ds === 'model' ? 'preflight' : v.ds);
     } });
     items.push({ label: 'Copy column name', action: function() {
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v.name);

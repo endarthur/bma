@@ -7,9 +7,10 @@
 // the plots are the evidence, the user moves the line. Applying a cap is a
 // one-click calcol (cap() already lives in the Math preamble).
 //
-// A10 phase 1g-b: parameterized by (ds, root) like auxtab.js. The svg
+// A10 phase 1g-b/c: parameterized by (ds, root) like auxtab.js. The svg
 // builders take the topcut state object t (= ds.topcut) directly; the worker
-// handle (auxTopcutWorker) stays global for the single aux dataset.
+// handle lives per-dataset on ds._topcutWorker (1g-c) so instances analyze
+// concurrently.
 
 function auxTopcutFingerprintNow(ds) {
   ds = ds || dsById('aux');
@@ -398,7 +399,7 @@ function loadAuxTopcut(ds, root) {
   var $st = auxQ('[data-aux="topcutStatus"]', root);
   function tfail(msg) {
     if ($st) { $st.textContent = 'Error: ' + msg; $st.style.color = 'var(--red)'; }
-    if (auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} auxTopcutWorker = null; }
+    if (ds._topcutWorker) { try { ds._topcutWorker.terminate(); } catch (e) {} ds._topcutWorker = null; }
   }
   // Declustered mode: weights ride per-row, fingerprint-gated like every
   // other consumer of the declus weights
@@ -408,10 +409,10 @@ function loadAuxTopcut(ds, root) {
     if (typeof auxDeclusFresh === 'function' && auxDeclusFresh(ds)) declusWeights = ds.declus.weights;
     else { tfail('declustered weights missing or stale — run Declustering on the sidebar'); return; }
   }
-  if (auxTopcutWorker) { try { auxTopcutWorker.terminate(); } catch (e) {} }
-  auxTopcutWorker = new Worker(workerUrl);
+  if (ds._topcutWorker) { try { ds._topcutWorker.terminate(); } catch (e) {} }
+  ds._topcutWorker = new Worker(workerUrl);
   if ($st) { $st.textContent = '0%'; $st.style.color = ''; }
-  auxTopcutWorker.postMessage({
+  ds._topcutWorker.postMessage({
     mode: 'colvalues',
     file: ds.file,
     zipEntry: ds.preflight.selectedZipEntry || null,
@@ -425,16 +426,16 @@ function loadAuxTopcut(ds, root) {
     dmEndianness: ds.preflight.dmEndianness || null,
     dmFormat: ds.preflight.dmFormat || null
   });
-  auxTopcutWorker.onerror = function(e) { tfail(e.message || 'unknown error'); };
-  auxTopcutWorker.onmessage = function(e) {
+  ds._topcutWorker.onerror = function(e) { tfail(e.message || 'unknown error'); };
+  ds._topcutWorker.onmessage = function(e) {
     var msg = e.data;
     if (msg.type === 'colvalues-progress') {
       if ($st) $st.textContent = Math.min(99, msg.percent).toFixed(0) + '%';
     } else if (msg.type === 'error') {
       tfail(msg.message);
     } else if (msg.type === 'colvalues-complete') {
-      auxTopcutWorker.terminate();
-      auxTopcutWorker = null;
+      ds._topcutWorker.terminate();
+      ds._topcutWorker = null;
       if (msg.finite < 2) { tfail('Not enough numeric values.'); return; }
       var m = msg.values.length;
       // Prefix sums of w, w·v, w·v² (w = 1 in raw mode)

@@ -53,13 +53,21 @@ function showPanel(tabId) {
 function wsActivateInRails(tabId) {
   if (!wsRails) return;
   if (findTab(wsRails.state, tabId)) { wsRails.activateTab(tabId); return; }
-  // Closed panel: re-add it to the main workspace. Panels are singletons —
-  // renderPanel re-fetches the same element it re-homed at close.
+  // Closed singleton panel: re-add it to the main workspace. Singletons are
+  // re-homed at close, so renderPanel re-fetches the same element.
   var p = wsPanelById(tabId);
-  if (!p) return;
-  wsRails.addTab({ id: p.id, title: p.title }, wsMainTarget());
-  wsSyncBadgesFromLegacy();
-  wsSyncLegacyTabbar(tabId); // addTab activates without emitting tab:activate
+  if (p) {
+    wsRails.addTab({ id: p.id, title: p.title }, wsMainTarget());
+    wsSyncBadgesFromLegacy();
+    wsSyncLegacyTabbar(tabId); // addTab activates without emitting tab:activate
+    return;
+  }
+  // Closed dataset INSTANCE (d2+): renderPanel rebuilds its panel from the ds
+  // (A10 1g-c — state lives in the ds object, the clone is throwaway).
+  var ds = (typeof dsById === 'function') ? dsById(tabId) : null;
+  if (ds && ds.kind !== 'model') {
+    wsRails.addTab({ id: ds.id, title: 'Import: ' + (ds.prefix || 'data'), closeable: true }, wsMainTarget());
+  }
 }
 
 // Where re-added (or re-opened) tabs land: the first stack of the first
@@ -118,6 +126,10 @@ function wsDefaultLayout(activeId) {
 function wsRehomePanel(tab, wrapper) {
   var el = wrapper && wrapper.firstElementChild;
   if (!el) return;
+  // A10 1g-c: instance dataset panels (d2+) are throwaway clones — their state
+  // lives in the ds object and renderPanel rebuilds on reopen, so discard them
+  // (re-home only the static singletons + the tree).
+  if (tab.id !== 'data' && !wsPanelById(tab.id)) return;
   var main = document.getElementById('resultsMain');
   var panels = main ? main.querySelector('.results-panels') : null;
   if (!panels) return;
@@ -125,13 +137,101 @@ function wsRehomePanel(tab, wrapper) {
   else panels.appendChild(el);
 }
 
+// ─── A10 1g-c: dataset instance panels (d2+) ───────────────────────────────
+// The first comparison dataset is the singleton #panelAux; further datasets
+// (a 3rd/4th comparison — new vs composites vs previous model vs check) are
+// C9 instances: per-id panels cloned from #panelAux, dockable + closeable.
+// All per-dataset state lives in the ds registry object, so a closed instance
+// rebuilds from scratch on reopen (no preserveOnClose). renderPanel routes
+// instance ids here.
+
+// Build an instance's config panel. #panelAux is the template: clone it, strip
+// every id (no duplicates — the panel resolves DOM by data-aux/data-act via
+// auxQ), drop the drillhole card (drillhole sets are their own add path), tag
+// the root data-ds=<id>, and wire it for this ds.
+function wsBuildDatasetPanel(ds) {
+  var tmpl = document.getElementById('panelAux');
+  if (!tmpl || !ds) return null;
+  var el = tmpl.cloneNode(true);
+  el.removeAttribute('id');
+  el.dataset.ds = ds.id;
+  el.dataset.tab = ds.id;
+  el.classList.add('active');   // wrapper controls visibility; class keeps display rules
+  el.querySelectorAll('[id]').forEach(function(n) { n.removeAttribute('id'); });
+  var dh = el.querySelector('.dh-card');
+  if (dh) dh.remove();
+  var emptyEl = el.querySelector('[data-aux="empty"]');
+  var configEl = el.querySelector('[data-aux="config"]');
+  if (ds.preflight) {
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (configEl) configEl.style.display = '';
+  } else {
+    // Fresh instance: clear any state the clone copied from a loaded aux,
+    // show the empty import surface.
+    ['[data-aux="sidebar"]', '[data-aux="preview"]', '[data-aux="summaryView"]',
+     '[data-aux="topcutView"]', '[data-aux="fileInfo"]'].forEach(function(sel) {
+      var n = el.querySelector(sel); if (n) n.innerHTML = '';
+    });
+    if (emptyEl) emptyEl.style.display = '';
+    if (configEl) configEl.style.display = 'none';
+  }
+  if (typeof wireDatasetPanel === 'function') wireDatasetPanel(el, ds);
+  if (ds.preflight && typeof renderAuxConfig === 'function') renderAuxConfig(ds, el);
+  else if (typeof renderAuxFromMain === 'function') renderAuxFromMain(ds, el);
+  return el;
+}
+
+// Data ▸ Add point dataset… — spawn a new instance and activate its (empty)
+// import panel; the panel's own dropzone/picker loads the file into the ds.
+function wsAddPointDataset() {
+  if (!wsRails) {
+    // Legacy/mobile shell has no instance tabs — fall back to the singleton aux
+    showPanel('aux');
+    var afi = document.getElementById('auxFileInput');
+    if (afi) afi.click();
+    return;
+  }
+  if (typeof dsCreate !== 'function') return;
+  var ds = dsCreate({ prefix: 'data' });
+  dsAdd(ds);
+  wsRails.addTab({ id: ds.id, title: 'Import: ' + ds.prefix, closeable: true }, wsMainTarget());
+  wsRails.activateTab(ds.id);   // renderPanel → wsBuildDatasetPanel (empty import surface)
+}
+
+// Track the prefix in the tab title (loadAuxFile on load, onAuxConfigChange on edit)
+function wsSetDatasetTabTitle(ds) {
+  if (!wsRails || !ds || ds.id === 'aux' || ds.id === 'model') return;
+  if (findTab(wsRails.state, ds.id)) wsRails.updateTab(ds.id, { title: 'Import: ' + (ds.prefix || 'data') });
+}
+
+// Fully remove an instance: terminate its workers, close its tab (→
+// onPanelDestroy discards the clone), drop it from the registry, refresh the
+// dataset-listing views. (The singleton aux uses clearAux instead — reset, not remove.)
+function wsRemoveInstance(ds) {
+  if (!ds || ds.id === 'aux' || ds.id === 'model') return;
+  ['_worker', '_declusWorker', '_topcutWorker'].forEach(function(k) {
+    if (ds[k]) { try { ds[k].terminate(); } catch (e) {} ds[k] = null; }
+  });
+  if (wsRails && findTab(wsRails.state, ds.id)) wsRails.closeTab(ds.id);
+  if (typeof dsRemove === 'function') dsRemove(ds.id);
+  if (typeof refreshCatalogTree === 'function') refreshCatalogTree();
+  if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
+    renderStatsSidebar(); renderStatsTable(); renderStatsCdfPanel();
+  }
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+
 // Mirror the legacy tab bar's .active to the rails-focused panel — project
 // serialization (activeTab), getActiveTabId(), Alt+V and the smokes all
 // read `.results-tab.active`
 function wsSyncLegacyTabbar(tabId) {
-  $resultsTabs.querySelectorAll('.results-tab').forEach(function(t) {
-    t.classList.toggle('active', t.dataset.tab === tabId);
-  });
+  var tabs = $resultsTabs.querySelectorAll('.results-tab');
+  // Instance tabs (d2+) have no legacy button — leave the last real active in
+  // place so getActiveTabId() doesn't fall back while an instance is focused.
+  var hasBtn = false;
+  tabs.forEach(function(t) { if (t.dataset.tab === tabId) hasBtn = true; });
+  if (!hasBtn) return;
+  tabs.forEach(function(t) { t.classList.toggle('active', t.dataset.tab === tabId); });
 }
 
 // #results.tree-open + toggle-button state follow catalogTreeOpen on both
@@ -320,7 +420,7 @@ function wsMenuAction(a) {
     case 'analyze': executeAnalysis(); break;
     case 'filter': wsFocusFilter(); break;
     case 'calcols': showPanel('calcols'); break;
-    case 'addPoint': { showPanel('aux'); var afi = document.getElementById('auxFileInput'); if (afi) afi.click(); break; }
+    case 'addPoint': wsAddPointDataset(); break;
     case 'addDrillhole': { showPanel('aux'); var dh = document.getElementById('dhCard'); if (dh && dh.scrollIntoView) dh.scrollIntoView({ block: 'nearest' }); break; }
     case 'help': toggleHelp(); break;
     case 'example': { var ex = document.getElementById('exampleDownload'); if (ex) ex.click(); break; }
@@ -342,7 +442,11 @@ function buildRailsShell(host) {
     renderPanel: function(tab) {
       if (tab.id === 'data') return document.getElementById('catalogTree');
       var p = wsPanelById(tab.id);
-      return p ? document.getElementById(p.el) : null;
+      if (p) return document.getElementById(p.el);
+      // A10 1g-c: a dataset instance tab (d2+) → build its panel from the ds
+      var ds = (typeof dsById === 'function') ? dsById(tab.id) : null;
+      if (ds && ds.kind !== 'model') return wsBuildDatasetPanel(ds);
+      return null;
     },
     onPanelDestroy: wsRehomePanel,
     // C6-5 discoverability: a hint when every tab/rail has been closed

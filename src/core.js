@@ -20,7 +20,9 @@ let auxCompleteData = null;    // snapshot of the last aux analysis (parallel to
 let auxData = null;            // aux stats object for comparison rendering
 let auxPrefix = 'aux';         // display-only label prefix for aux pseudo-columns (e.g. "aux:Fe")
 let auxFilter = null;          // { expression } — references aux columns via the fixed AUX_ROW_VAR handle
-let auxWorker = null;          // worker handle for the aux analysis pass
+// A10 1g-c: the analysis/declus/topcut worker handles live PER-DATASET on the
+// ds object (ds._worker / ds._declusWorker / ds._topcutWorker) so instance
+// datasets analyze concurrently without clobbering each other's worker.
 let pendingAuxRestore = null;  // aux config from a loaded project, applied once the aux file is (re)loaded
 const AUX_ROW_VAR = 'aux';     // fixed code handle for aux filter/calc expressions (NOT the display prefix)
 let auxStale = false;              // aux config changed since last aux analysis
@@ -34,12 +36,10 @@ const AUX_DECLUS_WEIGHT = '__declus__'; // aux weight sentinel: use computed dec
 let auxDeclus = null;              // cell-declustering state: { params, weights (Float64Array|null),
                                    //   curve, optCellSize, declusteredMean, naiveMean, n, located,
                                    //   wtMin, wtMax, usedRange, fingerprint } — weights NOT persisted
-let auxDeclusWorker = null;        // worker handle for the declustering pass
 let auxView = 'preview';           // aux main-area view: 'preview' | 'topcut'
 let auxTopcut = null;              // top-cut analysis state: { varName, cap, values (sorted
                                    //   Float64Array)|null, prefixS, prefixSS, n, finite,
                                    //   fingerprint } — values NOT persisted (re-loaded on demand)
-let auxTopcutWorker = null;        // worker handle for the column-values pass
 let statsAuxSelected = null;       // Set of aux col indices shown in the stats table (null = defaults)
 let statsCdfAuxSelected = new Set(); // aux col indices with CDF curves
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes
