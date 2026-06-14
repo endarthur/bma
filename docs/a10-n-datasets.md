@@ -266,14 +266,27 @@ inherits its *paired model* var's color/unit). Target: display lives on the
   `catUnit` onto `catPropColor`/`catPropUnit`. Still delegating → bit-identical
   (verified by the full smoke suite). After this, no consumer reads per-`ds:name`
   display directly.
-- **4a-iii (flip storage + editing)** — make `catalog.properties[propId] =
-  {name, color, unit, scale, valueColors, valueOrder, members:[{ds,col}]}`
-  canonical; migrate `vars`+`pairs` → `properties` (seed members by normalized
-  name); repoint `catPropColor`/`catPropUnit` to read the property; generalize
-  the tree pairing popover to **merge / rename / split** group membership; drop
-  per-member display overrides. This is the only behavior-changing slice, and
-  it's localized behind the 4a-i API. Project migration: legacy `catalog`
-  (`vars`+`pairs`) → `properties` in `migrateLegacyCatalog()`.
+- **4a-iii ✅ (b65bb06) — storage flip** — `catalog.properties[id] = {name,
+  members:[{ds,col}], color?, unit?, valueColors?, valueOrder?, sortMode?,
+  split?}` keyed by opaque id is canonical; `vars`+`pairs` gone. The legacy
+  `catVar`/`catVarPeek`/`catPair`/`catPairsRev`/`catSetUnit`/`getCategoryColor`
+  API stays as a FACADE over properties (~25 consumers untouched). Derived
+  `_catPropIdx` (ds:col→id, not serialized). Creation makes dumb singletons;
+  **`catSeedPairs` is the one place that groups by name**, merging tentative
+  singletons into the same-named property while leaving explicit pairs
+  (multi-member) and splits (`split` flag) alone — a user's unpair/custom-pair
+  is never silently re-merged. New: `catSetPair`, `catImportLegacyVarsPairs`
+  (C1a vars+pairs → properties), `catReindexProps`. `catCompact` prunes empty /
+  re-derivable singletons (keeps display / multi / split / name-shared so splits
+  survive reload). Persistence: serialize writes `properties`; `applyProject`
+  adopts native properties (+reindex) or converts C1a vars+pairs; pre-C1a
+  `migrateLegacyCatalog` works through the facade. Full suite green (tree-smoke
+  rewritten to the properties shape) + new guard
+  `experiments/catalog-migration-check.js` (legacy upgrade path). **Deferred:**
+  the richer **merge / rename / split** popover — the existing pair/unpair UI
+  now operates on property membership, so the new editing affordance folds into
+  4c. Per-member display overrides are gone (members share the property's
+  color/unit) — the one intended behavior change.
 
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
