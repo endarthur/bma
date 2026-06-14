@@ -5788,7 +5788,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 6f026dd — click to check for updates">6f026dd</div>
+<div class="build-badge" id="buildBadge" title="build 88f7a8d — click to check for updates">88f7a8d</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8557,65 +8557,95 @@ let catFocusedCol = null;           // column index focused in main area
 let catChartShowAll = false;        // show all bars vs top 20
 let _catEventsWired = false;
 
-// ─── Property catalog (C1a) ─────────────────────────────────────────────
-// Single source of truth for per-variable / per-dataset properties: series
-// colors, units, categorical value colors/order/sort, roles (weight /
-// density / tonnageFactor), and model↔aux pairings. View membership stays
-// view-local. Design: docs/c1a-property-catalog.md.
+// ─── Property catalog (C1a → A10 4a properties) ─────────────────────────
+// Single source of truth for display + grouping. A **property** is a named
+// measured quantity instantiated by columns across datasets — the equivalence
+// class that subsumes C1a's per-`ds:name` vars + hub pairs (A10 4a-iii,
+// docs/a10-n-datasets.md "Converged model"). Display (color / unit /
+// categorical valueColors+order+sortMode) lives ON the property; a pair is a
+// 2-member property, an unmatched column a singleton, a group N members.
+//
+//   catalog.properties = { p1: { name, members:[{ds,col}], color?, unit?,
+//                                 valueColors?, valueOrder?, sortMode?, split? } }
+//
+// `catVar`/`catVarPeek` are the legacy FACADE: they return the property record
+// a column belongs to, so the ~25 consumers (display reads, valueColors/sort
+// writes, pairing) are unchanged. `_catPropIdx` (ds:col → id) is derived, not
+// serialized. Roles stay per-dataset. Design: docs/c1a-property-catalog.md.
 let catalog = newCatalog();
+let _catPropIdx = {};   // 'ds:col' → property id (derived from members)
+let _catPropSeq = 0;    // monotonic id counter (p1, p2, …)
 
 function newCatalog() {
   return {
     datasets: { model: { label: 'Model' }, aux: { label: 'aux' } },
-    vars: {},                        // 'model:Fe' → sparse { color, unit, valueColors, valueOrder, sortMode }
     roles: { model: {}, aux: {} },   // { weight, density, tonnageFactor } → variable name
-    pairs: {}                        // aux var name → model var name | null (null = explicit orphan)
+    properties: {}                   // id → { name, members, …display }
   };
 }
 
-// Live sparse record for a variable — created on demand; callers may set
-// properties directly, then must autoSaveProject()
-function catVar(ds, name) {
-  const key = ds + ':' + name;
-  let rec = catalog.vars[key];
-  if (!rec) { rec = {}; catalog.vars[key] = rec; }
-  return rec;
+function _catNorm(s) { return String(s).trim().toLowerCase(); }
+function _catNewProp(name) {
+  const id = 'p' + (++_catPropSeq);
+  catalog.properties[id] = { name: name, members: [] };
+  return id;
 }
-// Read-only lookup: never creates a record
-function catVarPeek(ds, name) { return catalog.vars[ds + ':' + name] || null; }
+// Rebuild the (ds:col → id) index + id counter from members. Call after a
+// whole-catalog load (the index is derived, never serialized).
+function catReindexProps() {
+  _catPropIdx = {}; _catPropSeq = 0;
+  if (!catalog.properties) catalog.properties = {};
+  for (const id of Object.keys(catalog.properties)) {
+    const n = parseInt(String(id).replace(/^p/, ''), 10);
+    if (isFinite(n) && n > _catPropSeq) _catPropSeq = n;
+    const p = catalog.properties[id];
+    if (!p.members) p.members = [];
+    for (const m of p.members) _catPropIdx[m.ds + ':' + m.col] = id;
+  }
+}
 
-// Series color: explicit → paired primary's (aux only) → palette fallback
+// The property id a column belongs to. create=true makes a dumb singleton if
+// none (NO name-grouping here — grouping is centralized in catSeedPairs so
+// splits/explicit pairs are never silently re-merged); create=false → null.
+function catPropIdFor(ds, col, create) {
+  const key = ds + ':' + col;
+  const id = _catPropIdx[key];
+  if (id && catalog.properties[id]) return id;
+  if (!create) return null;
+  const nid = _catNewProp(col);
+  catalog.properties[nid].members.push({ ds: ds, col: col });
+  _catPropIdx[key] = nid;
+  return nid;
+}
+function _catDetach(ds, col) {
+  const key = ds + ':' + col;
+  const id = _catPropIdx[key];
+  delete _catPropIdx[key];
+  const p = id && catalog.properties[id];
+  if (!p) return;
+  p.members = p.members.filter(function(m) { return !(m.ds === ds && m.col === col); });
+  if (p.members.length === 0) delete catalog.properties[id];
+}
+
+// ── Legacy facade: a "variable record" is now its property record ──
+function catVar(ds, name) { return catalog.properties[catPropIdFor(ds, name, true)]; }
+function catVarPeek(ds, name) { const id = catPropIdFor(ds, name, false); return id ? catalog.properties[id] : null; }
+
+// Series color: property color → palette fallback (members of a property share
+// its color — that's the cross-dataset grouping replacing hub inheritance)
 function catVarColor(ds, name, fallbackIdx) {
   const rec = catVarPeek(ds, name);
   if (rec && rec.color) return rec.color;
-  if (ds === 'aux') {
-    const p = catPair(name);
-    if (p) {
-      const prec = catVarPeek('model', p);
-      if (prec && prec.color) return prec.color;
-    }
-  }
   return STATSCAT_PALETTE[(fallbackIdx || 0) % STATSCAT_PALETTE.length];
 }
-
-// Unit as a GRADE_UNITS index (0 = raw). Aux variables without an explicit
-// unit inherit their paired primary's.
+// Unit as a GRADE_UNITS index (0 = raw) — property-level, shared by members
 function catUnit(ds, name) {
   const rec = catVarPeek(ds, name);
-  if (rec && rec.unit) return rec.unit;
-  if (ds === 'aux') {
-    const p = catPair(name);
-    if (p) return catUnit('model', p);
-  }
-  return 0;
+  return (rec && rec.unit) ? rec.unit : 0;
 }
 function catSetUnit(ds, name, idx) {
-  if (idx > 0) {
-    catVar(ds, name).unit = idx;
-  } else {
-    const rec = catVarPeek(ds, name);
-    if (rec) delete rec.unit;
-  }
+  if (idx > 0) catVar(ds, name).unit = idx;
+  else { const rec = catVarPeek(ds, name); if (rec) delete rec.unit; }
 }
 
 // Roles: one variable name per role per dataset (null = unassigned)
@@ -8628,53 +8658,96 @@ function catSetRole(ds, role, name) {
   else delete catalog.roles[ds][role];
 }
 
-// Pairing: aux variable → model variable. Seeded case-insensitively when
-// the aux dataset loads; existing entries (including explicit null =
-// unpaired) are never overwritten by re-seeding.
+// ── Pairing as property membership (legacy aux→model API over properties) ──
+// catPair: the model member of an aux column's property (the "hub" it shows as)
 function catPair(auxName) {
-  const v = catalog.pairs[auxName];
-  return v === undefined ? null : v;
+  const rec = catVarPeek('aux', auxName);
+  if (!rec) return null;
+  const m = rec.members.find(function(x) { return x.ds === 'model'; });
+  return m ? m.col : null;
 }
-// Aux variables paired to a given model variable (reverse lookup)
+// Aux columns sharing a model column's property (reverse lookup)
 function catPairsRev(modelName) {
-  const out = [];
-  for (const an of Object.keys(catalog.pairs)) {
-    if (catalog.pairs[an] === modelName) out.push(an);
-  }
-  return out;
+  const rec = catVarPeek('model', modelName);
+  if (!rec) return [];
+  return rec.members.filter(function(x) { return x.ds === 'aux'; }).map(function(x) { return x.col; });
 }
-function catSeedPairs(auxNames, modelNames) {
-  const modelLower = {};
-  for (const n of modelNames) modelLower[String(n).trim().toLowerCase()] = n;
-  for (const an of auxNames) {
-    if (catalog.pairs[an] !== undefined) continue;
-    const m = modelLower[String(an).trim().toLowerCase()];
-    catalog.pairs[an] = m !== undefined ? m : null;
+// Set/clear an aux column's pairing. modelName → join that model's property;
+// falsy → split into its own property (pinned so re-seeding won't re-merge).
+function catSetPair(auxName, modelName) {
+  _catDetach('aux', auxName);
+  if (modelName) {
+    const mid = catPropIdFor('model', modelName, true);
+    catalog.properties[mid].members.push({ ds: 'aux', col: auxName });
+    _catPropIdx['aux:' + auxName] = mid;
+  } else {
+    const id = _catNewProp(auxName);
+    catalog.properties[id].split = true;
+    catalog.properties[id].members.push({ ds: 'aux', col: auxName });
+    _catPropIdx['aux:' + auxName] = id;
   }
 }
 
-// ─── Properties (A10 phase 4a) ──────────────────────────────────────────
-// A "property" is a named measured quantity instantiated by columns across
-// datasets — the equivalence class that will subsume C1a's per-`ds:name`
-// vars + hub pairs (docs/a10-n-datasets.md "Converged model"). 4a-i is the
-// inert SEAM: these delegate to the current catVar*/catUnit/catPair logic, so
-// behavior is bit-identical. 4a-ii migrates consumers onto them; 4a-iii flips
-// storage to catalog.properties (display on the property) + merge/rename/split.
-//
-// catPropId(ds, name) → the id of the property this column belongs to. Today
-// the model var name anchors the property (the hub); a paired aux column joins
-// its model var's property, an unpaired/instance column anchors its own.
-function catPropId(ds, name) {
-  if (ds === 'model') return 'model:' + name;
-  if (ds === 'aux') { const m = catPair(name); return m ? 'model:' + m : 'aux:' + name; }
-  return ds + ':' + name; // instances (d2+): own property until 4c generalizes grouping
+// Idempotent name-grouping seed — the ONE place properties group by name, so
+// explicit pairs (multi-member) and splits (split flag) are never re-merged.
+// Tentative singletons (incl. display-only ones from migration) merge into the
+// same-named model-bearing property, carrying any display they hold.
+function catSeedPairs(auxNames, modelNames) {
+  for (const n of modelNames) catPropIdFor('model', n, true);
+  for (const an of auxNames) {
+    const id = catPropIdFor('aux', an, true);
+    const p = catalog.properties[id];
+    if (p.split || p.members.length > 1) continue;     // explicit choice — leave
+    const nn = _catNorm(an);
+    let targetId = null;
+    for (const pid of Object.keys(catalog.properties)) {
+      if (pid === id) continue;
+      const q = catalog.properties[pid];
+      if (_catNorm(q.name) !== nn) continue;
+      if (q.members.some(function(m) { return m.ds === 'aux'; })) continue;
+      targetId = pid; break;
+    }
+    if (!targetId) continue;
+    const q = catalog.properties[targetId];
+    if (p.color && !q.color) q.color = p.color;
+    if (p.unit && !q.unit) q.unit = p.unit;
+    if (p.valueColors && !q.valueColors) q.valueColors = p.valueColors;
+    if (p.valueOrder && !q.valueOrder) q.valueOrder = p.valueOrder;
+    if (p.sortMode && !q.sortMode) q.sortMode = p.sortMode;
+    q.members.push({ ds: 'aux', col: an });
+    delete catalog.properties[id];
+    _catPropIdx['aux:' + an] = targetId;
+  }
 }
-// Property display — same resolution as the per-variable accessors for now
-// (explicit override → paired-primary inheritance → palette / raw).
+
+// Convert a post-C1a project's catalog.vars + pairs into properties (pairs
+// first establish membership, then display attaches to the right property).
+function catImportLegacyVarsPairs(vars, pairs) {
+  for (const an of Object.keys(pairs || {})) catSetPair(an, pairs[an] || null);
+  // model: keys first so a paired group takes the model's display as canonical
+  const keys = Object.keys(vars || {}).sort(function(a, b) {
+    return (a.indexOf('model:') === 0 ? 0 : 1) - (b.indexOf('model:') === 0 ? 0 : 1);
+  });
+  for (const key of keys) {
+    const ci = key.indexOf(':'); if (ci < 0) continue;
+    const ds = key.slice(0, ci), name = key.slice(ci + 1);
+    const rec = vars[key]; if (!rec) continue;
+    const p = catVar(ds, name);
+    if (rec.color != null && p.color == null) p.color = rec.color;
+    if (rec.unit != null && p.unit == null) p.unit = rec.unit;
+    if (rec.valueColors && !p.valueColors) p.valueColors = Object.assign({}, rec.valueColors);
+    if (rec.valueOrder && !p.valueOrder) p.valueOrder = rec.valueOrder.slice();
+    if (rec.sortMode && !p.sortMode) p.sortMode = rec.sortMode;
+  }
+}
+
+// ── A10 4a property-id seam (used by per-panel selection in 4c) ──
+// The opaque id of a column's property (ensures membership).
+function catPropId(ds, name) { return catPropIdFor(ds, name, true); }
 function catPropColor(ds, name, fallbackIdx) { return catVarColor(ds, name, fallbackIdx); }
 function catPropUnit(ds, name) { return catUnit(ds, name); }
 
-// Categorical value color: explicit override → palette by value position
+// Categorical value color: property override → palette by value position
 function getCategoryColor(colName, value, fallbackIdx) {
   const rec = catVarPeek('model', colName);
   if (rec && rec.valueColors && rec.valueColors[value]) return rec.valueColors[value];
@@ -8709,15 +8782,29 @@ function catRefreshUnitSelects() {
   });
 }
 
-// Drop empty structures so the serialized catalog stays sparse
+// Drop empty display + re-derivable trivial singletons so the serialized
+// catalog stays sparse. A property is KEPT if it carries display, has >1
+// member (explicit/seeded pairing), is a split, or shares its name with
+// another property (so a split survives reload). Reindexes after pruning.
 function catCompact() {
-  for (const k of Object.keys(catalog.vars)) {
-    const rec = catalog.vars[k];
-    if (rec.valueColors && Object.keys(rec.valueColors).length === 0) delete rec.valueColors;
-    if (rec.valueOrder && rec.valueOrder.length === 0) delete rec.valueOrder;
-    for (const f of Object.keys(rec)) { if (rec[f] == null) delete rec[f]; }
-    if (Object.keys(rec).length === 0) delete catalog.vars[k];
+  if (!catalog.properties) { catalog.properties = {}; return; }
+  const nameCount = {};
+  for (const id of Object.keys(catalog.properties)) {
+    const nn = _catNorm(catalog.properties[id].name);
+    nameCount[nn] = (nameCount[nn] || 0) + 1;
   }
+  for (const id of Object.keys(catalog.properties)) {
+    const p = catalog.properties[id];
+    if (p.valueColors && Object.keys(p.valueColors).length === 0) delete p.valueColors;
+    if (p.valueOrder && p.valueOrder.length === 0) delete p.valueOrder;
+    for (const f of ['color', 'unit', 'sortMode']) { if (p[f] == null) delete p[f]; }
+    const hasDisplay = p.color || p.unit || p.sortMode ||
+      (p.valueColors && Object.keys(p.valueColors).length) || (p.valueOrder && p.valueOrder.length);
+    const multi = (p.members || []).length > 1;
+    const shared = nameCount[_catNorm(p.name)] > 1;
+    if (!hasDisplay && !multi && !p.split && !shared) delete catalog.properties[id];
+  }
+  catReindexProps();
 }
 
 // Statistics tab state
@@ -17197,9 +17284,15 @@ async function applyProject(project) {
   catalog = newCatalog();
   if (project.catalog) {
     if (project.catalog.datasets) catalog.datasets = project.catalog.datasets;
-    if (project.catalog.vars) catalog.vars = project.catalog.vars;
     if (project.catalog.roles) catalog.roles = project.catalog.roles;
-    if (project.catalog.pairs) catalog.pairs = project.catalog.pairs;
+    if (project.catalog.properties) {
+      // A10 4a: native properties format
+      catalog.properties = project.catalog.properties;
+      catReindexProps();
+    } else if (project.catalog.vars || project.catalog.pairs) {
+      // C1a-era catalog (vars + pairs) → properties
+      catImportLegacyVarsPairs(project.catalog.vars, project.catalog.pairs);
+    }
     if (!catalog.datasets.aux) catalog.datasets.aux = { label: 'aux' };
     if (!catalog.roles.model) catalog.roles.model = {};
     if (!catalog.roles.aux) catalog.roles.aux = {};
@@ -27871,13 +27964,18 @@ function treeDatasetHtml(ds, openState) {
     else cats.push(entry);
   }
 
-  // stale catalog entries: records that reference variables this dataset
-  // no longer has (renamed calcol etc.) — kept, shown grayed
+  // stale catalog entries: members of a display-carrying property that this
+  // dataset no longer has (renamed calcol etc.) — kept, shown grayed (4a:
+  // display is property-level, so flag members of properties that hold display)
   var stale = [];
-  for (var key in catalog.vars) {
-    if (key.indexOf(ds + ':') !== 0) continue;
-    var vn = key.slice(ds.length + 1);
-    if (!known[vn] && Object.keys(catalog.vars[key]).length > 0) stale.push(vn);
+  for (var pid in catalog.properties) {
+    var pp = catalog.properties[pid];
+    var hasDisp = pp.color || pp.unit || pp.sortMode ||
+      (pp.valueColors && Object.keys(pp.valueColors).length) || (pp.valueOrder && pp.valueOrder.length);
+    if (!hasDisp || !pp.members) continue;
+    for (var mi = 0; mi < pp.members.length; mi++) {
+      if (pp.members[mi].ds === ds && !known[pp.members[mi].col]) stale.push(pp.members[mi].col);
+    }
   }
 
   var auxModelOffset = 0;
@@ -28186,7 +28284,7 @@ function treeToggleRole(t, role) {
         autoSaveProject();
         renderTreePopover();
       } else if (e.target.id === 'treePopPair') {
-        catalog.pairs[t.name] = e.target.value || null;
+        catSetPair(t.name, e.target.value || null);
         treePairChanged();
         autoSaveProject();
         renderTreePopover();
@@ -28378,7 +28476,7 @@ CTX_PROVIDERS.push(function variableProvider(e) {
     var p = catPair(v.name);
     function setPair(target) {
       return function() {
-        catalog.pairs[v.name] = target;
+        catSetPair(v.name, target);
         treePairChanged();
         autoSaveProject();
       };

@@ -167,7 +167,7 @@ CTX_PROVIDERS.push(function variableProvider(e) {
     var p = catPair(v.name);
     function setPair(target) {
       return function() {
-        catalog.pairs[v.name] = target;
+        catSetPair(v.name, target);
         treePairChanged();
         autoSaveProject();
       };

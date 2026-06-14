@@ -615,9 +615,15 @@ async function applyProject(project) {
   catalog = newCatalog();
   if (project.catalog) {
     if (project.catalog.datasets) catalog.datasets = project.catalog.datasets;
-    if (project.catalog.vars) catalog.vars = project.catalog.vars;
     if (project.catalog.roles) catalog.roles = project.catalog.roles;
-    if (project.catalog.pairs) catalog.pairs = project.catalog.pairs;
+    if (project.catalog.properties) {
+      // A10 4a: native properties format
+      catalog.properties = project.catalog.properties;
+      catReindexProps();
+    } else if (project.catalog.vars || project.catalog.pairs) {
+      // C1a-era catalog (vars + pairs) → properties
+      catImportLegacyVarsPairs(project.catalog.vars, project.catalog.pairs);
+    }
     if (!catalog.datasets.aux) catalog.datasets.aux = { label: 'aux' };
     if (!catalog.roles.model) catalog.roles.model = {};
     if (!catalog.roles.aux) catalog.roles.aux = {};

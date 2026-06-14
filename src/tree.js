@@ -185,13 +185,18 @@ function treeDatasetHtml(ds, openState) {
     else cats.push(entry);
   }
 
-  // stale catalog entries: records that reference variables this dataset
-  // no longer has (renamed calcol etc.) — kept, shown grayed
+  // stale catalog entries: members of a display-carrying property that this
+  // dataset no longer has (renamed calcol etc.) — kept, shown grayed (4a:
+  // display is property-level, so flag members of properties that hold display)
   var stale = [];
-  for (var key in catalog.vars) {
-    if (key.indexOf(ds + ':') !== 0) continue;
-    var vn = key.slice(ds.length + 1);
-    if (!known[vn] && Object.keys(catalog.vars[key]).length > 0) stale.push(vn);
+  for (var pid in catalog.properties) {
+    var pp = catalog.properties[pid];
+    var hasDisp = pp.color || pp.unit || pp.sortMode ||
+      (pp.valueColors && Object.keys(pp.valueColors).length) || (pp.valueOrder && pp.valueOrder.length);
+    if (!hasDisp || !pp.members) continue;
+    for (var mi = 0; mi < pp.members.length; mi++) {
+      if (pp.members[mi].ds === ds && !known[pp.members[mi].col]) stale.push(pp.members[mi].col);
+    }
   }
 
   var auxModelOffset = 0;
@@ -500,7 +505,7 @@ function treeToggleRole(t, role) {
         autoSaveProject();
         renderTreePopover();
       } else if (e.target.id === 'treePopPair') {
-        catalog.pairs[t.name] = e.target.value || null;
+        catSetPair(t.name, e.target.value || null);
         treePairChanged();
         autoSaveProject();
         renderTreePopover();
