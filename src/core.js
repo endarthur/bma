@@ -433,14 +433,14 @@ function catEnsureSeeded() {
 // catalog's one-unit-per-variable (D2) — refresh them after any unit edit
 function catRefreshUnitSelects() {
   document.querySelectorAll('.col-unit-select').forEach(function(sel) {
-    if (sel.dataset.colName) sel.value = catUnit('model', sel.dataset.colName);
+    if (sel.dataset.colName) sel.value = catPropUnit('model', sel.dataset.colName);
   });
   document.querySelectorAll('.swath-var-unit, .gt-var-unit').forEach(function(sel) {
     if (sel.dataset.auxCol != null) {
-      if (sel.dataset.auxName) sel.value = catUnit('aux', sel.dataset.auxName);
+      if (sel.dataset.auxName) sel.value = catPropUnit('aux', sel.dataset.auxName);
     } else {
       const n = currentHeader && currentHeader[parseInt(sel.dataset.col)];
-      if (n) sel.value = catUnit('model', n);
+      if (n) sel.value = catPropUnit('model', n);
     }
   });
 }
@@ -512,7 +512,7 @@ let lastSwathData = null;
 let swathExprController = null;
 
 function getSwathVarColor(colName, paletteIdx) {
-  return catVarColor('model', colName, paletteIdx);
+  return catPropColor('model', colName, paletteIdx);
 }
 
 // GT state

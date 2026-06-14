@@ -82,7 +82,7 @@ function renderGtConfig(data) {
 
   // Grade variable checkbox list with per-variable unit selects
   var varItems = gtNumCols.map(function(c, i) {
-    var defUnit = catUnit('model', c.name);
+    var defUnit = catPropUnit('model', c.name);
     var opts = GT_GRADE_UNITS.slice(0, -1).map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
@@ -452,7 +452,7 @@ function gtFmt(v, dp) {
 }
 
 function getGtGradeUnit(colIdx) {
-  var idx = currentHeader[colIdx] ? catUnit('model', currentHeader[colIdx]) : 0;
+  var idx = currentHeader[colIdx] ? catPropUnit('model', currentHeader[colIdx]) : 0;
   var gu = GT_GRADE_UNITS[idx] || GT_GRADE_UNITS[0];
   return { gradeFactor: gu.factor, gradeSymbol: gu.symbol };
 }

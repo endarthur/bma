@@ -141,7 +141,7 @@ function treeMixedBadge(ds, idx) {
 }
 
 function treeUnitChip(ds, name) {
-  var u = catUnit(ds, name);
+  var u = catPropUnit(ds, name);
   if (!u || !GRADE_UNITS[u] || !GRADE_UNITS[u].symbol) return '';
   return '<span class="tree-unit">' + esc(GRADE_UNITS[u].symbol) + '</span>';
 }
@@ -220,10 +220,10 @@ function treeDatasetHtml(ds, openState) {
       if (rec && rec.color) color = rec.color;
       else {
         var pr = catPair(e.name);
-        if (pr && modelPal[pr] !== undefined) color = catVarColor('model', pr, modelPal[pr]);
+        if (pr && modelPal[pr] !== undefined) color = catPropColor('model', pr, modelPal[pr]);
       }
     }
-    if (!color) color = catVarColor(ds, e.name, (ds === 'aux' ? auxModelOffset : 0) + e.palIdx);
+    if (!color) color = catPropColor(ds, e.name, (ds === 'aux' ? auxModelOffset : 0) + e.palIdx);
     return '<div class="tree-row tree-row--edit"' + rowAttrs(e, 'num') + ' title="click to edit">' +
       '<span class="tree-chip" style="background:' + color + '"></span>' +
       '<span class="tree-name">' + esc(e.name) + '</span>' +
@@ -354,7 +354,7 @@ function renderTreePopover() {
       '<button class="tree-pop-btn" id="treePopColorAuto" title="clear override — palette / paired color">auto</button></div>';
 
     // Unit (one per variable — D2)
-    var u = catUnit(ds, name);
+    var u = catPropUnit(ds, name);
     html += '<div class="tree-pop-label">Unit</div><select class="tree-pop-select" id="treePopUnit">';
     for (var ui = 0; ui < GRADE_UNITS.length; ui++) {
       html += '<option value="' + ui + '"' + (ui === u ? ' selected' : '') + '>' + esc(GRADE_UNITS[ui].label) + '</option>';

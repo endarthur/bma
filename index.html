@@ -5788,7 +5788,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 0621ade — click to check for updates">0621ade</div>
+<div class="build-badge" id="buildBadge" title="build 6f026dd — click to check for updates">6f026dd</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8697,14 +8697,14 @@ function catEnsureSeeded() {
 // catalog's one-unit-per-variable (D2) — refresh them after any unit edit
 function catRefreshUnitSelects() {
   document.querySelectorAll('.col-unit-select').forEach(function(sel) {
-    if (sel.dataset.colName) sel.value = catUnit('model', sel.dataset.colName);
+    if (sel.dataset.colName) sel.value = catPropUnit('model', sel.dataset.colName);
   });
   document.querySelectorAll('.swath-var-unit, .gt-var-unit').forEach(function(sel) {
     if (sel.dataset.auxCol != null) {
-      if (sel.dataset.auxName) sel.value = catUnit('aux', sel.dataset.auxName);
+      if (sel.dataset.auxName) sel.value = catPropUnit('aux', sel.dataset.auxName);
     } else {
       const n = currentHeader && currentHeader[parseInt(sel.dataset.col)];
-      if (n) sel.value = catUnit('model', n);
+      if (n) sel.value = catPropUnit('model', n);
     }
   });
 }
@@ -8776,7 +8776,7 @@ let lastSwathData = null;
 let swathExprController = null;
 
 function getSwathVarColor(colName, paletteIdx) {
-  return catVarColor('model', colName, paletteIdx);
+  return catPropColor('model', colName, paletteIdx);
 }
 
 // GT state
@@ -18334,7 +18334,7 @@ function displayResults(data) {
       const typeLabel = isNum ? 'NUM' : 'CAT';
       let unitCell = '\u2014';
       if (isNum) {
-        let curUnit = catUnit('model', cName);
+        let curUnit = catPropUnit('model', cName);
         let unitOpts = GRADE_UNITS.map(function(u, ui) {
           return '<option value="' + ui + '"' + (ui === curUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
         }).join('');
@@ -21389,7 +21389,7 @@ function applySwathColor(colName, color) {
 }
 
 function getSwathUnit(colIdx) {
-  var idx = currentHeader[colIdx] ? catUnit('model', currentHeader[colIdx]) : 0;
+  var idx = currentHeader[colIdx] ? catPropUnit('model', currentHeader[colIdx]) : 0;
   var u = GRADE_UNITS[idx] || GRADE_UNITS[0];
   return { unitIdx: idx, symbol: u.symbol };
 }
@@ -21410,7 +21410,7 @@ function getAuxSwathVarColor(baseName, fallbackIdx) {
 }
 
 function getAuxSwathUnit(auxColIdx, baseName) {
-  var idx = baseName ? catUnit('aux', baseName) : 0; // inherits the paired primary's unit
+  var idx = baseName ? catPropUnit('aux', baseName) : 0; // inherits the paired primary's unit
   var u = GRADE_UNITS[idx] || GRADE_UNITS[0];
   return { unitIdx: idx, symbol: u.symbol };
 }
@@ -21556,7 +21556,7 @@ function renderSwathConfig(data) {
     '</div>';
   }
   const varItems = swathNumCols.map(function(c, vi) {
-    var defUnit = catUnit('model', c.name);
+    var defUnit = catPropUnit('model', c.name);
     var unitOpts = GRADE_UNITS.map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
@@ -21849,7 +21849,7 @@ function renderSwathAuxVars() {
     // Default: checked when the variable is paired with a model variable
     // (the comparison case) — pairing is seeded by name, editable in C1a+
     var checked = checkedNames !== null ? checkedNames.indexOf(c.name) >= 0 : !!catPair(c.name);
-    var unitIdx = catUnit('aux', c.name);
+    var unitIdx = catPropUnit('aux', c.name);
     var unitOpts = GRADE_UNITS.map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === unitIdx ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
@@ -23174,7 +23174,7 @@ function renderGtConfig(data) {
 
   // Grade variable checkbox list with per-variable unit selects
   var varItems = gtNumCols.map(function(c, i) {
-    var defUnit = catUnit('model', c.name);
+    var defUnit = catPropUnit('model', c.name);
     var opts = GT_GRADE_UNITS.slice(0, -1).map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
@@ -23544,7 +23544,7 @@ function gtFmt(v, dp) {
 }
 
 function getGtGradeUnit(colIdx) {
-  var idx = currentHeader[colIdx] ? catUnit('model', currentHeader[colIdx]) : 0;
+  var idx = currentHeader[colIdx] ? catPropUnit('model', currentHeader[colIdx]) : 0;
   var gu = GT_GRADE_UNITS[idx] || GT_GRADE_UNITS[0];
   return { gradeFactor: gu.factor, gradeSymbol: gu.symbol };
 }
@@ -27827,7 +27827,7 @@ function treeMixedBadge(ds, idx) {
 }
 
 function treeUnitChip(ds, name) {
-  var u = catUnit(ds, name);
+  var u = catPropUnit(ds, name);
   if (!u || !GRADE_UNITS[u] || !GRADE_UNITS[u].symbol) return '';
   return '<span class="tree-unit">' + esc(GRADE_UNITS[u].symbol) + '</span>';
 }
@@ -27906,10 +27906,10 @@ function treeDatasetHtml(ds, openState) {
       if (rec && rec.color) color = rec.color;
       else {
         var pr = catPair(e.name);
-        if (pr && modelPal[pr] !== undefined) color = catVarColor('model', pr, modelPal[pr]);
+        if (pr && modelPal[pr] !== undefined) color = catPropColor('model', pr, modelPal[pr]);
       }
     }
-    if (!color) color = catVarColor(ds, e.name, (ds === 'aux' ? auxModelOffset : 0) + e.palIdx);
+    if (!color) color = catPropColor(ds, e.name, (ds === 'aux' ? auxModelOffset : 0) + e.palIdx);
     return '<div class="tree-row tree-row--edit"' + rowAttrs(e, 'num') + ' title="click to edit">' +
       '<span class="tree-chip" style="background:' + color + '"></span>' +
       '<span class="tree-name">' + esc(e.name) + '</span>' +
@@ -28040,7 +28040,7 @@ function renderTreePopover() {
       '<button class="tree-pop-btn" id="treePopColorAuto" title="clear override — palette / paired color">auto</button></div>';
 
     // Unit (one per variable — D2)
-    var u = catUnit(ds, name);
+    var u = catPropUnit(ds, name);
     html += '<div class="tree-pop-label">Unit</div><select class="tree-pop-select" id="treePopUnit">';
     for (var ui = 0; ui < GRADE_UNITS.length; ui++) {
       html += '<option value="' + ui + '"' + (ui === u ? ' selected' : '') + '>' + esc(GRADE_UNITS[ui].label) + '</option>';

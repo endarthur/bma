@@ -77,7 +77,7 @@ function applySwathColor(colName, color) {
 }
 
 function getSwathUnit(colIdx) {
-  var idx = currentHeader[colIdx] ? catUnit('model', currentHeader[colIdx]) : 0;
+  var idx = currentHeader[colIdx] ? catPropUnit('model', currentHeader[colIdx]) : 0;
   var u = GRADE_UNITS[idx] || GRADE_UNITS[0];
   return { unitIdx: idx, symbol: u.symbol };
 }
@@ -98,7 +98,7 @@ function getAuxSwathVarColor(baseName, fallbackIdx) {
 }
 
 function getAuxSwathUnit(auxColIdx, baseName) {
-  var idx = baseName ? catUnit('aux', baseName) : 0; // inherits the paired primary's unit
+  var idx = baseName ? catPropUnit('aux', baseName) : 0; // inherits the paired primary's unit
   var u = GRADE_UNITS[idx] || GRADE_UNITS[0];
   return { unitIdx: idx, symbol: u.symbol };
 }
@@ -244,7 +244,7 @@ function renderSwathConfig(data) {
     '</div>';
   }
   const varItems = swathNumCols.map(function(c, vi) {
-    var defUnit = catUnit('model', c.name);
+    var defUnit = catPropUnit('model', c.name);
     var unitOpts = GRADE_UNITS.map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
@@ -537,7 +537,7 @@ function renderSwathAuxVars() {
     // Default: checked when the variable is paired with a model variable
     // (the comparison case) — pairing is seeded by name, editable in C1a+
     var checked = checkedNames !== null ? checkedNames.indexOf(c.name) >= 0 : !!catPair(c.name);
-    var unitIdx = catUnit('aux', c.name);
+    var unitIdx = catPropUnit('aux', c.name);
     var unitOpts = GRADE_UNITS.map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === unitIdx ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');

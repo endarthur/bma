@@ -1752,7 +1752,7 @@ function displayResults(data) {
       const typeLabel = isNum ? 'NUM' : 'CAT';
       let unitCell = '\u2014';
       if (isNum) {
-        let curUnit = catUnit('model', cName);
+        let curUnit = catPropUnit('model', cName);
         let unitOpts = GRADE_UNITS.map(function(u, ui) {
           return '<option value="' + ui + '"' + (ui === curUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
         }).join('');
