@@ -18,7 +18,7 @@ A,A8,Empty-column warnings (+ real worker bug fix),Done,,,
 A,A9,Data-fidelity pass (zero silent loss; F1-F8),Done,,431cc08..7e86181,
 A10,Phase 0,Dataset registry getter-view over model+aux,Done,,01f02e4,
 A10,Phase 1,Instances live (registry factory / datasetize tree / DOM seam / parameterize / clone+spawn),Done,,b3323ed..42379c3,1c/1d/1e/1f/1g-a/1g-b/1g-c + 2a + phase 3 (summary)
-A10,Phase 4a,Properties layer (named equivalence classes; display moves onto property; subsumes vars+pairs),Active,Phase 1,bee5c94,4a-i inert seam done (catPropId/Color/Unit); 4a-ii migrate consumers; 4a-iii flip storage + merge/rename/split
+A10,Phase 4a,Properties layer (named equivalence classes; display moves onto property; subsumes vars+pairs),Active,Phase 1,c4f4bac,4a-i seam + 4a-ii consumer migration DONE (bit-identical); NEXT 4a-iii flip storage to catalog.properties + merge/rename/split popover + legacy migration (behavior-changing)
 A10,Phase 4b,De-privilege model (no kind; grid geometry an optional facet; panels feature-detect),Planned,4a,,Reference-hub + gridded/point split removed
 A10,Phase 4c,Per-panel selection (datasets x properties chips; progressive disclosure at 3+ datasets),Planned,4a; 4b,,
 A10,Phase 4d,Per-panel reference (delta% denominator is instance state; NO global star),Planned,4c,,
