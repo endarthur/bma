@@ -444,6 +444,56 @@ Smokes that pin current behaviour (keep green): `a10-smoke` (ref picker, chips,
 fan-out across stats/swath/categories), `delta-row-smoke`, `rails-smoke`
 (layout serialize/restore), `tree-smoke`, `c6-smoke`.
 
+### Phase 4e — progress (2026-06-16)
+
+Sliced B1/C1a-style; `4e-a` + `4e-b` landed (`d3d29cb..5364059`):
+
+- **4e-a ✅ (d3d29cb)** — inert scaffold. The scattered per-panel ephemeral
+  module-globals (`statsCmpSel`/`statsCdfCmpSel`/`statsDsHidden`/`statsRefDs`/
+  `swathDsHidden`/`catDsHidden`/`catFocusedCol`) are corralled into one
+  `panelState.{statistics,swath,categories}` container in core.js; every
+  read/write across core/statistics/swath/categories/project/auxtab/ctxmenu/tree
+  routes through it. Single instance, bit-identical. (4e-c keys this by panel
+  instance for cloning; the already-persisted Statistics fields — selectedVars/
+  visibleMetrics/percentiles/cdf\* — join the instance then.)
+- **4e-b ✅** — *the Phase-6 datasets key, pulled forward*. 4e-b in isolation
+  was a no-op: the chips/reference/d2+ selection are only reachable at 3+
+  datasets, and d2+ instances were dropped on reload (no `datasets` key), so the
+  "close the 4c/4d acceptable-loss deferral" goal needed dataset restoration.
+  - **4e-b-i (0de9b02)** — additive serialize. `serializeProject()` emits
+    `datasets` (the d2+ instances, same config block as the legacy `aux` key +
+    the stable id) and `panels` (cross-dataset selection by NAME, 4c hidden
+    chips + the 4d Δ% reference by id; a null `cmpSel` entry = default, omitted).
+    The 4d reference lives at `panels.statistics.refDs` — per-panel, **no global
+    `referenceId`** (deliberate deviation from the older sketch, post the 4d
+    no-global-star decision).
+  - **4e-b-ii (5364059)** — restore. `displayResults` recreates each instance
+    via `wsRestoreInstance(cfg)` (saved id+prefix, empty rails import panel
+    awaiting its named file; config held on `ds._pendingRestore`, consumed in
+    `loadAuxFile` when the file is re-supplied; `dsNextNum` advanced past
+    restored ids). The id-keyed panel state (chips + reference) applies
+    immediately; `applyStatsCmpRestore(ds)` reattaches each instance's table/CDF
+    selection by column name from `pendingPanelState` as it analyzes (called
+    from the shared aux/instance complete handler — aux keeps its legacy
+    `pendingStatsAuxRestore` path untouched). **Loss-safety** (standing rule): a
+    restored-but-not-yet-reloaded instance has no live config, so
+    `serializeComparisonDatasets`/`serializePanelState` re-emit its pending
+    config + selection until consumed — an autosave mid-restore drops nothing.
+    The 3 clear/new-file reset sites also reset `refDs` + swath/categories chips
+    + the two new pending vars.
+  - Smoke: `experiments/4e-persist-smoke.js` — full persist → reload →
+    re-supply files → re-analyze round-trip (32 asserts incl. mid-restore
+    loss-safety).
+
+**Remaining in 4e:** `4e-b-iii` (pack round-trip — the `.bma` archive should
+include the d2+ files and the reader auto-load them, like `auxToLoad`; today
+only the loose/autosave per-panel re-drop path restores instances) and `4e-c`
+(the original 4e scope: the tab-strip `[+]`/Duplicate cloneable **analysis**
+panels + scope-derived titles — `panelState` is the per-instance state object
+they will hang off, but the analysis panels are still singleton DOM). Note for
+4e-c: `wsSanitizeLayout` still drops instance tab ids from the `layout` key, so
+instance tabs are rebuilt in `displayResults` rather than via layout restore.
+
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
 Phase 1 is being executed as fine slices (B1/C1a playbook — de-risk first):
