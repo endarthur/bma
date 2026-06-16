@@ -4808,6 +4808,8 @@ table.stats tr.stats-delta-row td:first-child {
   background: var(--rails-border);
   color: var(--rails-text);
 }
+/* No "+" on the tree rail — its Data tab is fixed, not a spawn surface */
+.rails-rail[data-rail-id="rTree"] .rails-newtab-btn { display: none; }
 
 .rails-x {
   opacity: 0.4;

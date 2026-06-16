@@ -327,6 +327,21 @@ function wsPanelsMenuItems() {
   });
 }
 
+// "+" launcher (A10 4e-c) — the new-tab button at the end of each strip spawns
+// new workspace content: reopen any CLOSED panel (open ones are already
+// visible) or add a comparison dataset. Routes through wsMenuAction.
+function wsNewTabMenuItems() {
+  var items = [];
+  WS_PANELS.forEach(function(p) {
+    if (wsRails && findTab(wsRails.state, p.id)) return;   // already open — skip
+    items.push({ label: p.title, action: { panel: p.id } });
+  });
+  if (items.length) items.push('---');
+  items.push({ label: 'Add point dataset…', action: 'addPoint' });
+  items.push({ label: 'Add drillhole set…', action: 'addDrillhole' });
+  return items;
+}
+
 // ── C6-2 desktop menubar (File / View / Data / Help) ──────────────────────
 // Each section's items is a LIVE factory (Menu.show re-evaluates it on every
 // open via evaluateItems), so checkmarks (panels/theme/scale/tree) always
@@ -484,7 +499,10 @@ function buildRailsShell(host) {
     },
     // D4: floats on, but full-body drop targets stay off — they make any
     // float move snap into a stack
-    dropZones: { 'tab-append-body': false }
+    dropZones: { 'tab-append-body': false },
+    // A10 4e-c: the "+" at the end of each strip opens a launcher (reopen a
+    // closed panel / add a dataset) via the strip:newtab handler below
+    newTabButton: true
   });
 
   wsRails.on('tab:activate', function(ev) {
@@ -517,6 +535,19 @@ function buildRailsShell(host) {
       var tabEl = document.querySelector(
         '.rails-strip[data-stack-id="' + ev.stack.id + '"] .rails-tab[data-tab-id="' + a.panel + '"]');
       if (tabEl && tabEl.scrollIntoView) tabEl.scrollIntoView({ block: 'nearest', inline: 'center' });
+    });
+  });
+
+  // "+" new-tab button (A10 4e-c) → launcher menu anchored at the button
+  wsRails.on('strip:newtab', function(ev) {
+    if (!wsRails) return;
+    var stackId = ev && ev.stack && ev.stack.id;
+    var strip = stackId && document.querySelector('.rails-strip[data-stack-id="' + stackId + '"]');
+    var wrap = strip && strip.closest('.rails-strip-wrap');
+    var btn = wrap && wrap.querySelector('.rails-newtab-btn');
+    var r = btn ? btn.getBoundingClientRect() : { left: 80, bottom: 80 };
+    Menu.show(wsNewTabMenuItems(), { x: r.left, y: r.bottom }).then(function(a) {
+      if (a) wsMenuAction(a);
     });
   });
 
