@@ -66,6 +66,12 @@ function statsCmpDatasets() {
   return out;
 }
 
+// The comparison datasets actually shown — the chips (4c, ≥2 comparison
+// datasets) let the user hide any of them; the sidebar/table/CDF iterate this.
+function statsShownCmpDatasets() {
+  return statsCmpDatasets().filter(function(ds) { return !statsDsHidden.has(ds.id); });
+}
+
 // Numeric columns of a comparison dataset, each grouped to the model column it
 // shares a property with (catModelMember → matchCi into the model stats) when
 // one exists. Selection defaults to "paired only" until the user materializes
@@ -298,8 +304,26 @@ function renderStatsSidebar() {
     html += '</div>';
   }
 
-  // Comparison-dataset variables (each analyzed non-model dataset: aux, d2…)
-  statsCmpDatasets().forEach(function(ds) {
+  // Dataset chips (progressive disclosure) — only once a second comparison
+  // dataset joins (3+ total), so the common model+aux case stays uncluttered.
+  var dsSection = document.getElementById('statsDatasetsSection');
+  if (dsSection) {
+    var allCmp = statsCmpDatasets();
+    if (allCmp.length >= 2) {
+      var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the reference dataset — every Δ% is relative to a comparison">Model</span>';
+      allCmp.forEach(function(ds) {
+        var off = statsDsHidden.has(ds.id);
+        chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) + '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) + '">' + esc(dsLabel(ds.id)) + '</button>';
+      });
+      document.getElementById('statsDatasetChips').innerHTML = chips;
+      dsSection.style.display = '';
+    } else {
+      dsSection.style.display = 'none';
+    }
+  }
+
+  // Comparison-dataset variables (each shown non-model dataset: aux, d2…)
+  statsShownCmpDatasets().forEach(function(ds) {
     var cols = getStatsCmpCols(ds);
     if (cols.length === 0) return;
     var label = dsLabel(ds.id);
@@ -337,7 +361,7 @@ function renderStatsTable() {
   // within a group (aux before d2…), cmpUnmatched holds property-less columns.
   var cmpByMatch = {};
   var cmpUnmatched = [];
-  var cmpDatasets = statsCmpDatasets();
+  var cmpDatasets = statsShownCmpDatasets();
   cmpDatasets.forEach(function(ds) {
     getStatsCmpCols(ds).forEach(function(col) {
       if (!isStatsCmpSelected(ds, col)) return;
@@ -425,7 +449,7 @@ function renderStatsCdfPanel() {
   var chart = document.getElementById('statsCdfChart');
   if (!chart) return;
 
-  var anyCmpCdf = statsCmpDatasets().some(function(ds) {
+  var anyCmpCdf = statsShownCmpDatasets().some(function(ds) {
     var s = statsCdfCmpSel[ds.id]; return s && s.size > 0;
   });
   if (statsCdfSelected.size === 0 && !anyCmpCdf) {
@@ -448,7 +472,7 @@ function renderStatsCdfPanel() {
       skipped.push(header[ci]);
     }
   });
-  statsCmpDatasets().forEach(function(ds) {
+  statsShownCmpDatasets().forEach(function(ds) {
     var cdfSet = statsCdfCmpSel[ds.id];
     if (!cdfSet || cdfSet.size === 0) return;
     var label = dsLabel(ds.id), cs = ds.complete.stats, ch = ds.complete.header;
@@ -949,6 +973,20 @@ function wireStatsEventsOnce() {
     if (cb.checked) statsVisibleMetrics.add(cb.dataset.metric);
     else statsVisibleMetrics.delete(cb.dataset.metric);
     renderStatsTable();
+    autoSaveProject();
+  });
+
+  // --- Dataset chips (4c progressive disclosure; static container) ---
+  var $dsChips = document.getElementById('statsDatasetChips');
+  if ($dsChips) $dsChips.addEventListener('click', function(e) {
+    var b = e.target.closest('[data-ds-chip]');
+    if (!b) return;
+    var id = b.dataset.dsChip;
+    if (statsDsHidden.has(id)) statsDsHidden.delete(id);
+    else statsDsHidden.add(id);
+    renderStatsSidebar();
+    renderStatsTable();
+    renderStatsCdfPanel();
     autoSaveProject();
   });
 

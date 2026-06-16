@@ -308,9 +308,16 @@ inherits its *paired model* var's color/unit). Target: display lives on the
   model + aux only (the existing `auxSelected`/`cdfAuxSelected` project keys,
   now read off `statsCmpSel.aux`); d2+ stats selection is ephemeral until phase
   6 owns the `datasets` key — consistent with d2 datasets themselves not yet
-  persisting. **Still TODO in 4c:** progressive-disclosure dataset **chips** at
-  3+ datasets (today every comparison dataset's section just stacks); Swath
-  (4c-iii) and Categories + the merge/rename/split popover (4c-iv).
+  persisting.
+- **4c-ii-chips ✅ — progressive-disclosure dataset chips.** Once a *second*
+  comparison dataset joins (3+ total), a **Datasets** section appears in the
+  stats sidebar with a chip per comparison dataset (plus a static "Model"
+  baseline chip); toggling a chip hides/shows that dataset across the sidebar,
+  table, and CDF (`statsDsHidden` Set → `statsShownCmpDatasets()`). Below 3
+  datasets the section stays hidden, so the common model+aux case is unchanged
+  (guarded in `delta-row-smoke`). Chip state is ephemeral (phase 6, like the
+  rest of d2+ stats UI). **Still TODO in 4c:** Swath (4c-iii) and Categories +
+  the merge/rename/split popover (4c-iv).
 
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 

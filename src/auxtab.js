@@ -737,6 +737,7 @@ function clearAux(ds, root) {
   ds.stale = false;
   delete statsCmpSel[ds.id];
   delete statsCdfCmpSel[ds.id];
+  statsDsHidden.delete(ds.id);
   ds.calcolCode = '';
   ds.calcolMeta = [];
   catSetRole(ds.id, 'weight', null);

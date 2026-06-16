@@ -4080,6 +4080,26 @@ table.cat-values tr.cat-aux-only td { background: color-mix(in srgb, var(--brand
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .stats-var-item--aux .var-name { opacity: 0.85; font-style: italic; }
+/* A10 4c: dataset chips — progressive disclosure when 3+ datasets are loaded.
+   The model is the fixed Δ% baseline (a static chip); each comparison dataset
+   toggles its participation in the sidebar + table + CDF. */
+.stats-ds-chips { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.stats-ds-chip {
+  font: 0.65rem var(--mono); background: var(--bg2); color: var(--sel);
+  border: 1px solid var(--sel); border-radius: 999px;
+  padding: 0.15rem 0.5rem; cursor: pointer; line-height: 1.2;
+  max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stats-ds-chip:not(.off) { background: var(--sel-soft); }
+.stats-ds-chip:hover:not(.stats-ds-chip--model) { color: var(--fg-bright); }
+.stats-ds-chip.off {
+  color: var(--fg-dim); border-color: var(--border); border-style: dashed;
+  background: transparent; text-decoration: line-through; opacity: 0.75;
+}
+.stats-ds-chip--model {
+  cursor: default; color: var(--fg-dim);
+  border-color: var(--border); border-left: 2px solid var(--sel); background: transparent;
+}
 .aux-declus-results {
   margin-top: 0.4rem; padding-top: 0.35rem;
   border-top: 1px dashed var(--border);
@@ -5492,6 +5512,10 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
               <div class="stats-sidebar-title">Metrics</div>
               <div class="stats-metric-toggles" id="statsMetricToggles"></div>
             </div>
+            <div class="stats-sidebar-section" data-sb="datasets" id="statsDatasetsSection" style="display:none">
+              <div class="stats-sidebar-title">Datasets</div>
+              <div class="stats-ds-chips" id="statsDatasetChips"></div>
+            </div>
             <div class="stats-sidebar-section--grow">
               <div class="stats-sidebar-title">Variables <span class="badge" id="statsBadge"></span></div>
               <input type="text" class="stats-search" id="statsVarSearch" placeholder="Search variables…" autocomplete="off" spellcheck="false">
@@ -5788,7 +5812,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 8840e4d — click to check for updates">8840e4d</div>
+<div class="build-badge" id="buildBadge" title="build 18c59d6 — click to check for updates">18c59d6</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8309,6 +8333,7 @@ let auxTopcut = null;              // top-cut analysis state: { varName, cap, va
 // default (paired-only). aux is just the first comparison dataset.
 let statsCmpSel = {};                // { dsId: Set<colIdx>|null } shown in the stats table
 let statsCdfCmpSel = {};             // { dsId: Set<colIdx> } with CDF curves
+let statsDsHidden = new Set();       // comparison dataset ids hidden via the 4c dataset chips (progressive disclosure at 3+ datasets)
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes (aux-only; d2+ ephemeral until phase 6)
 
 // ─── A10 dataset registry (phase 0) ──────────────────────────────────────
@@ -15289,6 +15314,7 @@ function clearAux(ds, root) {
   ds.stale = false;
   delete statsCmpSel[ds.id];
   delete statsCdfCmpSel[ds.id];
+  statsDsHidden.delete(ds.id);
   ds.calcolCode = '';
   ds.calcolMeta = [];
   catSetRole(ds.id, 'weight', null);
@@ -17603,6 +17629,7 @@ function clearProject() {
   statsCdfSelected = new Set();
   statsCmpSel = {};
   statsCdfCmpSel = {};
+  statsDsHidden = new Set();
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -17805,6 +17832,7 @@ async function handleFile(file, handle, skipRecents) {
   statsCdfSelected = new Set();
   statsCmpSel = {};
   statsCdfCmpSel = {};
+  statsDsHidden = new Set();
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -17979,6 +18007,7 @@ $backToPreflight.addEventListener('click', () => {
   statsCdfSelected = new Set();
   statsCmpSel = {};
   statsCdfCmpSel = {};
+  statsDsHidden = new Set();
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -19679,6 +19708,12 @@ function statsCmpDatasets() {
   return out;
 }
 
+// The comparison datasets actually shown — the chips (4c, ≥2 comparison
+// datasets) let the user hide any of them; the sidebar/table/CDF iterate this.
+function statsShownCmpDatasets() {
+  return statsCmpDatasets().filter(function(ds) { return !statsDsHidden.has(ds.id); });
+}
+
 // Numeric columns of a comparison dataset, each grouped to the model column it
 // shares a property with (catModelMember → matchCi into the model stats) when
 // one exists. Selection defaults to "paired only" until the user materializes
@@ -19911,8 +19946,26 @@ function renderStatsSidebar() {
     html += '</div>';
   }
 
-  // Comparison-dataset variables (each analyzed non-model dataset: aux, d2…)
-  statsCmpDatasets().forEach(function(ds) {
+  // Dataset chips (progressive disclosure) — only once a second comparison
+  // dataset joins (3+ total), so the common model+aux case stays uncluttered.
+  var dsSection = document.getElementById('statsDatasetsSection');
+  if (dsSection) {
+    var allCmp = statsCmpDatasets();
+    if (allCmp.length >= 2) {
+      var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the reference dataset — every Δ% is relative to a comparison">Model</span>';
+      allCmp.forEach(function(ds) {
+        var off = statsDsHidden.has(ds.id);
+        chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) + '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) + '">' + esc(dsLabel(ds.id)) + '</button>';
+      });
+      document.getElementById('statsDatasetChips').innerHTML = chips;
+      dsSection.style.display = '';
+    } else {
+      dsSection.style.display = 'none';
+    }
+  }
+
+  // Comparison-dataset variables (each shown non-model dataset: aux, d2…)
+  statsShownCmpDatasets().forEach(function(ds) {
     var cols = getStatsCmpCols(ds);
     if (cols.length === 0) return;
     var label = dsLabel(ds.id);
@@ -19950,7 +20003,7 @@ function renderStatsTable() {
   // within a group (aux before d2…), cmpUnmatched holds property-less columns.
   var cmpByMatch = {};
   var cmpUnmatched = [];
-  var cmpDatasets = statsCmpDatasets();
+  var cmpDatasets = statsShownCmpDatasets();
   cmpDatasets.forEach(function(ds) {
     getStatsCmpCols(ds).forEach(function(col) {
       if (!isStatsCmpSelected(ds, col)) return;
@@ -20038,7 +20091,7 @@ function renderStatsCdfPanel() {
   var chart = document.getElementById('statsCdfChart');
   if (!chart) return;
 
-  var anyCmpCdf = statsCmpDatasets().some(function(ds) {
+  var anyCmpCdf = statsShownCmpDatasets().some(function(ds) {
     var s = statsCdfCmpSel[ds.id]; return s && s.size > 0;
   });
   if (statsCdfSelected.size === 0 && !anyCmpCdf) {
@@ -20061,7 +20114,7 @@ function renderStatsCdfPanel() {
       skipped.push(header[ci]);
     }
   });
-  statsCmpDatasets().forEach(function(ds) {
+  statsShownCmpDatasets().forEach(function(ds) {
     var cdfSet = statsCdfCmpSel[ds.id];
     if (!cdfSet || cdfSet.size === 0) return;
     var label = dsLabel(ds.id), cs = ds.complete.stats, ch = ds.complete.header;
@@ -20562,6 +20615,20 @@ function wireStatsEventsOnce() {
     if (cb.checked) statsVisibleMetrics.add(cb.dataset.metric);
     else statsVisibleMetrics.delete(cb.dataset.metric);
     renderStatsTable();
+    autoSaveProject();
+  });
+
+  // --- Dataset chips (4c progressive disclosure; static container) ---
+  var $dsChips = document.getElementById('statsDatasetChips');
+  if ($dsChips) $dsChips.addEventListener('click', function(e) {
+    var b = e.target.closest('[data-ds-chip]');
+    if (!b) return;
+    var id = b.dataset.dsChip;
+    if (statsDsHidden.has(id)) statsDsHidden.delete(id);
+    else statsDsHidden.add(id);
+    renderStatsSidebar();
+    renderStatsTable();
+    renderStatsCdfPanel();
     autoSaveProject();
   });
 

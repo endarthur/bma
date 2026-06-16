@@ -4065,6 +4065,26 @@ table.cat-values tr.cat-aux-only td { background: color-mix(in srgb, var(--brand
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .stats-var-item--aux .var-name { opacity: 0.85; font-style: italic; }
+/* A10 4c: dataset chips — progressive disclosure when 3+ datasets are loaded.
+   The model is the fixed Δ% baseline (a static chip); each comparison dataset
+   toggles its participation in the sidebar + table + CDF. */
+.stats-ds-chips { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.stats-ds-chip {
+  font: 0.65rem var(--mono); background: var(--bg2); color: var(--sel);
+  border: 1px solid var(--sel); border-radius: 999px;
+  padding: 0.15rem 0.5rem; cursor: pointer; line-height: 1.2;
+  max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stats-ds-chip:not(.off) { background: var(--sel-soft); }
+.stats-ds-chip:hover:not(.stats-ds-chip--model) { color: var(--fg-bright); }
+.stats-ds-chip.off {
+  color: var(--fg-dim); border-color: var(--border); border-style: dashed;
+  background: transparent; text-decoration: line-through; opacity: 0.75;
+}
+.stats-ds-chip--model {
+  cursor: default; color: var(--fg-dim);
+  border-color: var(--border); border-left: 2px solid var(--sel); background: transparent;
+}
 .aux-declus-results {
   margin-top: 0.4rem; padding-top: 0.35rem;
   border-top: 1px dashed var(--border);

@@ -45,6 +45,7 @@ let auxTopcut = null;              // top-cut analysis state: { varName, cap, va
 // default (paired-only). aux is just the first comparison dataset.
 let statsCmpSel = {};                // { dsId: Set<colIdx>|null } shown in the stats table
 let statsCdfCmpSel = {};             // { dsId: Set<colIdx> } with CDF curves
+let statsDsHidden = new Set();       // comparison dataset ids hidden via the 4c dataset chips (progressive disclosure at 3+ datasets)
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes (aux-only; d2+ ephemeral until phase 6)
 
 // ─── A10 dataset registry (phase 0) ──────────────────────────────────────

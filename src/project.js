@@ -897,6 +897,7 @@ function clearProject() {
   statsCdfSelected = new Set();
   statsCmpSel = {};
   statsCdfCmpSel = {};
+  statsDsHidden = new Set();
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -1099,6 +1100,7 @@ async function handleFile(file, handle, skipRecents) {
   statsCdfSelected = new Set();
   statsCmpSel = {};
   statsCdfCmpSel = {};
+  statsDsHidden = new Set();
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -1273,6 +1275,7 @@ $backToPreflight.addEventListener('click', () => {
   statsCdfSelected = new Set();
   statsCmpSel = {};
   statsCdfCmpSel = {};
+  statsDsHidden = new Set();
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
