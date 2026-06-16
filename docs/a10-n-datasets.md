@@ -406,6 +406,44 @@ inherits its *paired model* var's color/unit). Target: display lives on the
   Next: 4e (multi-instance spawn — `{datasets, reference, properties, params,
   title}` becomes real serialized instance state).
 
+### Phase 4e — starting notes (handoff 2026-06-16)
+
+4e = the tab-strip `[+]` / Duplicate, scope-derived titles, and turning the
+per-panel state below into **real per-instance serialized state** via the C9
+clone contract (see "the rails instance contract" section above; `dsConfigRoot`
++ `auxQ(sel, root)` are the scoped-DOM precedent). Entry points: rails build is
+`buildRailsShell()` / `wsRails` in `src/workspace.js`; serialization is
+`serializeProject()` (`statsTab` + `layout` keys) → `applyProject()` in
+`src/project.js`.
+
+**⚠ The per-panel state to migrate is scattered as module-globals — collect ALL
+of it or instances silently lose state (an "acceptable loss" trap):**
+
+- **Statistics** (`src/core.js` decls): `statsCmpSel{}` / `statsCdfCmpSel{}`
+  (per-dsId Set, table + CDF column selection), `statsDsHidden` (Set, chips),
+  `statsRefDs` (4d reference, `null`=default), `statsSelectedVars`,
+  `statsVisibleMetrics`, `statsPercentiles`, `statsCdfSelected`, `statsCdfScale`,
+  `statsCdfMode`. Today `serializeProject().statsTab` persists only the
+  model+aux slice (`selectedVars`/`visibleMetrics`/`percentiles`/`cdf*` +
+  `auxSelected`/`cdfAuxSelected` by NAME); **d2+ selection, `statsDsHidden`, and
+  `statsRefDs` are ephemeral** (reset at the 3 `statsCmpSel = {}` sites in
+  project.js).
+- **Swath** (`src/swath.js`): `swathDsHidden` (Set, chips). Sidebar checked vars
+  are DOM-driven, serialized only for aux as `swath.auxCheckedVars` (scoped to
+  `data-ds="aux"`); d2+ ephemeral.
+- **Categories** (`src/categories.js`): `catDsHidden` (Set, chips),
+  `catFocusedCol`.
+
+These are all global today because there is exactly one of each panel. 4e makes
+panels cloneable, so each must hang off the **instance** (the C9 state object),
+not the module. The 4d/4c work deliberately left them ephemeral *pending this
+phase* — so 4e is also where d2+ selection/chip/reference state finally
+persists (phase-6 "datasets key" territory; coordinate the two).
+
+Smokes that pin current behaviour (keep green): `a10-smoke` (ref picker, chips,
+fan-out across stats/swath/categories), `delta-row-smoke`, `rails-smoke`
+(layout serialize/restore), `tree-smoke`, `c6-smoke`.
+
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
 Phase 1 is being executed as fine slices (B1/C1a playbook — de-risk first):
