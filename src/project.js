@@ -831,21 +831,37 @@ function openPackModal() {
   var $m = document.getElementById('packModal');
   document.getElementById('packTitle').value = projectTitle || '';
   document.getElementById('packModelName').textContent = currentFile.name + ' (' + formatBytes(currentFile.size) + ')';
+  // A10 4e-b-iii: the include-comparison row now covers EVERY comparison
+  // dataset (aux + the d2+ instances), so a packed project round-trips them all.
   var $auxRow = document.getElementById('packAuxRow');
   var auxPackSize = 0;
+  var cmpLabels = [];
+  var cmpNames = {};
+  cmpNames[currentFile.name] = true;
   if (auxFile && auxFile.name !== currentFile.name) {
-    $auxRow.style.display = '';
     if (dhIsDerivedAux()) {
       // D8: the raw trio rides the pack; the recipe re-derives the composites
       var trio = dhPackFiles();
-      auxPackSize = trio[0].size + trio[1].size + trio[2].size;
-      document.getElementById('packAuxName').textContent =
-        'drillhole set: ' + trio.map(function(f) { return f.name; }).join(' + ') +
-        ' (' + formatBytes(auxPackSize) + ' — composites re-derive on load)';
+      auxPackSize += trio[0].size + trio[1].size + trio[2].size;
+      trio.forEach(function(f) { cmpNames[f.name] = true; });
+      cmpLabels.push('drillhole set: ' + trio.map(function(f) { return f.name; }).join(' + ') +
+        ' (' + formatBytes(trio[0].size + trio[1].size + trio[2].size) + ' — composites re-derive on load)');
     } else {
-      auxPackSize = auxFile.size;
-      document.getElementById('packAuxName').textContent = auxFile.name + ' (' + formatBytes(auxFile.size) + ')';
+      auxPackSize += auxFile.size;
+      cmpNames[auxFile.name] = true;
+      cmpLabels.push(auxFile.name + ' (' + formatBytes(auxFile.size) + ')');
     }
+  }
+  for (var pdi = 2; pdi < datasets.length; pdi++) {
+    var pds = datasets[pdi];
+    if (!pds.file || cmpNames[pds.file.name]) continue;
+    cmpNames[pds.file.name] = true;
+    auxPackSize += pds.file.size;
+    cmpLabels.push((pds.prefix ? pds.prefix + ': ' : '') + pds.file.name + ' (' + formatBytes(pds.file.size) + ')');
+  }
+  if (cmpLabels.length) {
+    $auxRow.style.display = '';
+    document.getElementById('packAuxName').innerHTML = cmpLabels.map(esc).join('<br>');
     document.getElementById('packIncAux').checked = true;
   } else {
     $auxRow.style.display = 'none';
@@ -883,9 +899,10 @@ async function runPack() {
   try {
     projectTitle = document.getElementById('packTitle').value.trim() || null;
     updateProjectTitleDisplay();
-    var includeAux = !!(auxFile && auxFile.name !== currentFile.name &&
-      document.getElementById('packAuxRow').style.display !== 'none' &&
+    // A10 4e-b-iii: one checkbox governs all comparison data (aux + d2+).
+    var includeCmp = !!(document.getElementById('packAuxRow').style.display !== 'none' &&
       document.getElementById('packIncAux').checked);
+    var includeAux = !!(includeCmp && auxFile && auxFile.name !== currentFile.name);
     var compress = !!document.getElementById('packCompress').checked;
 
     var stem = currentFile.name.replace(/\.[^.]+$/, '');
@@ -897,13 +914,29 @@ async function runPack() {
     // Never re-deflate archives; everything else follows the toggle
     function wantsDeflate(name) { return compress && !/\.zip$/i.test(name); }
     var files = [{ name: currentFile.name, blob: currentFile, deflate: wantsDeflate(currentFile.name) }];
+    var packed = {}; packed[currentFile.name] = true;   // dedup: one archive entry per name
     if (includeAux && dhIsDerivedAux()) {
       // D8: pack the raw trio, never the derived composite CSV
       dhPackFiles().forEach(function(f) {
+        if (packed[f.name]) return;
+        packed[f.name] = true;
         files.push({ name: f.name, blob: f, deflate: wantsDeflate(f.name) });
       });
-    } else if (includeAux) {
+    } else if (includeAux && !packed[auxFile.name]) {
+      packed[auxFile.name] = true;
       files.push({ name: auxFile.name, blob: auxFile, deflate: wantsDeflate(auxFile.name) });
+    }
+    // A10 4e-b-iii: the comparison-dataset instances (d2+) ride along too, so a
+    // packed project restores them without a manual re-drop (matched by name on
+    // load). Dedup against model/aux/trio — one copy suffices, the reader keys
+    // each instance to its own fileName.
+    if (includeCmp) {
+      for (var fdi = 2; fdi < datasets.length; fdi++) {
+        var fds = datasets[fdi];
+        if (!fds.file || packed[fds.file.name]) continue;
+        packed[fds.file.name] = true;
+        files.push({ name: fds.file.name, blob: fds.file, deflate: wantsDeflate(fds.file.name) });
+      }
     }
     files.push({ name: stem + '.bma.json', blob: new Blob([json]), deflate: compress });
 
@@ -1077,6 +1110,7 @@ $projectFileInput.addEventListener('change', (e) => {
 let pendingDroppedProject = null;
 let pendingDroppedAuxFile = null;
 let pendingDroppedDhTrio = null; // raw drillhole trio from a packed project (A7)
+let pendingDroppedDatasetFiles = null; // { id: File } d2+ instance files from a packed project (A10 4e-b-iii) — consumed in displayResults once the instances are recreated
 
 // A "packed project" is a zip containing a .bma.json plus the data files it
 // references. Returns {project, modelFile, auxFile} or null (not packed /
@@ -1100,6 +1134,9 @@ async function tryPackedProject(file) {
       (project.drillholes && project.drillholes.files
         ? ' and the packed <strong>drillhole set</strong> (composites re-derive on load)'
         : (project.aux && project.aux.fileName ? ' and <strong>' + esc(project.aux.fileName) + '</strong>' : '')) +
+      (Array.isArray(project.datasets) && project.datasets.length
+        ? ' (+ ' + project.datasets.length + ' comparison dataset' + (project.datasets.length > 1 ? 's' : '') + ')'
+        : '') +
       ' with that setup?' +
       '<div class="confirm-hint">“Open as zip” ignores the project and opens the archive normally.</div>',
     okLabel: 'Load project',
@@ -1125,7 +1162,19 @@ async function tryPackedProject(file) {
     }
     if (!found) dhTrio = null;
   }
-  return { project: project, modelFile: modelFile, auxFile: auxF, dhTrio: dhTrio };
+  // A10 4e-b-iii: the comparison-dataset instances (d2+) ride in the archive —
+  // extract each by its saved fileName so it auto-loads into its restored
+  // instance (the panel state reattaches as each analyzes).
+  let datasetFiles = null;
+  if (Array.isArray(project.datasets) && project.datasets.length) {
+    datasetFiles = {};
+    for (const cfg of project.datasets) {
+      if (!cfg || !cfg.id || !cfg.fileName) continue;
+      const fe = entries.find(e => e.name === cfg.fileName);
+      if (fe) { try { datasetFiles[cfg.id] = await zipEntryToFile(file, fe); } catch (e) {} }
+    }
+  }
+  return { project: project, modelFile: modelFile, auxFile: auxF, dhTrio: dhTrio, datasetFiles: datasetFiles };
 }
 
 async function handleFile(file, handle, skipRecents) {
@@ -1155,6 +1204,7 @@ async function handleFile(file, handle, skipRecents) {
       pendingDroppedProject = packed.project;
       pendingDroppedAuxFile = packed.auxFile;
       pendingDroppedDhTrio = packed.dhTrio;
+      pendingDroppedDatasetFiles = packed.datasetFiles || null; // 4e-b-iii: consumed in displayResults once instances exist
       // Recents records the archive the user actually opened (re-openable
       // via its handle) — not the extracted inner CSV, which used to land
       // in the list under a name nobody dropped and could never re-open
@@ -1943,6 +1993,19 @@ function displayResults(data) {
       pendingDatasetsRestore[cfg.id] = cfg;
       if (typeof wsRestoreInstance === 'function') wsRestoreInstance(cfg);
     });
+    // 4e-b-iii: a packed project carries the d2+ files in the archive — load
+    // each into its freshly-recreated instance now (loadAuxFile applies the
+    // pending config + preflight, like the packed aux path; user analyzes per
+    // dataset, which reattaches its selection). The loose/autosave path leaves
+    // this null and the user re-drops each file into its waiting panel.
+    if (pendingDroppedDatasetFiles) {
+      var ddf = pendingDroppedDatasetFiles;
+      pendingDroppedDatasetFiles = null;
+      Object.keys(ddf).forEach(function(id) {
+        var dds = (typeof dsById === 'function') ? dsById(id) : null;
+        if (dds && ddf[id] && typeof loadAuxFile === 'function') loadAuxFile(ddf[id], null, null, dds, dsConfigRoot(dds));
+      });
+    }
     pendingPanelState = restoredProject.panels || null;
     if (pendingPanelState && pendingPanelState.statistics) {
       var pst = pendingPanelState.statistics;
