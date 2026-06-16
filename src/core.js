@@ -40,12 +40,29 @@ let auxView = 'preview';           // aux main-area view: 'preview' | 'topcut'
 let auxTopcut = null;              // top-cut analysis state: { varName, cap, values (sorted
                                    //   Float64Array)|null, prefixS, prefixSS, n, finite,
                                    //   fingerprint } — values NOT persisted (re-loaded on demand)
-// A10 4c-ii: Statistics selection is per comparison dataset (aux, d2, d3…), not
-// a single aux. Maps keyed by dataset id; absent/null entry = that dataset's
-// default (paired-only). aux is just the first comparison dataset.
-let statsCmpSel = {};                // { dsId: Set<colIdx>|null } shown in the stats table
-let statsCdfCmpSel = {};             // { dsId: Set<colIdx> } with CDF curves
-let statsDsHidden = new Set();       // comparison dataset ids hidden via the 4c dataset chips (progressive disclosure at 3+ datasets)
+// A10 phase 4e-a: per-panel instance state, corralled from the scattered
+// module-globals that 4c/4d left ephemeral. Single instance today (one
+// Statistics/Swath/Categories panel each); 4e-b serializes this object, 4e-c
+// keys it by panel instance for [+]/Duplicate cloning. Only the previously
+// un-persisted selection/chip/reference state lives here — the already-persisted
+// Statistics fields (selectedVars/visibleMetrics/percentiles/cdf*) join the
+// instance in 4e-c. Selection maps are keyed by dataset id; absent/null entry =
+// that dataset's default (paired-only). aux is just the first comparison dataset.
+let panelState = {
+  statistics: {
+    cmpSel: {},          // { dsId: Set<colIdx>|null } shown in the stats table
+    cdfCmpSel: {},       // { dsId: Set<colIdx> } with CDF curves
+    dsHidden: new Set(), // comparison dataset ids hidden via the 4c dataset chips (progressive disclosure at 3+ datasets)
+    refDs: null          // 4d Δ% reference dataset id (null = default: first shown comparison)
+  },
+  swath: {
+    dsHidden: new Set()  // comparison dataset ids hidden via the 4c dataset chips
+  },
+  categories: {
+    dsHidden: new Set(), // comparison dataset ids hidden via the 4c dataset chips
+    focusedCol: null     // column index focused in main area
+  }
+};
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes (aux-only; d2+ ephemeral until phase 6)
 
 // ─── A10 dataset registry (phase 0) ──────────────────────────────────────
@@ -311,8 +328,7 @@ let statsCatCdfMax = null;
 let statsCatCrossMode = 'count'; // 'count', 'row', 'col'
 let statsCatShowSelectedOnly = false;
 
-// Categories tab state
-let catFocusedCol = null;           // column index focused in main area
+// Categories tab state — focusedCol moved to panelState.categories (4e-a)
 let catChartShowAll = false;        // show all bars vs top 20
 let _catEventsWired = false;
 
@@ -698,7 +714,7 @@ function reRenderChartsForTheme() {
   try { if (typeof lastCompleteData !== 'undefined' && lastCompleteData && typeof currentGroupBy !== 'undefined' && currentGroupBy !== null && typeof renderStatsCatContent === 'function') renderStatsCatContent(); } catch (e) {}
   try { if (typeof lastGtData !== 'undefined' && lastGtData && typeof renderGtOutput === 'function') renderGtOutput(); } catch (e) {}
   try { if (typeof lastSwathData !== 'undefined' && lastSwathData && typeof renderSwathOutput === 'function') renderSwathOutput(); } catch (e) {}
-  try { if (typeof _catData !== 'undefined' && _catData && typeof catFocusedCol !== 'undefined' && catFocusedCol !== null && typeof renderCatMain === 'function') renderCatMain(); } catch (e) {}
+  try { if (typeof _catData !== 'undefined' && _catData && typeof panelState.categories.focusedCol !== 'undefined' && panelState.categories.focusedCol !== null && typeof renderCatMain === 'function') renderCatMain(); } catch (e) {}
   try { if (typeof auxView !== 'undefined' && auxView === 'topcut' && typeof renderAuxTopcut === 'function') renderAuxTopcut(); } catch (e) {}
   try { if (typeof refreshCatalogTree === 'function') refreshCatalogTree(); } catch (e) {}
 }
@@ -806,7 +822,7 @@ function observeChartWidth(el, render) {
     if (lastSwathData) renderSwathOutput();
   });
   observeChartWidth(document.getElementById('catChart'), function() {
-    if (_catData && catFocusedCol !== null) renderCatBarChart();
+    if (_catData && panelState.categories.focusedCol !== null) renderCatBarChart();
   });
 })();
 

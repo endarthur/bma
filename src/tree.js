@@ -407,7 +407,7 @@ function treePairChanged() {
     if (typeof renderStatsSidebar === 'function') renderStatsSidebar();
     renderStatsTable();
   }
-  if (typeof renderCatMain === 'function' && catFocusedCol !== null && typeof _catData !== 'undefined' && _catData) renderCatMain();
+  if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null && typeof _catData !== 'undefined' && _catData) renderCatMain();
 }
 
 function treeSetColor(color) {
@@ -482,7 +482,7 @@ function treeToggleRole(t, role) {
         return;
       }
       if (e.target.id === 'treePopCatTab') {
-        if (t.idx !== null) { catFocusedCol = t.idx; }
+        if (t.idx !== null) { panelState.categories.focusedCol = t.idx; }
         hideTreePopover();
         showPanel('categories');
         if (typeof renderCatSidebar === 'function') { renderCatSidebar(); renderCatMain(); }

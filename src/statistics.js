@@ -32,9 +32,8 @@ let _statsEventsWired = false;
 let _statsCdfParams = null; // coordinate system for CDF tooltip
 // A10 4d: the Δ% reference (denominator) is per-panel state — NOT a global ★.
 // null = default (first shown comparison dataset = the samples/validation
-// reference, preserving the model-vs-samples acceptance number). Ephemeral like
-// the other d2+ stats UI until phase 6 / the 4e instance-state serialization.
-let statsRefDs = null;
+// reference, preserving the model-vs-samples acceptance number). Lives on
+// panelState.statistics.refDs (4e-a); serialized in 4e-b.
 
 function tdQuantileFromCentroids(centroids, totalCount, q) {
   if (!centroids || centroids.length === 0) return null;
@@ -74,7 +73,7 @@ function statsCmpDatasets() {
 // The comparison datasets actually shown — the chips (4c, ≥2 comparison
 // datasets) let the user hide any of them; the sidebar/table/CDF iterate this.
 function statsShownCmpDatasets() {
-  return statsCmpDatasets().filter(function(ds) { return !statsDsHidden.has(ds.id); });
+  return statsCmpDatasets().filter(function(ds) { return !panelState.statistics.dsHidden.has(ds.id); });
 }
 
 // A10 4d: the resolved Δ% reference dataset id for this panel. Defaults to the
@@ -84,7 +83,7 @@ function statsShownCmpDatasets() {
 function statsReferenceDs() {
   var shownCmp = statsShownCmpDatasets();
   var shown = ['model'].concat(shownCmp.map(function(d) { return d.id; }));
-  if (statsRefDs && shown.indexOf(statsRefDs) >= 0) return statsRefDs;
+  if (panelState.statistics.refDs && shown.indexOf(panelState.statistics.refDs) >= 0) return panelState.statistics.refDs;
   return shownCmp.length ? shownCmp[0].id : 'model';
 }
 
@@ -137,16 +136,16 @@ function getStatsCmpCols(ds) {
 }
 
 function isStatsCmpSelected(ds, col) {
-  var sel = statsCmpSel[ds.id];
+  var sel = panelState.statistics.cmpSel[ds.id];
   if (sel == null) return col.matchCi !== null;   // default: paired only
   return sel.has(col.idx);
 }
 
 function materializeStatsCmpSel(ds) {
-  if (statsCmpSel[ds.id]) return;
+  if (panelState.statistics.cmpSel[ds.id]) return;
   var s = new Set();
   getStatsCmpCols(ds).forEach(function(c) { if (c.matchCi !== null) s.add(c.idx); });
-  statsCmpSel[ds.id] = s;
+  panelState.statistics.cmpSel[ds.id] = s;
 }
 
 // Convert a project restore (variable names) to aux column indices — callable
@@ -159,12 +158,12 @@ function applyStatsAuxRestore() {
   if (pendingStatsAuxRestore.selected) {
     var s = new Set();
     pendingStatsAuxRestore.selected.forEach(function(n) { if (byName[n] !== undefined) s.add(byName[n]); });
-    statsCmpSel.aux = s;
+    panelState.statistics.cmpSel.aux = s;
   }
   if (pendingStatsAuxRestore.cdf) {
     var c = new Set();
     pendingStatsAuxRestore.cdf.forEach(function(n) { if (byName[n] !== undefined) c.add(byName[n]); });
-    statsCdfCmpSel.aux = c;
+    panelState.statistics.cdfCmpSel.aux = c;
   }
   pendingStatsAuxRestore = null;
 }
@@ -363,7 +362,7 @@ function renderStatsSidebar() {
       refSel += '</select></div>';
       var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the model dataset — toggle comparison chips to hide them">Model</span>';
       allCmp.forEach(function(ds) {
-        var off = statsDsHidden.has(ds.id);
+        var off = panelState.statistics.dsHidden.has(ds.id);
         chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) + '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) + '">' + esc(dsLabel(ds.id)) + '</button>';
       });
       document.getElementById('statsDatasetChips').innerHTML = refSel + '<div class="stats-ds-chip-row">' + chips + '</div>';
@@ -449,7 +448,7 @@ function renderStatsTable() {
   function cmpRowHtml(member) {
     var ds = member.ds, ac = member.col, label = dsLabel(ds.id);
     var as = ds.complete.stats[ac.idx];
-    var cdfSet = statsCdfCmpSel[ds.id];
+    var cdfSet = panelState.statistics.cdfCmpSel[ds.id];
     var aCdfActive = !!(cdfSet && cdfSet.has(ac.idx));
     var aNameClass = aCdfActive ? 'cdf-link cdf-active' : 'cdf-link';
     var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-cmp-ds="' + esc(ds.id) + '" data-cmp-col="' + ac.idx + '" href="#">' + esc(label + ':' + ac.name) + '</a>' + statsRefBadge(ds.id === refId) + statsEmptyTag(ds.id, ac.idx) + statsMixedTag(ds.id, ac.idx) + '</td>';
@@ -510,7 +509,7 @@ function renderStatsCdfPanel() {
   if (!chart) return;
 
   var anyCmpCdf = statsShownCmpDatasets().some(function(ds) {
-    var s = statsCdfCmpSel[ds.id]; return s && s.size > 0;
+    var s = panelState.statistics.cdfCmpSel[ds.id]; return s && s.size > 0;
   });
   if (statsCdfSelected.size === 0 && !anyCmpCdf) {
     chart.innerHTML = '<div class="stats-cdf-hint">Click column names to add CDF curves</div>';
@@ -533,7 +532,7 @@ function renderStatsCdfPanel() {
     }
   });
   statsShownCmpDatasets().forEach(function(ds) {
-    var cdfSet = statsCdfCmpSel[ds.id];
+    var cdfSet = panelState.statistics.cdfCmpSel[ds.id];
     if (!cdfSet || cdfSet.size === 0) return;
     var label = dsLabel(ds.id), cs = ds.complete.stats, ch = ds.complete.header;
     cdfSet.forEach(function(ai) {
@@ -1042,8 +1041,8 @@ function wireStatsEventsOnce() {
     var b = e.target.closest('[data-ds-chip]');
     if (!b) return;
     var id = b.dataset.dsChip;
-    if (statsDsHidden.has(id)) statsDsHidden.delete(id);
-    else statsDsHidden.add(id);
+    if (panelState.statistics.dsHidden.has(id)) panelState.statistics.dsHidden.delete(id);
+    else panelState.statistics.dsHidden.add(id);
     renderStatsSidebar();
     renderStatsTable();
     renderStatsCdfPanel();
@@ -1052,7 +1051,7 @@ function wireStatsEventsOnce() {
   // --- Δ% reference picker (4d; same container) ---
   if ($dsChips) $dsChips.addEventListener('change', function(e) {
     if (e.target.id !== 'statsRefSel') return;
-    statsRefDs = e.target.value || null;
+    panelState.statistics.refDs = e.target.value || null;
     renderStatsTable();
     autoSaveProject();
   });
@@ -1065,8 +1064,8 @@ function wireStatsEventsOnce() {
       if (cds) {
         materializeStatsCmpSel(cds);
         var aIdx = parseInt(acb.dataset.cmpCol);
-        if (acb.checked) statsCmpSel[cds.id].add(aIdx);
-        else statsCmpSel[cds.id].delete(aIdx);
+        if (acb.checked) panelState.statistics.cmpSel[cds.id].add(aIdx);
+        else panelState.statistics.cmpSel[cds.id].delete(aIdx);
         var aItem = acb.closest('.stats-var-item');
         if (aItem) aItem.classList.toggle('unchecked', !acb.checked);
         renderStatsTable();
@@ -1096,7 +1095,7 @@ function wireStatsEventsOnce() {
     });
     statsCmpDatasets().forEach(materializeStatsCmpSel);
     document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-cmp-col]').forEach(function(el) {
-      statsCmpSel[el.dataset.cmpDs].add(parseInt(el.dataset.cmpCol));
+      panelState.statistics.cmpSel[el.dataset.cmpDs].add(parseInt(el.dataset.cmpCol));
     });
     renderStatsSidebar();
     renderStatsTable();
@@ -1109,7 +1108,7 @@ function wireStatsEventsOnce() {
     });
     statsCmpDatasets().forEach(materializeStatsCmpSel);
     document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-cmp-col]').forEach(function(el) {
-      statsCmpSel[el.dataset.cmpDs].delete(parseInt(el.dataset.cmpCol));
+      panelState.statistics.cmpSel[el.dataset.cmpDs].delete(parseInt(el.dataset.cmpCol));
     });
     renderStatsSidebar();
     renderStatsTable();
@@ -1130,7 +1129,7 @@ function wireStatsEventsOnce() {
     e.preventDefault();
     if (link.dataset.cmpCol !== undefined) {
       var dsId = link.dataset.cmpDs, aCol = parseInt(link.dataset.cmpCol);
-      var set = statsCdfCmpSel[dsId] || (statsCdfCmpSel[dsId] = new Set());
+      var set = panelState.statistics.cdfCmpSel[dsId] || (panelState.statistics.cdfCmpSel[dsId] = new Set());
       if (set.has(aCol)) set.delete(aCol);
       else set.add(aCol);
     } else {

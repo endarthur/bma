@@ -5865,7 +5865,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 20e92ab — click to check for updates">20e92ab</div>
+<div class="build-badge" id="buildBadge" title="build 0e3e453 — click to check for updates">0e3e453</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8425,12 +8425,29 @@ let auxView = 'preview';           // aux main-area view: 'preview' | 'topcut'
 let auxTopcut = null;              // top-cut analysis state: { varName, cap, values (sorted
                                    //   Float64Array)|null, prefixS, prefixSS, n, finite,
                                    //   fingerprint } — values NOT persisted (re-loaded on demand)
-// A10 4c-ii: Statistics selection is per comparison dataset (aux, d2, d3…), not
-// a single aux. Maps keyed by dataset id; absent/null entry = that dataset's
-// default (paired-only). aux is just the first comparison dataset.
-let statsCmpSel = {};                // { dsId: Set<colIdx>|null } shown in the stats table
-let statsCdfCmpSel = {};             // { dsId: Set<colIdx> } with CDF curves
-let statsDsHidden = new Set();       // comparison dataset ids hidden via the 4c dataset chips (progressive disclosure at 3+ datasets)
+// A10 phase 4e-a: per-panel instance state, corralled from the scattered
+// module-globals that 4c/4d left ephemeral. Single instance today (one
+// Statistics/Swath/Categories panel each); 4e-b serializes this object, 4e-c
+// keys it by panel instance for [+]/Duplicate cloning. Only the previously
+// un-persisted selection/chip/reference state lives here — the already-persisted
+// Statistics fields (selectedVars/visibleMetrics/percentiles/cdf*) join the
+// instance in 4e-c. Selection maps are keyed by dataset id; absent/null entry =
+// that dataset's default (paired-only). aux is just the first comparison dataset.
+let panelState = {
+  statistics: {
+    cmpSel: {},          // { dsId: Set<colIdx>|null } shown in the stats table
+    cdfCmpSel: {},       // { dsId: Set<colIdx> } with CDF curves
+    dsHidden: new Set(), // comparison dataset ids hidden via the 4c dataset chips (progressive disclosure at 3+ datasets)
+    refDs: null          // 4d Δ% reference dataset id (null = default: first shown comparison)
+  },
+  swath: {
+    dsHidden: new Set()  // comparison dataset ids hidden via the 4c dataset chips
+  },
+  categories: {
+    dsHidden: new Set(), // comparison dataset ids hidden via the 4c dataset chips
+    focusedCol: null     // column index focused in main area
+  }
+};
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes (aux-only; d2+ ephemeral until phase 6)
 
 // ─── A10 dataset registry (phase 0) ──────────────────────────────────────
@@ -8696,8 +8713,7 @@ let statsCatCdfMax = null;
 let statsCatCrossMode = 'count'; // 'count', 'row', 'col'
 let statsCatShowSelectedOnly = false;
 
-// Categories tab state
-let catFocusedCol = null;           // column index focused in main area
+// Categories tab state — focusedCol moved to panelState.categories (4e-a)
 let catChartShowAll = false;        // show all bars vs top 20
 let _catEventsWired = false;
 
@@ -9083,7 +9099,7 @@ function reRenderChartsForTheme() {
   try { if (typeof lastCompleteData !== 'undefined' && lastCompleteData && typeof currentGroupBy !== 'undefined' && currentGroupBy !== null && typeof renderStatsCatContent === 'function') renderStatsCatContent(); } catch (e) {}
   try { if (typeof lastGtData !== 'undefined' && lastGtData && typeof renderGtOutput === 'function') renderGtOutput(); } catch (e) {}
   try { if (typeof lastSwathData !== 'undefined' && lastSwathData && typeof renderSwathOutput === 'function') renderSwathOutput(); } catch (e) {}
-  try { if (typeof _catData !== 'undefined' && _catData && typeof catFocusedCol !== 'undefined' && catFocusedCol !== null && typeof renderCatMain === 'function') renderCatMain(); } catch (e) {}
+  try { if (typeof _catData !== 'undefined' && _catData && typeof panelState.categories.focusedCol !== 'undefined' && panelState.categories.focusedCol !== null && typeof renderCatMain === 'function') renderCatMain(); } catch (e) {}
   try { if (typeof auxView !== 'undefined' && auxView === 'topcut' && typeof renderAuxTopcut === 'function') renderAuxTopcut(); } catch (e) {}
   try { if (typeof refreshCatalogTree === 'function') refreshCatalogTree(); } catch (e) {}
 }
@@ -9191,7 +9207,7 @@ function observeChartWidth(el, render) {
     if (lastSwathData) renderSwathOutput();
   });
   observeChartWidth(document.getElementById('catChart'), function() {
-    if (_catData && catFocusedCol !== null) renderCatBarChart();
+    if (_catData && panelState.categories.focusedCol !== null) renderCatBarChart();
   });
 })();
 
@@ -14859,7 +14875,7 @@ function runAuxAnalysis(ds, root) {
         renderStatsTable();
         renderStatsCdfPanel();
       }
-      if (typeof renderCatMain === 'function' && catFocusedCol !== null) renderCatMain();
+      if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();
       if (ds.view === 'summary' && typeof renderAuxSummary === 'function') renderAuxSummary(ds, root);  // A10 per-dataset summary
       autoSaveProject();
     } else if (m.type === 'error') {
@@ -15414,9 +15430,9 @@ function clearAux(ds, root) {
   ds.filter = null;
   ds.prefix = 'aux';
   ds.stale = false;
-  delete statsCmpSel[ds.id];
-  delete statsCdfCmpSel[ds.id];
-  statsDsHidden.delete(ds.id);
+  delete panelState.statistics.cmpSel[ds.id];
+  delete panelState.statistics.cdfCmpSel[ds.id];
+  panelState.statistics.dsHidden.delete(ds.id);
   ds.calcolCode = '';
   ds.calcolMeta = [];
   catSetRole(ds.id, 'weight', null);
@@ -15438,7 +15454,7 @@ function clearAux(ds, root) {
   if (preview) preview.innerHTML = '';
   renderAuxFromMain(ds, root);
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
-  if (typeof renderCatMain === 'function' && catFocusedCol !== null) renderCatMain();
+  if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();
   if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
   if (typeof updateCalcolBadge === 'function') updateCalcolBadge();
   if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
@@ -17230,13 +17246,13 @@ function serializeProject() {
       cdfMode: statsCdfMode,
       // Persistence covers model + aux today (A10 4c-ii); d2+ stats selection
       // is ephemeral until phase 6 takes over the datasets key.
-      auxSelected: (auxCompleteData && statsCmpSel.aux != null)
-        ? Array.from(statsCmpSel.aux).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null,
-      cdfAuxSelected: (auxCompleteData && statsCdfCmpSel.aux && statsCdfCmpSel.aux.size > 0)
-        ? Array.from(statsCdfCmpSel.aux).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null
+      auxSelected: (auxCompleteData && panelState.statistics.cmpSel.aux != null)
+        ? Array.from(panelState.statistics.cmpSel.aux).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null,
+      cdfAuxSelected: (auxCompleteData && panelState.statistics.cdfCmpSel.aux && panelState.statistics.cdfCmpSel.aux.size > 0)
+        ? Array.from(panelState.statistics.cdfCmpSel.aux).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null
     },
     categories: {
-      focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null
+      focusedCol: panelState.categories.focusedCol !== null && currentHeader[panelState.categories.focusedCol] ? currentHeader[panelState.categories.focusedCol] : null
     },
     tree: { open: catalogTreeOpen },
     // C6-4a collapsed control sidebars (per-panel) + C6-4b collapsed sections
@@ -17725,16 +17741,16 @@ function clearProject() {
   statsCatCdfMax = null;
   statsCatCrossMode = 'count';
   statsCatShowSelectedOnly = false;
-  catFocusedCol = null;
+  panelState.categories.focusedCol = null;
   catalog = newCatalog();
   catChartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
-  statsCmpSel = {};
-  statsCdfCmpSel = {};
-  statsDsHidden = new Set();
+  panelState.statistics.cmpSel = {};
+  panelState.statistics.cdfCmpSel = {};
+  panelState.statistics.dsHidden = new Set();
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -17928,16 +17944,16 @@ async function handleFile(file, handle, skipRecents) {
   statsCatCdfMin = null;
   statsCatCdfMax = null;
   statsCatCrossMode = 'count';
-  catFocusedCol = null;
+  panelState.categories.focusedCol = null;
   catalog = newCatalog();
   catChartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
-  statsCmpSel = {};
-  statsCdfCmpSel = {};
-  statsDsHidden = new Set();
+  panelState.statistics.cmpSel = {};
+  panelState.statistics.cdfCmpSel = {};
+  panelState.statistics.dsHidden = new Set();
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -18103,16 +18119,16 @@ $backToPreflight.addEventListener('click', () => {
   statsCatGroupSortMode = null;
   statsCatSelectedVars = new Set();
   statsCatShowSelectedOnly = false;
-  catFocusedCol = null;
+  panelState.categories.focusedCol = null;
   catalog = newCatalog();
   catChartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
-  statsCmpSel = {};
-  statsCdfCmpSel = {};
-  statsDsHidden = new Set();
+  panelState.statistics.cmpSel = {};
+  panelState.statistics.cdfCmpSel = {};
+  panelState.statistics.dsHidden = new Set();
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -18680,7 +18696,7 @@ function displayResults(data) {
     if (catP.focusedCol) {
       const idx = header.indexOf(catP.focusedCol);
       if (idx >= 0 && categories[idx]) {
-        catFocusedCol = idx;
+        panelState.categories.focusedCol = idx;
         renderCatSidebar();
         renderCatMain();
       }
@@ -19779,9 +19795,8 @@ let _statsEventsWired = false;
 let _statsCdfParams = null; // coordinate system for CDF tooltip
 // A10 4d: the Δ% reference (denominator) is per-panel state — NOT a global ★.
 // null = default (first shown comparison dataset = the samples/validation
-// reference, preserving the model-vs-samples acceptance number). Ephemeral like
-// the other d2+ stats UI until phase 6 / the 4e instance-state serialization.
-let statsRefDs = null;
+// reference, preserving the model-vs-samples acceptance number). Lives on
+// panelState.statistics.refDs (4e-a); serialized in 4e-b.
 
 function tdQuantileFromCentroids(centroids, totalCount, q) {
   if (!centroids || centroids.length === 0) return null;
@@ -19821,7 +19836,7 @@ function statsCmpDatasets() {
 // The comparison datasets actually shown — the chips (4c, ≥2 comparison
 // datasets) let the user hide any of them; the sidebar/table/CDF iterate this.
 function statsShownCmpDatasets() {
-  return statsCmpDatasets().filter(function(ds) { return !statsDsHidden.has(ds.id); });
+  return statsCmpDatasets().filter(function(ds) { return !panelState.statistics.dsHidden.has(ds.id); });
 }
 
 // A10 4d: the resolved Δ% reference dataset id for this panel. Defaults to the
@@ -19831,7 +19846,7 @@ function statsShownCmpDatasets() {
 function statsReferenceDs() {
   var shownCmp = statsShownCmpDatasets();
   var shown = ['model'].concat(shownCmp.map(function(d) { return d.id; }));
-  if (statsRefDs && shown.indexOf(statsRefDs) >= 0) return statsRefDs;
+  if (panelState.statistics.refDs && shown.indexOf(panelState.statistics.refDs) >= 0) return panelState.statistics.refDs;
   return shownCmp.length ? shownCmp[0].id : 'model';
 }
 
@@ -19884,16 +19899,16 @@ function getStatsCmpCols(ds) {
 }
 
 function isStatsCmpSelected(ds, col) {
-  var sel = statsCmpSel[ds.id];
+  var sel = panelState.statistics.cmpSel[ds.id];
   if (sel == null) return col.matchCi !== null;   // default: paired only
   return sel.has(col.idx);
 }
 
 function materializeStatsCmpSel(ds) {
-  if (statsCmpSel[ds.id]) return;
+  if (panelState.statistics.cmpSel[ds.id]) return;
   var s = new Set();
   getStatsCmpCols(ds).forEach(function(c) { if (c.matchCi !== null) s.add(c.idx); });
-  statsCmpSel[ds.id] = s;
+  panelState.statistics.cmpSel[ds.id] = s;
 }
 
 // Convert a project restore (variable names) to aux column indices — callable
@@ -19906,12 +19921,12 @@ function applyStatsAuxRestore() {
   if (pendingStatsAuxRestore.selected) {
     var s = new Set();
     pendingStatsAuxRestore.selected.forEach(function(n) { if (byName[n] !== undefined) s.add(byName[n]); });
-    statsCmpSel.aux = s;
+    panelState.statistics.cmpSel.aux = s;
   }
   if (pendingStatsAuxRestore.cdf) {
     var c = new Set();
     pendingStatsAuxRestore.cdf.forEach(function(n) { if (byName[n] !== undefined) c.add(byName[n]); });
-    statsCdfCmpSel.aux = c;
+    panelState.statistics.cdfCmpSel.aux = c;
   }
   pendingStatsAuxRestore = null;
 }
@@ -20110,7 +20125,7 @@ function renderStatsSidebar() {
       refSel += '</select></div>';
       var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the model dataset — toggle comparison chips to hide them">Model</span>';
       allCmp.forEach(function(ds) {
-        var off = statsDsHidden.has(ds.id);
+        var off = panelState.statistics.dsHidden.has(ds.id);
         chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) + '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) + '">' + esc(dsLabel(ds.id)) + '</button>';
       });
       document.getElementById('statsDatasetChips').innerHTML = refSel + '<div class="stats-ds-chip-row">' + chips + '</div>';
@@ -20196,7 +20211,7 @@ function renderStatsTable() {
   function cmpRowHtml(member) {
     var ds = member.ds, ac = member.col, label = dsLabel(ds.id);
     var as = ds.complete.stats[ac.idx];
-    var cdfSet = statsCdfCmpSel[ds.id];
+    var cdfSet = panelState.statistics.cdfCmpSel[ds.id];
     var aCdfActive = !!(cdfSet && cdfSet.has(ac.idx));
     var aNameClass = aCdfActive ? 'cdf-link cdf-active' : 'cdf-link';
     var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-cmp-ds="' + esc(ds.id) + '" data-cmp-col="' + ac.idx + '" href="#">' + esc(label + ':' + ac.name) + '</a>' + statsRefBadge(ds.id === refId) + statsEmptyTag(ds.id, ac.idx) + statsMixedTag(ds.id, ac.idx) + '</td>';
@@ -20257,7 +20272,7 @@ function renderStatsCdfPanel() {
   if (!chart) return;
 
   var anyCmpCdf = statsShownCmpDatasets().some(function(ds) {
-    var s = statsCdfCmpSel[ds.id]; return s && s.size > 0;
+    var s = panelState.statistics.cdfCmpSel[ds.id]; return s && s.size > 0;
   });
   if (statsCdfSelected.size === 0 && !anyCmpCdf) {
     chart.innerHTML = '<div class="stats-cdf-hint">Click column names to add CDF curves</div>';
@@ -20280,7 +20295,7 @@ function renderStatsCdfPanel() {
     }
   });
   statsShownCmpDatasets().forEach(function(ds) {
-    var cdfSet = statsCdfCmpSel[ds.id];
+    var cdfSet = panelState.statistics.cdfCmpSel[ds.id];
     if (!cdfSet || cdfSet.size === 0) return;
     var label = dsLabel(ds.id), cs = ds.complete.stats, ch = ds.complete.header;
     cdfSet.forEach(function(ai) {
@@ -20789,8 +20804,8 @@ function wireStatsEventsOnce() {
     var b = e.target.closest('[data-ds-chip]');
     if (!b) return;
     var id = b.dataset.dsChip;
-    if (statsDsHidden.has(id)) statsDsHidden.delete(id);
-    else statsDsHidden.add(id);
+    if (panelState.statistics.dsHidden.has(id)) panelState.statistics.dsHidden.delete(id);
+    else panelState.statistics.dsHidden.add(id);
     renderStatsSidebar();
     renderStatsTable();
     renderStatsCdfPanel();
@@ -20799,7 +20814,7 @@ function wireStatsEventsOnce() {
   // --- Δ% reference picker (4d; same container) ---
   if ($dsChips) $dsChips.addEventListener('change', function(e) {
     if (e.target.id !== 'statsRefSel') return;
-    statsRefDs = e.target.value || null;
+    panelState.statistics.refDs = e.target.value || null;
     renderStatsTable();
     autoSaveProject();
   });
@@ -20812,8 +20827,8 @@ function wireStatsEventsOnce() {
       if (cds) {
         materializeStatsCmpSel(cds);
         var aIdx = parseInt(acb.dataset.cmpCol);
-        if (acb.checked) statsCmpSel[cds.id].add(aIdx);
-        else statsCmpSel[cds.id].delete(aIdx);
+        if (acb.checked) panelState.statistics.cmpSel[cds.id].add(aIdx);
+        else panelState.statistics.cmpSel[cds.id].delete(aIdx);
         var aItem = acb.closest('.stats-var-item');
         if (aItem) aItem.classList.toggle('unchecked', !acb.checked);
         renderStatsTable();
@@ -20843,7 +20858,7 @@ function wireStatsEventsOnce() {
     });
     statsCmpDatasets().forEach(materializeStatsCmpSel);
     document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-cmp-col]').forEach(function(el) {
-      statsCmpSel[el.dataset.cmpDs].add(parseInt(el.dataset.cmpCol));
+      panelState.statistics.cmpSel[el.dataset.cmpDs].add(parseInt(el.dataset.cmpCol));
     });
     renderStatsSidebar();
     renderStatsTable();
@@ -20856,7 +20871,7 @@ function wireStatsEventsOnce() {
     });
     statsCmpDatasets().forEach(materializeStatsCmpSel);
     document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-cmp-col]').forEach(function(el) {
-      statsCmpSel[el.dataset.cmpDs].delete(parseInt(el.dataset.cmpCol));
+      panelState.statistics.cmpSel[el.dataset.cmpDs].delete(parseInt(el.dataset.cmpCol));
     });
     renderStatsSidebar();
     renderStatsTable();
@@ -20877,7 +20892,7 @@ function wireStatsEventsOnce() {
     e.preventDefault();
     if (link.dataset.cmpCol !== undefined) {
       var dsId = link.dataset.cmpDs, aCol = parseInt(link.dataset.cmpCol);
-      var set = statsCdfCmpSel[dsId] || (statsCdfCmpSel[dsId] = new Set());
+      var set = panelState.statistics.cdfCmpSel[dsId] || (panelState.statistics.cdfCmpSel[dsId] = new Set());
       if (set.has(aCol)) set.delete(aCol);
       else set.add(aCol);
     } else {
@@ -21750,9 +21765,8 @@ function resetSwathState() {
 }
 
 // A10 4c-iii-c: dataset chips let the user hide a comparison dataset (sidebar
-// rows + chart series) without un-checking each variable. Ephemeral, like the
-// Statistics chips (phase 6 persists it). Keyed by dsId.
-var swathDsHidden = new Set();
+// rows + chart series) without un-checking each variable. Keyed by dsId; lives
+// on panelState.swath.dsHidden (4e-a), serialized in 4e-b.
 
 // A10 4c-iii-b: every comparison dataset that can overlay a swath — has a file
 // and a preflight (XYZ may still be unassigned; we list it with a note, the
@@ -21770,7 +21784,7 @@ function swathCmpDatasets() {
 // datasets) let the user hide any of them; the sidebar listing, the fan-out
 // run, and the chart all iterate this.
 function swathShownCmpDatasets() {
-  return swathCmpDatasets().filter(function(d) { return !swathDsHidden.has(d.id); });
+  return swathCmpDatasets().filter(function(d) { return !panelState.swath.dsHidden.has(d.id); });
 }
 
 // A comparison dataset is swath-ready once its X/Y/Z are assigned.
@@ -21991,7 +22005,7 @@ function swathDirView(sd, key) {
     // A10 4c-iii: one comparison block per overlaid dataset (aux, d2…), each
     // with this direction's per-variable bins. Chip-hidden datasets (4c-iii-c)
     // drop out of the chart from cache, no re-run.
-    cmp: (sd.cmp || []).filter(function(c) { return !swathDsHidden.has(c.dsId); }).map(function(c) {
+    cmp: (sd.cmp || []).filter(function(c) { return !panelState.swath.dsHidden.has(c.dsId); }).map(function(c) {
       return {
         dsId: c.dsId,
         vars: c.results ? (c.results[d.key] || null) : null,
@@ -22018,7 +22032,7 @@ function renderSwathOutput(stat) {
   if (!sd.activeKey || keys.indexOf(sd.activeKey) < 0) sd.activeKey = keys[0];
 
   // Chip-hidden comparison datasets (4c-iii-c) drop their notes too.
-  var cmpList = (sd.cmp || []).filter(function(c) { return !swathDsHidden.has(c.dsId); });
+  var cmpList = (sd.cmp || []).filter(function(c) { return !panelState.swath.dsHidden.has(c.dsId); });
   var html = workerErrNote(sd);
   cmpList.forEach(function(c) {
     html += workerErrNote({ filterErrors: c.filterErrors, calcolErrors: c.calcolErrors }, dsLabel(c.dsId));
@@ -22215,8 +22229,8 @@ function renderSwathConfig(data) {
     var b = e.target.closest('[data-ds-chip]');
     if (!b) return;
     var id = b.dataset.dsChip;
-    if (swathDsHidden.has(id)) swathDsHidden.delete(id);
-    else swathDsHidden.add(id);
+    if (panelState.swath.dsHidden.has(id)) panelState.swath.dsHidden.delete(id);
+    else panelState.swath.dsHidden.add(id);
     renderSwathAuxVars();
     if (lastSwathData) renderSwathOutput();
   });
@@ -22352,7 +22366,7 @@ function renderSwathDatasetChips() {
   if (allCmp.length < 2) { section.style.display = 'none'; return; }
   var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the model (primary) series">Model</span>';
   allCmp.forEach(function(ds) {
-    var off = swathDsHidden.has(ds.id);
+    var off = panelState.swath.dsHidden.has(ds.id);
     chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) +
       '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) +
       '">' + esc(dsLabel(ds.id)) + '</button>';
@@ -27927,8 +27941,8 @@ function renderCategoriesTab(categories, header, origColCount, rowCount) {
   $catValueSearch.style.display = '';
 
   // Auto-focus first column if none focused
-  if (catFocusedCol === null || !categories[catFocusedCol]) {
-    catFocusedCol = catCols[0];
+  if (panelState.categories.focusedCol === null || !categories[panelState.categories.focusedCol]) {
+    panelState.categories.focusedCol = catCols[0];
   }
 
   renderCatSidebar();
@@ -27951,7 +27965,7 @@ function renderCatSidebar() {
     var cat = categories[i];
     var uniqueCount = Object.keys(cat.counts).length + (cat.overflow ? '+' : '');
     var isCalcol = i >= origColCount;
-    var active = i === catFocusedCol ? ' active' : '';
+    var active = i === panelState.categories.focusedCol ? ' active' : '';
     html += '<div class="cat-col-item' + active + '" data-col="' + i + '">';
     html += '<span class="col-name">' + esc(name) + '</span>';
     if (isCalcol) html += '<span class="calcol-tag">CALC</span>';
@@ -27962,7 +27976,7 @@ function renderCatSidebar() {
 }
 
 function renderCatMain() {
-  if (!_catData || catFocusedCol === null) return;
+  if (!_catData || panelState.categories.focusedCol === null) return;
   renderCatDatasetChips();
   renderCatToolbar();
   renderCatSortGroup();
@@ -27980,7 +27994,7 @@ function renderCatDatasetChips() {
   if (allCmp.length < 2) { section.style.display = 'none'; return; }
   var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the model (reference) categories">Model</span>';
   allCmp.forEach(function(ds) {
-    var off = catDsHidden.has(ds.id);
+    var off = panelState.categories.dsHidden.has(ds.id);
     chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) +
       '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) +
       '">' + esc(dsLabel(ds.id)) + '</button>';
@@ -27989,9 +28003,8 @@ function renderCatDatasetChips() {
   section.style.display = '';
 }
 
-// A10 4c-iv: dataset show/hide chips for Categories (ephemeral, like the
-// Statistics and Swath chips — phase 6 persists). Keyed by dsId.
-var catDsHidden = new Set();
+// A10 4c-iv: dataset show/hide chips for Categories. Keyed by dsId; lives on
+// panelState.categories.dsHidden (4e-a), serialized in 4e-b.
 
 // Comparison datasets that can mirror a categorical column — every non-model
 // dataset whose last analysis produced categories. Registry order (aux, d2…).
@@ -28006,7 +28019,7 @@ function catCmpDatasets() {
 // The comparison datasets actually shown — the chips (≥2 comparison datasets)
 // let the user hide any of them.
 function catShownCmpDatasets() {
-  return catCmpDatasets().filter(function(d) { return !catDsHidden.has(d.id); });
+  return catCmpDatasets().filter(function(d) { return !panelState.categories.dsHidden.has(d.id); });
 }
 
 // Category counts of a comparison dataset's column grouped (by catalog
@@ -28086,8 +28099,8 @@ function getCatSortedEntries(colIdx) {
 // used to sit in the toolbar above the chart, far from the table).
 function renderCatSortGroup() {
   var grp = document.getElementById('catSortGroup');
-  if (!grp || !_catData || catFocusedCol === null) return;
-  var colName = _catData.header[catFocusedCol];
+  if (!grp || !_catData || panelState.categories.focusedCol === null) return;
+  var colName = _catData.header[panelState.categories.focusedCol];
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
   var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
   grp.innerHTML =
@@ -28099,13 +28112,13 @@ function renderCatSortGroup() {
 }
 
 function renderCatToolbar() {
-  if (!_catData || catFocusedCol === null) return;
+  if (!_catData || panelState.categories.focusedCol === null) return;
   var header = _catData.header;
   var origColCount = _catData.origColCount;
-  var colName = header[catFocusedCol];
-  var isCalcol = catFocusedCol >= origColCount;
+  var colName = header[panelState.categories.focusedCol];
+  var isCalcol = panelState.categories.focusedCol >= origColCount;
 
-  var cat = _catData.categories[catFocusedCol];
+  var cat = _catData.categories[panelState.categories.focusedCol];
   var entries = Object.entries(cat.counts);
   var uniqueCount = entries.length + (cat.overflow ? '+' : '');
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
@@ -28163,9 +28176,9 @@ function renderCatToolbar() {
 }
 
 function renderCatBarChart() {
-  if (!_catData || catFocusedCol === null) return;
-  var colName = _catData.header[catFocusedCol];
-  var entries = getCatSortedEntries(catFocusedCol);
+  if (!_catData || panelState.categories.focusedCol === null) return;
+  var colName = _catData.header[panelState.categories.focusedCol];
+  var entries = getCatSortedEntries(panelState.categories.focusedCol);
   if (entries.length === 0) { $catChart.innerHTML = ''; return; }
 
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
@@ -28270,9 +28283,9 @@ function renderCatBarChart() {
 }
 
 function renderCatValueTable() {
-  if (!_catData || catFocusedCol === null) return;
-  var colName = _catData.header[catFocusedCol];
-  var entries = getCatSortedEntries(catFocusedCol);
+  if (!_catData || panelState.categories.focusedCol === null) return;
+  var colName = _catData.header[panelState.categories.focusedCol];
+  var entries = getCatSortedEntries(panelState.categories.focusedCol);
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
   var maxCount = 0;
   for (var i = 0; i < entries.length; i++) { if (entries[i][1] > maxCount) maxCount = entries[i][1]; }
@@ -28319,8 +28332,8 @@ function renderCatValueTable() {
 
     html += '<tr style="--bar:' + barPct + '%" data-val="' + esc(val) + '">';
     html += '<td class="cat-drag-cell' + (isCustom ? '' : ' cat-drag-cell--dormant') + '" draggable="true" title="Drag to reorder \u2014 sets Custom order">\u2261</td>';
-    html += '<td class="cat-swatch-cell"><span class="cat-swatch" style="background:' + color + '" data-col="' + catFocusedCol + '" data-val="' + esc(val) + '"></span></td>';
-    html += '<td class="cat-cb-cell"><input type="checkbox" data-col="' + catFocusedCol + '" data-val="' + esc(val) + '"></td>';
+    html += '<td class="cat-swatch-cell"><span class="cat-swatch" style="background:' + color + '" data-col="' + panelState.categories.focusedCol + '" data-val="' + esc(val) + '"></span></td>';
+    html += '<td class="cat-cb-cell"><input type="checkbox" data-col="' + panelState.categories.focusedCol + '" data-val="' + esc(val) + '"></td>';
     html += '<td class="cat-val-cell">' + esc(val) + '</td>';
     html += '<td class="cat-count-cell">' + count.toLocaleString() + '</td>';
     html += '<td class="cat-pct-cell">' + pct + '%</td>';
@@ -28406,7 +28419,7 @@ function applyCatColor(colName, value, color) {
 function initCustomOrder(colName) {
   var rec = catVar('model', colName);
   if (!rec.valueOrder) {
-    var entries = getCatSortedEntries(catFocusedCol);
+    var entries = getCatSortedEntries(panelState.categories.focusedCol);
     rec.valueOrder = entries.map(function(e){ return e[0]; });
   }
 }
@@ -28420,8 +28433,8 @@ function wireCatEventsOnce() {
     var item = e.target.closest('.cat-col-item');
     if (!item) return;
     var colIdx = parseInt(item.dataset.col);
-    if (colIdx === catFocusedCol) return;
-    catFocusedCol = colIdx;
+    if (colIdx === panelState.categories.focusedCol) return;
+    panelState.categories.focusedCol = colIdx;
     catChartShowAll = false;
     $catValueSearch.value = '';
     renderCatSidebar();
@@ -28443,8 +28456,8 @@ function wireCatEventsOnce() {
     var b = e.target.closest('[data-ds-chip]');
     if (!b) return;
     var id = b.dataset.dsChip;
-    if (catDsHidden.has(id)) catDsHidden.delete(id);
-    else catDsHidden.add(id);
+    if (panelState.categories.dsHidden.has(id)) panelState.categories.dsHidden.delete(id);
+    else panelState.categories.dsHidden.add(id);
     renderCatMain();
   });
 
@@ -28453,7 +28466,7 @@ function wireCatEventsOnce() {
   if (catSortGroupEl) catSortGroupEl.addEventListener('click', function(e) {
     var sortBtn = e.target.closest('.cat-sort-btn');
     if (!sortBtn) return;
-    var colName = _catData.header[catFocusedCol];
+    var colName = _catData.header[panelState.categories.focusedCol];
     var newMode = sortBtn.dataset.sort;
     catVar('model', colName).sortMode = newMode;
     if (newMode === 'custom') initCustomOrder(colName);
@@ -28467,7 +28480,7 @@ function wireCatEventsOnce() {
   $catToolbar.addEventListener('click', function(e) {
     var copyBtn = e.target.closest('#catCopyBtn');
     if (!copyBtn) return;
-    var entries = getCatSortedEntries(catFocusedCol);
+    var entries = getCatSortedEntries(panelState.categories.focusedCol);
     var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
     var lines = ['Value\tCount\t%'];
     for (var i = 0; i < entries.length; i++) {
@@ -28597,14 +28610,14 @@ function wireCatEventsOnce() {
     $catValueTable.querySelectorAll('.drag-over').forEach(function(el){ el.classList.remove('drag-over'); });
     dragSrcRow.classList.remove('dragging');
 
-    var colName = _catData.header[catFocusedCol];
+    var colName = _catData.header[panelState.categories.focusedCol];
     var rec = catVar('model', colName);
     if (rec.sortMode !== 'custom') {
       // Dragging IS the declaration of a custom order (C6): adopt the
       // currently displayed order as the starting point and switch modes —
       // previously the handles only existed after clicking Custom, which
       // nobody found
-      rec.valueOrder = getCatSortedEntries(catFocusedCol).map(function(e) { return e[0]; });
+      rec.valueOrder = getCatSortedEntries(panelState.categories.focusedCol).map(function(e) { return e[0]; });
       rec.sortMode = 'custom';
       renderCatSortGroup();
     } else {
@@ -29042,7 +29055,7 @@ function treePairChanged() {
     if (typeof renderStatsSidebar === 'function') renderStatsSidebar();
     renderStatsTable();
   }
-  if (typeof renderCatMain === 'function' && catFocusedCol !== null && typeof _catData !== 'undefined' && _catData) renderCatMain();
+  if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null && typeof _catData !== 'undefined' && _catData) renderCatMain();
 }
 
 function treeSetColor(color) {
@@ -29117,7 +29130,7 @@ function treeToggleRole(t, role) {
         return;
       }
       if (e.target.id === 'treePopCatTab') {
-        if (t.idx !== null) { catFocusedCol = t.idx; }
+        if (t.idx !== null) { panelState.categories.focusedCol = t.idx; }
         hideTreePopover();
         showPanel('categories');
         if (typeof renderCatSidebar === 'function') { renderCatSidebar(); renderCatMain(); }
@@ -29364,7 +29377,7 @@ CTX_PROVIDERS.push(function variableProvider(e) {
 
   if (v.kind === 'cat' && v.ds === 'model' && v.idx !== null) {
     items.push({ label: 'Focus in Categories', action: function() {
-      catFocusedCol = v.idx;
+      panelState.categories.focusedCol = v.idx;
       showPanel('categories');
       if (typeof renderCatSidebar === 'function') { renderCatSidebar(); renderCatMain(); }
       autoSaveProject();
@@ -29376,8 +29389,8 @@ CTX_PROVIDERS.push(function variableProvider(e) {
 // Categories value rows: jump straight to the value color picker
 CTX_PROVIDERS.push(function catValueProvider(e) {
   var tr = e.target.closest && e.target.closest('#catValueTable tr[data-val]');
-  if (!tr || catFocusedCol === null || typeof _catData === 'undefined' || !_catData) return null;
-  var colName = _catData.header[catFocusedCol];
+  if (!tr || panelState.categories.focusedCol === null || typeof _catData === 'undefined' || !_catData) return null;
+  var colName = _catData.header[panelState.categories.focusedCol];
   var val = tr.dataset.val;
   var swatch = tr.querySelector('.cat-swatch, [data-val]');
   return [

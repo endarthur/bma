@@ -20,9 +20,8 @@ function resetSwathState() {
 }
 
 // A10 4c-iii-c: dataset chips let the user hide a comparison dataset (sidebar
-// rows + chart series) without un-checking each variable. Ephemeral, like the
-// Statistics chips (phase 6 persists it). Keyed by dsId.
-var swathDsHidden = new Set();
+// rows + chart series) without un-checking each variable. Keyed by dsId; lives
+// on panelState.swath.dsHidden (4e-a), serialized in 4e-b.
 
 // A10 4c-iii-b: every comparison dataset that can overlay a swath — has a file
 // and a preflight (XYZ may still be unassigned; we list it with a note, the
@@ -40,7 +39,7 @@ function swathCmpDatasets() {
 // datasets) let the user hide any of them; the sidebar listing, the fan-out
 // run, and the chart all iterate this.
 function swathShownCmpDatasets() {
-  return swathCmpDatasets().filter(function(d) { return !swathDsHidden.has(d.id); });
+  return swathCmpDatasets().filter(function(d) { return !panelState.swath.dsHidden.has(d.id); });
 }
 
 // A comparison dataset is swath-ready once its X/Y/Z are assigned.
@@ -261,7 +260,7 @@ function swathDirView(sd, key) {
     // A10 4c-iii: one comparison block per overlaid dataset (aux, d2…), each
     // with this direction's per-variable bins. Chip-hidden datasets (4c-iii-c)
     // drop out of the chart from cache, no re-run.
-    cmp: (sd.cmp || []).filter(function(c) { return !swathDsHidden.has(c.dsId); }).map(function(c) {
+    cmp: (sd.cmp || []).filter(function(c) { return !panelState.swath.dsHidden.has(c.dsId); }).map(function(c) {
       return {
         dsId: c.dsId,
         vars: c.results ? (c.results[d.key] || null) : null,
@@ -288,7 +287,7 @@ function renderSwathOutput(stat) {
   if (!sd.activeKey || keys.indexOf(sd.activeKey) < 0) sd.activeKey = keys[0];
 
   // Chip-hidden comparison datasets (4c-iii-c) drop their notes too.
-  var cmpList = (sd.cmp || []).filter(function(c) { return !swathDsHidden.has(c.dsId); });
+  var cmpList = (sd.cmp || []).filter(function(c) { return !panelState.swath.dsHidden.has(c.dsId); });
   var html = workerErrNote(sd);
   cmpList.forEach(function(c) {
     html += workerErrNote({ filterErrors: c.filterErrors, calcolErrors: c.calcolErrors }, dsLabel(c.dsId));
@@ -485,8 +484,8 @@ function renderSwathConfig(data) {
     var b = e.target.closest('[data-ds-chip]');
     if (!b) return;
     var id = b.dataset.dsChip;
-    if (swathDsHidden.has(id)) swathDsHidden.delete(id);
-    else swathDsHidden.add(id);
+    if (panelState.swath.dsHidden.has(id)) panelState.swath.dsHidden.delete(id);
+    else panelState.swath.dsHidden.add(id);
     renderSwathAuxVars();
     if (lastSwathData) renderSwathOutput();
   });
@@ -622,7 +621,7 @@ function renderSwathDatasetChips() {
   if (allCmp.length < 2) { section.style.display = 'none'; return; }
   var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the model (primary) series">Model</span>';
   allCmp.forEach(function(ds) {
-    var off = swathDsHidden.has(ds.id);
+    var off = panelState.swath.dsHidden.has(ds.id);
     chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) +
       '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) +
       '">' + esc(dsLabel(ds.id)) + '</button>';

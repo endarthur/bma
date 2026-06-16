@@ -198,7 +198,7 @@ CTX_PROVIDERS.push(function variableProvider(e) {
 
   if (v.kind === 'cat' && v.ds === 'model' && v.idx !== null) {
     items.push({ label: 'Focus in Categories', action: function() {
-      catFocusedCol = v.idx;
+      panelState.categories.focusedCol = v.idx;
       showPanel('categories');
       if (typeof renderCatSidebar === 'function') { renderCatSidebar(); renderCatMain(); }
       autoSaveProject();
@@ -210,8 +210,8 @@ CTX_PROVIDERS.push(function variableProvider(e) {
 // Categories value rows: jump straight to the value color picker
 CTX_PROVIDERS.push(function catValueProvider(e) {
   var tr = e.target.closest && e.target.closest('#catValueTable tr[data-val]');
-  if (!tr || catFocusedCol === null || typeof _catData === 'undefined' || !_catData) return null;
-  var colName = _catData.header[catFocusedCol];
+  if (!tr || panelState.categories.focusedCol === null || typeof _catData === 'undefined' || !_catData) return null;
+  var colName = _catData.header[panelState.categories.focusedCol];
   var val = tr.dataset.val;
   var swatch = tr.querySelector('.cat-swatch, [data-val]');
   return [

@@ -396,13 +396,13 @@ function serializeProject() {
       cdfMode: statsCdfMode,
       // Persistence covers model + aux today (A10 4c-ii); d2+ stats selection
       // is ephemeral until phase 6 takes over the datasets key.
-      auxSelected: (auxCompleteData && statsCmpSel.aux != null)
-        ? Array.from(statsCmpSel.aux).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null,
-      cdfAuxSelected: (auxCompleteData && statsCdfCmpSel.aux && statsCdfCmpSel.aux.size > 0)
-        ? Array.from(statsCdfCmpSel.aux).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null
+      auxSelected: (auxCompleteData && panelState.statistics.cmpSel.aux != null)
+        ? Array.from(panelState.statistics.cmpSel.aux).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null,
+      cdfAuxSelected: (auxCompleteData && panelState.statistics.cdfCmpSel.aux && panelState.statistics.cdfCmpSel.aux.size > 0)
+        ? Array.from(panelState.statistics.cdfCmpSel.aux).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null
     },
     categories: {
-      focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null
+      focusedCol: panelState.categories.focusedCol !== null && currentHeader[panelState.categories.focusedCol] ? currentHeader[panelState.categories.focusedCol] : null
     },
     tree: { open: catalogTreeOpen },
     // C6-4a collapsed control sidebars (per-panel) + C6-4b collapsed sections
@@ -891,16 +891,16 @@ function clearProject() {
   statsCatCdfMax = null;
   statsCatCrossMode = 'count';
   statsCatShowSelectedOnly = false;
-  catFocusedCol = null;
+  panelState.categories.focusedCol = null;
   catalog = newCatalog();
   catChartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
-  statsCmpSel = {};
-  statsCdfCmpSel = {};
-  statsDsHidden = new Set();
+  panelState.statistics.cmpSel = {};
+  panelState.statistics.cdfCmpSel = {};
+  panelState.statistics.dsHidden = new Set();
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -1094,16 +1094,16 @@ async function handleFile(file, handle, skipRecents) {
   statsCatCdfMin = null;
   statsCatCdfMax = null;
   statsCatCrossMode = 'count';
-  catFocusedCol = null;
+  panelState.categories.focusedCol = null;
   catalog = newCatalog();
   catChartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
-  statsCmpSel = {};
-  statsCdfCmpSel = {};
-  statsDsHidden = new Set();
+  panelState.statistics.cmpSel = {};
+  panelState.statistics.cdfCmpSel = {};
+  panelState.statistics.dsHidden = new Set();
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -1269,16 +1269,16 @@ $backToPreflight.addEventListener('click', () => {
   statsCatGroupSortMode = null;
   statsCatSelectedVars = new Set();
   statsCatShowSelectedOnly = false;
-  catFocusedCol = null;
+  panelState.categories.focusedCol = null;
   catalog = newCatalog();
   catChartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
-  statsCmpSel = {};
-  statsCdfCmpSel = {};
-  statsDsHidden = new Set();
+  panelState.statistics.cmpSel = {};
+  panelState.statistics.cdfCmpSel = {};
+  panelState.statistics.dsHidden = new Set();
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -1846,7 +1846,7 @@ function displayResults(data) {
     if (catP.focusedCol) {
       const idx = header.indexOf(catP.focusedCol);
       if (idx >= 0 && categories[idx]) {
-        catFocusedCol = idx;
+        panelState.categories.focusedCol = idx;
         renderCatSidebar();
         renderCatMain();
       }

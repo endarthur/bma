@@ -27,8 +27,8 @@ function renderCategoriesTab(categories, header, origColCount, rowCount) {
   $catValueSearch.style.display = '';
 
   // Auto-focus first column if none focused
-  if (catFocusedCol === null || !categories[catFocusedCol]) {
-    catFocusedCol = catCols[0];
+  if (panelState.categories.focusedCol === null || !categories[panelState.categories.focusedCol]) {
+    panelState.categories.focusedCol = catCols[0];
   }
 
   renderCatSidebar();
@@ -51,7 +51,7 @@ function renderCatSidebar() {
     var cat = categories[i];
     var uniqueCount = Object.keys(cat.counts).length + (cat.overflow ? '+' : '');
     var isCalcol = i >= origColCount;
-    var active = i === catFocusedCol ? ' active' : '';
+    var active = i === panelState.categories.focusedCol ? ' active' : '';
     html += '<div class="cat-col-item' + active + '" data-col="' + i + '">';
     html += '<span class="col-name">' + esc(name) + '</span>';
     if (isCalcol) html += '<span class="calcol-tag">CALC</span>';
@@ -62,7 +62,7 @@ function renderCatSidebar() {
 }
 
 function renderCatMain() {
-  if (!_catData || catFocusedCol === null) return;
+  if (!_catData || panelState.categories.focusedCol === null) return;
   renderCatDatasetChips();
   renderCatToolbar();
   renderCatSortGroup();
@@ -80,7 +80,7 @@ function renderCatDatasetChips() {
   if (allCmp.length < 2) { section.style.display = 'none'; return; }
   var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the model (reference) categories">Model</span>';
   allCmp.forEach(function(ds) {
-    var off = catDsHidden.has(ds.id);
+    var off = panelState.categories.dsHidden.has(ds.id);
     chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) +
       '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) +
       '">' + esc(dsLabel(ds.id)) + '</button>';
@@ -89,9 +89,8 @@ function renderCatDatasetChips() {
   section.style.display = '';
 }
 
-// A10 4c-iv: dataset show/hide chips for Categories (ephemeral, like the
-// Statistics and Swath chips — phase 6 persists). Keyed by dsId.
-var catDsHidden = new Set();
+// A10 4c-iv: dataset show/hide chips for Categories. Keyed by dsId; lives on
+// panelState.categories.dsHidden (4e-a), serialized in 4e-b.
 
 // Comparison datasets that can mirror a categorical column — every non-model
 // dataset whose last analysis produced categories. Registry order (aux, d2…).
@@ -106,7 +105,7 @@ function catCmpDatasets() {
 // The comparison datasets actually shown — the chips (≥2 comparison datasets)
 // let the user hide any of them.
 function catShownCmpDatasets() {
-  return catCmpDatasets().filter(function(d) { return !catDsHidden.has(d.id); });
+  return catCmpDatasets().filter(function(d) { return !panelState.categories.dsHidden.has(d.id); });
 }
 
 // Category counts of a comparison dataset's column grouped (by catalog
@@ -186,8 +185,8 @@ function getCatSortedEntries(colIdx) {
 // used to sit in the toolbar above the chart, far from the table).
 function renderCatSortGroup() {
   var grp = document.getElementById('catSortGroup');
-  if (!grp || !_catData || catFocusedCol === null) return;
-  var colName = _catData.header[catFocusedCol];
+  if (!grp || !_catData || panelState.categories.focusedCol === null) return;
+  var colName = _catData.header[panelState.categories.focusedCol];
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
   var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
   grp.innerHTML =
@@ -199,13 +198,13 @@ function renderCatSortGroup() {
 }
 
 function renderCatToolbar() {
-  if (!_catData || catFocusedCol === null) return;
+  if (!_catData || panelState.categories.focusedCol === null) return;
   var header = _catData.header;
   var origColCount = _catData.origColCount;
-  var colName = header[catFocusedCol];
-  var isCalcol = catFocusedCol >= origColCount;
+  var colName = header[panelState.categories.focusedCol];
+  var isCalcol = panelState.categories.focusedCol >= origColCount;
 
-  var cat = _catData.categories[catFocusedCol];
+  var cat = _catData.categories[panelState.categories.focusedCol];
   var entries = Object.entries(cat.counts);
   var uniqueCount = entries.length + (cat.overflow ? '+' : '');
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
@@ -263,9 +262,9 @@ function renderCatToolbar() {
 }
 
 function renderCatBarChart() {
-  if (!_catData || catFocusedCol === null) return;
-  var colName = _catData.header[catFocusedCol];
-  var entries = getCatSortedEntries(catFocusedCol);
+  if (!_catData || panelState.categories.focusedCol === null) return;
+  var colName = _catData.header[panelState.categories.focusedCol];
+  var entries = getCatSortedEntries(panelState.categories.focusedCol);
   if (entries.length === 0) { $catChart.innerHTML = ''; return; }
 
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
@@ -370,9 +369,9 @@ function renderCatBarChart() {
 }
 
 function renderCatValueTable() {
-  if (!_catData || catFocusedCol === null) return;
-  var colName = _catData.header[catFocusedCol];
-  var entries = getCatSortedEntries(catFocusedCol);
+  if (!_catData || panelState.categories.focusedCol === null) return;
+  var colName = _catData.header[panelState.categories.focusedCol];
+  var entries = getCatSortedEntries(panelState.categories.focusedCol);
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
   var maxCount = 0;
   for (var i = 0; i < entries.length; i++) { if (entries[i][1] > maxCount) maxCount = entries[i][1]; }
@@ -419,8 +418,8 @@ function renderCatValueTable() {
 
     html += '<tr style="--bar:' + barPct + '%" data-val="' + esc(val) + '">';
     html += '<td class="cat-drag-cell' + (isCustom ? '' : ' cat-drag-cell--dormant') + '" draggable="true" title="Drag to reorder \u2014 sets Custom order">\u2261</td>';
-    html += '<td class="cat-swatch-cell"><span class="cat-swatch" style="background:' + color + '" data-col="' + catFocusedCol + '" data-val="' + esc(val) + '"></span></td>';
-    html += '<td class="cat-cb-cell"><input type="checkbox" data-col="' + catFocusedCol + '" data-val="' + esc(val) + '"></td>';
+    html += '<td class="cat-swatch-cell"><span class="cat-swatch" style="background:' + color + '" data-col="' + panelState.categories.focusedCol + '" data-val="' + esc(val) + '"></span></td>';
+    html += '<td class="cat-cb-cell"><input type="checkbox" data-col="' + panelState.categories.focusedCol + '" data-val="' + esc(val) + '"></td>';
     html += '<td class="cat-val-cell">' + esc(val) + '</td>';
     html += '<td class="cat-count-cell">' + count.toLocaleString() + '</td>';
     html += '<td class="cat-pct-cell">' + pct + '%</td>';
@@ -506,7 +505,7 @@ function applyCatColor(colName, value, color) {
 function initCustomOrder(colName) {
   var rec = catVar('model', colName);
   if (!rec.valueOrder) {
-    var entries = getCatSortedEntries(catFocusedCol);
+    var entries = getCatSortedEntries(panelState.categories.focusedCol);
     rec.valueOrder = entries.map(function(e){ return e[0]; });
   }
 }
@@ -520,8 +519,8 @@ function wireCatEventsOnce() {
     var item = e.target.closest('.cat-col-item');
     if (!item) return;
     var colIdx = parseInt(item.dataset.col);
-    if (colIdx === catFocusedCol) return;
-    catFocusedCol = colIdx;
+    if (colIdx === panelState.categories.focusedCol) return;
+    panelState.categories.focusedCol = colIdx;
     catChartShowAll = false;
     $catValueSearch.value = '';
     renderCatSidebar();
@@ -543,8 +542,8 @@ function wireCatEventsOnce() {
     var b = e.target.closest('[data-ds-chip]');
     if (!b) return;
     var id = b.dataset.dsChip;
-    if (catDsHidden.has(id)) catDsHidden.delete(id);
-    else catDsHidden.add(id);
+    if (panelState.categories.dsHidden.has(id)) panelState.categories.dsHidden.delete(id);
+    else panelState.categories.dsHidden.add(id);
     renderCatMain();
   });
 
@@ -553,7 +552,7 @@ function wireCatEventsOnce() {
   if (catSortGroupEl) catSortGroupEl.addEventListener('click', function(e) {
     var sortBtn = e.target.closest('.cat-sort-btn');
     if (!sortBtn) return;
-    var colName = _catData.header[catFocusedCol];
+    var colName = _catData.header[panelState.categories.focusedCol];
     var newMode = sortBtn.dataset.sort;
     catVar('model', colName).sortMode = newMode;
     if (newMode === 'custom') initCustomOrder(colName);
@@ -567,7 +566,7 @@ function wireCatEventsOnce() {
   $catToolbar.addEventListener('click', function(e) {
     var copyBtn = e.target.closest('#catCopyBtn');
     if (!copyBtn) return;
-    var entries = getCatSortedEntries(catFocusedCol);
+    var entries = getCatSortedEntries(panelState.categories.focusedCol);
     var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
     var lines = ['Value\tCount\t%'];
     for (var i = 0; i < entries.length; i++) {
@@ -697,14 +696,14 @@ function wireCatEventsOnce() {
     $catValueTable.querySelectorAll('.drag-over').forEach(function(el){ el.classList.remove('drag-over'); });
     dragSrcRow.classList.remove('dragging');
 
-    var colName = _catData.header[catFocusedCol];
+    var colName = _catData.header[panelState.categories.focusedCol];
     var rec = catVar('model', colName);
     if (rec.sortMode !== 'custom') {
       // Dragging IS the declaration of a custom order (C6): adopt the
       // currently displayed order as the starting point and switch modes —
       // previously the handles only existed after clicking Custom, which
       // nobody found
-      rec.valueOrder = getCatSortedEntries(catFocusedCol).map(function(e) { return e[0]; });
+      rec.valueOrder = getCatSortedEntries(panelState.categories.focusedCol).map(function(e) { return e[0]; });
       rec.sortMode = 'custom';
       renderCatSortGroup();
     } else {

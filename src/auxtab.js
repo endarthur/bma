@@ -180,7 +180,7 @@ function runAuxAnalysis(ds, root) {
         renderStatsTable();
         renderStatsCdfPanel();
       }
-      if (typeof renderCatMain === 'function' && catFocusedCol !== null) renderCatMain();
+      if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();
       if (ds.view === 'summary' && typeof renderAuxSummary === 'function') renderAuxSummary(ds, root);  // A10 per-dataset summary
       autoSaveProject();
     } else if (m.type === 'error') {
@@ -735,9 +735,9 @@ function clearAux(ds, root) {
   ds.filter = null;
   ds.prefix = 'aux';
   ds.stale = false;
-  delete statsCmpSel[ds.id];
-  delete statsCdfCmpSel[ds.id];
-  statsDsHidden.delete(ds.id);
+  delete panelState.statistics.cmpSel[ds.id];
+  delete panelState.statistics.cdfCmpSel[ds.id];
+  panelState.statistics.dsHidden.delete(ds.id);
   ds.calcolCode = '';
   ds.calcolMeta = [];
   catSetRole(ds.id, 'weight', null);
@@ -759,7 +759,7 @@ function clearAux(ds, root) {
   if (preview) preview.innerHTML = '';
   renderAuxFromMain(ds, root);
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
-  if (typeof renderCatMain === 'function' && catFocusedCol !== null) renderCatMain();
+  if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();
   if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
   if (typeof updateCalcolBadge === 'function') updateCalcolBadge();
   if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
