@@ -316,8 +316,27 @@ inherits its *paired model* var's color/unit). Target: display lives on the
   table, and CDF (`statsDsHidden` Set → `statsShownCmpDatasets()`). Below 3
   datasets the section stays hidden, so the common model+aux case is unchanged
   (guarded in `delta-row-smoke`). Chip state is ephemeral (phase 6, like the
-  rest of d2+ stats UI). **Still TODO in 4c:** Swath (4c-iii) and Categories +
-  the merge/rename/split popover (4c-iv).
+  rest of d2+ stats UI).
+- **4c-iii Swath — in progress.**
+  - **4c-iii-a ✅ (71a1a35) — results data-structure seam.** `lastSwathData`
+    dropped its singular `aux*` fields (`auxResults`/`auxVarCols`/`auxHeader`/
+    `auxError`/`auxFilterErrors`/`auxCalcolErrors`/`auxWeightExcluded`) for a
+    `cmp[]` list — one entry per overlaid comparison dataset `{dsId, results,
+    varCols, header, error, filterErrors, calcolErrors, weightExcluded}`.
+    `swathDirView` exposes a per-direction `cmp[]`; `renderSwathCharts` builds
+    the comparison series by looping it (scaleKey/label/color/unit keyed by
+    `dsId` via `catModelMember`/`dsLabel`/`getAuxSwathVarColor(…,dsId)`);
+    `renderSwathOutput` loops `cmp` for the error/weight notes. Only aux runs
+    today → one entry, byte-stable. New UI guard `experiments/swath-smoke.js`
+    (Swath previously had only the worker-level `bma-swath-test`).
+  - **NEXT 4c-iii-b — worker fan-out:** generalize `renderSwathAuxVars` to list
+    every comparison dataset's vars (read `ds.preflight`/`ds.calcolMeta` via the
+    registry) and fan out one swath worker per dataset, appending to `cmp[]`.
+    Watch the aux declustering-weight path (`AUX_DECLUS_WEIGHT`) — d2+ use a
+    plain `catRole(id,'weight')` column, no declus UI. Then **4c-iii-c** dataset
+    chips (reuse the `statsDsHidden` pattern) + persistence generalization
+    (sidebar `auxCheckedVars` → per-dataset).
+- **Still TODO in 4c:** Categories + the merge/rename/split popover (4c-iv).
 
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
