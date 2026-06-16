@@ -63,26 +63,68 @@ function renderCatSidebar() {
 
 function renderCatMain() {
   if (!_catData || catFocusedCol === null) return;
+  renderCatDatasetChips();
   renderCatToolbar();
   renderCatSortGroup();
   renderCatBarChart();
   renderCatValueTable();
 }
 
-// Aux counterpart of a categorical column (catalog pairing, seeded by name):
-// { counts, total, overflow } or null. Lets the chart/table compare category
-// proportions model-vs-samples — e.g. lithology shares.
-function getCatAuxCounts(colName) {
-  if (!auxCompleteData || !auxCompleteData.categories || !colName) return null;
+// A10 4c-iv: dataset show/hide chips. Progressive disclosure — the section
+// appears only once a second comparison dataset joins (3+ total), so the
+// common model+aux case stays uncluttered. Model = a static baseline chip.
+function renderCatDatasetChips() {
+  var section = document.getElementById('catDatasetsSection');
+  if (!section) return;
+  var allCmp = catCmpDatasets();
+  if (allCmp.length < 2) { section.style.display = 'none'; return; }
+  var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the model (reference) categories">Model</span>';
+  allCmp.forEach(function(ds) {
+    var off = catDsHidden.has(ds.id);
+    chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) +
+      '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) +
+      '">' + esc(dsLabel(ds.id)) + '</button>';
+  });
+  document.getElementById('catDatasetChips').innerHTML = chips;
+  section.style.display = '';
+}
+
+// A10 4c-iv: dataset show/hide chips for Categories (ephemeral, like the
+// Statistics and Swath chips — phase 6 persists). Keyed by dsId.
+var catDsHidden = new Set();
+
+// Comparison datasets that can mirror a categorical column — every non-model
+// dataset whose last analysis produced categories. Registry order (aux, d2…).
+function catCmpDatasets() {
+  var out = [];
+  for (var i = 1; i < datasets.length; i++) {
+    var d = datasets[i];
+    if (d && d.complete && d.complete.categories) out.push(d);
+  }
+  return out;
+}
+// The comparison datasets actually shown — the chips (≥2 comparison datasets)
+// let the user hide any of them.
+function catShownCmpDatasets() {
+  return catCmpDatasets().filter(function(d) { return !catDsHidden.has(d.id); });
+}
+
+// Category counts of a comparison dataset's column grouped (by catalog
+// property) with a model categorical column: { counts, total, overflow } or
+// null. Generalizes the aux-only getCatAuxCounts so the chart/table can
+// compare category proportions model-vs-any-dataset — e.g. lithology shares.
+function getCatCmpCounts(ds, colName) {
+  if (!ds || !ds.complete || !ds.complete.categories || !colName) return null;
   catEnsureSeeded();
-  var revSet = new Set(catPairsRev(colName));
-  if (revSet.size === 0) return null;
-  var idxs = Object.keys(auxCompleteData.categories);
+  var memberSet = new Set(catGroupMembers(colName, ds.id));
+  if (memberSet.size === 0) return null;
+  var cats = ds.complete.categories, hdr = ds.complete.header;
+  var idxs = Object.keys(cats);
   for (var i = 0; i < idxs.length; i++) {
     var ai = idxs[i];
-    var aName = auxCompleteData.header[ai];
-    if (aName && revSet.has(aName)) {
-      var cat = auxCompleteData.categories[ai];
+    var aName = hdr[ai];
+    if (aName && memberSet.has(aName)) {
+      var cat = cats[ai];
       if (!cat || !cat.counts) return null;
       var total = 0;
       for (var v in cat.counts) total += cat.counts[v];
@@ -90,6 +132,24 @@ function getCatAuxCounts(colName) {
     }
   }
   return null;
+}
+
+// Shown comparison datasets that actually have a counterpart for colName, as
+// [{ds, label, counts}] in registry order. The render functions iterate this.
+function catCmpForCol(colName) {
+  var out = [];
+  catShownCmpDatasets().forEach(function(ds) {
+    var c = getCatCmpCounts(ds, colName);
+    if (c) out.push({ ds: ds, label: dsLabel(ds.id), counts: c });
+  });
+  return out;
+}
+
+// Comparison-series marker colour: the first dataset keeps the legacy aux look
+// (--fg-bright open diamond); additional datasets take palette hues so they
+// stay distinguishable on the shared axis.
+function catCmpMarkerColor(idx) {
+  return idx === 0 ? 'var(--fg-bright)' : STATSCAT_PALETTE[(idx - 1) % STATSCAT_PALETTE.length];
 }
 
 function getCatSortedEntries(colIdx) {
@@ -173,7 +233,7 @@ function renderCatToolbar() {
   if (total > 0) {
     for (var ki = 0; ki < byCount.length; ki++) { cum += byCount[ki][1]; cov80++; if (cum / total >= 0.8) break; }
   }
-  var auxCat = getCatAuxCounts(colName);
+  var cmps = catCmpForCol(colName);
 
   function stat(label, value, title) {
     return '<div class="cat-stat"' + (title ? ' title="' + esc(title) + '"' : '') + '>' +
@@ -194,7 +254,9 @@ function renderCatToolbar() {
   if (dom) html += stat('Dominant', trunc(dom[0]) + ' <span class="cat-stat-sub">' + domPct.toFixed(1) + '%</span>', dom[0] + ' \u2014 most frequent value');
   if (maxEntropy > 0) html += stat('Diversity', normPct + '%', 'normalized Shannon entropy (H=' + entropy.toFixed(2) + ' / ' + maxEntropy.toFixed(2) + ') \u2014 0% one value dominates, 100% even spread');
   if (total > 0 && byCount.length > 1) html += stat('80% in', cov80 + (cov80 === 1 ? ' cat' : ' cats'), 'categories making up 80% of the rows (concentration)');
-  if (auxCat) html += stat('vs ' + esc(auxPrefix || 'aux'), auxCat.total.toLocaleString() + (auxCat.overflow ? '+' : ''), 'paired ' + (auxPrefix || 'aux') + ':' + colName + ' \u2014 rows compared');
+  cmps.forEach(function(cm) {
+    html += stat('vs ' + esc(cm.label), cm.counts.total.toLocaleString() + (cm.counts.overflow ? '+' : ''), 'grouped ' + cm.label + ':' + colName + ' \u2014 rows compared');
+  });
   html += '</div>';
 
   $catToolbar.innerHTML = html;
@@ -215,11 +277,11 @@ function renderCatBarChart() {
   var showEntries = showAll ? entries : entries.slice(0, 20);
 
   var barH = 18, gap = 2, labelW = 120, rightPad = 60;
-  // Aux comparison: scale aux shares onto the same axis as the bars
-  // (bars are count/maxCount, i.e. share/maxShare)
-  var auxCat = getCatAuxCounts(colName);
+  // Comparison overlay: scale each comparison dataset's shares onto the same
+  // axis as the bars (bars are count/maxCount, i.e. share/maxShare).
+  var cmps = catCmpForCol(colName);
   var maxShare = total > 0 ? maxCount / total : 0;
-  var auxLegendH = auxCat ? 16 : 0;
+  var auxLegendH = cmps.length * 16;
   var chartH = showEntries.length * (barH + gap) + 30 + auxLegendH; // +30 for Pareto line clearance
   var chartW = chartHostWidth(document.getElementById('catChart'), 600);
   var barAreaW = chartW - labelW - rightPad;
@@ -247,17 +309,22 @@ function renderCatBarChart() {
     var pct = total > 0 ? (count / total * 100).toFixed(1) : '0.0';
     svg += '<text x="' + (labelW + barW + 4) + '" y="' + (y + barH / 2 + 3.5) + '" fill="var(--fg-dim)" font-size="8.5">' + count.toLocaleString() + ' (' + pct + '%)</text>';
 
-    // Aux share marker: open diamond at the aux proportion, on the bar axis
-    if (auxCat && auxCat.total > 0 && maxShare > 0) {
-      var auxShare = (auxCat.counts[val] || 0) / auxCat.total;
-      var amx = labelW + Math.min(auxShare / maxShare, 1) * barAreaW;
-      var amy = y + barH / 2;
-      svg += '<path d="M' + amx.toFixed(1) + ',' + (amy - 4.2).toFixed(1) +
-        ' L' + (amx + 4.2).toFixed(1) + ',' + amy.toFixed(1) +
-        ' L' + amx.toFixed(1) + ',' + (amy + 4.2).toFixed(1) +
-        ' L' + (amx - 4.2).toFixed(1) + ',' + amy.toFixed(1) + ' Z"' +
-        ' fill="none" stroke="var(--fg-bright)" stroke-width="1.2" opacity="0.85">' +
-        '<title>' + esc((auxPrefix || 'aux') + ':' + colName) + ' — ' + (auxShare * 100).toFixed(1) + '%</title></path>';
+    // Comparison share markers: an open diamond at each dataset's proportion,
+    // on the bar axis (first dataset --fg-bright, others palette hues).
+    if (maxShare > 0) {
+      for (var mi = 0; mi < cmps.length; mi++) {
+        var cm = cmps[mi];
+        if (cm.counts.total <= 0) continue;
+        var cShare = (cm.counts.counts[val] || 0) / cm.counts.total;
+        var amx = labelW + Math.min(cShare / maxShare, 1) * barAreaW;
+        var amy = y + barH / 2;
+        svg += '<path d="M' + amx.toFixed(1) + ',' + (amy - 4.2).toFixed(1) +
+          ' L' + (amx + 4.2).toFixed(1) + ',' + amy.toFixed(1) +
+          ' L' + amx.toFixed(1) + ',' + (amy + 4.2).toFixed(1) +
+          ' L' + (amx - 4.2).toFixed(1) + ',' + amy.toFixed(1) + ' Z"' +
+          ' fill="none" stroke="' + catCmpMarkerColor(mi) + '" stroke-width="1.2" opacity="0.85">' +
+          '<title>' + esc(cm.label + ':' + colName) + ' — ' + (cShare * 100).toFixed(1) + '%</title></path>';
+      }
     }
 
     // Pareto accumulation
@@ -265,12 +332,13 @@ function renderCatBarChart() {
     paretoPoints.push({ x: labelW + barW, y: y + barH / 2, pct: cumPct });
   }
 
-  // Aux legend line
-  if (auxCat) {
-    var legY = showEntries.length * (barH + gap) + 24;
+  // Comparison legend lines — one per overlaid dataset
+  for (var li = 0; li < cmps.length; li++) {
+    var lcm = cmps[li];
+    var legY = showEntries.length * (barH + gap) + 24 + li * 16;
     var lgx = labelW;
-    svg += '<path d="M' + lgx + ',' + (legY - 3) + ' L' + (lgx + 4.2) + ',' + (legY + 1.2) + ' L' + lgx + ',' + (legY + 5.4) + ' L' + (lgx - 4.2) + ',' + (legY + 1.2) + ' Z" fill="none" stroke="var(--fg-bright)" stroke-width="1.2" opacity="0.85"/>';
-    svg += '<text x="' + (lgx + 10) + '" y="' + (legY + 4) + '" fill="var(--fg-dim)" font-size="8.5">' + esc((auxPrefix || 'aux') + ':' + colName) + ' share, same axis' + (auxCat.overflow ? ' (aux overflowed — partial)' : '') + '</text>';
+    svg += '<path d="M' + lgx + ',' + (legY - 3) + ' L' + (lgx + 4.2) + ',' + (legY + 1.2) + ' L' + lgx + ',' + (legY + 5.4) + ' L' + (lgx - 4.2) + ',' + (legY + 1.2) + ' Z" fill="none" stroke="' + catCmpMarkerColor(li) + '" stroke-width="1.2" opacity="0.85"/>';
+    svg += '<text x="' + (lgx + 10) + '" y="' + (legY + 4) + '" fill="var(--fg-dim)" font-size="8.5">' + esc(lcm.label + ':' + colName) + ' share, same axis' + (lcm.counts.overflow ? ' (' + esc(lcm.label) + ' overflowed — partial)' : '') + '</text>';
   }
 
   // Pareto line
@@ -316,16 +384,30 @@ function renderCatValueTable() {
   // Limit to 500 values
   var show = entries.slice(0, 500);
 
-  var auxCat = getCatAuxCounts(colName);
-  var auxLabel = (auxPrefix || 'aux') + ':' + colName;
+  // A10 4c-iv: one n/% column-pair per shown comparison dataset (aux, d2…).
+  var cmps = catCmpForCol(colName);
 
   var html = '<thead><tr>';
   html += '<th></th>'; // drag handle column — always present (C6: dragging sets Custom order)
   html += '<th title="Category colour">·</th>';
   html += '<th class="cat-cb-head"><input type="checkbox" id="catSelectAll" title="Select all / none — ticked values filter the model"></th>';
   html += '<th>Value</th><th>Count</th><th>%</th>';
-  if (auxCat) html += '<th title="' + esc(auxLabel) + '">aux n</th><th title="' + esc(auxLabel) + '">aux %</th>';
+  cmps.forEach(function(cm) {
+    var lbl = esc(cm.label + ':' + colName);
+    html += '<th title="' + lbl + '">' + esc(cm.label) + ' n</th><th title="' + lbl + '">' + esc(cm.label) + ' %</th>';
+  });
   html += '</tr></thead><tbody>';
+
+  function cmpCells(val) {
+    var s = '';
+    cmps.forEach(function(cm) {
+      var n = cm.counts.counts[val] || 0;
+      var p = cm.counts.total > 0 ? (n / cm.counts.total * 100).toFixed(1) : '0.0';
+      s += '<td class="cat-count-cell cat-aux-cell">' + (n > 0 ? n.toLocaleString() : '—') + '</td>';
+      s += '<td class="cat-pct-cell cat-aux-cell">' + (n > 0 ? p + '%' : '—') + '</td>';
+    });
+    return s;
+  }
 
   for (var ri = 0; ri < show.length; ri++) {
     var val = show[ri][0];
@@ -342,38 +424,41 @@ function renderCatValueTable() {
     html += '<td class="cat-val-cell">' + esc(val) + '</td>';
     html += '<td class="cat-count-cell">' + count.toLocaleString() + '</td>';
     html += '<td class="cat-pct-cell">' + pct + '%</td>';
-    if (auxCat) {
-      var an = auxCat.counts[val] || 0;
-      var apct = auxCat.total > 0 ? (an / auxCat.total * 100).toFixed(1) : '0.0';
-      html += '<td class="cat-count-cell cat-aux-cell">' + (an > 0 ? an.toLocaleString() : '\u2014') + '</td>';
-      html += '<td class="cat-pct-cell cat-aux-cell">' + (an > 0 ? apct + '%' : '\u2014') + '</td>';
-    }
+    html += cmpCells(val);
     html += '</tr>';
   }
 
-  // Values present in aux but absent from the model \u2014 disagreements worth seeing
-  if (auxCat) {
+  // Values present in a comparison dataset but absent from the model \u2014 the
+  // union across shown datasets, ranked by their largest comparison count.
+  // Disagreements worth seeing (the legacy "aux only" rows, generalized).
+  if (cmps.length > 0) {
     var primarySet = {};
     for (var pi = 0; pi < entries.length; pi++) primarySet[entries[pi][0]] = true;
-    var auxOnly = Object.keys(auxCat.counts).filter(function(v) { return !primarySet[v]; });
-    auxOnly.sort(function(a, b) { return auxCat.counts[b] - auxCat.counts[a]; });
+    var extraMax = {};
+    cmps.forEach(function(cm) {
+      Object.keys(cm.counts.counts).forEach(function(v) {
+        if (primarySet[v]) return;
+        var n = cm.counts.counts[v] || 0;
+        if (n > (extraMax[v] || 0)) extraMax[v] = n;
+      });
+    });
+    var auxOnly = Object.keys(extraMax);
+    auxOnly.sort(function(a, b) { return extraMax[b] - extraMax[a]; });
+    var cmpOnlyTag = cmps.length === 1 ? esc(cmps[0].label) + ' only' : 'not in model';
     for (var ai = 0; ai < auxOnly.length; ai++) {
       var av = auxOnly[ai];
       if (search && !fuzzyMatch(search, av.toLowerCase())) continue;
-      var aOnly = auxCat.counts[av];
-      var aOnlyPct = auxCat.total > 0 ? (aOnly / auxCat.total * 100).toFixed(1) : '0.0';
       html += '<tr class="cat-aux-only" data-val="' + esc(av) + '">';
       html += '<td></td><td></td><td></td>';   // drag / swatch / checkbox columns (always present)
-      html += '<td class="cat-val-cell">' + esc(av) + ' <span class="cat-aux-only-tag">aux only</span></td>';
+      html += '<td class="cat-val-cell">' + esc(av) + ' <span class="cat-aux-only-tag">' + cmpOnlyTag + '</span></td>';
       html += '<td class="cat-count-cell">\u2014</td><td class="cat-pct-cell">\u2014</td>';
-      html += '<td class="cat-count-cell cat-aux-cell">' + aOnly.toLocaleString() + '</td>';
-      html += '<td class="cat-pct-cell cat-aux-cell">' + aOnlyPct + '%</td>';
+      html += cmpCells(av);
       html += '</tr>';
     }
   }
 
   if (entries.length > 500) {
-    var colSpan = 6 + (auxCat ? 2 : 0);   // drag/swatch/cb/value/count/% (+aux n/%)
+    var colSpan = 6 + cmps.length * 2;   // drag/swatch/cb/value/count/% (+ n/% per cmp ds)
     html += '<tr><td colspan="' + colSpan + '" style="color:var(--fg-dim);text-align:center;font-size:0.65rem;padding:0.4rem;">Showing 500 of ' + entries.length + ' values</td></tr>';
   }
 
@@ -450,6 +535,18 @@ function wireCatEventsOnce() {
     renderCatSidebar();
   });
   wireSearchShortcuts($catColSearch, null, null);
+
+  // Dataset chips (4c-iv) — toggle a comparison dataset's table/chart columns;
+  // re-renders the main area from cache (no re-analysis).
+  var catDsChipsEl = document.getElementById('catDatasetChips');
+  if (catDsChipsEl) catDsChipsEl.addEventListener('click', function(e) {
+    var b = e.target.closest('[data-ds-chip]');
+    if (!b) return;
+    var id = b.dataset.dsChip;
+    if (catDsHidden.has(id)) catDsHidden.delete(id);
+    else catDsHidden.add(id);
+    renderCatMain();
+  });
 
   // Sort buttons (delegated on the sort group beside the value table — C6-4c)
   var catSortGroupEl = document.getElementById('catSortGroup');

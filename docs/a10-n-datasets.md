@@ -357,7 +357,21 @@ inherits its *paired model* var's color/unit). Target: display lives on the
     Per-dataset selection **persistence** stays deferred to phase 6 (it needs
     the `datasets` serialization key); serialization is scoped to
     `data-ds="aux"` in the meantime, d2+ swath selection ephemeral.
-- **Still TODO in 4c:** Categories + the merge/rename/split popover (4c-iv).
+- **4c-iv Categories — in progress.**
+  - **4c-iv-a ✅ — comparison fan-out + chips.** `getCatAuxCounts` generalized to
+    `getCatCmpCounts(ds, colName)` (counts of the dataset's column grouped by
+    catalog property via `catGroupMembers`); `catCmpDatasets`/
+    `catShownCmpDatasets`/`catCmpForCol(colName)` enumerate the shown comparison
+    datasets that have a counterpart for the focused column. The toolbar emits a
+    "vs <label>" stat each; the bar chart draws a share marker + legend line per
+    dataset (`catCmpMarkerColor`: first = legacy `--fg-bright`, rest palette);
+    the value table gets an n/% column-pair per dataset and the "X only" rows
+    become the union of comparison-only values. `catDsHidden` Set (ephemeral) +
+    `#catDatasetChips` (progressive disclosure at ≥2 comparison datasets, reuses
+    `.stats-ds-chip`); toggling re-renders the main area from cache. Covered in
+    `a10-smoke`; single-aux case visually unchanged (`c6-smoke`).
+  - **NEXT 4c-iv-b** — the richer merge/rename/split property popover (the
+    catalog-editing UI deferred from 4a; today pair/unpair works property-backed).
 
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
