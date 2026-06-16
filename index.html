@@ -4525,6 +4525,11 @@ table.stats tr.stats-delta-row td:first-child {
 }
 .rails-overflow-btn[hidden] { display: none; }
 
+.rails-newtab-btn {
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
 .rails-strip:focus { outline: none; }
 
 .rails-tab {
@@ -4798,6 +4803,23 @@ table.stats tr.stats-delta-row td:first-child {
   transition: color 80ms, background 80ms;
 }
 .rails-overflow-btn:hover {
+  background: var(--rails-border);
+  color: var(--rails-text);
+}
+
+/* A10 4e-c: the opt-in new-tab "+" mirrors the overflow button's chrome */
+.rails-newtab-btn {
+  width: 26px;
+  border: none;
+  border-left: 1px solid var(--rails-border);
+  background: var(--rails-surface);
+  color: var(--rails-text-dim);
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1;
+  transition: color 80ms, background 80ms;
+}
+.rails-newtab-btn:hover {
   background: var(--rails-border);
   color: var(--rails-text);
 }
@@ -5865,7 +5887,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 6fcd51d — click to check for updates">6fcd51d</div>
+<div class="build-badge" id="buildBadge" title="build 3b0f595 — click to check for updates">3b0f595</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -9589,16 +9611,19 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-// ─── Vendored: @gcu/rails 0.1.0 ────────────────────────────────────────
-// Upstream: auditable/ext/rails, commit 5a6c7abe9dacc402055e1da31adb3ae96426ae55
-// Vendored 2026-06-11 for C1b (docs/c1b-rails-docking.md, D1). Re-vendor
-// deliberately: copy upstream index.js, strip the trailing `export` line,
-// keep this header. rails.css rides at the end of styles.css (same banner).
+// ─── Vendored: @gcu/rails 0.1.0 ────────────────────────
+// Upstream: auditable/ext/rails, commit d065780681bd51f52d4edc572b1b0c73d15e4559
+// Re-vendored 2026-06-16 (was 5a6c7ab, 2026-06-11) for A10 4e-c — adds the
+// opt-in newTabButton ([+] in each strip → `strip:newtab` event) + a
+// VS-Code-style tab-insert drop-zone refinement. Re-vendor deliberately: copy
+// upstream index.js, strip the trailing `export` line, keep this header.
+// rails.css rides at the end of styles.css (same banner).
 // Local changes: NONE (vendored as-is).
 //
 // ⚠ GENERATED FILE upstream — DO NOT hand-edit logic here.
 // @gcu/rails — layout engine for docked tab-based workspaces
 // Rails, stacks, tabs. Panels never reparent. Zero dependencies.
+
 
 // -- state.js --
 
@@ -10029,7 +10054,26 @@ function buildStripWrap(inst, stack) {
   const strip = buildStrip(inst, stack);
   const overflowBtn = buildOverflowBtn(inst, stack, strip);
   wrap.append(strip, overflowBtn);
+  // Opt-in new-tab button (config.newTabButton). Lives in the strip wrap next
+  // to the overflow button so it never scrolls away with the tabs. Emits
+  // `strip:newtab` ({ stack }) — the host spawns into that specific stack.
+  if (inst.config.newTabButton) wrap.append(buildNewTabBtn(inst, stack));
   return wrap;
+}
+
+function buildNewTabBtn(inst, stack) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'rails-newtab-btn';
+  btn.textContent = '+'; // +
+  btn.setAttribute('aria-label', 'New tab');
+  btn.title = 'New tab';
+  btn.tabIndex = -1;
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    inst._emit('strip:newtab', { stack });
+  });
+  return btn;
 }
 
 function buildOverflowBtn(inst, stack, strip) {
@@ -10716,7 +10760,7 @@ function updateFloatDrag(inst, ev, float, grabOffset) {
   const ly = ev.clientY - wsRect.top;
   let best = null, bestScore = Infinity;
   for (const z of drag.zones) {
-    const r = z.rect;
+    const r = z.hit || z.rect;   // tab-insert hit is wider than its caret visual
     if (lx >= r.x && lx <= r.x + r.w && ly >= r.y && ly <= r.y + r.h) {
       const area = r.w * r.h;
       const score = z.priority === 'body-append' ? area + 1e9 : area;
@@ -10917,7 +10961,7 @@ function updateTabDrag(inst, ev) {
 
   let best = null, bestScore = Infinity;
   for (const z of drag.zones) {
-    const r = z.rect;
+    const r = z.hit || z.rect;   // tab-insert hit is wider than its caret visual
     if (lx >= r.x && lx <= r.x + r.w && ly >= r.y && ly <= r.y + r.h) {
       const area = r.w * r.h;
       const score = z.priority === 'body-append' ? area + 1e9
@@ -11136,10 +11180,12 @@ function computeZones(inst, tab, touch) {
 // Expand narrow drop zones so they remain usable with finger-sized pointers.
 function inflateZonesForTouch(zones) {
   for (const z of zones) {
-    // tab-insert is narrowest (6px). Expand to ~20px.
+    // tab-insert halves are already wide; nudge the hit rect a touch more so
+    // finger-sized pointers comfortably cover the boundary.
     if (z.type === 'tab-insert') {
-      z.rect.x -= 7;
-      z.rect.w += 14;
+      const t = z.hit || z.rect;
+      t.x -= 4;
+      t.w += 8;
     }
     // new-rail and new-stack gaps — widen from 18px to 30px.
     if (z.type === 'new-rail' || z.type === 'new-stack') {
@@ -11230,26 +11276,45 @@ function collectStackInternalZones(zones, stackEl, stack, wsRect, enabled) {
   if (strip) {
     const stripRect = strip.getBoundingClientRect();
     const stripVisible = stripRect.width > 0 && stripRect.height > 0;
+    const top = stripRect.top - wsRect.top;
+    const h = stripRect.height;
+    const tabEls = stripVisible ? strip.querySelectorAll('.rails-tab') : [];
 
-    if (stripVisible && enabled('tab-append-strip')) {
-      zones.push({ type: 'tab-append', stackId: stack.id,
-        rect: { x: stripRect.left - wsRect.left, y: stripRect.top - wsRect.top,
-                w: stripRect.width, h: stripRect.height } });
-    }
-
-    if (stripVisible && enabled('tab-insert')) {
-      const tabEls = strip.querySelectorAll('.rails-tab');
-      const inserts = [];
+    // Each tab is split into two half-width INSERT targets — left half inserts
+    // before it, right half after — so anywhere over a tab is a precise drop
+    // point (no more 6px slivers). The wide `hit` rect drives detection; the
+    // thin `rect` is just a 2px caret drawn at the boundary, so the tabs stay
+    // fully visible during the drag (the target paints nothing). This is the
+    // VS-Code / browser tab-reorder model.
+    if (stripVisible && enabled('tab-insert') && tabEls.length) {
       tabEls.forEach((t, ti) => {
         const r = t.getBoundingClientRect();
-        inserts.push({ x: r.left, at: ti });
+        const x = r.left - wsRect.left;
+        const mid = r.width / 2;
+        zones.push({ type: 'tab-insert', stackId: stack.id, at: ti,
+          rect: { x: x - 1, y: top, w: 2, h },
+          hit:  { x, y: top, w: mid, h } });
+        zones.push({ type: 'tab-insert', stackId: stack.id, at: ti + 1,
+          rect: { x: x + r.width - 1, y: top, w: 2, h },
+          hit:  { x: x + mid, y: top, w: r.width - mid, h } });
       });
-      inserts.push({ x: stripRect.right, at: tabEls.length });
-      inserts.forEach(ins => {
-        zones.push({ type: 'tab-insert', stackId: stack.id, at: ins.at,
-          rect: { x: ins.x - wsRect.left - 3, y: stripRect.top - wsRect.top,
-                  w: 6, h: stripRect.height } });
-      });
+    }
+
+    // Append zone — only the EMPTY strip space past the last tab (or the whole
+    // strip when there are no tabs). It never overlaps a tab, so it can't hide
+    // one. With tab-insert disabled it falls back to covering the whole strip.
+    if (stripVisible && enabled('tab-append-strip')) {
+      if (!tabEls.length || !enabled('tab-insert')) {
+        zones.push({ type: 'tab-append', stackId: stack.id,
+          rect: { x: stripRect.left - wsRect.left, y: top, w: stripRect.width, h } });
+      } else {
+        const lastRight = tabEls[tabEls.length - 1].getBoundingClientRect().right - wsRect.left;
+        const stripRight = stripRect.right - wsRect.left;
+        if (stripRight - lastRight > 2) {
+          zones.push({ type: 'tab-append', stackId: stack.id,
+            rect: { x: lastRight, y: top, w: stripRight - lastRight, h } });
+        }
+      }
     }
   }
 
@@ -11427,6 +11492,11 @@ function createRails(host, options = {}) {
     dragThreshold: options.dragThreshold ?? 4,
     tabPosition: options.tabPosition ?? 'top',
     dropZones: options.dropZones ?? {},
+    // Opt-in "+" button at the end of every tab strip. When true, each strip
+    // renders a new-tab affordance that emits `strip:newtab` ({ stack }); the
+    // consumer decides what to spawn (e.g. a launcher) into that stack. Off by
+    // default so existing rails hosts are unchanged.
+    newTabButton: options.newTabButton ?? false,
   };
 
   const events = new Map();

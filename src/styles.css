@@ -4510,6 +4510,11 @@ table.stats tr.stats-delta-row td:first-child {
 }
 .rails-overflow-btn[hidden] { display: none; }
 
+.rails-newtab-btn {
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
 .rails-strip:focus { outline: none; }
 
 .rails-tab {
@@ -4783,6 +4788,23 @@ table.stats tr.stats-delta-row td:first-child {
   transition: color 80ms, background 80ms;
 }
 .rails-overflow-btn:hover {
+  background: var(--rails-border);
+  color: var(--rails-text);
+}
+
+/* A10 4e-c: the opt-in new-tab "+" mirrors the overflow button's chrome */
+.rails-newtab-btn {
+  width: 26px;
+  border: none;
+  border-left: 1px solid var(--rails-border);
+  background: var(--rails-surface);
+  color: var(--rails-text-dim);
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1;
+  transition: color 80ms, background 80ms;
+}
+.rails-newtab-btn:hover {
   background: var(--rails-border);
   color: var(--rails-text);
 }
