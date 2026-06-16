@@ -2416,6 +2416,48 @@ async function preparePack(data) {
   }
 }
 
+// A14: filtered-size preview — count total data rows and how many survive the
+// dataset's filter, in one streaming pass. No stats, no geometry; just the two
+// counts (+ filter/calcol error tallies, surfaced honestly like every pass).
+async function countAnalysis(data) {
+  const { file, zipEntry, globalFilter, calcolCode, calcolMeta, resolvedTypes, rowVarOverride } = data;
+  const startTime = performance.now();
+  let src;
+  try {
+    src = await makeRowSource(file, {
+      zipEntry, dmEndianness: data.dmEndianness, dmFormat: data.dmFormat,
+      rowVarOverride, resolvedTypes, calcolCode, calcolMeta
+    });
+  } catch (e) {
+    self.postMessage({ type: 'error', message: e.message });
+    return;
+  }
+  let globalFn = null;
+  if (globalFilter) {
+    try { globalFn = compileFilterFn(src.rowVarName, globalFilter.expression); }
+    catch (e) { self.postMessage({ type: 'error', message: 'Filter error: ' + e.message }); return; }
+  }
+  const csvFile = src.csvFile, buildRow = src.buildRow, delimiter = src.delimiter;
+  let total = 0, kept = 0;
+  await src.stream({
+    line(line, totalChars) {
+      total++;
+      // buildRow evaluates calcols so calcol-referencing filters work; the
+      // compiled filter (compileFilterFn) counts its own per-row errors and
+      // excludes the row, matching the analyze pass exactly.
+      const row = buildRow(line.split(delimiter));
+      if (!globalFn || globalFn(row)) kept++;
+    },
+    chunk(totalChars) {
+      self.postMessage({ type: 'count-progress', percent: (totalChars / csvFile.size) * 100 });
+    }
+  });
+  self.postMessage({
+    type: 'count-complete', total, kept, elapsed: performance.now() - startTime,
+    filterErrors: filterErrPayload(globalFn, null), calcolErrors: calcolErrPayload(src)
+  });
+}
+
 self.onmessage = (e) => {
   if (e.data.mode === 'export') {
     exportCSV(e.data);
@@ -2431,6 +2473,8 @@ self.onmessage = (e) => {
     sectionAnalysis(e.data);
   } else if (e.data.mode === 'gt') {
     gtAnalysis(e.data);
+  } else if (e.data.mode === 'count') {
+    countAnalysis(e.data);
   } else {
     const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName, weightArray, weightArrayLabel } = e.data;
     analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName, weightArray, weightArrayLabel);

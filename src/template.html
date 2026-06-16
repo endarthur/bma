@@ -660,6 +660,27 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   </div>
 </div>
 
+<div class="settings-modal" id="dsFilterModal">
+  <div class="settings-modal-inner pack-modal-inner">
+    <div class="settings-modal-head">
+      <span id="dsFilterTitle">Filter</span>
+      <button class="preflight-back-btn" id="dsFilterClose" title="Close">✕</button>
+    </div>
+    <div class="settings-modal-body">
+      <div class="ds-filter-label">Keep rows where <span class="ds-filter-rowvar" id="dsFilterRowVar"></span></div>
+      <textarea class="ds-filter-input" id="dsFilterExpr" rows="2" spellcheck="false" autocomplete="off" placeholder="r.Fe > 30 && r.zone == 1"></textarea>
+      <div class="ds-filter-count" id="dsFilterCount"></div>
+    </div>
+    <div class="pack-modal-foot">
+      <button class="toolbar-btn" id="dsFilterExact" title="Count survivors exactly — reads the whole file">Exact count</button>
+      <span style="flex:1"></span>
+      <button class="toolbar-btn" id="dsFilterClear">Clear filter</button>
+      <button class="toolbar-btn" id="dsFilterCancel">Cancel</button>
+      <button class="swath-generate" id="dsFilterApply">Apply &amp; re-analyze</button>
+    </div>
+  </div>
+</div>
+
 <div class="update-banner" id="updateBanner">
   <span>A new version of BMA is available.</span>
   <button id="updateReload">Reload</button>

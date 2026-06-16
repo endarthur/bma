@@ -238,3 +238,195 @@ document.getElementById('exportObjBtn').addEventListener('click', () => {
   }, currentFile ? currentFile.name : 'model');
 });
 
+// ─── A14: per-dataset filter modal (from the data-item context menu) ──────
+// Dataset-generic: edit any dataset's .filter, preview the surviving size two
+// ways — an INSTANT estimate from the preflight sample, and an EXACT one-pass
+// count on demand — then Apply (sets .filter + re-analyzes through the
+// dataset's normal path). Honest labeling: the estimate is always marked ~.
+var _dsFilterTarget = null;       // the ds being edited
+var _dsFilterController = null;   // createExprInput controller (rebuilt per open)
+var _dsFilterCountWorker = null;  // exact-count worker in flight
+
+// Build typed sample row objects (with calcols) for one dataset — the estimate
+// substrate. Mirrors getSampleRows() but is ds-generic and uses the full sample.
+function dsFilterSampleRows(ds) {
+  var pf = ds && ds.preflight;
+  if (!pf || !pf.sampleRows) return [];
+  var hdr = pf.header, types = pf.autoTypes || [], typeOv = pf.typeOverrides || {};
+  var calFn = null;
+  if (ds.calcolCode) {
+    try { calFn = new Function(ds.rowVar, MATH_PREAMBLE_MAIN + ds.calcolCode); } catch (e) { calFn = null; }
+  }
+  return pf.sampleRows.map(function(fields) {
+    var obj = {};
+    for (var i = 0; i < hdr.length; i++) {
+      var raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
+      var t = typeOv[i] || types[i];
+      obj[hdr[i]] = t === 'numeric' ? (raw === '' ? null : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+    }
+    if (calFn) { obj.META = { cat: [], num: [] }; try { calFn(obj); } catch (e) {} delete obj.META; }
+    return obj;
+  });
+}
+
+// Instant estimate: fraction of the preflight sample passing the expression,
+// scaled to the dataset's known row count when it has been analyzed.
+function dsFilterEstimate(ds, expr) {
+  var rows = dsFilterSampleRows(ds);
+  if (rows.length === 0) return null;
+  var fn;
+  try { fn = new Function(ds.rowVar, MATH_PREAMBLE_MAIN + 'return (' + expr + ');'); }
+  catch (e) { return { error: e.message }; }
+  var kept = 0, errs = 0;
+  for (var i = 0; i < rows.length; i++) {
+    try { if (fn(rows[i])) kept++; } catch (e) { errs++; }
+  }
+  return { sampleN: rows.length, kept: kept, errs: errs, ratio: kept / rows.length };
+}
+
+function dsFilterRenderEstimate() {
+  var ds = _dsFilterTarget, $c = document.getElementById('dsFilterCount');
+  if (!ds || !$c) return;
+  var expr = (document.getElementById('dsFilterExpr').value || '').trim();
+  if (!expr) {
+    var pop0 = ds.complete && ds.complete.rowCount ? ds.complete.rowCount : null;
+    $c.innerHTML = '<span class="ds-filter-est">No filter — all ' + (pop0 != null ? pop0.toLocaleString() + ' ' : '') + 'rows kept.</span>';
+    return;
+  }
+  var e = dsFilterEstimate(ds, expr);
+  if (!e) { $c.innerHTML = '<span class="ds-filter-est">No sample available to check.</span>'; return; }
+  if (e.error) { $c.innerHTML = '<span class="ds-filter-est ds-filter-est--err">Expression error: ' + esc(e.error) + '</span>'; return; }
+  // The preflight sample is the FILE HEAD (first N rows), not a random sample —
+  // and block models are usually spatially sorted, so the head can be wildly
+  // unrepresentative (a sorted-by-grade file could read 0% here yet pass half
+  // the file). So we report it strictly as a head sniff + syntax check, never
+  // extrapolate it to a population estimate, and steer to the exact count.
+  var pct = Math.round(e.ratio * 100);
+  var html = '<span class="ds-filter-est">First ' + e.sampleN + ' rows: <strong>' + e.kept + '</strong> pass (' + pct + '%) ' +
+    '<span class="ds-filter-est-tag">head sample</span> — not representative of a sorted file; use Exact count for the real number.</span>';
+  if (e.errs > 0) html += ' <span class="ds-filter-est--err">(' + e.errs + ' sample row' + (e.errs === 1 ? '' : 's') + ' errored)</span>';
+  $c.innerHTML = html;
+}
+
+function dsFilterExactCount() {
+  var ds = _dsFilterTarget;
+  if (!ds || !ds.file || !ds.preflight) return;
+  var expr = (document.getElementById('dsFilterExpr').value || '').trim();
+  var $c = document.getElementById('dsFilterCount');
+  var $btn = document.getElementById('dsFilterExact');
+  if (_dsFilterCountWorker) { try { _dsFilterCountWorker.terminate(); } catch (e) {} _dsFilterCountWorker = null; }
+  if ($btn) $btn.disabled = true;
+  $c.innerHTML = '<span class="ds-filter-est">Counting… <span id="dsFilterCountPct">0%</span></span>';
+  var typeOv = {};
+  for (var ti = 0; ti < ds.preflight.autoTypes.length; ti++) typeOv[ti] = ds.preflight.autoTypes[ti];
+  var w = new Worker(workerUrl);
+  _dsFilterCountWorker = w;
+  w.postMessage({
+    mode: 'count',
+    file: ds.file,
+    zipEntry: ds.preflight.selectedZipEntry || null,
+    globalFilter: expr ? { expression: expr } : null,
+    calcolCode: ds.calcolCode || null,
+    calcolMeta: (ds.calcolMeta && ds.calcolMeta.length > 0) ? ds.calcolMeta : null,
+    resolvedTypes: ds.preflight.autoTypes,
+    rowVarOverride: ds.rowVar,
+    dmEndianness: ds.preflight.dmEndianness || null,
+    dmFormat: ds.preflight.dmFormat || null
+  });
+  w.onerror = function(ev) {
+    if (_dsFilterCountWorker !== w) return;
+    $c.innerHTML = '<span class="ds-filter-est ds-filter-est--err">Count failed: ' + esc(ev.message || 'worker error') + '</span>';
+    try { w.terminate(); } catch (e) {} _dsFilterCountWorker = null; if ($btn) $btn.disabled = false;
+  };
+  w.onmessage = function(ev) {
+    var m = ev.data;
+    if (m.type === 'count-progress') {
+      var pe = document.getElementById('dsFilterCountPct');
+      if (pe) pe.textContent = Math.min(99, m.percent).toFixed(0) + '%';
+    } else if (m.type === 'count-complete') {
+      var pct = m.total > 0 ? Math.round(m.kept / m.total * 100) : 0;
+      var html = '<span class="ds-filter-est"><strong>' + m.kept.toLocaleString() + '</strong> of ' + m.total.toLocaleString() +
+        ' rows pass (' + pct + '%) <span class="ds-filter-est-tag ds-filter-est-tag--exact">exact</span></span>';
+      // No silent loss: surface filter/calcol errors the count encountered
+      if (m.filterErrors && m.filterErrors.count > 0) html += ' <span class="ds-filter-est--err">' + m.filterErrors.count.toLocaleString() + ' rows errored in the filter (excluded)</span>';
+      if (m.calcolErrors && m.calcolErrors.count > 0) html += ' <span class="ds-filter-est--err">' + m.calcolErrors.count.toLocaleString() + ' calcol errors</span>';
+      $c.innerHTML = html;
+      try { w.terminate(); } catch (e) {} _dsFilterCountWorker = null; if ($btn) $btn.disabled = false;
+    } else if (m.type === 'error') {
+      $c.innerHTML = '<span class="ds-filter-est ds-filter-est--err">' + esc(m.message) + '</span>';
+      try { w.terminate(); } catch (e) {} _dsFilterCountWorker = null; if ($btn) $btn.disabled = false;
+    }
+  };
+}
+
+function dsFilterClose() {
+  var $m = document.getElementById('dsFilterModal');
+  if ($m) $m.classList.remove('active');
+  if (_dsFilterController) { try { _dsFilterController.destroy(); } catch (e) {} _dsFilterController = null; }
+  if (_dsFilterCountWorker) { try { _dsFilterCountWorker.terminate(); } catch (e) {} _dsFilterCountWorker = null; }
+  _dsFilterTarget = null;
+}
+
+function dsFilterApply() {
+  var ds = _dsFilterTarget;
+  if (!ds) return;
+  var expr = (document.getElementById('dsFilterExpr').value || '').trim();
+  if (expr && _dsFilterController) {
+    var r = _dsFilterController.validate();
+    if (!r.valid) return;
+  }
+  var f = expr ? { expression: expr } : null;
+  ds.filter = f;
+  // Keep an open config-panel filter input in sync (comparison datasets)
+  if (ds.id !== 'model') {
+    var ta = auxQ('[data-aux="filter"]', dsConfigRoot(ds));
+    if (ta) ta.value = expr;
+  } else {
+    var $fe = document.getElementById('filterExpr');
+    if ($fe) $fe.value = expr;
+    currentFilter = f;
+  }
+  dsFilterClose();
+  // Re-analyze through the dataset's normal path
+  if (ds.id === 'model') {
+    startAnalysis(currentXYZ, f, undefined, undefined, undefined, undefined);
+  } else if (typeof runAuxAnalysis === 'function') {
+    runAuxAnalysis(ds, dsConfigRoot(ds));
+  }
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+
+// Open the filter modal for a dataset (called from the ctx menu).
+function openDatasetFilterModal(ds) {
+  if (!ds) return;
+  _dsFilterTarget = ds;
+  var $m = document.getElementById('dsFilterModal');
+  document.getElementById('dsFilterTitle').textContent = 'Filter — ' + dsLabel(ds.id);
+  document.getElementById('dsFilterRowVar').textContent = '(' + ds.rowVar + '.column …)';
+  var $expr = document.getElementById('dsFilterExpr');
+  $expr.value = ds.filter ? ds.filter.expression : '';
+  $expr.placeholder = ds.rowVar + '.Fe > 30';
+  if (_dsFilterController) { try { _dsFilterController.destroy(); } catch (e) {} }
+  // Filter autocomplete scoped to this dataset's columns (createExprInput reads
+  // the active dataset via its mode; default 'filter' targets the model — for
+  // comparison datasets the estimate/exact count still validate by evaluation)
+  _dsFilterController = createExprInput($expr, { mode: 'filter' });
+  $m.classList.add('active');
+  dsFilterRenderEstimate();
+  $expr.focus();
+}
+
+(function wireDsFilterModal() {
+  var $expr = document.getElementById('dsFilterExpr');
+  if ($expr) $expr.addEventListener('input', dsFilterRenderEstimate);
+  var byId = function(id, fn) { var el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+  byId('dsFilterExact', dsFilterExactCount);
+  byId('dsFilterApply', dsFilterApply);
+  byId('dsFilterCancel', dsFilterClose);
+  byId('dsFilterClose', dsFilterClose);
+  byId('dsFilterClear', function() {
+    var e = document.getElementById('dsFilterExpr'); if (e) e.value = '';
+    dsFilterRenderEstimate();
+  });
+})();
+

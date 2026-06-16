@@ -2006,6 +2006,24 @@ table.stats tr:hover td:first-child { background: var(--bg2); }
   overflow-y: auto;
   flex: 1;
 }
+/* A14: per-dataset filter modal */
+.ds-filter-label { font-size: 0.72rem; color: var(--fg); margin-bottom: 0.35rem; }
+.ds-filter-rowvar { color: var(--fg-dim); font-family: var(--mono); font-size: 0.66rem; }
+.ds-filter-input {
+  width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: 0.74rem;
+  background: var(--bg2); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 0.45rem 0.5rem; resize: vertical;
+}
+.ds-filter-input:focus { outline: none; border-color: var(--action); }
+.ds-filter-count { margin-top: 0.55rem; font-size: 0.72rem; min-height: 1.2em; line-height: 1.5; }
+.ds-filter-est { color: var(--fg-dim); }
+.ds-filter-est strong { color: var(--fg-bright); }
+.ds-filter-est--err { color: var(--red); }
+.ds-filter-est-tag {
+  font-family: var(--mono); font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--info); border: 1px solid var(--info); border-radius: 999px; padding: 0 0.35rem; margin-left: 0.2rem;
+}
+.ds-filter-est-tag--exact { color: var(--go); border-color: var(--go); }
 .settings-section {
   margin-bottom: 1.2rem;
 }
@@ -5811,12 +5829,33 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   </div>
 </div>
 
+<div class="settings-modal" id="dsFilterModal">
+  <div class="settings-modal-inner pack-modal-inner">
+    <div class="settings-modal-head">
+      <span id="dsFilterTitle">Filter</span>
+      <button class="preflight-back-btn" id="dsFilterClose" title="Close">✕</button>
+    </div>
+    <div class="settings-modal-body">
+      <div class="ds-filter-label">Keep rows where <span class="ds-filter-rowvar" id="dsFilterRowVar"></span></div>
+      <textarea class="ds-filter-input" id="dsFilterExpr" rows="2" spellcheck="false" autocomplete="off" placeholder="r.Fe > 30 && r.zone == 1"></textarea>
+      <div class="ds-filter-count" id="dsFilterCount"></div>
+    </div>
+    <div class="pack-modal-foot">
+      <button class="toolbar-btn" id="dsFilterExact" title="Count survivors exactly — reads the whole file">Exact count</button>
+      <span style="flex:1"></span>
+      <button class="toolbar-btn" id="dsFilterClear">Clear filter</button>
+      <button class="toolbar-btn" id="dsFilterCancel">Cancel</button>
+      <button class="swath-generate" id="dsFilterApply">Apply &amp; re-analyze</button>
+    </div>
+  </div>
+</div>
+
 <div class="update-banner" id="updateBanner">
   <span>A new version of BMA is available.</span>
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build fda699c — click to check for updates">fda699c</div>
+<div class="build-badge" id="buildBadge" title="build 10ee991 — click to check for updates">10ee991</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8268,6 +8307,48 @@ async function preparePack(data) {
   }
 }
 
+// A14: filtered-size preview — count total data rows and how many survive the
+// dataset's filter, in one streaming pass. No stats, no geometry; just the two
+// counts (+ filter/calcol error tallies, surfaced honestly like every pass).
+async function countAnalysis(data) {
+  const { file, zipEntry, globalFilter, calcolCode, calcolMeta, resolvedTypes, rowVarOverride } = data;
+  const startTime = performance.now();
+  let src;
+  try {
+    src = await makeRowSource(file, {
+      zipEntry, dmEndianness: data.dmEndianness, dmFormat: data.dmFormat,
+      rowVarOverride, resolvedTypes, calcolCode, calcolMeta
+    });
+  } catch (e) {
+    self.postMessage({ type: 'error', message: e.message });
+    return;
+  }
+  let globalFn = null;
+  if (globalFilter) {
+    try { globalFn = compileFilterFn(src.rowVarName, globalFilter.expression); }
+    catch (e) { self.postMessage({ type: 'error', message: 'Filter error: ' + e.message }); return; }
+  }
+  const csvFile = src.csvFile, buildRow = src.buildRow, delimiter = src.delimiter;
+  let total = 0, kept = 0;
+  await src.stream({
+    line(line, totalChars) {
+      total++;
+      // buildRow evaluates calcols so calcol-referencing filters work; the
+      // compiled filter (compileFilterFn) counts its own per-row errors and
+      // excludes the row, matching the analyze pass exactly.
+      const row = buildRow(line.split(delimiter));
+      if (!globalFn || globalFn(row)) kept++;
+    },
+    chunk(totalChars) {
+      self.postMessage({ type: 'count-progress', percent: (totalChars / csvFile.size) * 100 });
+    }
+  });
+  self.postMessage({
+    type: 'count-complete', total, kept, elapsed: performance.now() - startTime,
+    filterErrors: filterErrPayload(globalFn, null), calcolErrors: calcolErrPayload(src)
+  });
+}
+
 self.onmessage = (e) => {
   if (e.data.mode === 'export') {
     exportCSV(e.data);
@@ -8283,6 +8364,8 @@ self.onmessage = (e) => {
     sectionAnalysis(e.data);
   } else if (e.data.mode === 'gt') {
     gtAnalysis(e.data);
+  } else if (e.data.mode === 'count') {
+    countAnalysis(e.data);
   } else {
     const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName, weightArray, weightArrayLabel } = e.data;
     analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName, weightArray, weightArrayLabel);
@@ -26867,6 +26950,198 @@ document.getElementById('exportObjBtn').addEventListener('click', () => {
   }, currentFile ? currentFile.name : 'model');
 });
 
+// ─── A14: per-dataset filter modal (from the data-item context menu) ──────
+// Dataset-generic: edit any dataset's .filter, preview the surviving size two
+// ways — an INSTANT estimate from the preflight sample, and an EXACT one-pass
+// count on demand — then Apply (sets .filter + re-analyzes through the
+// dataset's normal path). Honest labeling: the estimate is always marked ~.
+var _dsFilterTarget = null;       // the ds being edited
+var _dsFilterController = null;   // createExprInput controller (rebuilt per open)
+var _dsFilterCountWorker = null;  // exact-count worker in flight
+
+// Build typed sample row objects (with calcols) for one dataset — the estimate
+// substrate. Mirrors getSampleRows() but is ds-generic and uses the full sample.
+function dsFilterSampleRows(ds) {
+  var pf = ds && ds.preflight;
+  if (!pf || !pf.sampleRows) return [];
+  var hdr = pf.header, types = pf.autoTypes || [], typeOv = pf.typeOverrides || {};
+  var calFn = null;
+  if (ds.calcolCode) {
+    try { calFn = new Function(ds.rowVar, MATH_PREAMBLE_MAIN + ds.calcolCode); } catch (e) { calFn = null; }
+  }
+  return pf.sampleRows.map(function(fields) {
+    var obj = {};
+    for (var i = 0; i < hdr.length; i++) {
+      var raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');
+      var t = typeOv[i] || types[i];
+      obj[hdr[i]] = t === 'numeric' ? (raw === '' ? null : (isNaN(Number(raw)) ? raw : Number(raw))) : raw;
+    }
+    if (calFn) { obj.META = { cat: [], num: [] }; try { calFn(obj); } catch (e) {} delete obj.META; }
+    return obj;
+  });
+}
+
+// Instant estimate: fraction of the preflight sample passing the expression,
+// scaled to the dataset's known row count when it has been analyzed.
+function dsFilterEstimate(ds, expr) {
+  var rows = dsFilterSampleRows(ds);
+  if (rows.length === 0) return null;
+  var fn;
+  try { fn = new Function(ds.rowVar, MATH_PREAMBLE_MAIN + 'return (' + expr + ');'); }
+  catch (e) { return { error: e.message }; }
+  var kept = 0, errs = 0;
+  for (var i = 0; i < rows.length; i++) {
+    try { if (fn(rows[i])) kept++; } catch (e) { errs++; }
+  }
+  return { sampleN: rows.length, kept: kept, errs: errs, ratio: kept / rows.length };
+}
+
+function dsFilterRenderEstimate() {
+  var ds = _dsFilterTarget, $c = document.getElementById('dsFilterCount');
+  if (!ds || !$c) return;
+  var expr = (document.getElementById('dsFilterExpr').value || '').trim();
+  if (!expr) {
+    var pop0 = ds.complete && ds.complete.rowCount ? ds.complete.rowCount : null;
+    $c.innerHTML = '<span class="ds-filter-est">No filter — all ' + (pop0 != null ? pop0.toLocaleString() + ' ' : '') + 'rows kept.</span>';
+    return;
+  }
+  var e = dsFilterEstimate(ds, expr);
+  if (!e) { $c.innerHTML = '<span class="ds-filter-est">No sample available to check.</span>'; return; }
+  if (e.error) { $c.innerHTML = '<span class="ds-filter-est ds-filter-est--err">Expression error: ' + esc(e.error) + '</span>'; return; }
+  // The preflight sample is the FILE HEAD (first N rows), not a random sample —
+  // and block models are usually spatially sorted, so the head can be wildly
+  // unrepresentative (a sorted-by-grade file could read 0% here yet pass half
+  // the file). So we report it strictly as a head sniff + syntax check, never
+  // extrapolate it to a population estimate, and steer to the exact count.
+  var pct = Math.round(e.ratio * 100);
+  var html = '<span class="ds-filter-est">First ' + e.sampleN + ' rows: <strong>' + e.kept + '</strong> pass (' + pct + '%) ' +
+    '<span class="ds-filter-est-tag">head sample</span> — not representative of a sorted file; use Exact count for the real number.</span>';
+  if (e.errs > 0) html += ' <span class="ds-filter-est--err">(' + e.errs + ' sample row' + (e.errs === 1 ? '' : 's') + ' errored)</span>';
+  $c.innerHTML = html;
+}
+
+function dsFilterExactCount() {
+  var ds = _dsFilterTarget;
+  if (!ds || !ds.file || !ds.preflight) return;
+  var expr = (document.getElementById('dsFilterExpr').value || '').trim();
+  var $c = document.getElementById('dsFilterCount');
+  var $btn = document.getElementById('dsFilterExact');
+  if (_dsFilterCountWorker) { try { _dsFilterCountWorker.terminate(); } catch (e) {} _dsFilterCountWorker = null; }
+  if ($btn) $btn.disabled = true;
+  $c.innerHTML = '<span class="ds-filter-est">Counting… <span id="dsFilterCountPct">0%</span></span>';
+  var typeOv = {};
+  for (var ti = 0; ti < ds.preflight.autoTypes.length; ti++) typeOv[ti] = ds.preflight.autoTypes[ti];
+  var w = new Worker(workerUrl);
+  _dsFilterCountWorker = w;
+  w.postMessage({
+    mode: 'count',
+    file: ds.file,
+    zipEntry: ds.preflight.selectedZipEntry || null,
+    globalFilter: expr ? { expression: expr } : null,
+    calcolCode: ds.calcolCode || null,
+    calcolMeta: (ds.calcolMeta && ds.calcolMeta.length > 0) ? ds.calcolMeta : null,
+    resolvedTypes: ds.preflight.autoTypes,
+    rowVarOverride: ds.rowVar,
+    dmEndianness: ds.preflight.dmEndianness || null,
+    dmFormat: ds.preflight.dmFormat || null
+  });
+  w.onerror = function(ev) {
+    if (_dsFilterCountWorker !== w) return;
+    $c.innerHTML = '<span class="ds-filter-est ds-filter-est--err">Count failed: ' + esc(ev.message || 'worker error') + '</span>';
+    try { w.terminate(); } catch (e) {} _dsFilterCountWorker = null; if ($btn) $btn.disabled = false;
+  };
+  w.onmessage = function(ev) {
+    var m = ev.data;
+    if (m.type === 'count-progress') {
+      var pe = document.getElementById('dsFilterCountPct');
+      if (pe) pe.textContent = Math.min(99, m.percent).toFixed(0) + '%';
+    } else if (m.type === 'count-complete') {
+      var pct = m.total > 0 ? Math.round(m.kept / m.total * 100) : 0;
+      var html = '<span class="ds-filter-est"><strong>' + m.kept.toLocaleString() + '</strong> of ' + m.total.toLocaleString() +
+        ' rows pass (' + pct + '%) <span class="ds-filter-est-tag ds-filter-est-tag--exact">exact</span></span>';
+      // No silent loss: surface filter/calcol errors the count encountered
+      if (m.filterErrors && m.filterErrors.count > 0) html += ' <span class="ds-filter-est--err">' + m.filterErrors.count.toLocaleString() + ' rows errored in the filter (excluded)</span>';
+      if (m.calcolErrors && m.calcolErrors.count > 0) html += ' <span class="ds-filter-est--err">' + m.calcolErrors.count.toLocaleString() + ' calcol errors</span>';
+      $c.innerHTML = html;
+      try { w.terminate(); } catch (e) {} _dsFilterCountWorker = null; if ($btn) $btn.disabled = false;
+    } else if (m.type === 'error') {
+      $c.innerHTML = '<span class="ds-filter-est ds-filter-est--err">' + esc(m.message) + '</span>';
+      try { w.terminate(); } catch (e) {} _dsFilterCountWorker = null; if ($btn) $btn.disabled = false;
+    }
+  };
+}
+
+function dsFilterClose() {
+  var $m = document.getElementById('dsFilterModal');
+  if ($m) $m.classList.remove('active');
+  if (_dsFilterController) { try { _dsFilterController.destroy(); } catch (e) {} _dsFilterController = null; }
+  if (_dsFilterCountWorker) { try { _dsFilterCountWorker.terminate(); } catch (e) {} _dsFilterCountWorker = null; }
+  _dsFilterTarget = null;
+}
+
+function dsFilterApply() {
+  var ds = _dsFilterTarget;
+  if (!ds) return;
+  var expr = (document.getElementById('dsFilterExpr').value || '').trim();
+  if (expr && _dsFilterController) {
+    var r = _dsFilterController.validate();
+    if (!r.valid) return;
+  }
+  var f = expr ? { expression: expr } : null;
+  ds.filter = f;
+  // Keep an open config-panel filter input in sync (comparison datasets)
+  if (ds.id !== 'model') {
+    var ta = auxQ('[data-aux="filter"]', dsConfigRoot(ds));
+    if (ta) ta.value = expr;
+  } else {
+    var $fe = document.getElementById('filterExpr');
+    if ($fe) $fe.value = expr;
+    currentFilter = f;
+  }
+  dsFilterClose();
+  // Re-analyze through the dataset's normal path
+  if (ds.id === 'model') {
+    startAnalysis(currentXYZ, f, undefined, undefined, undefined, undefined);
+  } else if (typeof runAuxAnalysis === 'function') {
+    runAuxAnalysis(ds, dsConfigRoot(ds));
+  }
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+
+// Open the filter modal for a dataset (called from the ctx menu).
+function openDatasetFilterModal(ds) {
+  if (!ds) return;
+  _dsFilterTarget = ds;
+  var $m = document.getElementById('dsFilterModal');
+  document.getElementById('dsFilterTitle').textContent = 'Filter — ' + dsLabel(ds.id);
+  document.getElementById('dsFilterRowVar').textContent = '(' + ds.rowVar + '.column …)';
+  var $expr = document.getElementById('dsFilterExpr');
+  $expr.value = ds.filter ? ds.filter.expression : '';
+  $expr.placeholder = ds.rowVar + '.Fe > 30';
+  if (_dsFilterController) { try { _dsFilterController.destroy(); } catch (e) {} }
+  // Filter autocomplete scoped to this dataset's columns (createExprInput reads
+  // the active dataset via its mode; default 'filter' targets the model — for
+  // comparison datasets the estimate/exact count still validate by evaluation)
+  _dsFilterController = createExprInput($expr, { mode: 'filter' });
+  $m.classList.add('active');
+  dsFilterRenderEstimate();
+  $expr.focus();
+}
+
+(function wireDsFilterModal() {
+  var $expr = document.getElementById('dsFilterExpr');
+  if ($expr) $expr.addEventListener('input', dsFilterRenderEstimate);
+  var byId = function(id, fn) { var el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+  byId('dsFilterExact', dsFilterExactCount);
+  byId('dsFilterApply', dsFilterApply);
+  byId('dsFilterCancel', dsFilterClose);
+  byId('dsFilterClose', dsFilterClose);
+  byId('dsFilterClear', function() {
+    var e = document.getElementById('dsFilterExpr'); if (e) e.value = '';
+    dsFilterRenderEstimate();
+  });
+})();
+
 // ─── Settings Modal — Themes, Cache, Defaults ─────────────────────────
 
 var bmaSettings = null;
@@ -28867,6 +29142,11 @@ CTX_PROVIDERS.push(function datasetProvider(e) {
     // A10 1g-c: instance ids open their own panel (showPanel(ds) → activate-or-rebuild)
     { label: 'Open import panel', action: function() { showPanel(ds === 'model' ? 'preflight' : ds); } }
   ];
+  // A14: edit this dataset's filter (+ live size preview) without leaving the tree
+  if (dsObj && dsObj.file && dsObj.preflight && typeof openDatasetFilterModal === 'function') {
+    var flt = dsObj.filter && dsObj.filter.expression;
+    items.push({ label: 'Filter…' + (flt ? ' ✓' : ''), action: function() { openDatasetFilterModal(dsObj); } });
+  }
   if (ds === 'aux' && typeof clearAux === 'function') {
     items.push({ sep: true });
     items.push({ label: 'Remove dataset', danger: true, action: function() { clearAux(); } });

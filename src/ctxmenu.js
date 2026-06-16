@@ -116,6 +116,11 @@ CTX_PROVIDERS.push(function datasetProvider(e) {
     // A10 1g-c: instance ids open their own panel (showPanel(ds) → activate-or-rebuild)
     { label: 'Open import panel', action: function() { showPanel(ds === 'model' ? 'preflight' : ds); } }
   ];
+  // A14: edit this dataset's filter (+ live size preview) without leaving the tree
+  if (dsObj && dsObj.file && dsObj.preflight && typeof openDatasetFilterModal === 'function') {
+    var flt = dsObj.filter && dsObj.filter.expression;
+    items.push({ label: 'Filter…' + (flt ? ' ✓' : ''), action: function() { openDatasetFilterModal(dsObj); } });
+  }
   if (ds === 'aux' && typeof clearAux === 'function') {
     items.push({ sep: true });
     items.push({ label: 'Remove dataset', danger: true, action: function() { clearAux(); } });
