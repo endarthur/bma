@@ -442,8 +442,11 @@ function serializeProject() {
       });
       var swathAuxChecked = null;
       if (auxFile) {
+        // Persistence covers the model + aux today; d2+ swath selection is
+        // ephemeral until A10 phase 6, so scope this to aux's own rows
+        // (avoids restoring a d2 name onto aux when column names collide).
         swathAuxChecked = [];
-        document.querySelectorAll('#swathVarList input[data-aux="1"]:checked').forEach(function(cb) {
+        document.querySelectorAll('#swathVarList input[data-aux="1"][data-ds="aux"]:checked').forEach(function(cb) {
           if (cb.dataset.name) swathAuxChecked.push(cb.dataset.name);
         });
       }

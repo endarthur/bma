@@ -10,11 +10,83 @@ function swathMarkStale() {
   if (typeof setGenStale === 'function') setGenStale('swathGenerate', true);
 }
 var _swathChartParams = null; // stored for crosshair
-var swathAuxWorker = null;          // second worker for the aux dataset pass
+// A10 4c-iii-b: one worker per overlaid comparison dataset (aux, d2…) — the
+// fan-out replaced the single legacy swathAuxWorker.
+var swathCmpWorkers = [];
 var pendingSwathAuxRestore = null;  // { checked: [names], units: {name: unitIdx} } from project restore
 
 function resetSwathState() {
   _swathChartParams = null;
+}
+
+// A10 4c-iii-b: every comparison dataset that can overlay a swath — has a file
+// and a preflight (XYZ may still be unassigned; we list it with a note, the
+// same as the legacy aux path). Registry order: aux first, then d2, d3…
+function swathCmpDatasets() {
+  var out = [];
+  for (var i = 1; i < datasets.length; i++) {
+    var d = datasets[i];
+    if (d && d.file && d.preflight) out.push(d);
+  }
+  return out;
+}
+
+// A comparison dataset is swath-ready once its X/Y/Z are assigned.
+function swathCmpReady(ds) {
+  var xyz = ds && ds.preflight && ds.preflight.xyz;
+  return !!(xyz && xyz.x >= 0 && xyz.y >= 0 && xyz.z >= 0);
+}
+
+// Numeric comparison columns of a dataset as {name, idx, isCalc}: raw numeric
+// header cols (minus X/Y/Z) then numeric calcols. idx indexes the dataset's
+// extended header (raw length + calcol ordinal) — the swath worker's varCols
+// space. Generalizes the inline aux loop.
+function swathCmpCols(ds) {
+  var pf = ds.preflight;
+  if (!pf) return [];
+  var xyz = pf.xyz || { x: -1, y: -1, z: -1 };
+  var cols = [];
+  for (var i = 0; i < pf.header.length; i++) {
+    if (pf.autoTypes[i] !== 'numeric') continue;
+    if (i === xyz.x || i === xyz.y || i === xyz.z) continue;
+    cols.push({ name: pf.header[i], idx: i });
+  }
+  var cm = ds.calcolMeta || [];
+  for (var ci = 0; ci < cm.length; ci++) {
+    if (cm[ci].type !== 'numeric') continue;
+    cols.push({ name: cm[ci].name, idx: pf.header.length + ci, isCalc: true });
+  }
+  return cols;
+}
+
+// The worker's extended header for a comparison dataset (raw header + calcol
+// names), matching the varCols index space.
+function swathCmpHeader(ds) {
+  return ds.preflight.header.concat((ds.calcolMeta || []).map(function(m) { return m.name; }));
+}
+
+// Resolve a comparison dataset's swath weight. Only aux has a declustering UI
+// (the AUX_DECLUS_WEIGHT sentinel → computed weights, soft-failed when stale);
+// d2+ use a plain catRole(id,'weight') column or none.
+function resolveSwathCmpWeight(ds) {
+  var w = catRole(ds.id, 'weight');
+  if (ds.id === 'aux' && w === AUX_DECLUS_WEIGHT) {
+    if (typeof auxDeclusFresh === 'function' && auxDeclusFresh(ds)) {
+      return { weightColName: null, weightArray: ds.declus.weights };
+    }
+    return { blockedError: 'aux series skipped: declustered weights missing or stale — re-run Declustering on the Aux tab' };
+  }
+  return { weightColName: w, weightArray: null };
+}
+
+function terminateSwathCmpWorkers() {
+  swathCmpWorkers.forEach(function(w) { try { w.terminate(); } catch (e) {} });
+  swathCmpWorkers = [];
+}
+function cleanupSwathCmpWorker(w) {
+  try { w.terminate(); } catch (e) {}
+  var i = swathCmpWorkers.indexOf(w);
+  if (i >= 0) swathCmpWorkers.splice(i, 1);
 }
 
 function showSwathColorPicker(colName, colIdx, anchorEl, presetColor) {
@@ -59,8 +131,11 @@ function hideSwathColorPicker() {
 }
 
 function applySwathColor(colName, color) {
-  // colName is a primary variable name or an 'aux:NAME' color key
-  if (colName.indexOf('aux:') === 0) catVar('aux', colName.slice(4)).color = color;
+  // colName is a primary variable name or a '<dsId>:NAME' comparison color key
+  // (aux:NAME, d2:NAME…). Only a known dataset id prefix routes to that dataset.
+  var ci = colName.indexOf(':');
+  var ds = ci > 0 ? dsById(colName.slice(0, ci)) : null;
+  if (ds) catVar(ds.id, colName.slice(ci + 1)).color = color;
   else catVar('model', colName).color = color;
   // Update the swatch in the sidebar (aux swatches carry data-color-key, primary carry data-col)
   document.querySelectorAll('#swathVarList .swath-color-swatch').forEach(function(sw) {
@@ -415,7 +490,7 @@ function renderSwathConfig(data) {
     if (e.target.classList.contains('swath-var-unit')) {
       var uv = parseInt(e.target.value);
       if (e.target.dataset.auxCol != null) {
-        if (e.target.dataset.auxName) catSetUnit('aux', e.target.dataset.auxName, uv);
+        if (e.target.dataset.auxName) catSetUnit(e.target.dataset.auxDs || 'aux', e.target.dataset.auxName, uv);
       } else {
         var un = currentHeader[parseInt(e.target.dataset.col)];
         if (un) catSetUnit('model', un, uv);
@@ -437,8 +512,9 @@ function renderSwathConfig(data) {
       e.preventDefault();
       e.stopPropagation();
       if (swatch.dataset.colorKey) {
-        // Aux swatch — override key is 'aux:NAME' (stable across display-prefix changes)
-        var curColor = getAuxSwathVarColor(swatch.dataset.auxName, swathNumCols.length + parseInt(swatch.dataset.auxIdx || 0));
+        // Comparison swatch — override key is '<dsId>:NAME' (stable across display-prefix changes)
+        var swDsId = swatch.dataset.auxDs || 'aux';
+        var curColor = getAuxSwathVarColor(swatch.dataset.auxName, swathNumCols.length + parseInt(swatch.dataset.auxIdx || 0), swDsId);
         showSwathColorPicker(swatch.dataset.colorKey, null, swatch, curColor);
         return;
       }
@@ -510,61 +586,67 @@ function renderSwathAuxVars() {
   var wrap = document.getElementById('swathAuxVars');
   if (!wrap) return;
 
-  // Capture current DOM state before wiping
-  var prevChecked = null;
+  // Capture current DOM checked state before wiping, keyed '<dsId>:name' so
+  // names that collide across datasets don't cross-contaminate. prevSeen tracks
+  // which datasets already had rows — a dataset appearing for the first time
+  // (e.g. a freshly-loaded d2) gets its paired default rather than inheriting
+  // "unchecked" just because other datasets' checkboxes existed.
+  var prevChecked = {};
+  var prevSeen = {};
   wrap.querySelectorAll('input[data-aux="1"]').forEach(function(cb) {
-    if (prevChecked === null) prevChecked = [];
-    if (cb.checked && cb.dataset.name) prevChecked.push(cb.dataset.name);
+    var dsId = cb.dataset.ds || 'aux';
+    prevSeen[dsId] = true;
+    if (cb.checked && cb.dataset.name) prevChecked[dsId + ':' + cb.dataset.name] = true;
   });
 
-  if (!auxFile || !auxPreflightData) { wrap.innerHTML = ''; return; }
+  var cmpDatasets = swathCmpDatasets();
+  if (cmpDatasets.length === 0) { wrap.innerHTML = ''; return; }
   catEnsureSeeded();
 
-  var label = auxPrefix || 'aux';
-  var divider = '<div class="swath-aux-divider">' + esc(label) + ': ' + esc(auxFile.name) + '</div>';
-  var axyz = auxPreflightData.xyz || { x: -1, y: -1, z: -1 };
-  if (axyz.x < 0 || axyz.y < 0 || axyz.z < 0) {
-    wrap.innerHTML = divider + '<div class="swath-aux-note">Assign aux X/Y/Z in the Aux tab to overlay aux variables.</div>';
-    return;
-  }
-  var auxCols = [];
-  for (var i = 0; i < auxPreflightData.header.length; i++) {
-    if (auxPreflightData.autoTypes[i] !== 'numeric') continue;
-    if (i === axyz.x || i === axyz.y || i === axyz.z) continue;
-    auxCols.push({ name: auxPreflightData.header[i], idx: i });
-  }
-  // Aux calcols (extended indices past the raw aux header)
-  for (var ci2 = 0; ci2 < auxCalcolMeta.length; ci2++) {
-    if (auxCalcolMeta[ci2].type !== 'numeric') continue;
-    auxCols.push({ name: auxCalcolMeta[ci2].name, idx: auxPreflightData.header.length + ci2, isCalc: true });
-  }
-  if (auxCols.length === 0) {
-    wrap.innerHTML = divider + '<div class="swath-aux-note">No numeric aux variables.</div>';
-    return;
-  }
-
+  // A pending project restore applies to aux only (persistence covers the
+  // model + aux today; d2+ swath selection is ephemeral until A10 phase 6).
   var restore = pendingSwathAuxRestore;
   pendingSwathAuxRestore = null;
-  var checkedNames = restore && restore.checked ? restore.checked : prevChecked;
 
-  var html = divider;
-  for (var ai = 0; ai < auxCols.length; ai++) {
-    var c = auxCols[ai];
-    // Default: checked when the variable is paired with a model variable
-    // (the comparison case) — pairing is seeded by name, editable in C1a+
-    var checked = checkedNames !== null ? checkedNames.indexOf(c.name) >= 0 : !!catPair(c.name);
-    var unitIdx = catPropUnit('aux', c.name);
-    var unitOpts = GRADE_UNITS.map(function(u, ui) {
-      return '<option value="' + ui + '"' + (ui === unitIdx ? ' selected' : '') + '>' + esc(u.label) + '</option>';
-    }).join('');
-    var color = getAuxSwathVarColor(c.name, swathNumCols.length + ai);
-    var emptyTag = colIsEmpty('aux', c.idx) ? '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>' : '';
-    html += '<label class="swath-var-item swath-var-item--aux">' +
-      '<input type="checkbox" value="' + c.idx + '" data-aux="1" data-name="' + esc(c.name) + '"' + (checked ? ' checked' : '') + '>' +
-      '<div class="swath-color-swatch" data-color-key="aux:' + esc(c.name) + '" data-aux-name="' + esc(c.name) + '" data-aux-idx="' + ai + '" style="background:' + color + '"></div>' +
-      '<span>' + esc(label) + ':' + esc(c.name) + '</span>' + emptyTag +
-      '<select class="swath-var-unit" data-aux-col="' + c.idx + '" data-aux-name="' + esc(c.name) + '">' + unitOpts + '</select></label>';
-  }
+  var ai = 0;  // running palette ordinal across all comparison series
+  var html = '';
+  cmpDatasets.forEach(function(ds) {
+    var label = dsLabel(ds.id);
+    var fname = ds.file ? ds.file.name : '';
+    html += '<div class="swath-aux-divider">' + esc(label) + (fname ? ': ' + esc(fname) : '') + '</div>';
+    if (!swathCmpReady(ds)) {
+      html += '<div class="swath-aux-note">Assign ' + esc(label) + ' X/Y/Z to overlay its variables.</div>';
+      return;
+    }
+    var cols = swathCmpCols(ds);
+    if (cols.length === 0) {
+      html += '<div class="swath-aux-note">No numeric ' + esc(label) + ' variables.</div>';
+      return;
+    }
+    for (var k = 0; k < cols.length; k++, ai++) {
+      var c = cols[k];
+      // Default: checked when the variable shares a property with a model
+      // variable (the comparison case) — seeded by name, editable in C1a+.
+      // A project restore (aux only) overrides the default; otherwise prior
+      // DOM state is preserved across rebuilds.
+      var key = ds.id + ':' + c.name;
+      var checked;
+      if (ds.id === 'aux' && restore && restore.checked) checked = restore.checked.indexOf(c.name) >= 0;
+      else if (prevSeen[ds.id]) checked = !!prevChecked[key];   // preserve user toggles
+      else checked = !!catModelMember(ds.id, c.name);            // paired-by-default on first appearance
+      var unitIdx = catPropUnit(ds.id, c.name);
+      var unitOpts = GRADE_UNITS.map(function(u, ui) {
+        return '<option value="' + ui + '"' + (ui === unitIdx ? ' selected' : '') + '>' + esc(u.label) + '</option>';
+      }).join('');
+      var color = getAuxSwathVarColor(c.name, swathNumCols.length + ai, ds.id);
+      var emptyTag = colIsEmpty(ds.id, c.idx) ? '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>' : '';
+      html += '<label class="swath-var-item swath-var-item--aux">' +
+        '<input type="checkbox" value="' + c.idx + '" data-aux="1" data-ds="' + esc(ds.id) + '" data-name="' + esc(c.name) + '"' + (checked ? ' checked' : '') + '>' +
+        '<div class="swath-color-swatch" data-color-key="' + esc(ds.id) + ':' + esc(c.name) + '" data-aux-ds="' + esc(ds.id) + '" data-aux-name="' + esc(c.name) + '" data-aux-idx="' + ai + '" style="background:' + color + '"></div>' +
+        '<span>' + esc(label) + ':' + esc(c.name) + '</span>' + emptyTag +
+        '<select class="swath-var-unit" data-aux-col="' + c.idx + '" data-aux-ds="' + esc(ds.id) + '" data-aux-name="' + esc(c.name) + '">' + unitOpts + '</select></label>';
+    }
+  });
   wrap.innerHTML = html;
 }
 
@@ -653,21 +735,27 @@ function runSwath() {
     }
   }
 
-  // Gather selected variable column indices (primary and aux are separate
-  // index spaces — aux indices point into the aux file's header)
+  // Gather selected model variable column indices (the model and each
+  // comparison dataset live in separate index spaces — comparison indices
+  // point into that dataset's own header).
   var varCols = [];
   document.querySelectorAll('#swathVarList input[type="checkbox"]:not([data-aux]):checked').forEach(function(cb) {
     varCols.push(parseInt(cb.value));
   });
-  var auxReady = !!(auxFile && auxPreflightData && auxPreflightData.xyz &&
-    auxPreflightData.xyz.x >= 0 && auxPreflightData.xyz.y >= 0 && auxPreflightData.xyz.z >= 0);
-  var auxVarCols = [];
-  if (auxReady) {
-    document.querySelectorAll('#swathVarList input[type="checkbox"][data-aux]:checked').forEach(function(cb) {
-      auxVarCols.push(parseInt(cb.value));
+  // A10 4c-iii-b: build a run per comparison dataset that has selected vars —
+  // one swath worker each, resolving its own weight (the declustering-stale
+  // case soft-fails into a per-dataset error rather than launching a worker).
+  var cmpRuns = [];
+  swathCmpDatasets().forEach(function(ds) {
+    if (!swathCmpReady(ds)) return;
+    var sel = [];
+    document.querySelectorAll('#swathVarList input[type="checkbox"][data-aux][data-ds="' + ds.id + '"]:checked').forEach(function(cb) {
+      sel.push(parseInt(cb.value));
     });
-  }
-  if (varCols.length === 0 && auxVarCols.length === 0) return;
+    if (sel.length === 0) return;
+    cmpRuns.push({ ds: ds, varCols: sel, weight: resolveSwathCmpWeight(ds) });
+  });
+  if (varCols.length === 0 && cmpRuns.length === 0) return;
 
   // Worker payload: direction geometry only (no display fields)
   var workerDirs = dcfg.dirs.map(function(d) {
@@ -675,7 +763,10 @@ function runSwath() {
   });
 
   if (swathWorker) { swathWorker.terminate(); swathWorker = null; }
-  if (swathAuxWorker) { swathAuxWorker.terminate(); swathAuxWorker = null; }
+  terminateSwathCmpWorkers();
+  // The progress bar follows the model worker when present, else the first
+  // comparison worker (so a comparison-only run still animates).
+  var barDriverId = varCols.length > 0 ? 'model' : (cmpRuns[0] ? cmpRuns[0].ds.id : null);
 
   var $progress = document.getElementById('swathProgress');
   var $fill = document.getElementById('swathProgressFill');
@@ -690,7 +781,7 @@ function runSwath() {
   if ($btn) $btn.disabled = true;
 
   var pending = 0;
-  var out = { results: {}, auxResults: null, auxError: null, elapsed: 0 };
+  var out = { results: {}, elapsed: 0, cmp: {} };  // cmp keyed by dsId
 
   function finalize() {
     if (pending > 0) return;
@@ -700,20 +791,13 @@ function runSwath() {
     if ($btn) $btn.disabled = false;
     // Keep the active output tab when the new run still has that direction
     var prevKey = lastSwathData && lastSwathData.activeKey;
-    // A10 4c-iii: comparison datasets ride as a list (one entry per overlaid
-    // dataset). Today only aux runs; the worker fan-out (4c-iii-b) appends d2+.
+    // A10 4c-iii-b: comparison datasets ride as a list (one entry per overlaid
+    // dataset), assembled in registry order (aux, d2, d3…) from the per-dataset
+    // result slots the fan-out workers wrote.
     var cmp = [];
-    if (auxVarCols.length > 0 || out.auxError) {
-      cmp.push({
-        dsId: 'aux',
-        results: out.auxResults,
-        varCols: auxVarCols,
-        header: auxReady ? auxPreflightData.header.concat(auxCalcolMeta.map(function(m) { return m.name; })) : null,
-        error: out.auxError,
-        filterErrors: out.auxFilterErrors || null,
-        calcolErrors: out.auxCalcolErrors || null,
-        weightExcluded: out.auxWeightExcluded || 0
-      });
+    for (var ci = 1; ci < datasets.length; ci++) {
+      var slot = out.cmp[datasets[ci].id];
+      if (slot) cmp.push(slot);
     }
     lastSwathData = {
       directions: dcfg.dirs, mode: dcfg.mode, angles: dcfg.angles,
@@ -740,14 +824,15 @@ function runSwath() {
     autoSaveProject();
   }
 
-  // Primary failure aborts everything; aux failure is soft (primary still renders)
+  // Primary failure aborts everything; a comparison failure is soft (the model
+  // and the other comparison series still render)
   function abortAll(msg) {
     $label.textContent = msg;
     $label.style.color = 'var(--red)';
     setTimeout(function() { $progress.classList.remove('active'); $label.style.color = ''; }, 3000);
     if ($btn) $btn.disabled = false;
     if (swathWorker) { swathWorker.terminate(); swathWorker = null; }
-    if (swathAuxWorker) { swathAuxWorker.terminate(); swathAuxWorker = null; }
+    terminateSwathCmpWorkers();
   }
 
   if (varCols.length > 0) {
@@ -795,71 +880,77 @@ function runSwath() {
     };
   }
 
-  // Declustered aux weights ride along only when fresh and aligned —
-  // otherwise the aux series soft-fails into the warning banner rather
-  // than silently rendering unweighted
-  var swathDeclusWeights = null, swathDeclusBlocked = null;
-  var swathAuxWeight = catRole('aux', 'weight');
-  if (auxVarCols.length > 0 && swathAuxWeight === AUX_DECLUS_WEIGHT) {
-    if (typeof auxDeclusFresh === 'function' && auxDeclusFresh()) swathDeclusWeights = auxDeclus.weights;
-    else swathDeclusBlocked = 'aux series skipped: declustered weights missing or stale — re-run Declustering on the Aux tab';
-  }
-  if (swathDeclusBlocked) {
-    out.auxError = swathDeclusBlocked;
-  } else if (auxVarCols.length > 0) {
+  // Fan out one worker per comparison dataset. Each writes a result slot keyed
+  // by dsId; a soft per-dataset error (declustered weights stale, worker crash)
+  // surfaces in the warning banner instead of silently rendering unweighted or
+  // dropping the series.
+  cmpRuns.forEach(function(run) {
+    var ds = run.ds, pf = ds.preflight;
+    var slot = {
+      dsId: ds.id, results: null, varCols: run.varCols, header: swathCmpHeader(ds),
+      error: null, filterErrors: null, calcolErrors: null, weightExcluded: 0
+    };
+    out.cmp[ds.id] = slot;
+    if (run.weight.blockedError) { slot.error = run.weight.blockedError; return; }  // no worker
+
     pending++;
-    swathAuxWorker = new Worker(workerUrl);
-    swathAuxWorker.postMessage({
+    var w = new Worker(workerUrl);
+    swathCmpWorkers.push(w);
+    w.postMessage({
       mode: 'swath',
-      file: auxFile,
-      zipEntry: auxPreflightData.selectedZipEntry || null,
-      globalFilter: auxFilter ? { expression: auxFilter.expression } : null,
+      file: ds.file,
+      zipEntry: pf.selectedZipEntry || null,
+      globalFilter: ds.filter ? { expression: ds.filter.expression } : null,
       localFilter: null,
-      calcolCode: auxCalcolCode || null,
-      calcolMeta: auxCalcolMeta.length > 0 ? auxCalcolMeta : null,
-      resolvedTypes: auxPreflightData.autoTypes,
-      xyzCols: [auxPreflightData.xyz.x, auxPreflightData.xyz.y, auxPreflightData.xyz.z],
+      calcolCode: ds.calcolCode || null,
+      calcolMeta: (ds.calcolMeta && ds.calcolMeta.length > 0) ? ds.calcolMeta : null,
+      resolvedTypes: pf.autoTypes,
+      xyzCols: [pf.xyz.x, pf.xyz.y, pf.xyz.z],
       dxyzCols: [-1, -1, -1],
       directions: workerDirs,
-      varCols: auxVarCols,
-      rowVarOverride: AUX_ROW_VAR,
-      weightColName: swathDeclusWeights ? null : swathAuxWeight,
-      weightArray: swathDeclusWeights,
-      dmEndianness: auxPreflightData.dmEndianness || null,
-      dmFormat: auxPreflightData.dmFormat || null
+      varCols: run.varCols,
+      rowVarOverride: ds.rowVar,
+      weightColName: run.weight.weightColName,
+      weightArray: run.weight.weightArray,
+      dmEndianness: pf.dmEndianness || null,
+      dmFormat: pf.dmFormat || null
     });
-    swathAuxWorker.onerror = function(e) {
-      out.auxError = e.message || 'unknown error';
-      if (swathAuxWorker) { swathAuxWorker.terminate(); swathAuxWorker = null; }
+    w.onerror = function(e) {
+      slot.error = e.message || 'unknown error';
+      cleanupSwathCmpWorker(w);
       pending--;
       finalize();
     };
-    swathAuxWorker.onmessage = function(e) {
+    w.onmessage = function(e) {
       var m = e.data;
       if (m.type === 'swath-progress') {
-        if (varCols.length === 0) {
+        if (barDriverId === ds.id) {
           var pct = Math.min(99, m.percent);
           $fill.style.width = pct.toFixed(1) + '%';
           $label.textContent = pct.toFixed(0) + '%';
         }
       } else if (m.type === 'swath-complete') {
-        out.auxResults = m.results;
-        out.auxFilterErrors = m.filterErrors || null;
-        out.auxCalcolErrors = m.calcolErrors || null;
-        out.auxWeightExcluded = m.weightExcluded || 0;
-        swathAuxWorker.terminate();
-        swathAuxWorker = null;
+        slot.results = m.results;
+        slot.filterErrors = m.filterErrors || null;
+        slot.calcolErrors = m.calcolErrors || null;
+        slot.weightExcluded = m.weightExcluded || 0;
+        cleanupSwathCmpWorker(w);
         pending--;
         finalize();
       } else if (m.type === 'error') {
-        out.auxError = m.message;
-        swathAuxWorker.terminate();
-        swathAuxWorker = null;
+        slot.error = m.message;
+        cleanupSwathCmpWorker(w);
         pending--;
         finalize();
       }
     };
-  }
+  });
+
+  // No worker actually launched (e.g. the only selected dataset is aux with
+  // stale declustered weights → soft-blocked). finalize() is guarded by
+  // pending>0, so this is a no-op when workers are in flight; when none ran it
+  // surfaces the per-dataset error banner instead of leaving the bar spinning.
+  if (pending === 0) finalize();
 }
 
 function queryTDigestPercentile(centroids, p) {

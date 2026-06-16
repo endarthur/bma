@@ -748,7 +748,7 @@ function clearAux(ds, root) {
   if (ds._topcutWorker) { try { ds._topcutWorker.terminate(); } catch (e) {} ds._topcutWorker = null; }
   if (typeof renderAuxView === 'function') renderAuxView(ds, root);
   if (ds._worker) { try { ds._worker.terminate(); } catch (e) {} ds._worker = null; }
-  if (typeof swathAuxWorker !== 'undefined' && swathAuxWorker) { try { swathAuxWorker.terminate(); } catch (e) {} swathAuxWorker = null; }
+  if (typeof terminateSwathCmpWorkers === 'function') terminateSwathCmpWorkers();
   var configEl = auxQ('[data-aux="config"]', root);
   if (configEl) configEl.style.display = 'none';
   var emptyEl = auxQ('[data-aux="empty"]', root);

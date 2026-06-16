@@ -329,13 +329,24 @@ inherits its *paired model* var's color/unit). Target: display lives on the
     `renderSwathOutput` loops `cmp` for the error/weight notes. Only aux runs
     today → one entry, byte-stable. New UI guard `experiments/swath-smoke.js`
     (Swath previously had only the worker-level `bma-swath-test`).
-  - **NEXT 4c-iii-b — worker fan-out:** generalize `renderSwathAuxVars` to list
-    every comparison dataset's vars (read `ds.preflight`/`ds.calcolMeta` via the
-    registry) and fan out one swath worker per dataset, appending to `cmp[]`.
-    Watch the aux declustering-weight path (`AUX_DECLUS_WEIGHT`) — d2+ use a
-    plain `catRole(id,'weight')` column, no declus UI. Then **4c-iii-c** dataset
-    chips (reuse the `statsDsHidden` pattern) + persistence generalization
-    (sidebar `auxCheckedVars` → per-dataset).
+  - **4c-iii-b ✅ — worker fan-out.** `renderSwathAuxVars` now loops
+    `swathCmpDatasets()` (every registry dataset with a file + preflight), each
+    with its own divider + numeric vars (`swathCmpCols` reads
+    `ds.preflight`/`ds.calcolMeta`); checkboxes carry `data-ds`, swatches/units
+    `data-aux-ds`, so colour keys generalize to `<dsId>:NAME` (`applySwathColor`
+    routes by `dsById` prefix). `runSwath` builds a `cmpRuns` list and fans out
+    one worker per dataset (`swathCmpWorkers[]` replaced the single
+    `swathAuxWorker`), each writing a `dsId`-keyed slot in `out.cmp`; `finalize`
+    assembles `cmp[]` in registry order. Weight resolves per dataset
+    (`resolveSwathCmpWeight`): aux keeps the `AUX_DECLUS_WEIGHT` soft-fail path,
+    d2+ use a plain `catRole(id,'weight')` column. Newly-appearing datasets get
+    their paired default (`prevSeen` per-ds gate); model+aux byte-stable
+    (`swath-smoke`), d2 fan-out covered in `a10-smoke`. Also fixed a latent hang:
+    an aux-only run blocked on stale declustered weights now finalizes (surfaces
+    the error banner) instead of leaving the bar spinning.
+  - **NEXT 4c-iii-c** — dataset chips (reuse the `statsDsHidden` pattern) +
+    persistence generalization (sidebar `auxCheckedVars` → per-dataset; today
+    serialization is scoped to `data-ds="aux"`, d2+ selection ephemeral).
 - **Still TODO in 4c:** Categories + the merge/rename/split popover (4c-iv).
 
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
