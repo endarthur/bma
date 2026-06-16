@@ -269,8 +269,8 @@ function dsFilterSampleRows(ds) {
   });
 }
 
-// Instant estimate: fraction of the preflight sample passing the expression,
-// scaled to the dataset's known row count when it has been analyzed.
+// Head-sniff estimate: fraction of the preflight sample (the FILE HEAD) passing
+// the expression. Fallback only — the head is biased on sorted files.
 function dsFilterEstimate(ds, expr) {
   var rows = dsFilterSampleRows(ds);
   if (rows.length === 0) return null;
@@ -284,6 +284,60 @@ function dsFilterEstimate(ds, expr) {
   return { sampleN: rows.length, kept: kept, errs: errs, ratio: kept / rows.length };
 }
 
+// Distribution-modeled estimate (Arthur's idea): Monte-Carlo over the per-column
+// t-digest centroids + category counts from the last analysis. Sort-order
+// unbiased (unlike the head sniff) and accurate for single-column predicates.
+// CAVEAT: it samples each column independently from its MARGINAL, so the joint
+// correlation between columns is lost — multi-column filters on correlated
+// columns can be off. Honest label + the exact count cover that.
+var DS_FILTER_SYNTH_N = 4000;
+function dsFilterSynthEstimate(ds, expr) {
+  var c = ds.complete;
+  if (!c || !c.stats || !c.header || !c.colTypes) return null;
+  var hdr = c.header, colTypes = c.colTypes, stats = c.stats, cats = c.categories || {};
+  var origCount = c.origColCount || hdr.length;
+  // Per-column samplers: cumulative-weight arrays built once (binary-searched
+  // per draw) so 4000 rows over many columns stays instant.
+  var samplers = [];
+  for (var ci = 0; ci < origCount; ci++) {
+    var name = hdr[ci], s = stats[ci];
+    if (colTypes[ci] === 'numeric' && s && s.centroids && s.centroids.length) {
+      var cum = [], t = 0;
+      for (var k = 0; k < s.centroids.length; k++) { t += s.centroids[k][1]; cum.push(t); }
+      samplers.push({ name: name, kind: 'num', vals: s.centroids, cum: cum, total: t, fb: s.mean });
+    } else if (colTypes[ci] === 'numeric' && s) {
+      samplers.push({ name: name, kind: 'const', val: s.mean });
+    } else if (colTypes[ci] === 'categorical' && cats[ci] && cats[ci].counts) {
+      var es = Object.entries(cats[ci].counts), cum2 = [], t2 = 0;
+      for (var k2 = 0; k2 < es.length; k2++) { t2 += es[k2][1]; cum2.push(t2); }
+      samplers.push({ name: name, kind: 'cat', vals: es, cum: cum2, total: t2, fb: es.length ? es[0][0] : '' });
+    } else {
+      samplers.push({ name: name, kind: 'null' });
+    }
+  }
+  var calFn = null;
+  if (ds.calcolCode) { try { calFn = new Function(ds.rowVar, MATH_PREAMBLE_MAIN + ds.calcolCode); } catch (e) {} }
+  var fn;
+  try { fn = new Function(ds.rowVar, MATH_PREAMBLE_MAIN + 'return (' + expr + ');'); }
+  catch (e) { return { error: e.message }; }
+  function bsearch(cum, r) { var lo = 0, hi = cum.length - 1; while (lo < hi) { var m = (lo + hi) >> 1; if (cum[m] < r) lo = m + 1; else hi = m; } return lo; }
+  var N = DS_FILTER_SYNTH_N, kept = 0, errs = 0;
+  for (var i = 0; i < N; i++) {
+    var obj = {};
+    for (var si = 0; si < samplers.length; si++) {
+      var sm = samplers[si];
+      if (sm.kind === 'num' || sm.kind === 'cat') {
+        var idx = bsearch(sm.cum, Math.random() * sm.total);
+        obj[sm.name] = sm.vals[idx] ? sm.vals[idx][0] : sm.fb;
+      } else if (sm.kind === 'const') { obj[sm.name] = sm.val; }
+      else { obj[sm.name] = null; }
+    }
+    if (calFn) { obj.META = { cat: [], num: [] }; try { calFn(obj); } catch (e) {} delete obj.META; }
+    try { if (fn(obj)) kept++; } catch (e) { errs++; }
+  }
+  return { n: N, kept: kept, ratio: kept / N, errs: errs, pop: c.rowCount || null };
+}
+
 function dsFilterRenderEstimate() {
   var ds = _dsFilterTarget, $c = document.getElementById('dsFilterCount');
   if (!ds || !$c) return;
@@ -293,19 +347,28 @@ function dsFilterRenderEstimate() {
     $c.innerHTML = '<span class="ds-filter-est">No filter — all ' + (pop0 != null ? pop0.toLocaleString() + ' ' : '') + 'rows kept.</span>';
     return;
   }
+  // Prefer the distribution-modeled estimate when the dataset has been analyzed
+  // (sort-order unbiased); fall back to the head sniff otherwise.
+  var m = dsFilterSynthEstimate(ds, expr);
+  if (m && !m.error) {
+    var pct = Math.round(m.ratio * 100);
+    var html = '<span class="ds-filter-est">≈ <strong>' + pct + '%</strong>';
+    if (m.pop != null) html += ' &middot; ≈ ' + Math.round(m.ratio * m.pop).toLocaleString() + ' of ' + m.pop.toLocaleString() + ' rows';
+    html += ' <span class="ds-filter-est-tag">modeled</span> — from the column distributions; assumes columns vary independently, so multi-column filters may differ. Exact count for the real number.</span>';
+    if (m.errs > 0) html += ' <span class="ds-filter-est--err">(' + m.errs + ' modeled rows errored)</span>';
+    $c.innerHTML = html;
+    return;
+  }
+  if (m && m.error) { $c.innerHTML = '<span class="ds-filter-est ds-filter-est--err">Expression error: ' + esc(m.error) + '</span>'; return; }
+  // Fallback: not analyzed yet → head sniff (explicitly non-representative)
   var e = dsFilterEstimate(ds, expr);
-  if (!e) { $c.innerHTML = '<span class="ds-filter-est">No sample available to check.</span>'; return; }
+  if (!e) { $c.innerHTML = '<span class="ds-filter-est">Analyze the dataset for a size estimate, or use Exact count.</span>'; return; }
   if (e.error) { $c.innerHTML = '<span class="ds-filter-est ds-filter-est--err">Expression error: ' + esc(e.error) + '</span>'; return; }
-  // The preflight sample is the FILE HEAD (first N rows), not a random sample —
-  // and block models are usually spatially sorted, so the head can be wildly
-  // unrepresentative (a sorted-by-grade file could read 0% here yet pass half
-  // the file). So we report it strictly as a head sniff + syntax check, never
-  // extrapolate it to a population estimate, and steer to the exact count.
-  var pct = Math.round(e.ratio * 100);
-  var html = '<span class="ds-filter-est">First ' + e.sampleN + ' rows: <strong>' + e.kept + '</strong> pass (' + pct + '%) ' +
-    '<span class="ds-filter-est-tag">head sample</span> — not representative of a sorted file; use Exact count for the real number.</span>';
-  if (e.errs > 0) html += ' <span class="ds-filter-est--err">(' + e.errs + ' sample row' + (e.errs === 1 ? '' : 's') + ' errored)</span>';
-  $c.innerHTML = html;
+  var hp = Math.round(e.ratio * 100);
+  var hh = '<span class="ds-filter-est">First ' + e.sampleN + ' rows: <strong>' + e.kept + '</strong> pass (' + hp + '%) ' +
+    '<span class="ds-filter-est-tag">head sample</span> — not analyzed yet; head is unrepresentative of a sorted file. Exact count for the real number.</span>';
+  if (e.errs > 0) hh += ' <span class="ds-filter-est--err">(' + e.errs + ' sample row' + (e.errs === 1 ? '' : 's') + ' errored)</span>';
+  $c.innerHTML = hh;
 }
 
 function dsFilterExactCount() {
