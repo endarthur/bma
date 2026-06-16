@@ -198,6 +198,27 @@ function wsAddPointDataset() {
   wsRails.activateTab(ds.id);   // renderPanel → wsBuildDatasetPanel (empty import surface)
 }
 
+// A10 4e-b: recreate a comparison-dataset instance from its saved config on
+// project load. The registry entry + rails tab come back immediately with the
+// saved id/prefix; the panel is the empty import surface awaiting its named
+// file (loadAuxFile applies ds._pendingRestore when it lands, like aux). State
+// stays on the ds, so this is just wsAddPointDataset with a fixed id + pending
+// config. dsNextNum is advanced past restored ids so a later Add won't collide.
+function wsRestoreInstance(cfg) {
+  if (typeof dsCreate !== 'function' || !cfg || !cfg.id) return null;
+  var existing = (typeof dsById === 'function') ? dsById(cfg.id) : null;
+  if (existing) return existing;
+  var ds = dsCreate({ id: cfg.id, prefix: cfg.prefix || 'data' });
+  ds._pendingRestore = cfg;
+  dsAdd(ds);
+  var n = parseInt(String(cfg.id).replace(/^d/, ''), 10);
+  if (typeof dsNextNum !== 'undefined' && isFinite(n) && n >= dsNextNum) dsNextNum = n + 1;
+  if (wsRails && !findTab(wsRails.state, ds.id)) {
+    wsRails.addTab({ id: ds.id, title: 'Import: ' + (ds.prefix || 'data'), closeable: true }, wsMainTarget());
+  }
+  return ds;
+}
+
 // Track the prefix in the tab title (loadAuxFile on load, onAuxConfigChange on edit)
 function wsSetDatasetTabTitle(ds) {
   if (!wsRails || !ds || ds.id === 'aux' || ds.id === 'model') return;

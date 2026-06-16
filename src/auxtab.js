@@ -175,6 +175,7 @@ function runAuxAnalysis(ds, root) {
       ds._worker.terminate();
       ds._worker = null;
       if (typeof applyStatsAuxRestore === 'function') applyStatsAuxRestore();
+      if (typeof applyStatsCmpRestore === 'function') applyStatsCmpRestore(ds);  // 4e-b: instance (d2+) selection by name
       if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
         renderStatsSidebar();
         renderStatsTable();
@@ -692,13 +693,20 @@ function loadAuxFile(file, handle, zipEntryName, ds, root) {
     if (zipEntryName && data.zipEntries && zipEntryName !== data.selectedZipEntry) {
       try { await loadZipEntryIntoPreflight(file, data, zipEntryName); } catch (e) { /* keep default entry */ }
     }
-    if (pendingAuxRestore && pendingAuxRestore.fileName === file.name) {
-      var savedAux = pendingAuxRestore;
-      pendingAuxRestore = null;
+    // A10 4e-b: aux carries its restore on the global pendingAuxRestore;
+    // instances (d2+) carry theirs on ds._pendingRestore (set by
+    // wsRestoreInstance). Apply when the re-supplied file matches the saved one.
+    var savedAux = ds._pendingRestore || (ds.id === 'aux' ? pendingAuxRestore : null);
+    if (savedAux && savedAux.fileName === file.name) {
+      if (ds.id === 'aux') pendingAuxRestore = null;
+      ds._pendingRestore = null;
       if (savedAux.zipEntry && data.zipEntries && savedAux.zipEntry !== data.selectedZipEntry) {
         try { await loadZipEntryIntoPreflight(file, data, savedAux.zipEntry); } catch (e) { /* entry gone — keep default */ }
       }
       applyAuxRestore(savedAux, ds);
+      // File-backed now — the live serialize owns it; drop the pending copy so
+      // it isn't re-emitted as a phantom (loss-safe: only dropped once applied).
+      if (typeof pendingDatasetsRestore !== 'undefined' && pendingDatasetsRestore) delete pendingDatasetsRestore[ds.id];
     }
     // A10 1g-c: instance datasets seed their display prefix from the filename
     // (the singleton aux keeps its 'aux' default — bit-identical behavior).

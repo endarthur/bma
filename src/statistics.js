@@ -168,6 +168,30 @@ function applyStatsAuxRestore() {
   pendingStatsAuxRestore = null;
 }
 
+// A10 4e-b: reattach a comparison dataset's table/CDF selection (stored by
+// column NAME in project.panels) once its analysis header exists. aux keeps the
+// legacy pendingStatsAuxRestore path above; this covers the instances (d2+).
+// Runs from the shared aux/instance analysis-complete handler for the dataset
+// that just finished; consumes only that dataset's entries, leaving the rest
+// pending until they analyze (and re-emittable by serialize meanwhile).
+function applyStatsCmpRestore(ds) {
+  if (!ds || ds.id === 'aux' || !ds.complete) return;
+  if (!pendingPanelState || !pendingPanelState.statistics) return;
+  var hdr = ds.complete.header;
+  var byName = {};
+  for (var i = 0; i < hdr.length; i++) byName[hdr[i]] = i;
+  var ps = pendingPanelState.statistics;
+  function reattach(pendMap, liveMap) {
+    if (!pendMap || !pendMap[ds.id]) return;
+    var s = new Set();
+    pendMap[ds.id].forEach(function(n) { if (byName[n] !== undefined) s.add(byName[n]); });
+    liveMap[ds.id] = s;               // [] = explicit empty selection (not default)
+    delete pendMap[ds.id];            // consumed
+  }
+  reattach(ps.cmpSel, panelState.statistics.cmpSel);
+  reattach(ps.cdfCmpSel, panelState.statistics.cdfCmpSel);
+}
+
 function getStatsMetricColumns() {
   var cols = [];
   for (var m of STATS_ALL_METRICS) {

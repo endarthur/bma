@@ -339,10 +339,11 @@ function projectKey(f) { return 'bma:' + f.name + ':' + f.size; }
 // file-backed instances are persisted (matched by name+size on reload, like
 // aux/drillholes); the analysis result is re-derived, never stored.
 function serializeComparisonDatasets() {
-  var out = [];
+  var out = [], seen = {};
   for (var i = 2; i < datasets.length; i++) {
     var ds = datasets[i];
     if (!ds.file) continue;
+    seen[ds.id] = true;
     out.push({
       id: ds.id,
       fileName: ds.file.name,
@@ -359,6 +360,14 @@ function serializeComparisonDatasets() {
       view: ds.view
     });
   }
+  // Loss-safety: an instance whose file hasn't been re-supplied yet (restored
+  // but awaiting its re-drop) has no live config to emit — re-emit its pending
+  // saved config verbatim so an autosave mid-restore never drops it.
+  if (typeof pendingDatasetsRestore !== 'undefined' && pendingDatasetsRestore) {
+    Object.keys(pendingDatasetsRestore).forEach(function(id) {
+      if (!seen[id]) out.push(pendingDatasetsRestore[id]);
+    });
+  }
   return out;
 }
 
@@ -369,7 +378,7 @@ function serializeComparisonDatasets() {
 // stored by id. A null cmpSel entry = "that dataset's default (paired only)",
 // so it is omitted; an explicit empty selection serializes as [].
 function serializePanelState() {
-  function selByName(map) {
+  function selByName(map, pending) {
     var o = {};
     Object.keys(map).forEach(function(dsId) {
       var sel = map[dsId];
@@ -379,12 +388,16 @@ function serializePanelState() {
       if (!hdr) return;                              // not analyzed — nothing to map
       o[dsId] = Array.from(sel).map(function(idx) { return hdr[idx]; }).filter(Boolean);
     });
+    // Loss-safety: a dataset awaiting reattach (file/analysis not back yet) still
+    // has its selection as names in pendingPanelState — re-emit until consumed.
+    if (pending) Object.keys(pending).forEach(function(dsId) { if (!(dsId in o)) o[dsId] = pending[dsId]; });
     return o;
   }
+  var pps = (typeof pendingPanelState !== 'undefined' && pendingPanelState && pendingPanelState.statistics) ? pendingPanelState.statistics : null;
   return {
     statistics: {
-      cmpSel: selByName(panelState.statistics.cmpSel),
-      cdfCmpSel: selByName(panelState.statistics.cdfCmpSel),
+      cmpSel: selByName(panelState.statistics.cmpSel, pps && pps.cmpSel),
+      cdfCmpSel: selByName(panelState.statistics.cdfCmpSel, pps && pps.cdfCmpSel),
       dsHidden: Array.from(panelState.statistics.dsHidden),
       refDs: panelState.statistics.refDs            // 4d per-panel reference (no global star), by id
     },
@@ -968,6 +981,11 @@ function clearProject() {
   panelState.statistics.cmpSel = {};
   panelState.statistics.cdfCmpSel = {};
   panelState.statistics.dsHidden = new Set();
+  panelState.statistics.refDs = null;
+  panelState.swath.dsHidden = new Set();
+  panelState.categories.dsHidden = new Set();
+  pendingDatasetsRestore = {};
+  pendingPanelState = null;
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -1171,6 +1189,11 @@ async function handleFile(file, handle, skipRecents) {
   panelState.statistics.cmpSel = {};
   panelState.statistics.cdfCmpSel = {};
   panelState.statistics.dsHidden = new Set();
+  panelState.statistics.refDs = null;
+  panelState.swath.dsHidden = new Set();
+  panelState.categories.dsHidden = new Set();
+  pendingDatasetsRestore = {};
+  pendingPanelState = null;
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -1346,6 +1369,11 @@ $backToPreflight.addEventListener('click', () => {
   panelState.statistics.cmpSel = {};
   panelState.statistics.cdfCmpSel = {};
   panelState.statistics.dsHidden = new Set();
+  panelState.statistics.refDs = null;
+  panelState.swath.dsHidden = new Set();
+  panelState.categories.dsHidden = new Set();
+  pendingDatasetsRestore = {};
+  pendingPanelState = null;
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -1901,6 +1929,31 @@ function displayResults(data) {
     if (st.auxSelected || st.cdfAuxSelected) {
       pendingStatsAuxRestore = { selected: st.auxSelected || null, cdf: st.cdfAuxSelected || null };
       applyStatsAuxRestore(); // no-op until aux analysis exists; consumed then
+    }
+
+    // A10 4e-b: comparison-dataset instances (d2+) + cross-dataset panel state.
+    // Recreate each instance now (empty import panel awaiting its named file,
+    // pending config consumed when the file lands). The id-keyed panel state
+    // (4c hidden chips, 4d Δ% reference) applies immediately — it needs no
+    // headers; the selection-by-name reattaches per dataset as it analyzes
+    // (pendingPanelState, drained by applyStatsCmpRestore).
+    pendingDatasetsRestore = {};
+    (restoredProject.datasets || []).forEach(function(cfg) {
+      if (!cfg || !cfg.id) return;
+      pendingDatasetsRestore[cfg.id] = cfg;
+      if (typeof wsRestoreInstance === 'function') wsRestoreInstance(cfg);
+    });
+    pendingPanelState = restoredProject.panels || null;
+    if (pendingPanelState && pendingPanelState.statistics) {
+      var pst = pendingPanelState.statistics;
+      if (Array.isArray(pst.dsHidden)) panelState.statistics.dsHidden = new Set(pst.dsHidden);
+      if (pst.refDs !== undefined) panelState.statistics.refDs = pst.refDs || null;
+    }
+    if (pendingPanelState && pendingPanelState.swath && Array.isArray(pendingPanelState.swath.dsHidden)) {
+      panelState.swath.dsHidden = new Set(pendingPanelState.swath.dsHidden);
+    }
+    if (pendingPanelState && pendingPanelState.categories && Array.isArray(pendingPanelState.categories.dsHidden)) {
+      panelState.categories.dsHidden = new Set(pendingPanelState.categories.dsHidden);
     }
 
     // Re-render stats tab with restored state

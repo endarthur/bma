@@ -24,6 +24,14 @@ let auxFilter = null;          // { expression } — references aux columns via 
 // ds object (ds._worker / ds._declusWorker / ds._topcutWorker) so instance
 // datasets analyze concurrently without clobbering each other's worker.
 let pendingAuxRestore = null;  // aux config from a loaded project, applied once the aux file is (re)loaded
+// A10 phase 4e-b: restore of the comparison-dataset instances (d2+) + the
+// cross-dataset panel state. pendingDatasetsRestore is keyed by ds id and holds
+// each instance's saved config until its file is re-supplied (then consumed in
+// loadAuxFile); pendingPanelState holds project.panels until each dataset's
+// analysis lets cmpSel/cdfCmpSel reattach by column name. Both are re-emitted
+// by serialize while still pending, so an autosave mid-restore loses nothing.
+let pendingDatasetsRestore = {};
+let pendingPanelState = null;
 const AUX_ROW_VAR = 'aux';     // fixed code handle for aux filter/calc expressions (NOT the display prefix)
 let auxStale = false;              // aux config changed since last aux analysis
 let auxCalcolCode = '';            // calculated-columns code block for the aux dataset (uses aux.)

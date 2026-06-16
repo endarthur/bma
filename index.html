@@ -5865,7 +5865,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build e890f78 — click to check for updates">e890f78</div>
+<div class="build-badge" id="buildBadge" title="build 504b0df — click to check for updates">504b0df</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8409,6 +8409,14 @@ let auxFilter = null;          // { expression } — references aux columns via 
 // ds object (ds._worker / ds._declusWorker / ds._topcutWorker) so instance
 // datasets analyze concurrently without clobbering each other's worker.
 let pendingAuxRestore = null;  // aux config from a loaded project, applied once the aux file is (re)loaded
+// A10 phase 4e-b: restore of the comparison-dataset instances (d2+) + the
+// cross-dataset panel state. pendingDatasetsRestore is keyed by ds id and holds
+// each instance's saved config until its file is re-supplied (then consumed in
+// loadAuxFile); pendingPanelState holds project.panels until each dataset's
+// analysis lets cmpSel/cdfCmpSel reattach by column name. Both are re-emitted
+// by serialize while still pending, so an autosave mid-restore loses nothing.
+let pendingDatasetsRestore = {};
+let pendingPanelState = null;
 const AUX_ROW_VAR = 'aux';     // fixed code handle for aux filter/calc expressions (NOT the display prefix)
 let auxStale = false;              // aux config changed since last aux analysis
 let auxCalcolCode = '';            // calculated-columns code block for the aux dataset (uses aux.)
@@ -14870,6 +14878,7 @@ function runAuxAnalysis(ds, root) {
       ds._worker.terminate();
       ds._worker = null;
       if (typeof applyStatsAuxRestore === 'function') applyStatsAuxRestore();
+      if (typeof applyStatsCmpRestore === 'function') applyStatsCmpRestore(ds);  // 4e-b: instance (d2+) selection by name
       if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
         renderStatsSidebar();
         renderStatsTable();
@@ -15387,13 +15396,20 @@ function loadAuxFile(file, handle, zipEntryName, ds, root) {
     if (zipEntryName && data.zipEntries && zipEntryName !== data.selectedZipEntry) {
       try { await loadZipEntryIntoPreflight(file, data, zipEntryName); } catch (e) { /* keep default entry */ }
     }
-    if (pendingAuxRestore && pendingAuxRestore.fileName === file.name) {
-      var savedAux = pendingAuxRestore;
-      pendingAuxRestore = null;
+    // A10 4e-b: aux carries its restore on the global pendingAuxRestore;
+    // instances (d2+) carry theirs on ds._pendingRestore (set by
+    // wsRestoreInstance). Apply when the re-supplied file matches the saved one.
+    var savedAux = ds._pendingRestore || (ds.id === 'aux' ? pendingAuxRestore : null);
+    if (savedAux && savedAux.fileName === file.name) {
+      if (ds.id === 'aux') pendingAuxRestore = null;
+      ds._pendingRestore = null;
       if (savedAux.zipEntry && data.zipEntries && savedAux.zipEntry !== data.selectedZipEntry) {
         try { await loadZipEntryIntoPreflight(file, data, savedAux.zipEntry); } catch (e) { /* entry gone — keep default */ }
       }
       applyAuxRestore(savedAux, ds);
+      // File-backed now — the live serialize owns it; drop the pending copy so
+      // it isn't re-emitted as a phantom (loss-safe: only dropped once applied).
+      if (typeof pendingDatasetsRestore !== 'undefined' && pendingDatasetsRestore) delete pendingDatasetsRestore[ds.id];
     }
     // A10 1g-c: instance datasets seed their display prefix from the filename
     // (the singleton aux keeps its 'aux' default — bit-identical behavior).
@@ -17189,10 +17205,11 @@ function projectKey(f) { return 'bma:' + f.name + ':' + f.size; }
 // file-backed instances are persisted (matched by name+size on reload, like
 // aux/drillholes); the analysis result is re-derived, never stored.
 function serializeComparisonDatasets() {
-  var out = [];
+  var out = [], seen = {};
   for (var i = 2; i < datasets.length; i++) {
     var ds = datasets[i];
     if (!ds.file) continue;
+    seen[ds.id] = true;
     out.push({
       id: ds.id,
       fileName: ds.file.name,
@@ -17209,6 +17226,14 @@ function serializeComparisonDatasets() {
       view: ds.view
     });
   }
+  // Loss-safety: an instance whose file hasn't been re-supplied yet (restored
+  // but awaiting its re-drop) has no live config to emit — re-emit its pending
+  // saved config verbatim so an autosave mid-restore never drops it.
+  if (typeof pendingDatasetsRestore !== 'undefined' && pendingDatasetsRestore) {
+    Object.keys(pendingDatasetsRestore).forEach(function(id) {
+      if (!seen[id]) out.push(pendingDatasetsRestore[id]);
+    });
+  }
   return out;
 }
 
@@ -17219,7 +17244,7 @@ function serializeComparisonDatasets() {
 // stored by id. A null cmpSel entry = "that dataset's default (paired only)",
 // so it is omitted; an explicit empty selection serializes as [].
 function serializePanelState() {
-  function selByName(map) {
+  function selByName(map, pending) {
     var o = {};
     Object.keys(map).forEach(function(dsId) {
       var sel = map[dsId];
@@ -17229,12 +17254,16 @@ function serializePanelState() {
       if (!hdr) return;                              // not analyzed — nothing to map
       o[dsId] = Array.from(sel).map(function(idx) { return hdr[idx]; }).filter(Boolean);
     });
+    // Loss-safety: a dataset awaiting reattach (file/analysis not back yet) still
+    // has its selection as names in pendingPanelState — re-emit until consumed.
+    if (pending) Object.keys(pending).forEach(function(dsId) { if (!(dsId in o)) o[dsId] = pending[dsId]; });
     return o;
   }
+  var pps = (typeof pendingPanelState !== 'undefined' && pendingPanelState && pendingPanelState.statistics) ? pendingPanelState.statistics : null;
   return {
     statistics: {
-      cmpSel: selByName(panelState.statistics.cmpSel),
-      cdfCmpSel: selByName(panelState.statistics.cdfCmpSel),
+      cmpSel: selByName(panelState.statistics.cmpSel, pps && pps.cmpSel),
+      cdfCmpSel: selByName(panelState.statistics.cdfCmpSel, pps && pps.cdfCmpSel),
       dsHidden: Array.from(panelState.statistics.dsHidden),
       refDs: panelState.statistics.refDs            // 4d per-panel reference (no global star), by id
     },
@@ -17818,6 +17847,11 @@ function clearProject() {
   panelState.statistics.cmpSel = {};
   panelState.statistics.cdfCmpSel = {};
   panelState.statistics.dsHidden = new Set();
+  panelState.statistics.refDs = null;
+  panelState.swath.dsHidden = new Set();
+  panelState.categories.dsHidden = new Set();
+  pendingDatasetsRestore = {};
+  pendingPanelState = null;
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -18021,6 +18055,11 @@ async function handleFile(file, handle, skipRecents) {
   panelState.statistics.cmpSel = {};
   panelState.statistics.cdfCmpSel = {};
   panelState.statistics.dsHidden = new Set();
+  panelState.statistics.refDs = null;
+  panelState.swath.dsHidden = new Set();
+  panelState.categories.dsHidden = new Set();
+  pendingDatasetsRestore = {};
+  pendingPanelState = null;
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -18196,6 +18235,11 @@ $backToPreflight.addEventListener('click', () => {
   panelState.statistics.cmpSel = {};
   panelState.statistics.cdfCmpSel = {};
   panelState.statistics.dsHidden = new Set();
+  panelState.statistics.refDs = null;
+  panelState.swath.dsHidden = new Set();
+  panelState.categories.dsHidden = new Set();
+  pendingDatasetsRestore = {};
+  pendingPanelState = null;
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -18751,6 +18795,31 @@ function displayResults(data) {
     if (st.auxSelected || st.cdfAuxSelected) {
       pendingStatsAuxRestore = { selected: st.auxSelected || null, cdf: st.cdfAuxSelected || null };
       applyStatsAuxRestore(); // no-op until aux analysis exists; consumed then
+    }
+
+    // A10 4e-b: comparison-dataset instances (d2+) + cross-dataset panel state.
+    // Recreate each instance now (empty import panel awaiting its named file,
+    // pending config consumed when the file lands). The id-keyed panel state
+    // (4c hidden chips, 4d Δ% reference) applies immediately — it needs no
+    // headers; the selection-by-name reattaches per dataset as it analyzes
+    // (pendingPanelState, drained by applyStatsCmpRestore).
+    pendingDatasetsRestore = {};
+    (restoredProject.datasets || []).forEach(function(cfg) {
+      if (!cfg || !cfg.id) return;
+      pendingDatasetsRestore[cfg.id] = cfg;
+      if (typeof wsRestoreInstance === 'function') wsRestoreInstance(cfg);
+    });
+    pendingPanelState = restoredProject.panels || null;
+    if (pendingPanelState && pendingPanelState.statistics) {
+      var pst = pendingPanelState.statistics;
+      if (Array.isArray(pst.dsHidden)) panelState.statistics.dsHidden = new Set(pst.dsHidden);
+      if (pst.refDs !== undefined) panelState.statistics.refDs = pst.refDs || null;
+    }
+    if (pendingPanelState && pendingPanelState.swath && Array.isArray(pendingPanelState.swath.dsHidden)) {
+      panelState.swath.dsHidden = new Set(pendingPanelState.swath.dsHidden);
+    }
+    if (pendingPanelState && pendingPanelState.categories && Array.isArray(pendingPanelState.categories.dsHidden)) {
+      panelState.categories.dsHidden = new Set(pendingPanelState.categories.dsHidden);
     }
 
     // Re-render stats tab with restored state
@@ -19996,6 +20065,30 @@ function applyStatsAuxRestore() {
     panelState.statistics.cdfCmpSel.aux = c;
   }
   pendingStatsAuxRestore = null;
+}
+
+// A10 4e-b: reattach a comparison dataset's table/CDF selection (stored by
+// column NAME in project.panels) once its analysis header exists. aux keeps the
+// legacy pendingStatsAuxRestore path above; this covers the instances (d2+).
+// Runs from the shared aux/instance analysis-complete handler for the dataset
+// that just finished; consumes only that dataset's entries, leaving the rest
+// pending until they analyze (and re-emittable by serialize meanwhile).
+function applyStatsCmpRestore(ds) {
+  if (!ds || ds.id === 'aux' || !ds.complete) return;
+  if (!pendingPanelState || !pendingPanelState.statistics) return;
+  var hdr = ds.complete.header;
+  var byName = {};
+  for (var i = 0; i < hdr.length; i++) byName[hdr[i]] = i;
+  var ps = pendingPanelState.statistics;
+  function reattach(pendMap, liveMap) {
+    if (!pendMap || !pendMap[ds.id]) return;
+    var s = new Set();
+    pendMap[ds.id].forEach(function(n) { if (byName[n] !== undefined) s.add(byName[n]); });
+    liveMap[ds.id] = s;               // [] = explicit empty selection (not default)
+    delete pendMap[ds.id];            // consumed
+  }
+  reattach(ps.cmpSel, panelState.statistics.cmpSel);
+  reattach(ps.cdfCmpSel, panelState.statistics.cdfCmpSel);
 }
 
 function getStatsMetricColumns() {
@@ -30249,6 +30342,27 @@ function wsAddPointDataset() {
   dsAdd(ds);
   wsRails.addTab({ id: ds.id, title: 'Import: ' + ds.prefix, closeable: true }, wsMainTarget());
   wsRails.activateTab(ds.id);   // renderPanel → wsBuildDatasetPanel (empty import surface)
+}
+
+// A10 4e-b: recreate a comparison-dataset instance from its saved config on
+// project load. The registry entry + rails tab come back immediately with the
+// saved id/prefix; the panel is the empty import surface awaiting its named
+// file (loadAuxFile applies ds._pendingRestore when it lands, like aux). State
+// stays on the ds, so this is just wsAddPointDataset with a fixed id + pending
+// config. dsNextNum is advanced past restored ids so a later Add won't collide.
+function wsRestoreInstance(cfg) {
+  if (typeof dsCreate !== 'function' || !cfg || !cfg.id) return null;
+  var existing = (typeof dsById === 'function') ? dsById(cfg.id) : null;
+  if (existing) return existing;
+  var ds = dsCreate({ id: cfg.id, prefix: cfg.prefix || 'data' });
+  ds._pendingRestore = cfg;
+  dsAdd(ds);
+  var n = parseInt(String(cfg.id).replace(/^d/, ''), 10);
+  if (typeof dsNextNum !== 'undefined' && isFinite(n) && n >= dsNextNum) dsNextNum = n + 1;
+  if (wsRails && !findTab(wsRails.state, ds.id)) {
+    wsRails.addTab({ id: ds.id, title: 'Import: ' + (ds.prefix || 'data'), closeable: true }, wsMainTarget());
+  }
+  return ds;
 }
 
 // Track the prefix in the tab title (loadAuxFile on load, onAuxConfigChange on edit)
