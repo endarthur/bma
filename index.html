@@ -5816,7 +5816,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build c5d8703 — click to check for updates">c5d8703</div>
+<div class="build-badge" id="buildBadge" title="build fda699c — click to check for updates">fda699c</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8727,21 +8727,26 @@ function catGroupMembers(modelName, dsId) {
   return rec.members.filter(function(x) { return x.ds === dsId; }).map(function(x) { return x.col; });
 }
 function catPairsRev(modelName) { return catGroupMembers(modelName, 'aux'); }
-// Set/clear an aux column's pairing. modelName → join that model's property;
-// falsy → split into its own property (pinned so re-seeding won't re-merge).
-function catSetPair(auxName, modelName) {
-  _catDetach('aux', auxName);
+// Set/clear a comparison column's grouping (A10 4c-iv: any non-model dataset,
+// not just aux). modelName → join that model's property (MERGE); falsy → split
+// into its own property (pinned so re-seeding won't re-merge). Model columns
+// are the grouping anchors and cannot themselves be re-homed here.
+function catSetMember(ds, col, modelName) {
+  if (ds === 'model') return;
+  _catDetach(ds, col);
   if (modelName) {
     const mid = catPropIdFor('model', modelName, true);
-    catalog.properties[mid].members.push({ ds: 'aux', col: auxName });
-    _catPropIdx['aux:' + auxName] = mid;
+    catalog.properties[mid].members.push({ ds: ds, col: col });
+    _catPropIdx[ds + ':' + col] = mid;
   } else {
-    const id = _catNewProp(auxName);
+    const id = _catNewProp(col);
     catalog.properties[id].split = true;
-    catalog.properties[id].members.push({ ds: 'aux', col: auxName });
-    _catPropIdx['aux:' + auxName] = id;
+    catalog.properties[id].members.push({ ds: ds, col: col });
+    _catPropIdx[ds + ':' + col] = id;
   }
 }
+// Legacy aux-scoped alias.
+function catSetPair(auxName, modelName) { catSetMember('aux', auxName, modelName); }
 
 // Idempotent name-grouping seed for one dataset (dsId, default 'aux') against
 // the model — the ONE place properties group by name, so explicit pairs
@@ -28361,9 +28366,9 @@ function treeUnitChip(ds, name) {
   return '<span class="tree-unit">' + esc(GRADE_UNITS[u].symbol) + '</span>';
 }
 
-function treePairChip(name) {
-  var p = catPair(name);
-  if (p) return '<span class="tree-pair" title="paired with model:' + esc(p) + '">⇄ ' + esc(p) + '</span>';
+function treePairChip(ds, name) {
+  var p = catModelMember(ds, name);
+  if (p) return '<span class="tree-pair" title="grouped with model:' + esc(p) + '">⇄ ' + esc(p) + '</span>';
   return '<span class="tree-pair tree-pair--orphan" title="no model counterpart — compared nowhere">⇄ —</span>';
 }
 
@@ -28447,7 +28452,7 @@ function treeDatasetHtml(ds, openState) {
       '<span class="tree-chip" style="background:' + color + '"></span>' +
       '<span class="tree-name">' + esc(e.name) + '</span>' +
       treeUnitChip(ds, e.name) + treeRoleBadges(ds, e.name) + treeEmptyBadge(ds, e.idx) + treeMixedBadge(ds, e.idx) +
-      (ds === 'aux' ? treePairChip(e.name) : '') +
+      (ds !== 'model' ? treePairChip(ds, e.name) : '') +
       '</div>';
   }
   function catRow(e) {
@@ -28460,7 +28465,7 @@ function treeDatasetHtml(ds, openState) {
       '<span class="tree-chip tree-chip--cat"></span>' +
       '<span class="tree-name">' + esc(e.name) + '</span>' + nVals +
       treeRoleBadges(ds, e.name) +
-      (ds === 'aux' ? treePairChip(e.name) : '') +
+      (ds !== 'model' ? treePairChip(ds, e.name) : '') +
       '</div>';
   }
   function coordRow(c) {
@@ -28598,11 +28603,11 @@ function renderTreePopover() {
       '<button class="tree-pop-btn" id="treePopCatTab">edit colors & order in Categories →</button>';
   }
 
-  if (ds === 'aux') {
-    var p = catPair(name);
+  if (ds !== 'model') {
+    var p = catModelMember(ds, name);
     var targets = treePairTargets(t.kind);
-    html += '<div class="tree-pop-label">Paired with (model)</div><select class="tree-pop-select" id="treePopPair">';
-    html += '<option value=""' + (p === null ? ' selected' : '') + '>— unpaired</option>';
+    html += '<div class="tree-pop-label">Grouped with (model)</div><select class="tree-pop-select" id="treePopPair">';
+    html += '<option value=""' + (p === null ? ' selected' : '') + '>— ungrouped</option>';
     for (var pi = 0; pi < targets.length; pi++) {
       html += '<option value="' + esc(targets[pi]) + '"' + (targets[pi] === p ? ' selected' : '') + '>' + esc(targets[pi]) + '</option>';
     }
@@ -28616,7 +28621,9 @@ function renderTreePopover() {
 // everything else resolves pairs lazily at its next render
 function treePairChanged() {
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
-  if (lastCompleteData && auxCompleteData && typeof renderStatsTable === 'function') {
+  // A10 4c-iv: refresh stats when ANY comparison dataset exists, not just aux
+  var hasCmp = typeof statsCmpDatasets === 'function' && statsCmpDatasets().length > 0;
+  if (lastCompleteData && hasCmp && typeof renderStatsTable === 'function') {
     if (typeof renderStatsSidebar === 'function') renderStatsSidebar();
     renderStatsTable();
   }
@@ -28719,7 +28726,7 @@ function treeToggleRole(t, role) {
         autoSaveProject();
         renderTreePopover();
       } else if (e.target.id === 'treePopPair') {
-        catSetPair(t.name, e.target.value || null);
+        catSetMember(t.ds, t.name, e.target.value || null);
         treePairChanged();
         autoSaveProject();
         renderTreePopover();
@@ -28913,25 +28920,26 @@ CTX_PROVIDERS.push(function variableProvider(e) {
     }
   }
 
-  if (v.ds === 'aux') {
-    // pairing as an inline submenu: every legal model target, radio-style
-    // checkmark on the current one (was: bounce to the Properties popover)
-    var p = catPair(v.name);
+  if (v.ds !== 'model') {
+    // grouping as an inline submenu: every legal model target, radio-style
+    // checkmark on the current one (A10 4c-iv: any comparison dataset, not
+    // just aux — group/split a column into a model property)
+    var p = catModelMember(v.ds, v.name);
     function setPair(target) {
       return function() {
-        catSetPair(v.name, target);
+        catSetMember(v.ds, v.name, target);
         treePairChanged();
         autoSaveProject();
       };
     }
-    var pairKids = [{ label: '— unpaired', checked: p === null, action: setPair(null) }];
+    var pairKids = [{ label: '— ungrouped', checked: p === null, action: setPair(null) }];
     var targets = (typeof treePairTargets === 'function') ? treePairTargets(v.kind) : [];
     for (var ti = 0; ti < targets.length; ti++) {
       pairKids.push({ label: targets[ti], checked: targets[ti] === p, action: setPair(targets[ti]) });
     }
     pairKids.push({ sep: true });
     pairKids.push({ label: 'Edit in Properties…', action: function() { openTreeEditor(v.ds, v.name, v.kind, v.idx, x, y); } });
-    items.push({ label: 'Paired with' + (p ? ': ' + p : ''), children: pairKids });
+    items.push({ label: 'Grouped with' + (p ? ': ' + p : ''), children: pairKids });
   }
 
   if (v.kind === 'cat' && v.ds === 'model' && v.idx !== null) {

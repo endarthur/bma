@@ -169,25 +169,26 @@ CTX_PROVIDERS.push(function variableProvider(e) {
     }
   }
 
-  if (v.ds === 'aux') {
-    // pairing as an inline submenu: every legal model target, radio-style
-    // checkmark on the current one (was: bounce to the Properties popover)
-    var p = catPair(v.name);
+  if (v.ds !== 'model') {
+    // grouping as an inline submenu: every legal model target, radio-style
+    // checkmark on the current one (A10 4c-iv: any comparison dataset, not
+    // just aux — group/split a column into a model property)
+    var p = catModelMember(v.ds, v.name);
     function setPair(target) {
       return function() {
-        catSetPair(v.name, target);
+        catSetMember(v.ds, v.name, target);
         treePairChanged();
         autoSaveProject();
       };
     }
-    var pairKids = [{ label: '— unpaired', checked: p === null, action: setPair(null) }];
+    var pairKids = [{ label: '— ungrouped', checked: p === null, action: setPair(null) }];
     var targets = (typeof treePairTargets === 'function') ? treePairTargets(v.kind) : [];
     for (var ti = 0; ti < targets.length; ti++) {
       pairKids.push({ label: targets[ti], checked: targets[ti] === p, action: setPair(targets[ti]) });
     }
     pairKids.push({ sep: true });
     pairKids.push({ label: 'Edit in Properties…', action: function() { openTreeEditor(v.ds, v.name, v.kind, v.idx, x, y); } });
-    items.push({ label: 'Paired with' + (p ? ': ' + p : ''), children: pairKids });
+    items.push({ label: 'Grouped with' + (p ? ': ' + p : ''), children: pairKids });
   }
 
   if (v.kind === 'cat' && v.ds === 'model' && v.idx !== null) {

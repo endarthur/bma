@@ -146,9 +146,9 @@ function treeUnitChip(ds, name) {
   return '<span class="tree-unit">' + esc(GRADE_UNITS[u].symbol) + '</span>';
 }
 
-function treePairChip(name) {
-  var p = catPair(name);
-  if (p) return '<span class="tree-pair" title="paired with model:' + esc(p) + '">⇄ ' + esc(p) + '</span>';
+function treePairChip(ds, name) {
+  var p = catModelMember(ds, name);
+  if (p) return '<span class="tree-pair" title="grouped with model:' + esc(p) + '">⇄ ' + esc(p) + '</span>';
   return '<span class="tree-pair tree-pair--orphan" title="no model counterpart — compared nowhere">⇄ —</span>';
 }
 
@@ -232,7 +232,7 @@ function treeDatasetHtml(ds, openState) {
       '<span class="tree-chip" style="background:' + color + '"></span>' +
       '<span class="tree-name">' + esc(e.name) + '</span>' +
       treeUnitChip(ds, e.name) + treeRoleBadges(ds, e.name) + treeEmptyBadge(ds, e.idx) + treeMixedBadge(ds, e.idx) +
-      (ds === 'aux' ? treePairChip(e.name) : '') +
+      (ds !== 'model' ? treePairChip(ds, e.name) : '') +
       '</div>';
   }
   function catRow(e) {
@@ -245,7 +245,7 @@ function treeDatasetHtml(ds, openState) {
       '<span class="tree-chip tree-chip--cat"></span>' +
       '<span class="tree-name">' + esc(e.name) + '</span>' + nVals +
       treeRoleBadges(ds, e.name) +
-      (ds === 'aux' ? treePairChip(e.name) : '') +
+      (ds !== 'model' ? treePairChip(ds, e.name) : '') +
       '</div>';
   }
   function coordRow(c) {
@@ -383,11 +383,11 @@ function renderTreePopover() {
       '<button class="tree-pop-btn" id="treePopCatTab">edit colors & order in Categories →</button>';
   }
 
-  if (ds === 'aux') {
-    var p = catPair(name);
+  if (ds !== 'model') {
+    var p = catModelMember(ds, name);
     var targets = treePairTargets(t.kind);
-    html += '<div class="tree-pop-label">Paired with (model)</div><select class="tree-pop-select" id="treePopPair">';
-    html += '<option value=""' + (p === null ? ' selected' : '') + '>— unpaired</option>';
+    html += '<div class="tree-pop-label">Grouped with (model)</div><select class="tree-pop-select" id="treePopPair">';
+    html += '<option value=""' + (p === null ? ' selected' : '') + '>— ungrouped</option>';
     for (var pi = 0; pi < targets.length; pi++) {
       html += '<option value="' + esc(targets[pi]) + '"' + (targets[pi] === p ? ' selected' : '') + '>' + esc(targets[pi]) + '</option>';
     }
@@ -401,7 +401,9 @@ function renderTreePopover() {
 // everything else resolves pairs lazily at its next render
 function treePairChanged() {
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
-  if (lastCompleteData && auxCompleteData && typeof renderStatsTable === 'function') {
+  // A10 4c-iv: refresh stats when ANY comparison dataset exists, not just aux
+  var hasCmp = typeof statsCmpDatasets === 'function' && statsCmpDatasets().length > 0;
+  if (lastCompleteData && hasCmp && typeof renderStatsTable === 'function') {
     if (typeof renderStatsSidebar === 'function') renderStatsSidebar();
     renderStatsTable();
   }
@@ -504,7 +506,7 @@ function treeToggleRole(t, role) {
         autoSaveProject();
         renderTreePopover();
       } else if (e.target.id === 'treePopPair') {
-        catSetPair(t.name, e.target.value || null);
+        catSetMember(t.ds, t.name, e.target.value || null);
         treePairChanged();
         autoSaveProject();
         renderTreePopover();

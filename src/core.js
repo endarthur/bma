@@ -435,21 +435,26 @@ function catGroupMembers(modelName, dsId) {
   return rec.members.filter(function(x) { return x.ds === dsId; }).map(function(x) { return x.col; });
 }
 function catPairsRev(modelName) { return catGroupMembers(modelName, 'aux'); }
-// Set/clear an aux column's pairing. modelName → join that model's property;
-// falsy → split into its own property (pinned so re-seeding won't re-merge).
-function catSetPair(auxName, modelName) {
-  _catDetach('aux', auxName);
+// Set/clear a comparison column's grouping (A10 4c-iv: any non-model dataset,
+// not just aux). modelName → join that model's property (MERGE); falsy → split
+// into its own property (pinned so re-seeding won't re-merge). Model columns
+// are the grouping anchors and cannot themselves be re-homed here.
+function catSetMember(ds, col, modelName) {
+  if (ds === 'model') return;
+  _catDetach(ds, col);
   if (modelName) {
     const mid = catPropIdFor('model', modelName, true);
-    catalog.properties[mid].members.push({ ds: 'aux', col: auxName });
-    _catPropIdx['aux:' + auxName] = mid;
+    catalog.properties[mid].members.push({ ds: ds, col: col });
+    _catPropIdx[ds + ':' + col] = mid;
   } else {
-    const id = _catNewProp(auxName);
+    const id = _catNewProp(col);
     catalog.properties[id].split = true;
-    catalog.properties[id].members.push({ ds: 'aux', col: auxName });
-    _catPropIdx['aux:' + auxName] = id;
+    catalog.properties[id].members.push({ ds: ds, col: col });
+    _catPropIdx[ds + ':' + col] = id;
   }
 }
+// Legacy aux-scoped alias.
+function catSetPair(auxName, modelName) { catSetMember('aux', auxName, modelName); }
 
 // Idempotent name-grouping seed for one dataset (dsId, default 'aux') against
 // the model — the ONE place properties group by name, so explicit pairs

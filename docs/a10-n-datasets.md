@@ -370,8 +370,23 @@ inherits its *paired model* var's color/unit). Target: display lives on the
     `#catDatasetChips` (progressive disclosure at ≥2 comparison datasets, reuses
     `.stats-ds-chip`); toggling re-renders the main area from cache. Covered in
     `a10-smoke`; single-aux case visually unchanged (`c6-smoke`).
-  - **NEXT 4c-iv-b** — the richer merge/rename/split property popover (the
-    catalog-editing UI deferred from 4a; today pair/unpair works property-backed).
+  - **4c-iv-b ✅ — grouping editor generalized to all comparison datasets.** The
+    catalog membership editor (popover "Grouped with" select + tree pair chip +
+    ctx-menu "Grouped with" submenu) was aux-only; it now works for any
+    comparison dataset (d2, d3…) so a column whose name doesn't match can be
+    merged into a model property or split into its own. Primitive: `catSetMember(
+    ds, col, modelName)` in core.js (model-name → MERGE, falsy → SPLIT with the
+    re-seed-guard `split` flag); `catSetPair` is now a thin aux alias. Tree rows
+    render `treePairChip(ds, name)` for every non-model dataset; `treePairChanged`
+    refreshes stats whenever any comparison dataset exists (not just aux).
+    Covered in `a10-smoke` (split/re-group a d2 column, consumers follow, d2 tree
+    chip present); tree-smoke labels updated (Paired→Grouped, unpaired→ungrouped).
+    **Rename deferred:** a property's `name` is not a user-visible display label
+    today (tree groups by category; stats/swath/cat label by `dsLabel:col`), so a
+    rename control would be dead UI — it needs the display-label plumbing, a
+    separate (lower-value) change. **4c-iv COMPLETE.**
+- **4c COMPLETE** (per-panel selection across Statistics, Swath, Categories +
+  generalized grouping). Next: 4d (per-panel reference / Δ% denominator).
 
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
