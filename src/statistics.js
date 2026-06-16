@@ -30,6 +30,11 @@ let _statsHeader = [];
 let _statsOrigColCount = 0;
 let _statsEventsWired = false;
 let _statsCdfParams = null; // coordinate system for CDF tooltip
+// A10 4d: the Δ% reference (denominator) is per-panel state — NOT a global ★.
+// null = default (first shown comparison dataset = the samples/validation
+// reference, preserving the model-vs-samples acceptance number). Ephemeral like
+// the other d2+ stats UI until phase 6 / the 4e instance-state serialization.
+let statsRefDs = null;
 
 function tdQuantileFromCentroids(centroids, totalCount, q) {
   if (!centroids || centroids.length === 0) return null;
@@ -70,6 +75,42 @@ function statsCmpDatasets() {
 // datasets) let the user hide any of them; the sidebar/table/CDF iterate this.
 function statsShownCmpDatasets() {
   return statsCmpDatasets().filter(function(ds) { return !statsDsHidden.has(ds.id); });
+}
+
+// A10 4d: the resolved Δ% reference dataset id for this panel. Defaults to the
+// first SHOWN comparison dataset (samples) so the headline stays the
+// model-vs-samples acceptance number; falls back to 'model' when no comparison
+// is shown, and self-heals if the chosen reference was hidden/removed.
+function statsReferenceDs() {
+  var shownCmp = statsShownCmpDatasets();
+  var shown = ['model'].concat(shownCmp.map(function(d) { return d.id; }));
+  if (statsRefDs && shown.indexOf(statsRefDs) >= 0) return statsRefDs;
+  return shownCmp.length ? shownCmp[0].id : 'model';
+}
+
+// The reference dataset's stats object for the property a model column (ci)
+// belongs to — stats[ci] when the model is the reference, else the reference
+// dataset's grouped column. null when the reference has no counterpart.
+function statsRefStatsFor(ci, refId, modelStats) {
+  if (refId === 'model') return modelStats[ci] || null;
+  var rds = dsById(refId);
+  if (!rds || !rds.complete || !rds.complete.stats) return null;
+  var cols = getStatsCmpCols(rds);
+  for (var i = 0; i < cols.length; i++) {
+    if (cols[i].matchCi === ci) return rds.complete.stats[cols[i].idx] || null;
+  }
+  return null;
+}
+// The reference column's display label for a property (for Δ% tooltips).
+function statsRefLabelFor(ci, refId, header) {
+  if (refId === 'model') return header[ci];
+  var rds = dsById(refId);
+  if (!rds || !rds.complete) return dsLabel(refId);
+  var cols = getStatsCmpCols(rds);
+  for (var i = 0; i < cols.length; i++) {
+    if (cols[i].matchCi === ci) return dsLabel(refId) + ':' + cols[i].name;
+  }
+  return dsLabel(refId);
 }
 
 // Numeric columns of a comparison dataset, each grouped to the model column it
@@ -310,12 +351,22 @@ function renderStatsSidebar() {
   if (dsSection) {
     var allCmp = statsCmpDatasets();
     if (allCmp.length >= 2) {
-      var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the reference dataset — every Δ% is relative to a comparison">Model</span>';
+      // A10 4d: per-panel Δ% reference picker (Model + each shown comparison).
+      // Only here (≥2 comparisons) where the choice is ambiguous; with a lone
+      // comparison the reference is unambiguously it (badged in the table).
+      var refNow = statsReferenceDs();
+      var refSel = '<div class="stats-ref-row"><span class="stats-ref-label" title="Δ% denominator — every other dataset is compared to this one">Δ% reference</span>' +
+        '<select class="stats-select stats-ref-sel" id="statsRefSel"><option value="model"' + (refNow === 'model' ? ' selected' : '') + '>Model</option>';
+      statsShownCmpDatasets().forEach(function(ds) {
+        refSel += '<option value="' + esc(ds.id) + '"' + (refNow === ds.id ? ' selected' : '') + '>' + esc(dsLabel(ds.id)) + '</option>';
+      });
+      refSel += '</select></div>';
+      var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the model dataset — toggle comparison chips to hide them">Model</span>';
       allCmp.forEach(function(ds) {
         var off = statsDsHidden.has(ds.id);
         chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) + '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) + '">' + esc(dsLabel(ds.id)) + '</button>';
       });
-      document.getElementById('statsDatasetChips').innerHTML = chips;
+      document.getElementById('statsDatasetChips').innerHTML = refSel + '<div class="stats-ds-chip-row">' + chips + '</div>';
       dsSection.style.display = '';
     } else {
       dsSection.style.display = 'none';
@@ -373,30 +424,37 @@ function renderStatsTable() {
   var cmpCount = cmpUnmatched.length;
   Object.keys(cmpByMatch).forEach(function(k) { cmpCount += cmpByMatch[k].length; });
 
+  // A10 4d: Δ% is computed against the panel's chosen reference dataset (the
+  // denominator), not implicitly against each comparison. Default reference =
+  // the first shown comparison (samples), so the common model+aux case still
+  // reads (model − samples)/samples — just shown under the model (the subject)
+  // with the reference row badged.
+  var refId = statsReferenceDs();
+  function statsRefBadge(isRef) {
+    return isRef ? ' <span class="stats-ref-badge" title="Δ% reference — every other dataset\'s Δ% is relative to this one">ref</span>' : '';
+  }
+  // Δ% row for a subject (model col ci identifies the property) vs the reference.
+  // Empty when the subject IS the reference or the reference has no counterpart.
+  function deltaRowFor(ci, subjectStats, subjectLabel) {
+    if (ci === null || ci === undefined) return '';
+    var refStats = statsRefStatsFor(ci, refId, stats);
+    if (!refStats || refStats === subjectStats) return '';
+    var refLabel = statsRefLabelFor(ci, refId, header);
+    var tip = '(' + subjectLabel + ' − ' + refLabel + ') / ' + refLabel;
+    var rowHtml = '<tr class="stats-delta-row"><td title="' + esc(tip) + '">Δ%</td>';
+    for (var m of metrics) rowHtml += '<td>' + formatDeltaPct(getStatValue(subjectStats, m), getStatValue(refStats, m), m) + '</td>';
+    return rowHtml + '</tr>';
+  }
+
   function cmpRowHtml(member) {
     var ds = member.ds, ac = member.col, label = dsLabel(ds.id);
     var as = ds.complete.stats[ac.idx];
     var cdfSet = statsCdfCmpSel[ds.id];
     var aCdfActive = !!(cdfSet && cdfSet.has(ac.idx));
     var aNameClass = aCdfActive ? 'cdf-link cdf-active' : 'cdf-link';
-    var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-cmp-ds="' + esc(ds.id) + '" data-cmp-col="' + ac.idx + '" href="#">' + esc(label + ':' + ac.name) + '</a>' + statsEmptyTag(ds.id, ac.idx) + statsMixedTag(ds.id, ac.idx) + '</td>';
+    var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-cmp-ds="' + esc(ds.id) + '" data-cmp-col="' + ac.idx + '" href="#">' + esc(label + ':' + ac.name) + '</a>' + statsRefBadge(ds.id === refId) + statsEmptyTag(ds.id, ac.idx) + statsMixedTag(ds.id, ac.idx) + '</td>';
     for (var m of metrics) rowHtml += '<td>' + formatStatValue(getStatValue(as, m), m) + '</td>';
-    return rowHtml + '</tr>' + deltaRowHtml(member);
-  }
-
-  // Δ% row: model vs the comparison dataset, relative to that dataset (the
-  // reference) — the mean-difference % is the headline acceptance statistic in
-  // validation comparison tables
-  function deltaRowHtml(member) {
-    var ds = member.ds, ac = member.col;
-    if (ac.matchCi === null || !stats[ac.matchCi]) return '';
-    var ps = stats[ac.matchCi];
-    var as = ds.complete.stats[ac.idx];
-    var label = dsLabel(ds.id);
-    var tip = '(' + header[ac.matchCi] + ' − ' + label + ':' + ac.name + ') / ' + label + ':' + ac.name;
-    var rowHtml = '<tr class="stats-delta-row"><td title="' + esc(tip) + '">Δ%</td>';
-    for (var m of metrics) rowHtml += '<td>' + formatDeltaPct(getStatValue(ps, m), getStatValue(as, m), m) + '</td>';
-    return rowHtml + '</tr>';
+    return rowHtml + '</tr>' + deltaRowFor(ac.matchCi, as, label + ':' + ac.name);
   }
 
   if (visCols.length === 0 && cmpCount === 0) {
@@ -418,7 +476,7 @@ function renderStatsTable() {
     var nameClass = cdfActive ? 'cdf-link cdf-active' : 'cdf-link';
     var nameHtml = '<a class="' + nameClass + '" data-col="' + ci + '" href="#">' + esc(header[ci]) + '</a>';
     if (isCalcol) nameHtml += '<span class="calcol-tag">CALC</span>';
-    nameHtml += statsEmptyTag('model', ci) + statsMixedTag('model', ci);
+    nameHtml += statsRefBadge(refId === 'model') + statsEmptyTag('model', ci) + statsMixedTag('model', ci);
 
     html += '<tr' + (isCalcol ? ' class="calcol-row"' : '') + '><td>' + nameHtml + '</td>';
     for (var m of metrics) {
@@ -426,6 +484,8 @@ function renderStatsTable() {
       html += '<td>' + formatStatValue(val, m) + '</td>';
     }
     html += '</tr>';
+    // Δ% of the model vs the reference (when the model isn't itself the reference)
+    html += deltaRowFor(ci, s, header[ci]);
     // Same-named comparison rows directly beneath their primary
     if (cmpByMatch[ci]) {
       for (var am = 0; am < cmpByMatch[ci].length; am++) html += cmpRowHtml(cmpByMatch[ci][am]);
@@ -987,6 +1047,13 @@ function wireStatsEventsOnce() {
     renderStatsSidebar();
     renderStatsTable();
     renderStatsCdfPanel();
+    autoSaveProject();
+  });
+  // --- Δ% reference picker (4d; same container) ---
+  if ($dsChips) $dsChips.addEventListener('change', function(e) {
+    if (e.target.id !== 'statsRefSel') return;
+    statsRefDs = e.target.value || null;
+    renderStatsTable();
     autoSaveProject();
   });
 

@@ -386,7 +386,25 @@ inherits its *paired model* var's color/unit). Target: display lives on the
     rename control would be dead UI — it needs the display-label plumbing, a
     separate (lower-value) change. **4c-iv COMPLETE.**
 - **4c COMPLETE** (per-panel selection across Statistics, Swath, Categories +
-  generalized grouping). Next: 4d (per-panel reference / Δ% denominator).
+  generalized grouping).
+- **4d ✅ — per-panel Δ% reference (no global ★).** `statsRefDs` (module-global
+  today; moves into instance state at 4e) holds the chosen reference;
+  `statsReferenceDs()` defaults to the first *shown* comparison dataset (the
+  samples — so the headline stays the `(model − samples)/samples` acceptance
+  number) and self-heals if that dataset is hidden/removed. Δ% generalized from
+  "model vs each comparison" to **every non-reference dataset (model included)
+  shows a Δ% row `(subject − ref)/|ref|` beneath its row** (`deltaRowFor` +
+  `statsRefStatsFor`/`statsRefLabelFor`); the reference row is badged `ref`
+  (`stats-ref-badge` — keeps the inferred default visible per the no-magic-only
+  rule). A reference picker (`#statsRefSel`: Model + each shown comparison)
+  appears in the Datasets section at ≥2 comparisons (where the choice is
+  ambiguous); the lone-comparison case stays uncluttered (reference is
+  unambiguously that comparison, badged). The common model+aux number is
+  identical to pre-4d (−7.3% Fe in the smoke), just relocated under the model
+  (the subject) with aux badged. Ephemeral until the 4e instance-state /
+  phase-6 serialization. Covered in `delta-row-smoke` + `a10-smoke`.
+  Next: 4e (multi-instance spawn — `{datasets, reference, properties, params,
+  title}` becomes real serialized instance state).
 
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 

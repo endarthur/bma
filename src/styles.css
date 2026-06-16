@@ -4087,6 +4087,16 @@ table.cat-values tr.cat-aux-only td { background: color-mix(in srgb, var(--brand
    The model is the fixed Δ% baseline (a static chip); each comparison dataset
    toggles its participation in the sidebar + table + CDF. */
 .stats-ds-chips { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+/* A10 4d: Δ% reference picker + the "ref" row badge */
+.stats-ref-row { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.4rem; }
+.stats-ref-label { font-size: 0.66rem; color: var(--fg-dim); white-space: nowrap; }
+.stats-ref-sel { flex: 1; min-width: 0; }
+.stats-ds-chip-row { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.stats-ref-badge {
+  font: 0.58rem var(--mono); text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--sel); border: 1px solid var(--sel); border-radius: 999px;
+  padding: 0 0.3rem; margin-left: 0.3rem; vertical-align: middle;
+}
 .stats-ds-chip {
   font: 0.65rem var(--mono); background: var(--bg2); color: var(--sel);
   border: 1px solid var(--sel); border-radius: 999px;
