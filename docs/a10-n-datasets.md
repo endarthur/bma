@@ -344,9 +344,19 @@ inherits its *paired model* var's color/unit). Target: display lives on the
     (`swath-smoke`), d2 fan-out covered in `a10-smoke`. Also fixed a latent hang:
     an aux-only run blocked on stale declustered weights now finalizes (surfaces
     the error banner) instead of leaving the bar spinning.
-  - **NEXT 4c-iii-c** — dataset chips (reuse the `statsDsHidden` pattern) +
-    persistence generalization (sidebar `auxCheckedVars` → per-dataset; today
-    serialization is scoped to `data-ds="aux"`, d2+ selection ephemeral).
+  - **4c-iii-c ✅ — dataset chips.** `swathDsHidden` Set (ephemeral, like the
+    Statistics chips) + `swathShownCmpDatasets()`. A `#swathDatasetsSection` in
+    the Variables section shows a static Model baseline chip + a toggle per
+    comparison dataset, progressive-disclosed at ≥2 comparison datasets (reuses
+    the `.stats-ds-chip` styling). `renderSwathDatasetChips` renders them;
+    `renderSwathAuxVars` lists only shown datasets; `runSwath` fans out only
+    shown datasets; `swathDirView` + `renderSwathOutput` filter `cmp`/notes by
+    `swathDsHidden`, so toggling a chip drops/restores a dataset's series **from
+    cache, no re-run**. Covered in `a10-smoke` (chips appear at 3 datasets; hide
+    d2 → rows + series gone, aux stays; re-show → restored from cache).
+    Per-dataset selection **persistence** stays deferred to phase 6 (it needs
+    the `datasets` serialization key); serialization is scoped to
+    `data-ds="aux"` in the meantime, d2+ swath selection ephemeral.
 - **Still TODO in 4c:** Categories + the merge/rename/split popover (4c-iv).
 
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)

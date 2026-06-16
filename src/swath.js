@@ -19,6 +19,11 @@ function resetSwathState() {
   _swathChartParams = null;
 }
 
+// A10 4c-iii-c: dataset chips let the user hide a comparison dataset (sidebar
+// rows + chart series) without un-checking each variable. Ephemeral, like the
+// Statistics chips (phase 6 persists it). Keyed by dsId.
+var swathDsHidden = new Set();
+
 // A10 4c-iii-b: every comparison dataset that can overlay a swath — has a file
 // and a preflight (XYZ may still be unassigned; we list it with a note, the
 // same as the legacy aux path). Registry order: aux first, then d2, d3…
@@ -29,6 +34,13 @@ function swathCmpDatasets() {
     if (d && d.file && d.preflight) out.push(d);
   }
   return out;
+}
+
+// The comparison datasets actually shown — the chips (4c-iii-c, ≥2 comparison
+// datasets) let the user hide any of them; the sidebar listing, the fan-out
+// run, and the chart all iterate this.
+function swathShownCmpDatasets() {
+  return swathCmpDatasets().filter(function(d) { return !swathDsHidden.has(d.id); });
 }
 
 // A comparison dataset is swath-ready once its X/Y/Z are assigned.
@@ -247,8 +259,9 @@ function swathDirView(sd, key) {
     vars: (sd.results && sd.results[d.key]) || {},
     varCols: sd.varCols,
     // A10 4c-iii: one comparison block per overlaid dataset (aux, d2…), each
-    // with this direction's per-variable bins.
-    cmp: (sd.cmp || []).map(function(c) {
+    // with this direction's per-variable bins. Chip-hidden datasets (4c-iii-c)
+    // drop out of the chart from cache, no re-run.
+    cmp: (sd.cmp || []).filter(function(c) { return !swathDsHidden.has(c.dsId); }).map(function(c) {
       return {
         dsId: c.dsId,
         vars: c.results ? (c.results[d.key] || null) : null,
@@ -274,7 +287,8 @@ function renderSwathOutput(stat) {
   var keys = sd.directions.map(function(d) { return d.key; });
   if (!sd.activeKey || keys.indexOf(sd.activeKey) < 0) sd.activeKey = keys[0];
 
-  var cmpList = sd.cmp || [];
+  // Chip-hidden comparison datasets (4c-iii-c) drop their notes too.
+  var cmpList = (sd.cmp || []).filter(function(c) { return !swathDsHidden.has(c.dsId); });
   var html = workerErrNote(sd);
   cmpList.forEach(function(c) {
     html += workerErrNote({ filterErrors: c.filterErrors, calcolErrors: c.calcolErrors }, dsLabel(c.dsId));
@@ -406,6 +420,11 @@ function renderSwathConfig(data) {
     '</div>' +
     '<div class="swath-sidebar-section--grow" data-sb="vars">' +
       '<div class="swath-sidebar-title">Variables</div>' +
+      // Dataset chips (progressive disclosure) \u2014 only once a second comparison
+      // dataset joins (3+ total), so the common model+aux case stays uncluttered.
+      '<div id="swathDatasetsSection" style="display:none;margin-bottom:0.4rem">' +
+        '<div class="stats-ds-chips" id="swathDatasetChips"></div>' +
+      '</div>' +
       '<input type="text" class="swath-search" id="swathVarSearch" placeholder="search\u2026" autocomplete="off" spellcheck="false">' +
       '<div class="swath-var-btns">' +
         '<button id="swathVarAll">All</button>' +
@@ -456,6 +475,20 @@ function renderSwathConfig(data) {
     document.querySelectorAll('#swathVarList .swath-var-item').forEach(function(item) {
       if (item.style.display !== 'none') item.querySelector('input[type="checkbox"]').checked = false;
     });
+  });
+
+  // Dataset chips (4c-iii-c) — toggle a comparison dataset's sidebar rows and
+  // its chart series; re-renders from cache (no re-run needed). Marks stale only
+  // if the toggle reveals a dataset not yet in the last result.
+  var $swathDsChips = document.getElementById('swathDatasetChips');
+  if ($swathDsChips) $swathDsChips.addEventListener('click', function(e) {
+    var b = e.target.closest('[data-ds-chip]');
+    if (!b) return;
+    var id = b.dataset.dsChip;
+    if (swathDsHidden.has(id)) swathDsHidden.delete(id);
+    else swathDsHidden.add(id);
+    renderSwathAuxVars();
+    if (lastSwathData) renderSwathOutput();
   });
 
   // Generate button
@@ -578,6 +611,26 @@ function renderSwathConfig(data) {
   renderSwathAuxVars();
 }
 
+// A10 4c-iii-c: render the dataset show/hide chips. Progressive disclosure —
+// the section appears only once a second comparison dataset joins (3+ total),
+// so the common model+aux case stays uncluttered. The model is a static
+// (non-toggleable) baseline chip; each comparison dataset is a toggle.
+function renderSwathDatasetChips() {
+  var section = document.getElementById('swathDatasetsSection');
+  if (!section) return;
+  var allCmp = swathCmpDatasets();
+  if (allCmp.length < 2) { section.style.display = 'none'; return; }
+  var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the model (primary) series">Model</span>';
+  allCmp.forEach(function(ds) {
+    var off = swathDsHidden.has(ds.id);
+    chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) +
+      '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) +
+      '">' + esc(dsLabel(ds.id)) + '</button>';
+  });
+  document.getElementById('swathDatasetChips').innerHTML = chips;
+  section.style.display = '';
+}
+
 // Build/refresh the aux variable rows inside the swath sidebar. Safe to call
 // anytime (no-op when the sidebar isn't built). Checkbox/unit state is keyed
 // by variable name and preserved across rebuilds; a pending project restore
@@ -599,8 +652,9 @@ function renderSwathAuxVars() {
     if (cb.checked && cb.dataset.name) prevChecked[dsId + ':' + cb.dataset.name] = true;
   });
 
-  var cmpDatasets = swathCmpDatasets();
-  if (cmpDatasets.length === 0) { wrap.innerHTML = ''; return; }
+  renderSwathDatasetChips();
+  var cmpDatasets = swathShownCmpDatasets();
+  if (swathCmpDatasets().length === 0) { wrap.innerHTML = ''; return; }
   catEnsureSeeded();
 
   // A pending project restore applies to aux only (persistence covers the
@@ -746,7 +800,7 @@ function runSwath() {
   // one swath worker each, resolving its own weight (the declustering-stale
   // case soft-fails into a per-dataset error rather than launching a worker).
   var cmpRuns = [];
-  swathCmpDatasets().forEach(function(ds) {
+  swathShownCmpDatasets().forEach(function(ds) {
     if (!swathCmpReady(ds)) return;
     var sel = [];
     document.querySelectorAll('#swathVarList input[type="checkbox"][data-aux][data-ds="' + ds.id + '"]:checked').forEach(function(cb) {
