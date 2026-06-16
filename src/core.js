@@ -414,19 +414,23 @@ function catSetRole(ds, role, name) {
 }
 
 // ── Pairing as property membership (legacy aux→model API over properties) ──
-// catPair: the model member of an aux column's property (the "hub" it shows as)
-function catPair(auxName) {
-  const rec = catVarPeek('aux', auxName);
+// catModelMember: the model column grouped with (ds,name) — the dataset-generic
+// primitive (A10 4c). catPair is the aux-only legacy alias.
+function catModelMember(ds, name) {
+  const rec = catVarPeek(ds, name);
   if (!rec) return null;
   const m = rec.members.find(function(x) { return x.ds === 'model'; });
   return m ? m.col : null;
 }
-// Aux columns sharing a model column's property (reverse lookup)
-function catPairsRev(modelName) {
+function catPair(auxName) { return catModelMember('aux', auxName); }
+// Members of a model column's property in a given dataset (default aux)
+function catGroupMembers(modelName, dsId) {
+  dsId = dsId || 'aux';
   const rec = catVarPeek('model', modelName);
   if (!rec) return [];
-  return rec.members.filter(function(x) { return x.ds === 'aux'; }).map(function(x) { return x.col; });
+  return rec.members.filter(function(x) { return x.ds === dsId; }).map(function(x) { return x.col; });
 }
+function catPairsRev(modelName) { return catGroupMembers(modelName, 'aux'); }
 // Set/clear an aux column's pairing. modelName → join that model's property;
 // falsy → split into its own property (pinned so re-seeding won't re-merge).
 function catSetPair(auxName, modelName) {
@@ -443,14 +447,17 @@ function catSetPair(auxName, modelName) {
   }
 }
 
-// Idempotent name-grouping seed — the ONE place properties group by name, so
-// explicit pairs (multi-member) and splits (split flag) are never re-merged.
-// Tentative singletons (incl. display-only ones from migration) merge into the
-// same-named model-bearing property, carrying any display they hold.
-function catSeedPairs(auxNames, modelNames) {
+// Idempotent name-grouping seed for one dataset (dsId, default 'aux') against
+// the model — the ONE place properties group by name, so explicit pairs
+// (multi-member) and splits (split flag) are never re-merged. Tentative
+// singletons (incl. display-only ones from migration) merge into the same-named
+// model-bearing property, carrying any display they hold. (A10 4c: dataset-
+// generic so every comparison dataset groups with the model, not just aux.)
+function catSeedPairs(names, modelNames, dsId) {
+  dsId = dsId || 'aux';
   for (const n of modelNames) catPropIdFor('model', n, true);
-  for (const an of auxNames) {
-    const id = catPropIdFor('aux', an, true);
+  for (const an of names) {
+    const id = catPropIdFor(dsId, an, true);
     const p = catalog.properties[id];
     if (p.split || p.members.length > 1) continue;     // explicit choice — leave
     const nn = _catNorm(an);
@@ -459,8 +466,10 @@ function catSeedPairs(auxNames, modelNames) {
       if (pid === id) continue;
       const q = catalog.properties[pid];
       if (_catNorm(q.name) !== nn) continue;
-      if (q.members.some(function(m) { return m.ds === 'aux'; })) continue;
-      targetId = pid; break;
+      if (q.members.some(function(m) { return m.ds === dsId; })) continue;
+      // prefer the model-bearing property (the canonical group) when several share the name
+      if (!targetId) targetId = pid;
+      if (q.members.some(function(m) { return m.ds === 'model'; })) { targetId = pid; break; }
     }
     if (!targetId) continue;
     const q = catalog.properties[targetId];
@@ -469,9 +478,9 @@ function catSeedPairs(auxNames, modelNames) {
     if (p.valueColors && !q.valueColors) q.valueColors = p.valueColors;
     if (p.valueOrder && !q.valueOrder) q.valueOrder = p.valueOrder;
     if (p.sortMode && !q.sortMode) q.sortMode = p.sortMode;
-    q.members.push({ ds: 'aux', col: an });
+    q.members.push({ ds: dsId, col: an });
     delete catalog.properties[id];
-    _catPropIdx['aux:' + an] = targetId;
+    _catPropIdx[dsId + ':' + an] = targetId;
   }
 }
 
@@ -513,12 +522,18 @@ function getCategoryColor(colName, value, fallbackIdx) {
 // callable from any renderer that needs pairs (aux list builders run off
 // preflight data, before any aux analyze)
 function catEnsureSeeded() {
-  if (!auxPreflightData || !currentHeader) return;
+  if (!currentHeader) return;
   const modelNames = currentHeader.slice();
   for (const cm of (currentCalcolMeta || [])) modelNames.push(cm.name);
-  const auxNames = (auxPreflightData.header || []).slice();
-  for (const am of (auxCalcolMeta || [])) auxNames.push(am.name);
-  catSeedPairs(auxNames, modelNames);
+  // A10 4c: seed EVERY comparison dataset (not just aux) against the model, so
+  // d2/d3 columns group into the model's properties (shared color/unit, Δ%).
+  for (let i = 0; i < datasets.length; i++) {
+    const ds = datasets[i];
+    if (ds.id === 'model' || !ds.preflight) continue;
+    const names = (ds.preflight.header || []).slice();
+    for (const am of (ds.calcolMeta || [])) names.push(am.name);
+    catSeedPairs(names, modelNames, ds.id);
+  }
 }
 
 // All per-variable unit selects (stats sidebar, swath, GT) are views of the
