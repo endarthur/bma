@@ -521,6 +521,69 @@ instance tabs are rebuilt in `displayResults` rather than restored via the
 layout (persisting them would also keep the dock arrangement, not just re-add
 the tab) — fold into the 4e-c persistence slice.
 
+### Cloneable analysis panels — design (2026-06-16, Categories as the proof)
+
+The dataset config panels are already cloneable (phase 1g, `#panelAux` clone +
+`auxQ(root)` + render fns parameterized by `(ds, root)`). The analysis panels
+reuse that exact playbook. **Categories goes first** — simplest data model (no
+worker fan-out; the categorical data comes from the model analysis) and the
+smallest per-instance state.
+
+**Per-instance vs shared state (the key split).**
+
+- *Shared* (one source, every instance reflects it): `_catData` (the model's
+  categorical analysis) and the **property catalog** — value colors, sort mode,
+  custom order, units are per-property attributes, so editing them in one
+  instance correctly shows in any instance focused on the same column. No
+  conflict (different focused columns = different properties).
+- *Per-instance*: `focusedCol`, `dsHidden` (which comparison datasets this panel
+  overlays), `chartShowAll` (top-20 vs all), and the value/column search text.
+  These are exactly the `panelState.categories` fields (4e-a) plus
+  `catChartShowAll` — small, self-contained.
+
+**Scoping approach (mirror 1e/1f/1g-b).** Clone `#panelCategories`, strip ids,
+resolve DOM via `catQ(sel, root)` keyed by `data-cat` attrs; parameterize every
+render fn (`renderCategoriesTab`/`renderCatSidebar`/`renderCatMain`/
+`renderCatDatasetChips`/`renderCatToolbar`/`renderCatBarChart`/
+`renderCatValueTable` + the color picker + event wiring) by `(inst, root)`. The
+singleton legacy panel is **instance #0** with `root = #panelCategories` and ids
+intact, so it stays bit-identical until clones exist.
+
+**Instance state.** `panelState.categories` generalizes from one object to a
+per-instance record keyed by the rails tab id (singleton id `categories`; clones
+`categories#2`, `categories#3`…). `_catData` stays shared/global.
+
+**Spawn + Duplicate UX.** The `[+]` launcher (4e-c-1) gains "New Categories
+panel" (fresh instance, default state); tab right-click gains **Duplicate**
+(clone this instance's state into a new tab). Each clone is a fresh
+`renderPanel` build for its id (like `wsBuildDatasetPanel`).
+
+**Scope-derived titles.** Each instance's tab title reflects its scope — e.g.
+`Categories: LITO` (focused column) or, with overlays, `Categories ▸ model+aux`.
+Set via `updateTab` on focus/scope change (the dataset panels' `Import: <prefix>`
+precedent).
+
+**Persistence.** Analysis-panel instances + their state serialize into the
+`layout` (tab arrangement) + `panels` (per-instance state) keys; this is where
+the `wsSanitizeLayout` "un-drop instance tab ids" work lands, generalized from
+d2+ to any instance id.
+
+**Slice plan** (each committable, smokes green):
+
+- **4e-c-2** — inert DOM-root seam: `catPanelRoot(inst)` + `catQ(sel, root)`;
+  `data-cat` attrs added (additive, ids kept); render fns take `(inst, root)`;
+  single instance, bit-identical. (the big mechanical slice — ~13 `$cat*` refs ×
+  ~60 sites.)
+- **4e-c-3** — per-instance state: `panelState.categories` keyed by instance;
+  legacy singleton = the default instance; `catChartShowAll` joins it.
+- **4e-c-4** — clone + spawn: `renderPanel` builds a Categories clone for
+  `categories#N`; Duplicate + `[+]` "New Categories"; scope-derived titles.
+- **4e-c-5** — persist instances (layout + panels) + restore; generalize
+  `wsSanitizeLayout`.
+- Then **repeat for Swath** (adds per-instance worker fan-out —
+  `swathCmpWorkers[]` moves onto the instance) **and Statistics** (most state is
+  already in `panelState`/globals; biggest render surface).
+
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
 Phase 1 is being executed as fine slices (B1/C1a playbook — de-risk first):
