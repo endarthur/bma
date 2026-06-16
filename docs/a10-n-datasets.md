@@ -481,18 +481,28 @@ Sliced B1/C1a-style; `4e-a` + `4e-b` landed (`d3d29cb..5364059`):
     config + selection until consumed — an autosave mid-restore drops nothing.
     The 3 clear/new-file reset sites also reset `refDs` + swath/categories chips
     + the two new pending vars.
-  - Smoke: `experiments/4e-persist-smoke.js` — full persist → reload →
-    re-supply files → re-analyze round-trip (32 asserts incl. mid-restore
-    loss-safety).
+  - **4e-b-iii (ba7137b)** — pack round-trip. `runPack` bundles the d2+ files
+    (one "include comparison data" checkbox now governs aux + d2+; deduped by
+    name against the model/aux/dh-trio entries — the reader keys each instance
+    to its own `fileName`, so one archive copy suffices). `tryPackedProject`
+    extracts each `project.datasets` file by name into a `{id: File}` map;
+    `displayResults` auto-loads them into the freshly-recreated instances via
+    `loadAuxFile` (the loose/autosave path leaves the map null and the user
+    re-drops). The persistence story is now complete — instances + panel state
+    survive **both** a reload and a shared pack.
+  - Smokes: `experiments/4e-persist-smoke.js` (loose persist→reload→re-supply→
+    re-analyze, 32 asserts incl. mid-restore loss-safety) +
+    `experiments/4e-pack-smoke.js` (pack→reload→drop archive→instance+file+
+    chips+reference+selection all restored).
 
-**Remaining in 4e:** `4e-b-iii` (pack round-trip — the `.bma` archive should
-include the d2+ files and the reader auto-load them, like `auxToLoad`; today
-only the loose/autosave per-panel re-drop path restores instances) and `4e-c`
-(the original 4e scope: the tab-strip `[+]`/Duplicate cloneable **analysis**
-panels + scope-derived titles — `panelState` is the per-instance state object
-they will hang off, but the analysis panels are still singleton DOM). Note for
-4e-c: `wsSanitizeLayout` still drops instance tab ids from the `layout` key, so
-instance tabs are rebuilt in `displayResults` rather than via layout restore.
+**Remaining in 4e:** `4e-c` only — the original 4e scope: the tab-strip
+`[+]`/Duplicate cloneable **analysis** panels + scope-derived titles.
+`panelState` is the per-instance state object they will hang off, but the
+analysis panels (Statistics/Swath/Categories) are still singleton DOM — the
+real architectural lift. Note for 4e-c: `wsSanitizeLayout` still drops instance
+tab ids from the `layout` key, so instance tabs are rebuilt in `displayResults`
+rather than restored via the layout (persisting them would also keep the dock
+arrangement, not just re-add the tab).
 
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
