@@ -54,51 +54,70 @@ function tdQuantileFromCentroids(centroids, totalCount, q) {
   return centroids[centroids.length - 1][0];
 }
 
-// Aux numeric columns available for comparison, each with its paired
-// primary column (catalog pairing, seeded by name) when one exists.
-// Selection defaults to "paired only" until the user materializes a choice.
-function getStatsAuxCols() {
-  if (!auxCompleteData || !auxCompleteData.stats) return [];
+// A10 4c-ii: comparison datasets the stats table iterates — every non-model
+// dataset that has finished analysis (aux, then d2, d3…), in registry order.
+// The model is datasets[0]; aux is simply the first comparison.
+function statsCmpDatasets() {
+  var out = [];
+  for (var i = 1; i < datasets.length; i++) {
+    var d = datasets[i];
+    if (d && d.complete && d.complete.stats) out.push(d);
+  }
+  return out;
+}
+
+// Numeric columns of a comparison dataset, each grouped to the model column it
+// shares a property with (catModelMember → matchCi into the model stats) when
+// one exists. Selection defaults to "paired only" until the user materializes
+// a choice. Generalizes the old aux-only getStatsAuxCols.
+function getStatsCmpCols(ds) {
+  if (!ds || !ds.complete || !ds.complete.stats) return [];
   catEnsureSeeded();
   var primaryByName = {};
   for (var i = 0; i < _statsNumCols.length; i++) {
     var ci = _statsNumCols[i];
     primaryByName[_statsHeader[ci]] = ci;
   }
+  var st = ds.complete.stats, hdr = ds.complete.header;
   var out = [];
-  Object.keys(auxCompleteData.stats).map(Number).sort(function(a, b) { return a - b; }).forEach(function(ai) {
-    var name = auxCompleteData.header[ai];
-    var p = catPair(name);
+  Object.keys(st).map(Number).sort(function(a, b) { return a - b; }).forEach(function(ai) {
+    var name = hdr[ai];
+    var p = catModelMember(ds.id, name);   // the model column in this column's property
     var m = p !== null ? primaryByName[p] : undefined;
     out.push({ idx: ai, name: name, matchCi: m !== undefined ? m : null });
   });
   return out;
 }
 
-function isStatsAuxSelected(auxCol) {
-  if (statsAuxSelected === null) return auxCol.matchCi !== null;
-  return statsAuxSelected.has(auxCol.idx);
+function isStatsCmpSelected(ds, col) {
+  var sel = statsCmpSel[ds.id];
+  if (sel == null) return col.matchCi !== null;   // default: paired only
+  return sel.has(col.idx);
 }
 
-function materializeStatsAuxSelected() {
-  if (statsAuxSelected !== null) return;
-  statsAuxSelected = new Set();
-  getStatsAuxCols().forEach(function(c) { if (c.matchCi !== null) statsAuxSelected.add(c.idx); });
+function materializeStatsCmpSel(ds) {
+  if (statsCmpSel[ds.id]) return;
+  var s = new Set();
+  getStatsCmpCols(ds).forEach(function(c) { if (c.matchCi !== null) s.add(c.idx); });
+  statsCmpSel[ds.id] = s;
 }
 
 // Convert a project restore (variable names) to aux column indices — callable
-// only once the aux analysis has produced a header
+// only once the aux analysis has produced a header. (Persistence covers the
+// model + aux today; d2+ stats selection is ephemeral until A10 phase 6.)
 function applyStatsAuxRestore() {
   if (!pendingStatsAuxRestore || !auxCompleteData) return;
   var byName = {};
   for (var i = 0; i < auxCompleteData.header.length; i++) byName[auxCompleteData.header[i]] = i;
   if (pendingStatsAuxRestore.selected) {
-    statsAuxSelected = new Set();
-    pendingStatsAuxRestore.selected.forEach(function(n) { if (byName[n] !== undefined) statsAuxSelected.add(byName[n]); });
+    var s = new Set();
+    pendingStatsAuxRestore.selected.forEach(function(n) { if (byName[n] !== undefined) s.add(byName[n]); });
+    statsCmpSel.aux = s;
   }
   if (pendingStatsAuxRestore.cdf) {
-    statsCdfAuxSelected = new Set();
-    pendingStatsAuxRestore.cdf.forEach(function(n) { if (byName[n] !== undefined) statsCdfAuxSelected.add(byName[n]); });
+    var c = new Set();
+    pendingStatsAuxRestore.cdf.forEach(function(n) { if (byName[n] !== undefined) c.add(byName[n]); });
+    statsCdfCmpSel.aux = c;
   }
   pendingStatsAuxRestore = null;
 }
@@ -279,23 +298,24 @@ function renderStatsSidebar() {
     html += '</div>';
   }
 
-  // Aux variables (when the aux dataset has been analyzed)
-  var auxCols = getStatsAuxCols();
-  if (auxCols.length > 0) {
-    var auxLabel = auxPrefix || 'aux';
-    html += '<div class="stats-aux-divider">' + esc(auxLabel) + ': ' + esc(auxFile ? auxFile.name : '') + '</div>';
-    for (var k = 0; k < auxCols.length; k++) {
-      var ac = auxCols[k];
-      var dispName = auxLabel + ':' + ac.name;
+  // Comparison-dataset variables (each analyzed non-model dataset: aux, d2…)
+  statsCmpDatasets().forEach(function(ds) {
+    var cols = getStatsCmpCols(ds);
+    if (cols.length === 0) return;
+    var label = dsLabel(ds.id);
+    html += '<div class="stats-aux-divider">' + esc(label) + ': ' + esc(ds.file ? ds.file.name : '') + '</div>';
+    for (var k = 0; k < cols.length; k++) {
+      var ac = cols[k];
+      var dispName = label + ':' + ac.name;
       if (search && !fuzzyMatch(search, dispName.toLowerCase())) continue;
-      var auxSel = isStatsAuxSelected(ac);
-      html += '<div class="stats-var-item stats-var-item--aux' + (auxSel ? '' : ' unchecked') + '" data-aux-col="' + ac.idx + '">';
-      html += '<input type="checkbox"' + (auxSel ? ' checked' : '') + ' data-aux-col="' + ac.idx + '">';
+      var cmpSel = isStatsCmpSelected(ds, ac);
+      html += '<div class="stats-var-item stats-var-item--aux' + (cmpSel ? '' : ' unchecked') + '" data-cmp-ds="' + esc(ds.id) + '" data-cmp-col="' + ac.idx + '">';
+      html += '<input type="checkbox"' + (cmpSel ? ' checked' : '') + ' data-cmp-ds="' + esc(ds.id) + '" data-cmp-col="' + ac.idx + '">';
       html += '<span class="var-name">' + esc(dispName) + '</span>';
-      html += statsEmptyTag('aux', ac.idx) + statsMixedTag('aux', ac.idx);
+      html += statsEmptyTag(ds.id, ac.idx) + statsMixedTag(ds.id, ac.idx);
       html += '</div>';
     }
-  }
+  });
   document.getElementById('statsVarList').innerHTML = html;
 }
 
@@ -312,45 +332,57 @@ function renderStatsTable() {
     return statsSelectedVars === null || statsSelectedVars.has(ci);
   });
 
-  // Selected aux columns, paired to their same-named primary where possible
-  var auxSelectedCols = getStatsAuxCols().filter(isStatsAuxSelected);
-  var auxByMatch = {};
-  var auxUnmatched = [];
-  auxSelectedCols.forEach(function(ac) {
-    if (ac.matchCi !== null) (auxByMatch[ac.matchCi] = auxByMatch[ac.matchCi] || []).push(ac);
-    else auxUnmatched.push(ac);
+  // Selected comparison columns (across aux, d2…), grouped to their same-named
+  // model column where the property pairs them. cmpByMatch keeps registry order
+  // within a group (aux before d2…), cmpUnmatched holds property-less columns.
+  var cmpByMatch = {};
+  var cmpUnmatched = [];
+  var cmpDatasets = statsCmpDatasets();
+  cmpDatasets.forEach(function(ds) {
+    getStatsCmpCols(ds).forEach(function(col) {
+      if (!isStatsCmpSelected(ds, col)) return;
+      var member = { ds: ds, col: col };
+      if (col.matchCi !== null) (cmpByMatch[col.matchCi] = cmpByMatch[col.matchCi] || []).push(member);
+      else cmpUnmatched.push(member);
+    });
   });
-  var auxLabel = auxPrefix || 'aux';
+  var cmpCount = cmpUnmatched.length;
+  Object.keys(cmpByMatch).forEach(function(k) { cmpCount += cmpByMatch[k].length; });
 
-  function auxRowHtml(ac) {
-    var as = auxCompleteData.stats[ac.idx];
-    var aCdfActive = statsCdfAuxSelected.has(ac.idx);
+  function cmpRowHtml(member) {
+    var ds = member.ds, ac = member.col, label = dsLabel(ds.id);
+    var as = ds.complete.stats[ac.idx];
+    var cdfSet = statsCdfCmpSel[ds.id];
+    var aCdfActive = !!(cdfSet && cdfSet.has(ac.idx));
     var aNameClass = aCdfActive ? 'cdf-link cdf-active' : 'cdf-link';
-    var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-aux-col="' + ac.idx + '" href="#">' + esc(auxLabel + ':' + ac.name) + '</a>' + statsEmptyTag('aux', ac.idx) + statsMixedTag('aux', ac.idx) + '</td>';
+    var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-cmp-ds="' + esc(ds.id) + '" data-cmp-col="' + ac.idx + '" href="#">' + esc(label + ':' + ac.name) + '</a>' + statsEmptyTag(ds.id, ac.idx) + statsMixedTag(ds.id, ac.idx) + '</td>';
     for (var m of metrics) rowHtml += '<td>' + formatStatValue(getStatValue(as, m), m) + '</td>';
-    return rowHtml + '</tr>' + deltaRowHtml(ac);
+    return rowHtml + '</tr>' + deltaRowHtml(member);
   }
 
-  // Δ% row: model vs aux, relative to aux (the reference dataset) — the
-  // mean-difference % is the headline acceptance statistic in validation
-  // comparison tables
-  function deltaRowHtml(ac) {
+  // Δ% row: model vs the comparison dataset, relative to that dataset (the
+  // reference) — the mean-difference % is the headline acceptance statistic in
+  // validation comparison tables
+  function deltaRowHtml(member) {
+    var ds = member.ds, ac = member.col;
     if (ac.matchCi === null || !stats[ac.matchCi]) return '';
     var ps = stats[ac.matchCi];
-    var as = auxCompleteData.stats[ac.idx];
-    var tip = '(' + header[ac.matchCi] + ' − ' + auxLabel + ':' + ac.name + ') / ' + auxLabel + ':' + ac.name;
+    var as = ds.complete.stats[ac.idx];
+    var label = dsLabel(ds.id);
+    var tip = '(' + header[ac.matchCi] + ' − ' + label + ':' + ac.name + ') / ' + label + ':' + ac.name;
     var rowHtml = '<tr class="stats-delta-row"><td title="' + esc(tip) + '">Δ%</td>';
     for (var m of metrics) rowHtml += '<td>' + formatDeltaPct(getStatValue(ps, m), getStatValue(as, m), m) + '</td>';
     return rowHtml + '</tr>';
   }
 
-  if (visCols.length === 0 && auxSelectedCols.length === 0) {
+  if (visCols.length === 0 && cmpCount === 0) {
     $statsContent.innerHTML = '<div style="color:var(--fg-dim);padding:1rem;">No variables selected.</div>';
     return;
   }
 
-  // A9 F3: per-row filter/calcol errors from the model and aux analyses
-  var html = workerErrNote(lastCompleteData) + workerErrNote(auxCompleteData, auxLabel);
+  // A9 F3: per-row filter/calcol errors from the model and comparison analyses
+  var html = workerErrNote(lastCompleteData);
+  cmpDatasets.forEach(function(ds) { html += workerErrNote(ds.complete, dsLabel(ds.id)); });
   html += '<table class="stats"><thead><tr><th>Column</th>';
   for (var m of metrics) html += '<th>' + esc(m.label) + '</th>';
   html += '</tr></thead><tbody>';
@@ -370,20 +402,20 @@ function renderStatsTable() {
       html += '<td>' + formatStatValue(val, m) + '</td>';
     }
     html += '</tr>';
-    // Same-named aux rows directly beneath their primary
-    if (auxByMatch[ci]) {
-      for (var am = 0; am < auxByMatch[ci].length; am++) html += auxRowHtml(auxByMatch[ci][am]);
+    // Same-named comparison rows directly beneath their primary
+    if (cmpByMatch[ci]) {
+      for (var am = 0; am < cmpByMatch[ci].length; am++) html += cmpRowHtml(cmpByMatch[ci][am]);
     }
   }
-  // Matched aux rows whose primary is deselected still render, at the end
+  // Matched comparison rows whose primary is deselected still render, at the end
   var visSet = new Set(visCols);
-  Object.keys(auxByMatch).forEach(function(ciKey) {
+  Object.keys(cmpByMatch).forEach(function(ciKey) {
     if (!visSet.has(parseInt(ciKey))) {
-      auxByMatch[ciKey].forEach(function(ac) { html += auxRowHtml(ac); });
+      cmpByMatch[ciKey].forEach(function(member) { html += cmpRowHtml(member); });
     }
   });
-  // Aux variables with no primary counterpart
-  for (var au = 0; au < auxUnmatched.length; au++) html += auxRowHtml(auxUnmatched[au]);
+  // Comparison variables with no model counterpart
+  for (var au = 0; au < cmpUnmatched.length; au++) html += cmpRowHtml(cmpUnmatched[au]);
 
   html += '</tbody></table>';
   $statsContent.innerHTML = html;
@@ -393,7 +425,10 @@ function renderStatsCdfPanel() {
   var chart = document.getElementById('statsCdfChart');
   if (!chart) return;
 
-  if (statsCdfSelected.size === 0 && statsCdfAuxSelected.size === 0) {
+  var anyCmpCdf = statsCmpDatasets().some(function(ds) {
+    var s = statsCdfCmpSel[ds.id]; return s && s.size > 0;
+  });
+  if (statsCdfSelected.size === 0 && !anyCmpCdf) {
     chart.innerHTML = '<div class="stats-cdf-hint">Click column names to add CDF curves</div>';
     return;
   }
@@ -413,17 +448,19 @@ function renderStatsCdfPanel() {
       skipped.push(header[ci]);
     }
   });
-  if (auxCompleteData && auxCompleteData.stats) {
-    var auxLabel = auxPrefix || 'aux';
-    statsCdfAuxSelected.forEach(function(ai) {
-      var as = auxCompleteData.stats[ai];
+  statsCmpDatasets().forEach(function(ds) {
+    var cdfSet = statsCdfCmpSel[ds.id];
+    if (!cdfSet || cdfSet.size === 0) return;
+    var label = dsLabel(ds.id), cs = ds.complete.stats, ch = ds.complete.header;
+    cdfSet.forEach(function(ai) {
+      var as = cs[ai];
       if (as && as.centroids && as.centroids.length > 0) {
-        entries.push([auxLabel + ':' + auxCompleteData.header[ai], as, true]); // [2]=isAux → dashed
+        entries.push([label + ':' + ch[ai], as, true]); // [2]=comparison → dashed
       } else {
-        skipped.push(auxLabel + ':' + auxCompleteData.header[ai]);
+        skipped.push(label + ':' + ch[ai]);
       }
     });
-  }
+  });
 
   var note = skipped.length > 0
     ? '<div class="warn-note">No data for ' + skipped.map(esc).join(', ') +
@@ -917,16 +954,19 @@ function wireStatsEventsOnce() {
 
   // --- Variable checkboxes (delegation on container — innerHTML changes) ---
   document.getElementById('statsVarList').addEventListener('change', function(e) {
-    var acb = e.target.closest('input[data-aux-col]');
+    var acb = e.target.closest('input[data-cmp-col]');
     if (acb) {
-      materializeStatsAuxSelected();
-      var aIdx = parseInt(acb.dataset.auxCol);
-      if (acb.checked) statsAuxSelected.add(aIdx);
-      else statsAuxSelected.delete(aIdx);
-      var aItem = acb.closest('.stats-var-item');
-      if (aItem) aItem.classList.toggle('unchecked', !acb.checked);
-      renderStatsTable();
-      autoSaveProject();
+      var cds = dsById(acb.dataset.cmpDs);
+      if (cds) {
+        materializeStatsCmpSel(cds);
+        var aIdx = parseInt(acb.dataset.cmpCol);
+        if (acb.checked) statsCmpSel[cds.id].add(aIdx);
+        else statsCmpSel[cds.id].delete(aIdx);
+        var aItem = acb.closest('.stats-var-item');
+        if (aItem) aItem.classList.toggle('unchecked', !acb.checked);
+        renderStatsTable();
+        autoSaveProject();
+      }
       return;
     }
     var cb = e.target.closest('input[data-col]');
@@ -949,9 +989,9 @@ function wireStatsEventsOnce() {
     document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-col]').forEach(function(el) {
       statsSelectedVars.add(parseInt(el.dataset.col));
     });
-    materializeStatsAuxSelected();
-    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-aux-col]').forEach(function(el) {
-      statsAuxSelected.add(parseInt(el.dataset.auxCol));
+    statsCmpDatasets().forEach(materializeStatsCmpSel);
+    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-cmp-col]').forEach(function(el) {
+      statsCmpSel[el.dataset.cmpDs].add(parseInt(el.dataset.cmpCol));
     });
     renderStatsSidebar();
     renderStatsTable();
@@ -962,9 +1002,9 @@ function wireStatsEventsOnce() {
     document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-col]').forEach(function(el) {
       statsSelectedVars.delete(parseInt(el.dataset.col));
     });
-    materializeStatsAuxSelected();
-    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-aux-col]').forEach(function(el) {
-      statsAuxSelected.delete(parseInt(el.dataset.auxCol));
+    statsCmpDatasets().forEach(materializeStatsCmpSel);
+    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-cmp-col]').forEach(function(el) {
+      statsCmpSel[el.dataset.cmpDs].delete(parseInt(el.dataset.cmpCol));
     });
     renderStatsSidebar();
     renderStatsTable();
@@ -983,10 +1023,11 @@ function wireStatsEventsOnce() {
     var link = e.target.closest('.cdf-link');
     if (!link) return;
     e.preventDefault();
-    if (link.dataset.auxCol !== undefined) {
-      var aCol = parseInt(link.dataset.auxCol);
-      if (statsCdfAuxSelected.has(aCol)) statsCdfAuxSelected.delete(aCol);
-      else statsCdfAuxSelected.add(aCol);
+    if (link.dataset.cmpCol !== undefined) {
+      var dsId = link.dataset.cmpDs, aCol = parseInt(link.dataset.cmpCol);
+      var set = statsCdfCmpSel[dsId] || (statsCdfCmpSel[dsId] = new Set());
+      if (set.has(aCol)) set.delete(aCol);
+      else set.add(aCol);
     } else {
       var col = parseInt(link.dataset.col);
       if (statsCdfSelected.has(col)) statsCdfSelected.delete(col);

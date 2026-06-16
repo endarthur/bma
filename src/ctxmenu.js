@@ -57,11 +57,21 @@ function ctxResolveVariable(e) {
     if (header[ai] === undefined) return null;
     return { ds: 'aux', name: header[ai], kind: types[ai] === 'numeric' ? 'num' : 'cat', idx: ai };
   }
+  // A10 4c-ii: any comparison dataset's stats column (aux, d2…), resolved from
+  // its completed analysis (what the stats table renders from).
+  function cmpVar(dsId, ai) {
+    var ds = dsById(dsId);
+    if (!ds || !ds.complete) return null;
+    var name = ds.complete.header[ai];
+    if (name === undefined) return null;
+    var kind = (ds.complete.colTypes && ds.complete.colTypes[ai] === 'numeric') ? 'num' : 'cat';
+    return { ds: dsId, name: name, kind: kind, idx: ai };
+  }
 
-  // Statistics sidebar + table (model and aux entries carry data attrs)
-  var sEl = t.closest && t.closest('#panelStatistics [data-aux-col], #panelStatistics [data-col]');
+  // Statistics sidebar + table (model and comparison entries carry data attrs)
+  var sEl = t.closest && t.closest('#panelStatistics [data-cmp-col], #panelStatistics [data-col]');
   if (sEl) {
-    if (sEl.dataset.auxCol !== undefined) return auxVar(parseInt(sEl.dataset.auxCol));
+    if (sEl.dataset.cmpCol !== undefined) return cmpVar(sEl.dataset.cmpDs, parseInt(sEl.dataset.cmpCol));
     return modelVar(parseInt(sEl.dataset.col));
   }
 

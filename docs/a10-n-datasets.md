@@ -288,6 +288,30 @@ inherits its *paired model* var's color/unit). Target: display lives on the
   4c. Per-member display overrides are gone (members share the property's
   color/unit) — the one intended behavior change.
 
+### Phase 4c slicing (per-panel selection)
+
+- **4c-i ✅ (5b84618)** — seeding generalized to all datasets; `catModelMember`/
+  `catGroupMembers` primitives (data-layer foundation).
+- **4c-ii ✅ — Statistics iterates datasets × properties.** The Statistics tab
+  dropped its hardcoded model+aux split. It now walks `statsCmpDatasets()` (every
+  non-model dataset with completed stats: aux, then d2, d3…) and `getStatsCmpCols(ds)`
+  (each column grouped to its model counterpart via `catModelMember(ds.id,…)`).
+  Selection is **per comparison dataset**, keyed by dataset id: `statsCmpSel`
+  (`{dsId: Set|null}`, null ⇒ paired-only default) and `statsCdfCmpSel`
+  (`{dsId: Set}`) replace the old single `statsAuxSelected`/`statsCdfAuxSelected`.
+  Sidebar sections, table rows (`stats-aux-row`), the **Δ% row** (now per
+  comparison member vs the model), and the CDF overlay all iterate the list. DOM
+  attrs moved `data-aux-col` → `data-cmp-ds`/`data-cmp-col` (context-menu var
+  resolver + smokes updated). Model+aux output is byte-identical
+  (`delta-row-smoke`); `a10-smoke` asserts a loaded d2 now renders its own
+  sidebar section, table rows, and Fe Δ% row. **Persistence** still covers
+  model + aux only (the existing `auxSelected`/`cdfAuxSelected` project keys,
+  now read off `statsCmpSel.aux`); d2+ stats selection is ephemeral until phase
+  6 owns the `datasets` key — consistent with d2 datasets themselves not yet
+  persisting. **Still TODO in 4c:** progressive-disclosure dataset **chips** at
+  3+ datasets (today every comparison dataset's section just stacks); Swath
+  (4c-iii) and Categories + the merge/rename/split popover (4c-iv).
+
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
 Phase 1 is being executed as fine slices (B1/C1a playbook — de-risk first):

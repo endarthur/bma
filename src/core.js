@@ -40,9 +40,12 @@ let auxView = 'preview';           // aux main-area view: 'preview' | 'topcut'
 let auxTopcut = null;              // top-cut analysis state: { varName, cap, values (sorted
                                    //   Float64Array)|null, prefixS, prefixSS, n, finite,
                                    //   fingerprint } — values NOT persisted (re-loaded on demand)
-let statsAuxSelected = null;       // Set of aux col indices shown in the stats table (null = defaults)
-let statsCdfAuxSelected = new Set(); // aux col indices with CDF curves
-let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes
+// A10 4c-ii: Statistics selection is per comparison dataset (aux, d2, d3…), not
+// a single aux. Maps keyed by dataset id; absent/null entry = that dataset's
+// default (paired-only). aux is just the first comparison dataset.
+let statsCmpSel = {};                // { dsId: Set<colIdx>|null } shown in the stats table
+let statsCdfCmpSel = {};             // { dsId: Set<colIdx> } with CDF curves
+let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes (aux-only; d2+ ephemeral until phase 6)
 
 // ─── A10 dataset registry (phase 0) ──────────────────────────────────────
 // The registry that replaces the model+aux singleton split. Phase 0 changes

@@ -735,8 +735,8 @@ function clearAux(ds, root) {
   ds.filter = null;
   ds.prefix = 'aux';
   ds.stale = false;
-  statsAuxSelected = null;
-  statsCdfAuxSelected = new Set();
+  delete statsCmpSel[ds.id];
+  delete statsCdfCmpSel[ds.id];
   ds.calcolCode = '';
   ds.calcolMeta = [];
   catSetRole(ds.id, 'weight', null);

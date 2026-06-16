@@ -394,10 +394,12 @@ function serializeProject() {
       cdfSelected: Array.from(statsCdfSelected),
       cdfScale: statsCdfScale,
       cdfMode: statsCdfMode,
-      auxSelected: (auxCompleteData && statsAuxSelected !== null)
-        ? Array.from(statsAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null,
-      cdfAuxSelected: (auxCompleteData && statsCdfAuxSelected.size > 0)
-        ? Array.from(statsCdfAuxSelected).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null
+      // Persistence covers model + aux today (A10 4c-ii); d2+ stats selection
+      // is ephemeral until phase 6 takes over the datasets key.
+      auxSelected: (auxCompleteData && statsCmpSel.aux != null)
+        ? Array.from(statsCmpSel.aux).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null,
+      cdfAuxSelected: (auxCompleteData && statsCdfCmpSel.aux && statsCdfCmpSel.aux.size > 0)
+        ? Array.from(statsCdfCmpSel.aux).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null
     },
     categories: {
       focusedCol: catFocusedCol !== null && currentHeader[catFocusedCol] ? currentHeader[catFocusedCol] : null
@@ -893,6 +895,8 @@ function clearProject() {
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
+  statsCmpSel = {};
+  statsCdfCmpSel = {};
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -1093,6 +1097,8 @@ async function handleFile(file, handle, skipRecents) {
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
+  statsCmpSel = {};
+  statsCdfCmpSel = {};
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
@@ -1265,6 +1271,8 @@ $backToPreflight.addEventListener('click', () => {
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
   statsCdfSelected = new Set();
+  statsCmpSel = {};
+  statsCdfCmpSel = {};
   statsCdfScale = 'linear';
   statsCdfMode = 'cdf';
   pendingStatsAuxRestore = null;
