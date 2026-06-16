@@ -333,6 +333,66 @@ function formatBytes(b) {
 
 function projectKey(f) { return 'bma:' + f.name + ':' + f.size; }
 
+// A10 phase 4e-b: serialize the comparison-dataset instances (d2, d3…) — same
+// config shape as the legacy `aux` block plus the stable id, which re-keys the
+// panel selection state on restore. aux itself keeps its own block. Only
+// file-backed instances are persisted (matched by name+size on reload, like
+// aux/drillholes); the analysis result is re-derived, never stored.
+function serializeComparisonDatasets() {
+  var out = [];
+  for (var i = 2; i < datasets.length; i++) {
+    var ds = datasets[i];
+    if (!ds.file) continue;
+    out.push({
+      id: ds.id,
+      fileName: ds.file.name,
+      fileSize: ds.file.size,
+      prefix: ds.prefix,
+      xyz: ds.preflight ? ds.preflight.xyz : null,
+      zipEntry: ds.preflight ? (ds.preflight.selectedZipEntry || null) : null,
+      filter: ds.filter ? ds.filter.expression : '',
+      calcolCode: ds.calcolCode,
+      calcolMeta: ds.calcolMeta,
+      // Declus params only — weights are recomputed, never stored
+      declus: (ds.declus && ds.declus.params) ? { params: ds.declus.params } : null,
+      topcut: (ds.topcut && ds.topcut.varName) ? { varName: ds.topcut.varName, cap: ds.topcut.cap, xlog: !!ds.topcut.xlog, useDeclus: !!ds.topcut.useDeclus } : null,
+      view: ds.view
+    });
+  }
+  return out;
+}
+
+// A10 phase 4e-b: serialize the cross-dataset panel state (4c chips, 4d Δ%
+// reference, table/CDF selection) uniformly across every comparison dataset
+// (aux + d2+). Column selection is stored by NAME (survives reordering and
+// matches the legacy auxSelected convention); datasets and the reference are
+// stored by id. A null cmpSel entry = "that dataset's default (paired only)",
+// so it is omitted; an explicit empty selection serializes as [].
+function serializePanelState() {
+  function selByName(map) {
+    var o = {};
+    Object.keys(map).forEach(function(dsId) {
+      var sel = map[dsId];
+      if (sel == null) return;                       // default — restore re-derives
+      var ds = dsById(dsId);
+      var hdr = ds && ds.complete && ds.complete.header;
+      if (!hdr) return;                              // not analyzed — nothing to map
+      o[dsId] = Array.from(sel).map(function(idx) { return hdr[idx]; }).filter(Boolean);
+    });
+    return o;
+  }
+  return {
+    statistics: {
+      cmpSel: selByName(panelState.statistics.cmpSel),
+      cdfCmpSel: selByName(panelState.statistics.cdfCmpSel),
+      dsHidden: Array.from(panelState.statistics.dsHidden),
+      refDs: panelState.statistics.refDs            // 4d per-panel reference (no global star), by id
+    },
+    swath: { dsHidden: Array.from(panelState.swath.dsHidden) },
+    categories: { dsHidden: Array.from(panelState.categories.dsHidden) }
+  };
+}
+
 function serializeProject() {
   return {
     _bma: 1,
@@ -522,7 +582,14 @@ function serializeProject() {
           return { values: checked, showTotal: hasTotal };
         })()
       };
-    })()
+    })(),
+    // A10 phase 4e-b: comparison datasets beyond aux (d2, d3…) and the
+    // cross-dataset panel selection/chip/reference state. aux keeps its own
+    // `aux` block + the legacy statsTab.auxSelected; these cover the instance
+    // datasets and unify the per-panel state (4c chips, 4d Δ% reference, d2+
+    // table/CDF selection) the panels left ephemeral until now.
+    datasets: serializeComparisonDatasets(),
+    panels: serializePanelState()
   };
 }
 
