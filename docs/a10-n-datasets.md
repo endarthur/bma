@@ -495,14 +495,31 @@ Sliced B1/C1a-style; `4e-a` + `4e-b` landed (`d3d29cb..5364059`):
     `experiments/4e-pack-smoke.js` (pack→reload→drop archive→instance+file+
     chips+reference+selection all restored).
 
-**Remaining in 4e:** `4e-c` only — the original 4e scope: the tab-strip
-`[+]`/Duplicate cloneable **analysis** panels + scope-derived titles.
-`panelState` is the per-instance state object they will hang off, but the
-analysis panels (Statistics/Swath/Categories) are still singleton DOM — the
-real architectural lift. Note for 4e-c: `wsSanitizeLayout` still drops instance
-tab ids from the `layout` key, so instance tabs are rebuilt in `displayResults`
-rather than restored via the layout (persisting them would also keep the dock
-arrangement, not just re-add the tab).
+**4e-c — started.**
+
+- **4e-c-0 (69032b2)** — re-vendored `@gcu/rails` `5a6c7ab → d065780` (the
+  commit that adds the opt-in `newTabButton`). Body verified byte-identical to
+  upstream; `rails.css` gained one rule (`.rails-newtab-btn`), synced into
+  styles.css + a BMA override mirroring the overflow button. Also pulls a
+  VS-Code-style tab-insert drop-zone refinement (half-width hit targets, thin
+  caret) — JS-only, no API change. Inert until the next slice enables the flag.
+- **4e-c-1 (e37a8ad)** — turned `newTabButton: true` on and handled
+  `strip:newtab`: the `[+]` at the end of each strip opens a launcher menu
+  (reopen any closed panel + Add point/drillhole dataset, via `wsMenuAction`),
+  anchored at the button; suppressed on the fixed tree rail. Smoke
+  `experiments/4e-newtab-smoke.js`.
+
+**Remaining in 4e — the big one:** cloneable **analysis** panels (Duplicate) +
+scope-derived titles. Statistics/Swath/Categories still render into singleton
+DOM by id reading singleton module state, so N side-by-side instances need the
+dataset-panel clone playbook: clone + strip ids, scope DOM via a per-instance
+root, parameterize each render fn by `(instance, root)`, and key `panelState`
+by instance. `panelState` (4e-a) is the per-instance state object they hang
+off. This is the real architectural lift — multi-slice; scope before starting.
+Note: `wsSanitizeLayout` still drops instance tab ids from the `layout` key, so
+instance tabs are rebuilt in `displayResults` rather than restored via the
+layout (persisting them would also keep the dock arrangement, not just re-add
+the tab) — fold into the 4e-c persistence slice.
 
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
