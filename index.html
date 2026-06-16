@@ -5812,7 +5812,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 18c59d6 — click to check for updates">18c59d6</div>
+<div class="build-badge" id="buildBadge" title="build ed9f3d7 — click to check for updates">ed9f3d7</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -21643,10 +21643,13 @@ function getSwathUnit(colIdx) {
 // Aux series color: explicit override → paired primary variable's EFFECTIVE
 // color, including its palette-by-position fallback (same hue + dashed reads
 // as "same variable, other dataset") → palette fallback.
-function getAuxSwathVarColor(baseName, fallbackIdx) {
-  var rec = catVarPeek('aux', baseName);
+// A10 4c-iii: dsId defaults to 'aux' (the single legacy comparison) but any
+// comparison dataset's series resolves color/unit the same way.
+function getAuxSwathVarColor(baseName, fallbackIdx, dsId) {
+  dsId = dsId || 'aux';
+  var rec = catVarPeek(dsId, baseName);
   if (rec && rec.color) return rec.color;
-  var p = catPair(baseName);
+  var p = catModelMember(dsId, baseName);
   if (p) {
     for (var i = 0; i < swathNumCols.length; i++) {
       if (swathNumCols[i].name === p) return getSwathVarColor(p, i);
@@ -21655,8 +21658,8 @@ function getAuxSwathVarColor(baseName, fallbackIdx) {
   return STATSCAT_PALETTE[fallbackIdx % STATSCAT_PALETTE.length];
 }
 
-function getAuxSwathUnit(auxColIdx, baseName) {
-  var idx = baseName ? catPropUnit('aux', baseName) : 0; // inherits the paired primary's unit
+function getAuxSwathUnit(auxColIdx, baseName, dsId) {
+  var idx = baseName ? catPropUnit(dsId || 'aux', baseName) : 0; // inherits the paired primary's unit
   var u = GRADE_UNITS[idx] || GRADE_UNITS[0];
   return { unitIdx: idx, symbol: u.symbol };
 }
@@ -21712,7 +21715,7 @@ function getSwathXAxisLabel(swathData) {
 }
 
 // Single-direction view over the multi-direction result cache \u2014 the shape
-// renderSwathCharts and friends consume (vars/auxVars/binWidth/axis/az/pl)
+// renderSwathCharts and friends consume (vars/cmp[]/binWidth/axis/az/pl)
 function swathDirView(sd, key) {
   var d = sd.directions[0];
   for (var i = 0; i < sd.directions.length; i++) {
@@ -21725,11 +21728,18 @@ function swathDirView(sd, key) {
     plunge: d.dir ? d.plunge : null,
     binWidth: d.binWidth,
     vars: (sd.results && sd.results[d.key]) || {},
-    auxVars: sd.auxResults ? (sd.auxResults[d.key] || null) : null,
     varCols: sd.varCols,
-    auxVarCols: sd.auxVarCols,
-    auxHeader: sd.auxHeader,
-    auxError: sd.auxError
+    // A10 4c-iii: one comparison block per overlaid dataset (aux, d2…), each
+    // with this direction's per-variable bins.
+    cmp: (sd.cmp || []).map(function(c) {
+      return {
+        dsId: c.dsId,
+        vars: c.results ? (c.results[d.key] || null) : null,
+        varCols: c.varCols,
+        header: c.header,
+        error: c.error
+      };
+    })
   };
 }
 
@@ -21747,12 +21757,18 @@ function renderSwathOutput(stat) {
   var keys = sd.directions.map(function(d) { return d.key; });
   if (!sd.activeKey || keys.indexOf(sd.activeKey) < 0) sd.activeKey = keys[0];
 
-  var html = workerErrNote(sd) +
-    workerErrNote({ filterErrors: sd.auxFilterErrors, calcolErrors: sd.auxCalcolErrors }, auxPrefix || 'aux');
-  if (sd.weightExcluded > 0 || sd.auxWeightExcluded > 0) {
+  var cmpList = sd.cmp || [];
+  var html = workerErrNote(sd);
+  cmpList.forEach(function(c) {
+    html += workerErrNote({ filterErrors: c.filterErrors, calcolErrors: c.calcolErrors }, dsLabel(c.dsId));
+  });
+  var anyCmpWeightExcl = cmpList.some(function(c) { return c.weightExcluded > 0; });
+  if (sd.weightExcluded > 0 || anyCmpWeightExcl) {
     var wParts = [];
     if (sd.weightExcluded > 0) wParts.push(sd.weightExcluded.toLocaleString() + ' model');
-    if (sd.auxWeightExcluded > 0) wParts.push(sd.auxWeightExcluded.toLocaleString() + ' ' + (auxPrefix || 'aux'));
+    cmpList.forEach(function(c) {
+      if (c.weightExcluded > 0) wParts.push(c.weightExcluded.toLocaleString() + ' ' + dsLabel(c.dsId));
+    });
     html += '<div class="warn-note">Rows excluded for invalid weight: ' + wParts.join(', ') + '.</div>';
   }
   if (sd.directions.length > 1) {
@@ -22242,15 +22258,27 @@ function runSwath() {
     if ($btn) $btn.disabled = false;
     // Keep the active output tab when the new run still has that direction
     var prevKey = lastSwathData && lastSwathData.activeKey;
+    // A10 4c-iii: comparison datasets ride as a list (one entry per overlaid
+    // dataset). Today only aux runs; the worker fan-out (4c-iii-b) appends d2+.
+    var cmp = [];
+    if (auxVarCols.length > 0 || out.auxError) {
+      cmp.push({
+        dsId: 'aux',
+        results: out.auxResults,
+        varCols: auxVarCols,
+        header: auxReady ? auxPreflightData.header.concat(auxCalcolMeta.map(function(m) { return m.name; })) : null,
+        error: out.auxError,
+        filterErrors: out.auxFilterErrors || null,
+        calcolErrors: out.auxCalcolErrors || null,
+        weightExcluded: out.auxWeightExcluded || 0
+      });
+    }
     lastSwathData = {
       directions: dcfg.dirs, mode: dcfg.mode, angles: dcfg.angles,
-      results: out.results, auxResults: out.auxResults,
-      varCols: varCols, auxVarCols: auxVarCols, elapsed: out.elapsed,
-      auxHeader: auxReady ? auxPreflightData.header.concat(auxCalcolMeta.map(function(m) { return m.name; })) : null,
-      auxError: out.auxError,
+      results: out.results, varCols: varCols, elapsed: out.elapsed,
+      cmp: cmp,
       filterErrors: out.filterErrors || null, calcolErrors: out.calcolErrors || null,
-      auxFilterErrors: out.auxFilterErrors || null, auxCalcolErrors: out.auxCalcolErrors || null,
-      weightExcluded: out.weightExcluded || 0, auxWeightExcluded: out.auxWeightExcluded || 0,
+      weightExcluded: out.weightExcluded || 0,
       activeKey: dcfg.dirs.some(function(d) { return d.key === prevKey; }) ? prevKey : dcfg.dirs[0].key
     };
     swathStale = false;
@@ -22265,7 +22293,7 @@ function runSwath() {
       });
     }
     scanBins(out.results);
-    scanBins(out.auxResults);
+    cmp.forEach(function(c) { scanBins(c.results); });
     wsTabBadge('swath', 'Swath', totalBins + ' bins');
     autoSaveProject();
   }
@@ -22457,9 +22485,9 @@ function renderSwathCharts(swathData, stat, $target) {
     return;
   }
   var varCols = swathData.varCols || [];
-  var auxVarCols = swathData.auxVarCols || [];
+  var cmp = swathData.cmp || [];
   var hasData = varCols.some(function(vi) { return swathData.vars[vi] && swathData.vars[vi].length > 0; }) ||
-    auxVarCols.some(function(vi) { return swathData.auxVars && swathData.auxVars[vi] && swathData.auxVars[vi].length > 0; });
+    cmp.some(function(c) { return c.vars && (c.varCols || []).some(function(vi) { return c.vars[vi] && c.vars[vi].length > 0; }); });
   if (!hasData) {
     $content.innerHTML = '<div class="swath-hint">No data in selected bins.</div>';
     return;
@@ -22489,34 +22517,40 @@ function renderSwathCharts(swathData, stat, $target) {
       scaleKey: name
     });
   }
-  if (swathData.auxVars) {
-    var primaryKeys = {};
-    varEntries.forEach(function(en) { primaryKeys[en.scaleKey] = true; });
-    var prefixLabel = auxPrefix || 'aux';
-    for (var ai = 0; ai < auxVarCols.length; ai++) {
-      var aIdx = auxVarCols[ai];
-      var aBins = (swathData.auxVars[aIdx] || []).filter(function(b) { return b.count > 0; }).sort(function(a, b) { return a.center - b.center; });
-      var baseName = (swathData.auxHeader && swathData.auxHeader[aIdx]) || 'Variable';
+  // Comparison series — one block per overlaid dataset (aux, d2…). A member
+  // sharing a property with a shown model variable rides that variable's Y axis
+  // and hue (dashed reads as "same variable, other dataset"); otherwise it gets
+  // its own scale keyed by '<dsId>:<name>'.
+  var primaryKeys = {};
+  varEntries.forEach(function(en) { primaryKeys[en.scaleKey] = true; });
+  cmp.forEach(function(c) {
+    if (!c.vars) return;
+    var prefixLabel = dsLabel(c.dsId);
+    var cVarCols = c.varCols || [];
+    for (var ai = 0; ai < cVarCols.length; ai++) {
+      var aIdx = cVarCols[ai];
+      var aBins = (c.vars[aIdx] || []).filter(function(b) { return b.count > 0; }).sort(function(a, b) { return a.center - b.center; });
+      var baseName = (c.header && c.header[aIdx]) || 'Variable';
       if (aBins.length === 0) { noData.push(prefixLabel + ':' + baseName); continue; }
       var aLines = buildSwathStatLines(aBins, stat);
-      // A paired aux variable shares its primary's Y axis (and color, dashed)
-      var aPair = catPair(baseName);
-      var aKey = aPair && primaryKeys[aPair] ? aPair : 'aux:' + baseName;
+      var aPair = catModelMember(c.dsId, baseName);
+      var aKey = aPair && primaryKeys[aPair] ? aPair : c.dsId + ':' + baseName;
       varEntries.push({
         colIdx: aIdx,
         isAux: true,
+        dsId: c.dsId,
         baseName: baseName,
         name: prefixLabel + ':' + baseName,
-        color: getAuxSwathVarColor(baseName, varEntries.length),
+        color: getAuxSwathVarColor(baseName, varEntries.length, c.dsId),
         bins: aBins,
         centerLine: aLines.centerLine,
         upperLine: aLines.upperLine,
         lowerLine: aLines.lowerLine,
-        unit: getAuxSwathUnit(aIdx, baseName),
+        unit: getAuxSwathUnit(aIdx, baseName, c.dsId),
         scaleKey: aKey
       });
     }
-  }
+  });
 
   if (varEntries.length === 0) {
     $content.innerHTML = '<div class="swath-hint">No data in selected bins.</div>';
@@ -22528,9 +22562,9 @@ function renderSwathCharts(swathData, stat, $target) {
     ? renderSwathSplitSvg(varEntries, swathData, stat, display)
     : renderSwathOverlaySvg(varEntries, swathData, stat, display);
   var html = '';
-  if (swathData.auxError) {
-    html += '<div class="warn-note">Aux swath failed: ' + esc(swathData.auxError) + ' — showing primary only.</div>';
-  }
+  cmp.forEach(function(c) {
+    if (c.error) html += '<div class="warn-note">' + esc(dsLabel(c.dsId)) + ' swath failed: ' + esc(c.error) + ' — showing primary only.</div>';
+  });
   if (noData.length > 0) {
     html += '<div class="warn-note">No data for ' + noData.map(esc).join(', ') +
       ' — column empty or every value filtered out.</div>';
