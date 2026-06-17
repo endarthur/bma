@@ -1,17 +1,67 @@
 // ─── Export Tab ────────────────────────────────────────────────────────
 
+// A10 G5a: which DATASET the Export tab targets ('model' | 'aux' | 'd2' …). The
+// Export tab generalizes beyond the model: any analyzed dataset gets its own
+// column selection + output names, exported from ITS file/filter/calcols/rowVar.
+// There is ONE Export panel (singleton DOM), so the render/wire functions resolve
+// the target internally via exportCtx() — no root threading. Per-dataset state is
+// the DATA-BOUND column list + detected source precision (ds.export); the FORMAT
+// settings (delimiter/quote/precision/…) stay SHARED globals.
+let exportTargetDsId = 'model';
+function exportNewState() { return { columns: [], sourcePrecision: {} }; }
+// Accessor proxy: for the model, get/set route to the live core.js globals so
+// serialize/restore stay bit-identical and unpolluted by a comparison's columns.
+const _exportSingleton = {
+  get columns() { return exportColumns; }, set columns(v) { exportColumns = v; },
+  get sourcePrecision() { return exportSourcePrecision; }, set sourcePrecision(v) { exportSourcePrecision = v; }
+};
+function exportStateFor(id) {
+  if (!id || id === 'model') return _exportSingleton;
+  var ds = dsById(id);
+  if (!ds) return _exportSingleton;
+  if (!ds.export) ds.export = exportNewState();
+  return ds.export;
+}
+function exportTargetDs() { return dsById(exportTargetDsId) || dsById('model'); }
+function exportCtx() {
+  var ds = exportTargetDs();
+  var isModel = ds.id === 'model';
+  var S = exportStateFor(ds.id);
+  var c = ds.complete || {};
+  return {
+    ds: ds, isModel: isModel, S: S,
+    header: isModel ? currentHeader : (c.header || []),
+    colTypes: isModel ? currentColTypes : (c.colTypes || []),
+    origColCount: isModel ? currentOrigColCount : ((c.origColCount != null) ? c.origColCount : ((c.header ? c.header.length : 0) - ((ds.calcolMeta || []).length))),
+    file: ds.file,
+    filter: isModel ? currentFilter : (ds.filter || null),
+    calcolCode: isModel ? currentCalcolCode : (ds.calcolCode || null),
+    calcolMeta: isModel ? currentCalcolMeta : (ds.calcolMeta || []),
+    preflight: isModel ? preflightData : ds.preflight,
+    rowVar: isModel ? undefined : ds.rowVar,
+    resolvedTypes: isModel
+      ? (currentColTypes ? currentColTypes.slice(0, currentOrigColCount) : [])
+      : ((ds.preflight && ds.preflight.autoTypes) || c.colTypes || []),
+    rowCount: isModel ? (lastCompleteData ? lastCompleteData.rowCount : 0) : ((c.rowCount != null) ? c.rowCount : 0),
+    totalRowCount: isModel ? (lastCompleteData ? lastCompleteData.totalRowCount : 0) : ((c.totalRowCount != null) ? c.totalRowCount : (c.rowCount || 0))
+  };
+}
+
 function initExportColumns() {
-  exportColumns = [];
-  for (let i = 0; i < currentHeader.length; i++) {
-    const isCalcol = i >= currentOrigColCount;
-    exportColumns.push({
-      name: currentHeader[i],
-      outputName: currentHeader[i],
-      type: currentColTypes[i] || 'numeric',
+  const C = exportCtx();
+  const cols = [];
+  const header = C.header || [], colTypes = C.colTypes || [], origColCount = C.origColCount;
+  for (let i = 0; i < header.length; i++) {
+    const isCalcol = i >= origColCount;
+    cols.push({
+      name: header[i],
+      outputName: header[i],
+      type: colTypes[i] || 'numeric',
       selected: true,
       isCalcol
     });
   }
+  C.S.columns = cols;
   detectSourcePrecision();
   renderExportColumns();
   updateExportRowPreview();
@@ -19,28 +69,31 @@ function initExportColumns() {
 }
 
 function detectSourcePrecision() {
-  exportSourcePrecision = {};
-  if (!preflightData || !preflightData.sampleRows || !preflightData.header) return;
-  const hdr = preflightData.header;
+  const C = exportCtx();
+  C.S.sourcePrecision = {};
+  const pf = C.preflight;
+  if (!pf || !pf.sampleRows || !pf.header) return;
+  const hdr = pf.header;
   for (let ci = 0; ci < hdr.length; ci++) {
     let maxDp = 0;
-    for (let ri = 0; ri < preflightData.sampleRows.length; ri++) {
-      const raw = (preflightData.sampleRows[ri][ci] || '').trim();
+    for (let ri = 0; ri < pf.sampleRows.length; ri++) {
+      const raw = (pf.sampleRows[ri][ci] || '').trim();
       const dot = raw.indexOf('.');
       if (dot >= 0) {
         const dp = raw.length - dot - 1;
         if (dp > maxDp) maxDp = dp;
       }
     }
-    if (maxDp > 0) exportSourcePrecision[hdr[ci]] = maxDp;
+    if (maxDp > 0) C.S.sourcePrecision[hdr[ci]] = maxDp;
   }
 }
 
 function renderExportColumns() {
+  const cols = exportCtx().S.columns;
   const search = $exportColSearch.value.toLowerCase();
   let html = '';
-  for (let i = 0; i < exportColumns.length; i++) {
-    const col = exportColumns[i];
+  for (let i = 0; i < cols.length; i++) {
+    const col = cols[i];
     const checked = col.selected ? ' checked' : '';
     const typeClass = col.isCalcol ? 'calcol' : (col.type === 'numeric' ? 'num' : 'cat');
     const typeLabel = col.isCalcol ? 'calc' : (col.type === 'numeric' ? 'num' : 'cat');
@@ -59,15 +112,17 @@ function renderExportColumns() {
 }
 
 function updateExportBadge() {
-  const sel = exportColumns.filter(c => c.selected).length;
-  $exportBadge.textContent = sel + ' / ' + exportColumns.length;
+  const cols = exportCtx().S.columns;
+  const sel = cols.filter(c => c.selected).length;
+  $exportBadge.textContent = sel + ' / ' + cols.length;
 }
 
 function updateExportRowPreview() {
-  if (!lastCompleteData) { $exportRowPreview.textContent = ''; return; }
-  const rc = lastCompleteData.rowCount;
-  const trc = lastCompleteData.totalRowCount;
-  if (currentFilter) {
+  const C = exportCtx();
+  if (!C.ds.complete) { $exportRowPreview.textContent = ''; return; }
+  const rc = C.rowCount;
+  const trc = C.totalRowCount;
+  if (C.filter) {
     $exportRowPreview.textContent = rc.toLocaleString() + ' / ' + trc.toLocaleString() + ' rows';
   } else {
     $exportRowPreview.textContent = trc.toLocaleString() + ' rows';
@@ -77,18 +132,19 @@ function updateExportRowPreview() {
 let exportDragIdx = null;
 
 function wireExportColumnEvents() {
+  const cols = exportCtx().S.columns;
   $exportColList.querySelectorAll('.export-col-item').forEach(el => {
     const idx = parseInt(el.dataset.idx);
     const cb = el.querySelector('input[type="checkbox"]');
     cb.addEventListener('change', () => {
-      exportColumns[idx].selected = cb.checked;
+      cols[idx].selected = cb.checked;
       updateExportBadge();
       updateExportPreview();
       autoSaveProject();
     });
     const renameInput = el.querySelector('.ecol-rename');
     renameInput.addEventListener('input', () => {
-      exportColumns[idx].outputName = renameInput.value || exportColumns[idx].name;
+      cols[idx].outputName = renameInput.value || cols[idx].name;
       updateExportPreview();
       autoSaveProject();
     });
@@ -122,11 +178,11 @@ function wireExportColumnEvents() {
       if (exportDragIdx === null || exportDragIdx === idx) return;
       const rect = el.getBoundingClientRect();
       const dropAfter = e.clientY >= rect.top + rect.height / 2;
-      const item = exportColumns.splice(exportDragIdx, 1)[0];
+      const item = cols.splice(exportDragIdx, 1)[0];
       let targetIdx = dropAfter ? idx : idx;
       if (exportDragIdx < idx) targetIdx--;
       const insertAt = dropAfter ? targetIdx + 1 : targetIdx;
-      exportColumns.splice(insertAt, 0, item);
+      cols.splice(insertAt, 0, item);
       exportDragIdx = null;
       renderExportColumns();
       updateExportPreview();
@@ -137,10 +193,11 @@ function wireExportColumnEvents() {
 
 // Column search
 $exportColSearch.addEventListener('input', () => {
+  const cols = exportCtx().S.columns;
   const search = $exportColSearch.value.toLowerCase();
   $exportColList.querySelectorAll('.export-col-item').forEach(el => {
     const idx = parseInt(el.dataset.idx);
-    const col = exportColumns[idx];
+    const col = cols[idx];
     const hidden = search && !fuzzyMatch(search, col.name.toLowerCase()) && !fuzzyMatch(search, col.outputName.toLowerCase());
     el.classList.toggle('export-col-hidden', hidden);
   });
@@ -149,25 +206,25 @@ wireSearchShortcuts($exportColSearch, document.getElementById('exportSelAll'), d
 
 // Selection buttons
 document.getElementById('exportSelAll').addEventListener('click', () => {
-  exportColumns.forEach(c => c.selected = true);
+  exportCtx().S.columns.forEach(c => c.selected = true);
   renderExportColumns();
   updateExportPreview();
   autoSaveProject();
 });
 document.getElementById('exportSelNone').addEventListener('click', () => {
-  exportColumns.forEach(c => c.selected = false);
+  exportCtx().S.columns.forEach(c => c.selected = false);
   renderExportColumns();
   updateExportPreview();
   autoSaveProject();
 });
 document.getElementById('exportSelOrig').addEventListener('click', () => {
-  exportColumns.forEach(c => c.selected = !c.isCalcol);
+  exportCtx().S.columns.forEach(c => c.selected = !c.isCalcol);
   renderExportColumns();
   updateExportPreview();
   autoSaveProject();
 });
 document.getElementById('exportSelCalc').addEventListener('click', () => {
-  exportColumns.forEach(c => c.selected = c.isCalcol);
+  exportCtx().S.columns.forEach(c => c.selected = c.isCalcol);
   renderExportColumns();
   updateExportPreview();
   autoSaveProject();
@@ -341,10 +398,12 @@ function updateExportWarnings() {
 
   // Precision warning
   if (exportPrecision !== null) {
+    const C = exportCtx();
+    const cols = C.S.columns, srcPrec = C.S.sourcePrecision;
     const affected = [];
-    for (const col of exportColumns) {
+    for (const col of cols) {
       if (!col.selected || col.type !== 'numeric') continue;
-      const srcDp = exportSourcePrecision[col.name];
+      const srcDp = srcPrec[col.name];
       if (srcDp !== undefined && srcDp > exportPrecision) {
         affected.push(col.outputName || col.name);
       }
@@ -352,8 +411,8 @@ function updateExportWarnings() {
     if (affected.length > 0) {
       const names = affected.length > 5 ? affected.slice(0, 5).join(', ') + ' +' + (affected.length - 5) + ' more' : affected.join(', ');
       warnings.push('Columns ' + names + ' have up to ' + Math.max(...affected.map(n => {
-        const col = exportColumns.find(c => (c.outputName || c.name) === n);
-        return col ? (exportSourcePrecision[col.name] || 0) : 0;
+        const col = cols.find(c => (c.outputName || c.name) === n);
+        return col ? (srcPrec[col.name] || 0) : 0;
       })) + ' dp \u2014 output will use ' + exportPrecision + ' dp');
     }
   }
@@ -370,21 +429,23 @@ function updateExportWarnings() {
 // ─── Live Preview ─────────────────────────────────────────────────────
 
 function updateExportPreview() {
-  if (!preflightData || !preflightData.sampleRows || !preflightData.header) {
+  const C = exportCtx();
+  const pf = C.preflight;
+  if (!pf || !pf.sampleRows || !pf.header) {
     $exportPreviewPre.textContent = '';
     $exportPreviewInfo.textContent = '';
     return;
   }
 
-  const selected = exportColumns.filter(c => c.selected);
+  const selected = C.S.columns.filter(c => c.selected);
   if (selected.length === 0) {
     $exportPreviewPre.textContent = '(No columns selected)';
     $exportPreviewInfo.textContent = '';
     return;
   }
 
-  const hdr = preflightData.header;
-  const rows = preflightData.sampleRows;
+  const hdr = pf.header;
+  const rows = pf.sampleRows;
   const maxRows = Math.min(rows.length, 100);
   const delim = exportDelimiter;
   const qc = exportQuoteChar;
@@ -454,7 +515,7 @@ function updateExportPreview() {
   $exportPreviewPre.textContent = lines.join(le);
 
   // Info text
-  const totalRows = lastCompleteData ? (currentFilter ? lastCompleteData.rowCount : lastCompleteData.totalRowCount) : rows.length;
+  const totalRows = C.ds.complete ? (C.filter ? C.rowCount : C.totalRowCount) : rows.length;
   if (totalRows > maxRows) {
     $exportPreviewInfo.textContent = 'Showing ' + maxRows + ' of ' + totalRows.toLocaleString() + ' rows';
   } else {
@@ -465,21 +526,23 @@ function updateExportPreview() {
 // ─── Export ───────────────────────────────────────────────────────────
 
 function startExport() {
-  const selected = exportColumns.filter(c => c.selected);
+  const C = exportCtx();
+  const selected = C.S.columns.filter(c => c.selected);
   if (selected.length === 0) {
     $exportInfo.textContent = 'No columns selected.';
     return;
   }
+  if (!C.file) { $exportInfo.textContent = 'Dataset not loaded.'; return; }
 
   const exportCols = selected.map(c => ({ name: c.name, outputName: c.outputName }));
-  const baseName = currentFile.name.replace(/\.[^.]+$/, '');
+  const baseName = C.file.name.replace(/\.[^.]+$/, '');
   const ext = exportDelimiter === '\t' ? '.tsv' : '.csv';
   const suggestedName = baseName + '_export' + ext;
 
-  const resolvedTypes = currentColTypes.slice(0, currentOrigColCount);
+  const resolvedTypes = C.resolvedTypes;
 
-  const filterPayload = currentFilter ? { expression: currentFilter.expression } : null;
-  const zipEntry = preflightData ? (preflightData.selectedZipEntry || null) : null;
+  const filterPayload = C.filter ? { expression: C.filter.expression } : null;
+  const zipEntry = C.preflight ? (C.preflight.selectedZipEntry || null) : null;
 
   let commentLines = null;
   if (exportCommentHeader && exportCommentText.trim()) {
@@ -488,13 +551,14 @@ function startExport() {
 
   const msg = {
     mode: 'export',
-    file: currentFile,
+    file: C.file,
     filter: filterPayload,
     zipEntry,
-    calcolCode: currentCalcolCode || null,
-    calcolMeta: currentCalcolMeta.length > 0 ? currentCalcolMeta : null,
+    calcolCode: C.calcolCode || null,
+    calcolMeta: (C.calcolMeta && C.calcolMeta.length > 0) ? C.calcolMeta : null,
     resolvedTypes,
     exportCols,
+    rowVarOverride: C.rowVar,   // A10 G5a: a comparison dataset's row handle (undefined = model 'r')
     delimiter: exportDelimiter,
     includeHeader: exportIncludeHeader,
     commentLines,
@@ -503,8 +567,8 @@ function startExport() {
     nullValue: exportNullValue,
     precision: exportPrecision,
     decimalSep: exportDecimalSep,
-    dmEndianness: preflightData && preflightData.dmEndianness || null,
-    dmFormat: preflightData && preflightData.dmFormat || null
+    dmEndianness: C.preflight && C.preflight.dmEndianness || null,
+    dmFormat: C.preflight && C.preflight.dmFormat || null
   };
 
   if (exportWorker) exportWorker.terminate();
