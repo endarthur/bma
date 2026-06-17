@@ -497,7 +497,7 @@ function serializeProject() {
     layout: wsSerializeLayout(),
     // Drillhole-set recipe (A7 Phase 2, D8) — file identities + mapping +
     // options; the derived composite CSV is never persisted (re-derived)
-    drillholes: dhSerialize(dsById('aux')),
+    drillholes: dhSerializeAll(),
     exportCols: exportColumns.map(c => ({
       name: c.name, outputName: c.outputName, selected: c.selected
     })),
@@ -788,7 +788,13 @@ async function applyProject(project) {
 
   // Drillhole-set recipe — applies when its three files land on the card
   // (a re-derived composite CSV then matches pendingAuxRestore by name)
-  dhRestoreFromProject(dsById('aux'), project.drillholes || null);
+  // A10 phase 5: `drillholes` is a per-dataset map { dsId: recipe }; a legacy
+  // single-set project wrote a flat recipe (has .files) → normalize to { aux }.
+  // The aux set restores here; d2+ sets restore in the displayResults datasets
+  // loop, once their instances exist (same normalize there).
+  var dhMap = project.drillholes || null;
+  if (dhMap && dhMap.files) dhMap = { aux: dhMap };
+  dhRestoreFromProject(dsById('aux'), dhMap ? (dhMap.aux || null) : null);
 
   // Stash remaining post-analysis config for when displayResults runs
   pendingProjectRestore = project;
@@ -972,9 +978,19 @@ async function runPack() {
     if (includeCmp) {
       for (var fdi = 2; fdi < datasets.length; fdi++) {
         var fds = datasets[fdi];
-        if (!fds.file || packed[fds.file.name]) continue;
-        packed[fds.file.name] = true;
-        files.push({ name: fds.file.name, blob: fds.file, deflate: wantsDeflate(fds.file.name) });
+        if (!fds.file) continue;
+        if (dhIsDerivedAux(fds)) {
+          // A10 p5-3b: a drillhole-derived comparison dataset packs its RAW trio
+          // (not the frozen composite), so it re-derives on load like aux (D8).
+          dhPackFiles(fds).forEach(function(f) {
+            if (!f || packed[f.name]) return;
+            packed[f.name] = true;
+            files.push({ name: f.name, blob: f, deflate: wantsDeflate(f.name) });
+          });
+        } else if (!packed[fds.file.name]) {
+          packed[fds.file.name] = true;
+          files.push({ name: fds.file.name, blob: fds.file, deflate: wantsDeflate(fds.file.name) });
+        }
       }
     }
     files.push({ name: stem + '.bma.json', blob: new Blob([json]), deflate: compress });
@@ -1069,7 +1085,7 @@ function clearProject() {
   pendingProjectRestore = null;
   resetExportSettings();
   wsResetLayout(true); // skipSave — clearProject just removed the stored key
-  dhReset(dsById('aux'));
+  dhResetAll();
 
   runPreflight(currentFile).then(data => {
     renderPreflight(data);
@@ -1151,7 +1167,8 @@ $projectFileInput.addEventListener('change', (e) => {
 // Project file dropped before its data file (or pulled from a packed zip)
 let pendingDroppedProject = null;
 let pendingDroppedAuxFile = null;
-let pendingDroppedDhTrio = null; // raw drillhole trio from a packed project (A7)
+let pendingDroppedDhTrio = null; // raw drillhole trio (aux) from a packed project (A7)
+let pendingDroppedDhTrios = null; // { dsId: trio } raw drillhole trios for d2+ derived datasets from a packed project (A10 p5-3b) — consumed in displayResults once the instances exist
 let pendingDroppedDatasetFiles = null; // { id: File } d2+ instance files from a packed project (A10 4e-b-iii) — consumed in displayResults once the instances are recreated
 
 // A "packed project" is a zip containing a .bma.json plus the data files it
@@ -1167,13 +1184,19 @@ async function tryPackedProject(file) {
   if (!project || project._bma !== 1 || !project.file || !project.file.name) return null;
   const modelEntry = entries.find(e => e.name === project.file.name);
   if (!modelEntry) return null;
+  // A10 phase 5: `drillholes` is a per-dataset map { dsId: recipe }; normalize a
+  // legacy flat recipe to { aux }. The aux trio rides here (p5-3a); d2+ sets in
+  // the archive ride as their own trios via the datasets loop below (p5-3b).
+  let dhMapPacked = project.drillholes || null;
+  if (dhMapPacked && dhMapPacked.files) dhMapPacked = { aux: dhMapPacked };
+  const dhAuxRecipe = dhMapPacked ? (dhMapPacked.aux || null) : null;
   const ok = await bmaConfirm({
     title: 'Packed project found',
     html: 'This archive contains a BMA project' +
       (project.title ? ': <strong>' + esc(project.title) + '</strong>' : '') +
       '<div class="confirm-detail"><code>' + esc(pjEntry.name) + '</code></div>' +
       'Load <strong>' + esc(project.file.name) + '</strong>' +
-      (project.drillholes && project.drillholes.files
+      (dhAuxRecipe && dhAuxRecipe.files
         ? ' and the packed <strong>drillhole set</strong> (composites re-derive on load)'
         : (project.aux && project.aux.fileName ? ' and <strong>' + esc(project.aux.fileName) + '</strong>' : '')) +
       (Array.isArray(project.datasets) && project.datasets.length
@@ -1194,11 +1217,11 @@ async function tryPackedProject(file) {
   // Drillhole packs carry the RAW trio (A7 D8) — the derived composite CSV
   // is never in the archive; it re-derives on load
   let dhTrio = null;
-  if (project.drillholes && project.drillholes.files) {
+  if (dhAuxRecipe && dhAuxRecipe.files) {
     dhTrio = {};
     let found = 0;
     for (const role of ['collar', 'survey', 'intervals']) {
-      const want = project.drillholes.files[role];
+      const want = dhAuxRecipe.files[role];
       const fe = want && entries.find(e => e.name === want.name);
       if (fe) { try { dhTrio[role] = await zipEntryToFile(file, fe); found++; } catch (e) {} }
     }
@@ -1216,7 +1239,26 @@ async function tryPackedProject(file) {
       if (fe) { try { datasetFiles[cfg.id] = await zipEntryToFile(file, fe); } catch (e) {} }
     }
   }
-  return { project: project, modelFile: modelFile, auxFile: auxF, dhTrio: dhTrio, datasetFiles: datasetFiles };
+  // A10 p5-3b: a drillhole-derived comparison dataset (d2+) packs its RAW trio,
+  // not the composite — extract each set's trio so it re-derives into its
+  // instance (the composite is absent from the archive, so datasetFiles misses
+  // it by design). Keyed by ds.id; the 'aux' set rides dhTrio above.
+  let dhTriosByDs = null;
+  if (dhMapPacked) {
+    for (const dsId in dhMapPacked) {
+      if (dsId === 'aux' || !dhMapPacked.hasOwnProperty(dsId)) continue;
+      const rec = dhMapPacked[dsId];
+      if (!rec || !rec.files) continue;
+      const trio = {}; let n = 0;
+      for (const role of ['collar', 'survey', 'intervals']) {
+        const want = rec.files[role];
+        const fe = want && entries.find(e => e.name === want.name);
+        if (fe) { try { trio[role] = await zipEntryToFile(file, fe); n++; } catch (e) {} }
+      }
+      if (n) { dhTriosByDs = dhTriosByDs || {}; dhTriosByDs[dsId] = trio; }
+    }
+  }
+  return { project: project, modelFile: modelFile, auxFile: auxF, dhTrio: dhTrio, datasetFiles: datasetFiles, dhTriosByDs: dhTriosByDs };
 }
 
 async function handleFile(file, handle, skipRecents) {
@@ -1246,6 +1288,7 @@ async function handleFile(file, handle, skipRecents) {
       pendingDroppedProject = packed.project;
       pendingDroppedAuxFile = packed.auxFile;
       pendingDroppedDhTrio = packed.dhTrio;
+      pendingDroppedDhTrios = packed.dhTriosByDs || null; // p5-3b: d2+ drillhole trios, re-derived in displayResults once instances exist
       pendingDroppedDatasetFiles = packed.datasetFiles || null; // 4e-b-iii: consumed in displayResults once instances exist
       // Recents records the archive the user actually opened (re-openable
       // via its handle) — not the extracted inner CSV, which used to land
@@ -1297,7 +1340,7 @@ async function handleFile(file, handle, skipRecents) {
   pendingProjectRestore = null;
   resetExportSettings();
   wsResetLayout(true); // fresh file starts from the default workspace layout
-  dhReset(dsById('aux'));   // fresh file starts with empty drillhole slots
+  dhResetAll();             // fresh file starts with empty drillhole slots
   currentTypeOverrides = null;
   currentZipEntry = null;
   currentSkipCols = null;
@@ -1995,10 +2038,18 @@ function displayResults(data) {
     // headers; the selection-by-name reattaches per dataset as it analyzes
     // (pendingPanelState, drained by applyStatsCmpRestore).
     pendingDatasetsRestore = {};
+    // A10 phase 5: per-dataset drillhole recipes (normalize the legacy flat shape)
+    var dhRestoreMap = restoredProject.drillholes || null;
+    if (dhRestoreMap && dhRestoreMap.files) dhRestoreMap = { aux: dhRestoreMap };
     (restoredProject.datasets || []).forEach(function(cfg) {
       if (!cfg || !cfg.id) return;
       pendingDatasetsRestore[cfg.id] = cfg;
       if (typeof wsRestoreInstance === 'function') wsRestoreInstance(cfg);
+      // This instance's drillhole set (if any): seed its pending recipe so the
+      // card shows the "drop the trio" hint when its panel builds (re-derives).
+      if (dhRestoreMap && dhRestoreMap[cfg.id] && typeof dhRestoreFromProject === 'function') {
+        dhRestoreFromProject(dsById(cfg.id), dhRestoreMap[cfg.id]);
+      }
     });
     // 4e-b-iii: a packed project carries the d2+ files in the archive — load
     // each into its freshly-recreated instance now (loadAuxFile applies the
@@ -2011,6 +2062,18 @@ function displayResults(data) {
       Object.keys(ddf).forEach(function(id) {
         var dds = (typeof dsById === 'function') ? dsById(id) : null;
         if (dds && ddf[id] && typeof loadAuxFile === 'function') loadAuxFile(ddf[id], null, null, dds, dsConfigRoot(dds));
+      });
+    }
+    // A10 p5-3b: a packed project carries each drillhole-derived d2+'s RAW trio
+    // (not the composite) — re-derive it into its instance now (dhLoadTrio →
+    // re-composite → loadAuxFile matches the pending config by the composite
+    // name, exactly like the packed aux path).
+    if (pendingDroppedDhTrios) {
+      var pdt = pendingDroppedDhTrios;
+      pendingDroppedDhTrios = null;
+      Object.keys(pdt).forEach(function(id) {
+        var dds = (typeof dsById === 'function') ? dsById(id) : null;
+        if (dds && pdt[id] && typeof dhLoadTrio === 'function') dhLoadTrio(dds, pdt[id]);
       });
     }
     pendingPanelState = restoredProject.panels || null;

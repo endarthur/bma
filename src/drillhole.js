@@ -584,6 +584,27 @@ function dhSerialize(ds) {
   };
 }
 
+// Serialize EVERY dataset's drillhole recipe as { dsId: recipe } (datasets with
+// no staged trio are omitted; null when none). Legacy single-set projects wrote
+// a flat recipe object — applyProject/displayResults normalize that into { aux }.
+function dhSerializeAll() {
+  var out = null;
+  for (var id in dhStates) {
+    if (!dhStates.hasOwnProperty(id)) continue;
+    var ds = dsById(id);
+    if (!ds) continue;
+    var rec = dhSerialize(ds);
+    if (rec) { out = out || {}; out[id] = rec; }
+  }
+  return out;
+}
+
+// New file / Clear project: every dataset's drillhole set starts fresh.
+function dhResetAll() {
+  dhReset(dsById('aux'));   // the aux card is static + visible — re-render empty
+  dhStates = {};            // drop every other dataset's staged set
+}
+
 // applyProject hands the saved recipe here; it applies when the files land
 function dhRestoreFromProject(ds, saved) {
   dhStateFor(ds).pendingRestore = (saved && saved.files) ? saved : null;
