@@ -181,7 +181,7 @@ function auxQ(sel, root) { var r = root || auxPanelRoot(); return r ? r.querySel
 // render path resolves its elements via catEls(root), defaulting to the static
 // #panelCategories, so behavior is bit-identical while the code stops depending
 // on unique ids. Clones (4e-c-4) pass their own root; the singleton $cat* consts
-// stay for the singleton-only consumers (project.js reset, wireCatEventsOnce).
+// stay for the singleton-only consumers (project.js reset, renderCategoriesTab).
 function catPanelRoot(inst) {
   if (inst && inst.root) return inst.root;     // future: an instance carries its panel root
   return document.getElementById('panelCategories');
@@ -377,8 +377,8 @@ let statsCatCdfMax = null;
 let statsCatCrossMode = 'count'; // 'count', 'row', 'col'
 let statsCatShowSelectedOnly = false;
 
-// Categories tab state — focusedCol + chartShowAll on panelState.categories (4e-a/c-3)
-let _catEventsWired = false;
+// Categories tab state — focusedCol + chartShowAll on panelState.categories (4e-a/c-3);
+// event wiring is per-root (wireCatEvents), guarded by root._catWired (4e-c-4)
 
 // ─── Property catalog (C1a → A10 4a properties) ─────────────────────────
 // Single source of truth for display + grouping. A **property** is a named

@@ -5889,7 +5889,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 6d054db — click to check for updates">6d054db</div>
+<div class="build-badge" id="buildBadge" title="build fec2e5b — click to check for updates">fec2e5b</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8590,7 +8590,7 @@ function auxQ(sel, root) { var r = root || auxPanelRoot(); return r ? r.querySel
 // render path resolves its elements via catEls(root), defaulting to the static
 // #panelCategories, so behavior is bit-identical while the code stops depending
 // on unique ids. Clones (4e-c-4) pass their own root; the singleton $cat* consts
-// stay for the singleton-only consumers (project.js reset, wireCatEventsOnce).
+// stay for the singleton-only consumers (project.js reset, renderCategoriesTab).
 function catPanelRoot(inst) {
   if (inst && inst.root) return inst.root;     // future: an instance carries its panel root
   return document.getElementById('panelCategories');
@@ -8786,8 +8786,8 @@ let statsCatCdfMax = null;
 let statsCatCrossMode = 'count'; // 'count', 'row', 'col'
 let statsCatShowSelectedOnly = false;
 
-// Categories tab state — focusedCol + chartShowAll on panelState.categories (4e-a/c-3)
-let _catEventsWired = false;
+// Categories tab state — focusedCol + chartShowAll on panelState.categories (4e-a/c-3);
+// event wiring is per-root (wireCatEvents), guarded by root._catWired (4e-c-4)
 
 // ─── Property catalog (C1a → A10 4a properties) ─────────────────────────
 // Single source of truth for display + grouping. A **property** is a named
@@ -28281,7 +28281,7 @@ function renderCategoriesTab(categories, header, origColCount, rowCount) {
 
   renderCatSidebar();
   renderCatMain();
-  wireCatEventsOnce();
+  wireCatEvents();
 }
 
 function renderCatSidebar(root) {
@@ -28497,7 +28497,7 @@ function renderCatToolbar(root) {
 
   var html = '<div class="cat-toolbar-row">';
   html += '<div class="cat-toolbar-title">' + esc(colName) + (isCalcol ? ' <span class="calcol-tag">CALC</span>' : '') + '</div>';
-  html += '<button class="cat-copy-btn" id="catCopyBtn" title="Copy value table (TSV)">Copy</button>';
+  html += '<button class="cat-copy-btn" title="Copy value table (TSV)">Copy</button>';
   html += '</div>';
 
   html += '<div class="cat-stats">';
@@ -28616,9 +28616,9 @@ function renderCatBarChart(root) {
 
   var toggleHtml = '';
   if (!showAll && entries.length > 30) {
-    toggleHtml = '<div class="cat-chart-toggle" id="catChartToggle">Show all ' + entries.length + ' values \u25BE</div>';
+    toggleHtml = '<div class="cat-chart-toggle">Show all ' + entries.length + ' values \u25BE</div>';
   } else if (st.chartShowAll && entries.length > 30) {
-    toggleHtml = '<div class="cat-chart-toggle" id="catChartToggle">Show top 20 \u25B4</div>';
+    toggleHtml = '<div class="cat-chart-toggle">Show top 20 \u25B4</div>';
   }
 
   els.chart.innerHTML = svg + toggleHtml;
@@ -28647,7 +28647,7 @@ function renderCatValueTable(root) {
   var html = '<thead><tr>';
   html += '<th></th>'; // drag handle column — always present (C6: dragging sets Custom order)
   html += '<th title="Category colour">·</th>';
-  html += '<th class="cat-cb-head"><input type="checkbox" id="catSelectAll" title="Select all / none — ticked values filter the model"></th>';
+  html += '<th class="cat-cb-head"><input type="checkbox" data-cat-selectall title="Select all / none — ticked values filter the model"></th>';
   html += '<th>Value</th><th>Count</th><th>%</th>';
   cmps.forEach(function(cm) {
     var lbl = esc(cm.label + ':' + colName);
@@ -28723,7 +28723,10 @@ function renderCatValueTable(root) {
   els.valueTable.innerHTML = html;
 }
 
-function showCatColorPicker(colName, value, anchorEl) {
+function showCatColorPicker(colName, value, anchorEl, root) {
+  var els = catEls(root);
+  var picker = els.colorPicker;
+  if (!picker) return;
   var currentColor = getCategoryColor(colName, value, 0);
 
   var html = '<div class="cat-color-grid">';
@@ -28735,95 +28738,104 @@ function showCatColorPicker(colName, value, anchorEl) {
   html += '</div>';
   html += '<input type="text" class="cat-hex-input" placeholder="#hex" value="' + esc(currentColor) + '">';
 
-  $catColorPicker.innerHTML = html;
-  $catColorPicker.dataset.colName = colName;
-  $catColorPicker.dataset.value = value;
+  picker.innerHTML = html;
+  picker.dataset.colName = colName;
+  picker.dataset.value = value;
 
   // Position near the anchor
   var rect = anchorEl.getBoundingClientRect();
-  var mainRect = $catMain.getBoundingClientRect();
-  $catColorPicker.style.top = (rect.bottom - mainRect.top + 4) + 'px';
-  $catColorPicker.style.left = Math.max(0, rect.left - mainRect.left - 60) + 'px';
-  $catColorPicker.classList.add('open');
+  var mainRect = els.main.getBoundingClientRect();
+  picker.style.top = (rect.bottom - mainRect.top + 4) + 'px';
+  picker.style.left = Math.max(0, rect.left - mainRect.left - 60) + 'px';
+  picker.classList.add('open');
 }
 
-function hideCatColorPicker() {
-  $catColorPicker.classList.remove('open');
+function hideCatColorPicker(root) {
+  var picker = catEls(root).colorPicker;
+  if (picker) picker.classList.remove('open');
 }
 
-function applyCatColor(colName, value, color) {
+function applyCatColor(colName, value, color, root) {
   var rec = catVar('model', colName);
   if (!rec.valueColors) rec.valueColors = {};
   rec.valueColors[value] = color;
-  renderCatBarChart();
-  renderCatValueTable();
+  renderCatBarChart(root);
+  renderCatValueTable(root);
   autoSaveProject();
 }
 
-function initCustomOrder(colName) {
+function initCustomOrder(colName, colIdx) {
   var rec = catVar('model', colName);
   if (!rec.valueOrder) {
-    var entries = getCatSortedEntries(panelState.categories.focusedCol);
+    var entries = getCatSortedEntries(colIdx);
     rec.valueOrder = entries.map(function(e){ return e[0]; });
   }
 }
 
-function wireCatEventsOnce() {
-  if (_catEventsWired) return;
-  _catEventsWired = true;
+// A10 4e-c-4: event wiring per panel ROOT (was the singleton-only
+// wireCatEventsOnce). Called for the singleton (#panelCategories) and for each
+// clone — handlers resolve their instance via catStateForRoot(root) and render
+// root-scoped, so every Categories panel is independent. The catalog
+// (colors/sort/order) is shared, so an edit in one panel surfaces in any panel
+// on the same column after its next render. Guarded per root (root._catWired).
+function wireCatEvents(root) {
+  root = root || catPanelRoot();
+  if (!root || root._catWired) return;
+  root._catWired = true;
+  var els = catEls(root);
+  var st = catStateForRoot(root);
 
   // Sidebar column click
-  $catColList.addEventListener('click', function(e) {
+  if (els.colList) els.colList.addEventListener('click', function(e) {
     var item = e.target.closest('.cat-col-item');
     if (!item) return;
     var colIdx = parseInt(item.dataset.col);
-    if (colIdx === panelState.categories.focusedCol) return;
-    panelState.categories.focusedCol = colIdx;
-    panelState.categories.chartShowAll = false;
-    $catValueSearch.value = '';
-    renderCatSidebar();
-    renderCatMain();
+    if (colIdx === st.focusedCol) return;
+    st.focusedCol = colIdx;
+    st.chartShowAll = false;
+    if (els.valueSearch) els.valueSearch.value = '';
+    renderCatSidebar(root);
+    renderCatMain(root);
+    if (typeof catSyncInstanceTitle === 'function') catSyncInstanceTitle(root);
     autoSaveProject();
   });
 
   // Sidebar search (reads the input directly at render time, so no global mirror)
-  $catColSearch.addEventListener('input', function() {
-    renderCatSidebar();
-  });
-  wireSearchShortcuts($catColSearch, null, null);
+  if (els.colSearch) {
+    els.colSearch.addEventListener('input', function() { renderCatSidebar(root); });
+    wireSearchShortcuts(els.colSearch, null, null);
+  }
 
-  // Dataset chips (4c-iv) — toggle a comparison dataset's table/chart columns;
-  // re-renders the main area from cache (no re-analysis).
-  var catDsChipsEl = document.getElementById('catDatasetChips');
-  if (catDsChipsEl) catDsChipsEl.addEventListener('click', function(e) {
+  // Dataset chips (4c-iv) — toggle a comparison dataset's columns (dsHidden is
+  // shared across instances for now); re-render the main area from cache.
+  if (els.datasetChips) els.datasetChips.addEventListener('click', function(e) {
     var b = e.target.closest('[data-ds-chip]');
     if (!b) return;
     var id = b.dataset.dsChip;
     if (panelState.categories.dsHidden.has(id)) panelState.categories.dsHidden.delete(id);
     else panelState.categories.dsHidden.add(id);
-    renderCatMain();
+    renderCatMain(root);
   });
 
   // Sort buttons (delegated on the sort group beside the value table — C6-4c)
-  var catSortGroupEl = document.getElementById('catSortGroup');
-  if (catSortGroupEl) catSortGroupEl.addEventListener('click', function(e) {
+  if (els.sortGroup) els.sortGroup.addEventListener('click', function(e) {
     var sortBtn = e.target.closest('.cat-sort-btn');
     if (!sortBtn) return;
-    var colName = _catData.header[panelState.categories.focusedCol];
+    var colName = _catData.header[st.focusedCol];
     var newMode = sortBtn.dataset.sort;
     catVar('model', colName).sortMode = newMode;
-    if (newMode === 'custom') initCustomOrder(colName);
-    renderCatSortGroup();
-    renderCatBarChart();
-    renderCatValueTable();
+    if (newMode === 'custom') initCustomOrder(colName, st.focusedCol);
+    renderCatSortGroup(root);
+    renderCatBarChart(root);
+    renderCatValueTable(root);
     autoSaveProject();
   });
 
   // Copy button (delegated on the toolbar)
-  $catToolbar.addEventListener('click', function(e) {
-    var copyBtn = e.target.closest('#catCopyBtn');
+  if (els.toolbar) els.toolbar.addEventListener('click', function(e) {
+    var copyBtn = e.target.closest('.cat-copy-btn');
     if (!copyBtn) return;
-    var entries = getCatSortedEntries(panelState.categories.focusedCol);
+    var entries = getCatSortedEntries(st.focusedCol);
     var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
     var lines = ['Value\tCount\t%'];
     for (var i = 0; i < entries.length; i++) {
@@ -28836,36 +28848,35 @@ function wireCatEventsOnce() {
   });
 
   // Chart toggle (delegated on chart area)
-  $catChart.addEventListener('click', function(e) {
+  if (els.chart) els.chart.addEventListener('click', function(e) {
     if (e.target.closest('.cat-chart-toggle')) {
-      panelState.categories.chartShowAll = !panelState.categories.chartShowAll;
-      renderCatBarChart();
+      st.chartShowAll = !st.chartShowAll;
+      renderCatBarChart(root);
     }
   });
 
   // Value search
-  $catValueSearch.addEventListener('input', function() {
-    renderCatValueTable();
-  });
-  wireSearchShortcuts($catValueSearch, null, null);
+  if (els.valueSearch) {
+    els.valueSearch.addEventListener('input', function() { renderCatValueTable(root); });
+    wireSearchShortcuts(els.valueSearch, null, null);
+  }
 
   // Table event delegation
-  $catValueTable.addEventListener('click', function(e) {
+  if (els.valueTable) els.valueTable.addEventListener('click', function(e) {
     // Swatch click → color picker
     var swatch = e.target.closest('.cat-swatch');
     if (swatch) {
       var colName = _catData.header[parseInt(swatch.dataset.col)];
-      showCatColorPicker(colName, swatch.dataset.val, swatch);
+      showCatColorPicker(colName, swatch.dataset.val, swatch, root);
       return;
     }
-
     // Checkbox change
     var cb = e.target.closest('input[type="checkbox"]');
     if (cb) {
       // Header select-all → toggle every visible value checkbox, then filter
-      if (cb.id === 'catSelectAll') {
+      if (cb.hasAttribute('data-cat-selectall')) {
         var on = cb.checked;
-        $catValueTable.querySelectorAll('.cat-cb-cell input[type="checkbox"]').forEach(function(b) {
+        els.valueTable.querySelectorAll('.cat-cb-cell input[type="checkbox"]').forEach(function(b) {
           b.checked = on;
           var r = b.closest('tr'); if (r) r.classList.toggle('active', on);
         });
@@ -28880,113 +28891,98 @@ function wireCatEventsOnce() {
   });
 
   // Color picker delegation
-  $catColorPicker.addEventListener('click', function(e) {
-    var swatch = e.target.closest('.cat-color-swatch');
-    if (swatch) {
-      var cn = $catColorPicker.dataset.colName;
-      var v = $catColorPicker.dataset.value;
-      applyCatColor(cn, v, swatch.dataset.color);
-      hideCatColorPicker();
-      return;
-    }
-  });
-
-  // Hex input
-  $catColorPicker.addEventListener('change', function(e) {
-    if (e.target.classList.contains('cat-hex-input')) {
+  if (els.colorPicker) {
+    els.colorPicker.addEventListener('click', function(e) {
+      var swatch = e.target.closest('.cat-color-swatch');
+      if (!swatch) return;
+      applyCatColor(els.colorPicker.dataset.colName, els.colorPicker.dataset.value, swatch.dataset.color, root);
+      hideCatColorPicker(root);
+    });
+    els.colorPicker.addEventListener('change', function(e) {
+      if (!e.target.classList.contains('cat-hex-input')) return;
       var hex = e.target.value.trim();
       if (/^#?[0-9a-fA-F]{3,8}$/.test(hex)) {
         if (hex[0] !== '#') hex = '#' + hex;
-        var cn = $catColorPicker.dataset.colName;
-        var v = $catColorPicker.dataset.value;
-        applyCatColor(cn, v, hex);
-        hideCatColorPicker();
+        applyCatColor(els.colorPicker.dataset.colName, els.colorPicker.dataset.value, hex, root);
+        hideCatColorPicker(root);
       }
-    }
-  });
-
-  // Close color picker on click outside
-  document.addEventListener('click', function(e) {
-    if (!$catColorPicker.classList.contains('open')) return;
-    if ($catColorPicker.contains(e.target)) return;
-    if (e.target.classList.contains('cat-swatch')) return;
-    hideCatColorPicker();
-  });
-
-  // Close color picker on Escape
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && $catColorPicker.classList.contains('open')) {
-      hideCatColorPicker();
-    }
-  });
+    });
+  }
 
   // Drag and drop for custom ordering
   var dragSrcRow = null;
-  $catValueTable.addEventListener('dragstart', function(e) {
-    var tr = e.target.closest('tr');
-    if (!tr || !e.target.classList.contains('cat-drag-cell')) return;
-    dragSrcRow = tr;
-    tr.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', tr.dataset.val);
-  });
+  if (els.valueTable) {
+    els.valueTable.addEventListener('dragstart', function(e) {
+      var tr = e.target.closest('tr');
+      if (!tr || !e.target.classList.contains('cat-drag-cell')) return;
+      dragSrcRow = tr;
+      tr.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', tr.dataset.val);
+    });
+    els.valueTable.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      var tr = e.target.closest('tr');
+      if (!tr || tr === dragSrcRow) return;
+      e.dataTransfer.dropEffect = 'move';
+      els.valueTable.querySelectorAll('.drag-over').forEach(function(el){ el.classList.remove('drag-over'); });
+      tr.classList.add('drag-over');
+    });
+    els.valueTable.addEventListener('dragleave', function(e) {
+      var tr = e.target.closest('tr');
+      if (tr) tr.classList.remove('drag-over');
+    });
+    els.valueTable.addEventListener('drop', function(e) {
+      e.preventDefault();
+      var tr = e.target.closest('tr');
+      if (!tr || !dragSrcRow || tr === dragSrcRow) return;
+      els.valueTable.querySelectorAll('.drag-over').forEach(function(el){ el.classList.remove('drag-over'); });
+      dragSrcRow.classList.remove('dragging');
 
-  $catValueTable.addEventListener('dragover', function(e) {
-    e.preventDefault();
-    var tr = e.target.closest('tr');
-    if (!tr || tr === dragSrcRow) return;
-    e.dataTransfer.dropEffect = 'move';
-    // Clear previous drag-over
-    $catValueTable.querySelectorAll('.drag-over').forEach(function(el){ el.classList.remove('drag-over'); });
-    tr.classList.add('drag-over');
-  });
+      var colName = _catData.header[st.focusedCol];
+      var rec = catVar('model', colName);
+      if (rec.sortMode !== 'custom') {
+        rec.valueOrder = getCatSortedEntries(st.focusedCol).map(function(e) { return e[0]; });
+        rec.sortMode = 'custom';
+        renderCatSortGroup(root);
+      } else {
+        initCustomOrder(colName, st.focusedCol);
+      }
+      var order = rec.valueOrder;
+      var fromVal = dragSrcRow.dataset.val;
+      var toVal = tr.dataset.val;
+      var fromIdx = order.indexOf(fromVal);
+      var toIdx = order.indexOf(toVal);
+      if (fromIdx >= 0 && toIdx >= 0) {
+        order.splice(fromIdx, 1);
+        var newToIdx = order.indexOf(toVal);
+        order.splice(newToIdx, 0, fromVal);
+        renderCatBarChart(root);
+        renderCatValueTable(root);
+        autoSaveProject();
+      }
+      dragSrcRow = null;
+    });
+    els.valueTable.addEventListener('dragend', function() {
+      if (dragSrcRow) dragSrcRow.classList.remove('dragging');
+      els.valueTable.querySelectorAll('.drag-over').forEach(function(el){ el.classList.remove('drag-over'); });
+      dragSrcRow = null;
+    });
+  }
 
-  $catValueTable.addEventListener('dragleave', function(e) {
-    var tr = e.target.closest('tr');
-    if (tr) tr.classList.remove('drag-over');
-  });
-
-  $catValueTable.addEventListener('drop', function(e) {
-    e.preventDefault();
-    var tr = e.target.closest('tr');
-    if (!tr || !dragSrcRow || tr === dragSrcRow) return;
-    $catValueTable.querySelectorAll('.drag-over').forEach(function(el){ el.classList.remove('drag-over'); });
-    dragSrcRow.classList.remove('dragging');
-
-    var colName = _catData.header[panelState.categories.focusedCol];
-    var rec = catVar('model', colName);
-    if (rec.sortMode !== 'custom') {
-      // Dragging IS the declaration of a custom order (C6): adopt the
-      // currently displayed order as the starting point and switch modes —
-      // previously the handles only existed after clicking Custom, which
-      // nobody found
-      rec.valueOrder = getCatSortedEntries(panelState.categories.focusedCol).map(function(e) { return e[0]; });
-      rec.sortMode = 'custom';
-      renderCatSortGroup();
-    } else {
-      initCustomOrder(colName);
-    }
-    var order = rec.valueOrder;
-    var fromVal = dragSrcRow.dataset.val;
-    var toVal = tr.dataset.val;
-    var fromIdx = order.indexOf(fromVal);
-    var toIdx = order.indexOf(toVal);
-    if (fromIdx >= 0 && toIdx >= 0) {
-      order.splice(fromIdx, 1);
-      var newToIdx = order.indexOf(toVal);
-      order.splice(newToIdx, 0, fromVal);
-      renderCatBarChart();
-      renderCatValueTable();
-      autoSaveProject();
-    }
-    dragSrcRow = null;
-  });
-
-  $catValueTable.addEventListener('dragend', function() {
-    if (dragSrcRow) dragSrcRow.classList.remove('dragging');
-    $catValueTable.querySelectorAll('.drag-over').forEach(function(el){ el.classList.remove('drag-over'); });
-    dragSrcRow = null;
-  });
+  // Close any open colour picker on outside click / Escape (bound once)
+  if (!wireCatEvents._docClose) {
+    wireCatEvents._docClose = true;
+    document.addEventListener('click', function(e) {
+      if (e.target.classList && e.target.classList.contains('cat-swatch')) return;
+      document.querySelectorAll('.cat-color-picker.open').forEach(function(p) {
+        if (!p.contains(e.target)) p.classList.remove('open');
+      });
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') document.querySelectorAll('.cat-color-picker.open').forEach(function(p) { p.classList.remove('open'); });
+    });
+  }
 }
 
 // ─── Catalog tree (C1a step 2: read-only) ─────────────────────────────
