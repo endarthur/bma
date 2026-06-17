@@ -5889,7 +5889,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 983ec3c — click to check for updates">983ec3c</div>
+<div class="build-badge" id="buildBadge" title="build dd68a4f — click to check for updates">dd68a4f</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8630,7 +8630,7 @@ function catStateForRoot(root) {
 // via statEls(root), defaulting to the static #panelStatistics, so behavior is
 // bit-identical (els.X === $statsX) while the code stops depending on unique ids.
 // Clones (st-4) pass their own root; the $stats* consts stay for singleton-only
-// consumers (wireStatsEventsOnce, project.js, workspace.js).
+// consumers (project.js, workspace.js).
 function statPanelRoot() { return document.getElementById('panelStatistics'); }
 function statQ(sel, root) { var r = root || statPanelRoot(); return r ? r.querySelector(sel) : null; }
 function statEls(root) {
@@ -20460,7 +20460,7 @@ function renderStatsTab(stats, header, origColCount, isFiltered, rowCount, root)
   renderStatsCdfPanel(root);
 
   if (!root && !_statsEventsWired) {
-    wireStatsEventsOnce();
+    wireStatsEvents();
     _statsEventsWired = true;
   }
 }
@@ -20551,7 +20551,7 @@ function renderStatsSidebar(root) {
       // comparison the reference is unambiguously it (badged in the table).
       var refNow = statsReferenceDs(root);
       var refSel = '<div class="stats-ref-row"><span class="stats-ref-label" title="Δ% denominator — every other dataset is compared to this one">Δ% reference</span>' +
-        '<select class="stats-select stats-ref-sel" data-stat="refSel" id="statsRefSel"><option value="model"' + (refNow === 'model' ? ' selected' : '') + '>Model</option>';
+        '<select class="stats-select stats-ref-sel" data-stat="refSel"><option value="model"' + (refNow === 'model' ? ' selected' : '') + '>Model</option>';
       statsShownCmpDatasets(root).forEach(function(ds) {
         refSel += '<option value="' + esc(ds.id) + '"' + (refNow === ds.id ? ' selected' : '') + '>' + esc(dsLabel(ds.id)) + '</option>';
       });
@@ -21174,103 +21174,109 @@ function wireStatsCdfTooltip(root) {
   });
 }
 
-// Wire all events ONCE using delegation — survives innerHTML rebuilds
-function wireStatsEventsOnce() {
-  // --- Preset buttons (static template elements) ---
-  document.getElementById('statsPresetBtns').addEventListener('click', function(e) {
+// Wire all events using delegation — survives innerHTML rebuilds. st-3: scoped
+// to a per-instance root (els = statEls(root), state via statStateForRoot(root)),
+// so a clone (st-4) wires its own controls + writes its own state. The singleton
+// calls it once (renderStatsTab's _statsEventsWired gate); each clone calls it
+// once at build. Cross-tab/global side effects (model weight role, swathWeight
+// mirror, markAnalysisStale) stay global — they're shared model state.
+function wireStatsEvents(root) {
+  var els = statEls(root);
+  var S = statStateForRoot(root);
+
+  // --- Preset buttons ---
+  els.presetBtns.addEventListener('click', function(e) {
     var btn = e.target.closest('.stats-preset');
     if (!btn) return;
     var preset = btn.dataset.preset;
     if (preset === 'custom') {
-      var customInput = document.getElementById('statsCustomPct');
-      customInput.style.display = '';
-      document.querySelectorAll('#statsPresetBtns .stats-preset').forEach(function(b) { b.classList.remove('active'); });
+      els.customPct.style.display = '';
+      els.presetBtns.querySelectorAll('.stats-preset').forEach(function(b) { b.classList.remove('active'); });
       btn.classList.add('active');
-      customInput.focus();
+      els.customPct.focus();
     } else if (STATS_PRESETS[preset]) {
-      statsPercentiles = STATS_PRESETS[preset].slice();
-      renderStatsSidebar();
-      renderStatsTable();
+      S.statsPercentiles = STATS_PRESETS[preset].slice();
+      renderStatsSidebar(root);
+      renderStatsTable(root);
       autoSaveProject();
     }
   });
 
-  // --- Custom percentile input (static template element) ---
-  document.getElementById('statsCustomPct').addEventListener('change', function() {
-    var input = document.getElementById('statsCustomPct');
-    var parts = input.value.split(',').map(function(s) { return parseInt(s.trim()); }).filter(function(n) { return !isNaN(n) && n >= 1 && n <= 99; });
+  // --- Custom percentile input ---
+  els.customPct.addEventListener('change', function() {
+    var parts = els.customPct.value.split(',').map(function(s) { return parseInt(s.trim()); }).filter(function(n) { return !isNaN(n) && n >= 1 && n <= 99; });
     if (parts.length > 0) {
       parts.sort(function(a, b) { return a - b; });
-      statsPercentiles = parts.filter(function(v, i, arr) { return i === 0 || v !== arr[i - 1]; });
-      renderStatsSidebar();
-      renderStatsTable();
+      S.statsPercentiles = parts.filter(function(v, i, arr) { return i === 0 || v !== arr[i - 1]; });
+      renderStatsSidebar(root);
+      renderStatsTable(root);
       autoSaveProject();
     }
   });
 
-  // --- Weight select (static template element) ---
+  // --- Weight select ---
   // Shared support weight (D3): writing here also re-points the Swath
-  // tab's weight select — one role, two views
-  document.getElementById('statsWeightSel').addEventListener('change', function() {
+  // tab's weight select — one role, two views (global; model state)
+  els.weightSel.addEventListener('change', function() {
     catSetRole('model', 'weight', this.value || null);
     var $sw = document.getElementById('swathWeight');
     if ($sw) $sw.value = this.value || '';
     markAnalysisStale();
-    renderStatsSidebar();
+    renderStatsSidebar(root);
     autoSaveProject();
   });
 
   // --- Metric toggles (delegation on container — innerHTML changes) ---
-  document.getElementById('statsMetricToggles').addEventListener('change', function(e) {
+  els.metricToggles.addEventListener('change', function(e) {
     var cb = e.target.closest('input[data-metric]');
     if (!cb) return;
-    if (statsVisibleMetrics === null) {
-      statsVisibleMetrics = new Set();
-      var allMetrics = getStatsMetricColumns();
+    if (S.statsVisibleMetrics === null) {
+      S.statsVisibleMetrics = new Set();
+      var allMetrics = getStatsMetricColumns(root);
       for (var m of allMetrics) {
-        if (isMetricVisible(m.key)) statsVisibleMetrics.add(m.key);
+        if (isMetricVisible(m.key, root)) S.statsVisibleMetrics.add(m.key);
       }
     }
-    if (cb.checked) statsVisibleMetrics.add(cb.dataset.metric);
-    else statsVisibleMetrics.delete(cb.dataset.metric);
-    renderStatsTable();
+    if (cb.checked) S.statsVisibleMetrics.add(cb.dataset.metric);
+    else S.statsVisibleMetrics.delete(cb.dataset.metric);
+    renderStatsTable(root);
     autoSaveProject();
   });
 
-  // --- Dataset chips (4c progressive disclosure; static container) ---
-  var $dsChips = document.getElementById('statsDatasetChips');
+  // --- Dataset chips (4c progressive disclosure) ---
+  var $dsChips = els.datasetChips;
   if ($dsChips) $dsChips.addEventListener('click', function(e) {
     var b = e.target.closest('[data-ds-chip]');
     if (!b) return;
     var id = b.dataset.dsChip;
-    if (panelState.statistics.dsHidden.has(id)) panelState.statistics.dsHidden.delete(id);
-    else panelState.statistics.dsHidden.add(id);
-    renderStatsSidebar();
-    renderStatsTable();
-    renderStatsCdfPanel();
+    if (S.dsHidden.has(id)) S.dsHidden.delete(id);
+    else S.dsHidden.add(id);
+    renderStatsSidebar(root);
+    renderStatsTable(root);
+    renderStatsCdfPanel(root);
     autoSaveProject();
   });
-  // --- Δ% reference picker (4d; same container) ---
+  // --- Δ% reference picker (4d; same container; detect by data-stat, no id) ---
   if ($dsChips) $dsChips.addEventListener('change', function(e) {
-    if (e.target.id !== 'statsRefSel') return;
-    panelState.statistics.refDs = e.target.value || null;
-    renderStatsTable();
+    if (!e.target.getAttribute || e.target.getAttribute('data-stat') !== 'refSel') return;
+    S.refDs = e.target.value || null;
+    renderStatsTable(root);
     autoSaveProject();
   });
 
   // --- Variable checkboxes (delegation on container — innerHTML changes) ---
-  document.getElementById('statsVarList').addEventListener('change', function(e) {
+  els.varList.addEventListener('change', function(e) {
     var acb = e.target.closest('input[data-cmp-col]');
     if (acb) {
       var cds = dsById(acb.dataset.cmpDs);
       if (cds) {
-        materializeStatsCmpSel(cds);
+        materializeStatsCmpSel(cds, root);
         var aIdx = parseInt(acb.dataset.cmpCol);
-        if (acb.checked) panelState.statistics.cmpSel[cds.id].add(aIdx);
-        else panelState.statistics.cmpSel[cds.id].delete(aIdx);
+        if (acb.checked) S.cmpSel[cds.id].add(aIdx);
+        else S.cmpSel[cds.id].delete(aIdx);
         var aItem = acb.closest('.stats-var-item');
         if (aItem) aItem.classList.toggle('unchecked', !acb.checked);
-        renderStatsTable();
+        renderStatsTable(root);
         autoSaveProject();
       }
       return;
@@ -21278,110 +21284,108 @@ function wireStatsEventsOnce() {
     var cb = e.target.closest('input[data-col]');
     if (!cb) return;
     var colIdx = parseInt(cb.dataset.col);
-    if (statsSelectedVars === null) {
-      statsSelectedVars = new Set(_statsNumCols);
+    if (S.statsSelectedVars === null) {
+      S.statsSelectedVars = new Set(_statsNumCols);
     }
-    if (cb.checked) statsSelectedVars.add(colIdx);
-    else statsSelectedVars.delete(colIdx);
+    if (cb.checked) S.statsSelectedVars.add(colIdx);
+    else S.statsSelectedVars.delete(colIdx);
     var item = cb.closest('.stats-var-item');
     if (item) item.classList.toggle('unchecked', !cb.checked);
-    renderStatsTable();
+    renderStatsTable(root);
     autoSaveProject();
   });
 
-  // --- All/None buttons (static template elements) ---
-  document.getElementById('statsVarAll').addEventListener('click', function() {
-    if (statsSelectedVars === null) statsSelectedVars = new Set(_statsNumCols);
-    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-col]').forEach(function(el) {
-      statsSelectedVars.add(parseInt(el.dataset.col));
+  // --- All/None buttons ---
+  els.varAll.addEventListener('click', function() {
+    if (S.statsSelectedVars === null) S.statsSelectedVars = new Set(_statsNumCols);
+    els.varList.querySelectorAll('.stats-var-item[data-col]').forEach(function(el) {
+      S.statsSelectedVars.add(parseInt(el.dataset.col));
     });
-    statsCmpDatasets().forEach(materializeStatsCmpSel);
-    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-cmp-col]').forEach(function(el) {
-      panelState.statistics.cmpSel[el.dataset.cmpDs].add(parseInt(el.dataset.cmpCol));
+    statsCmpDatasets().forEach(function(ds) { materializeStatsCmpSel(ds, root); });
+    els.varList.querySelectorAll('.stats-var-item[data-cmp-col]').forEach(function(el) {
+      S.cmpSel[el.dataset.cmpDs].add(parseInt(el.dataset.cmpCol));
     });
-    renderStatsSidebar();
-    renderStatsTable();
+    renderStatsSidebar(root);
+    renderStatsTable(root);
     autoSaveProject();
   });
-  document.getElementById('statsVarNone').addEventListener('click', function() {
-    if (statsSelectedVars === null) statsSelectedVars = new Set(_statsNumCols);
-    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-col]').forEach(function(el) {
-      statsSelectedVars.delete(parseInt(el.dataset.col));
+  els.varNone.addEventListener('click', function() {
+    if (S.statsSelectedVars === null) S.statsSelectedVars = new Set(_statsNumCols);
+    els.varList.querySelectorAll('.stats-var-item[data-col]').forEach(function(el) {
+      S.statsSelectedVars.delete(parseInt(el.dataset.col));
     });
-    statsCmpDatasets().forEach(materializeStatsCmpSel);
-    document.getElementById('statsVarList').querySelectorAll('.stats-var-item[data-cmp-col]').forEach(function(el) {
-      panelState.statistics.cmpSel[el.dataset.cmpDs].delete(parseInt(el.dataset.cmpCol));
+    statsCmpDatasets().forEach(function(ds) { materializeStatsCmpSel(ds, root); });
+    els.varList.querySelectorAll('.stats-var-item[data-cmp-col]').forEach(function(el) {
+      S.cmpSel[el.dataset.cmpDs].delete(parseInt(el.dataset.cmpCol));
     });
-    renderStatsSidebar();
-    renderStatsTable();
+    renderStatsSidebar(root);
+    renderStatsTable(root);
     autoSaveProject();
   });
 
-  // --- Variable search (static template element) ---
-  var $statsVarSearch = document.getElementById('statsVarSearch');
-  $statsVarSearch.addEventListener('input', function() {
-    renderStatsSidebar();
+  // --- Variable search ---
+  els.varSearch.addEventListener('input', function() {
+    renderStatsSidebar(root);
   });
-  wireSearchShortcuts($statsVarSearch, document.getElementById('statsVarAll'), document.getElementById('statsVarNone'));
+  wireSearchShortcuts(els.varSearch, els.varAll, els.varNone);
 
   // --- CDF links in table (delegation on container — innerHTML changes) ---
-  $statsContent.addEventListener('click', function(e) {
+  els.content.addEventListener('click', function(e) {
     var link = e.target.closest('.cdf-link');
     if (!link) return;
     e.preventDefault();
     if (link.dataset.cmpCol !== undefined) {
       var dsId = link.dataset.cmpDs, aCol = parseInt(link.dataset.cmpCol);
-      var set = panelState.statistics.cdfCmpSel[dsId] || (panelState.statistics.cdfCmpSel[dsId] = new Set());
+      var set = S.cdfCmpSel[dsId] || (S.cdfCmpSel[dsId] = new Set());
       if (set.has(aCol)) set.delete(aCol);
       else set.add(aCol);
     } else {
       var col = parseInt(link.dataset.col);
-      if (statsCdfSelected.has(col)) statsCdfSelected.delete(col);
-      else statsCdfSelected.add(col);
+      if (S.statsCdfSelected.has(col)) S.statsCdfSelected.delete(col);
+      else S.statsCdfSelected.add(col);
     }
-    renderStatsTable();
-    renderStatsCdfPanel();
+    renderStatsTable(root);
+    renderStatsCdfPanel(root);
     autoSaveProject();
   });
 
-  // --- CDF scale + mode buttons (static template elements) ---
-  document.getElementById('statsCdfToolbar').addEventListener('click', function(e) {
+  // --- CDF scale + mode buttons ---
+  els.cdfToolbar.addEventListener('click', function(e) {
     var modeBtn = e.target.closest('.stats-cdfmode');
     if (modeBtn) {
-      statsCdfMode = modeBtn.dataset.cdfmode;
-      renderStatsCdfPanel();
+      S.statsCdfMode = modeBtn.dataset.cdfmode;
+      renderStatsCdfPanel(root);
       autoSaveProject();
       return;
     }
     var btn = e.target.closest('.stats-scale');
     if (!btn) return;
-    statsCdfScale = btn.dataset.scale;
-    renderStatsCdfPanel();
+    S.statsCdfScale = btn.dataset.scale;
+    renderStatsCdfPanel(root);
     autoSaveProject();
   });
 
-  // --- Copy table (static template element) ---
-  document.getElementById('statsCopyBtn').addEventListener('click', copyStatsTable);
-
-  // --- Download SVG/PNG (static template elements) ---
-  document.getElementById('statsDownloadSvg').addEventListener('click', downloadStatsSvg);
-  document.getElementById('statsDownloadPng').addEventListener('click', downloadStatsPng);
+  // --- Copy table / Download SVG/PNG ---
+  els.copyBtn.addEventListener('click', function() { copyStatsTable(root); });
+  els.downloadSvg.addEventListener('click', function() { downloadStatsSvg(root); });
+  els.downloadPng.addEventListener('click', function() { downloadStatsPng(root); });
 
   // --- Mobile collapsible sidebar ---
   if (window.matchMedia('(max-width: 700px)').matches) {
-    $statsSidebar.addEventListener('click', function(e) {
+    els.sidebar.addEventListener('click', function(e) {
       var title = e.target.closest('.stats-sidebar-section--grow > .stats-sidebar-title');
       if (!title) return;
       var section = title.closest('.stats-sidebar-section--grow');
       var wasCollapsed = section.classList.contains('collapsed');
-      $statsSidebar.querySelectorAll('.stats-sidebar-section--grow').forEach(function(s) { s.classList.add('collapsed'); });
+      els.sidebar.querySelectorAll('.stats-sidebar-section--grow').forEach(function(s) { s.classList.add('collapsed'); });
       if (wasCollapsed) section.classList.remove('collapsed');
     });
   }
 }
 
-function copyStatsTable() {
-  var table = $statsContent.querySelector('table.stats');
+function copyStatsTable(root) {
+  var els = statEls(root);
+  var table = els.content.querySelector('table.stats');
   if (!table) return;
   var rows = table.querySelectorAll('tr');
   var lines = [];
@@ -21392,7 +21396,7 @@ function copyStatsTable() {
     lines.push(vals.join('\t'));
   });
   navigator.clipboard.writeText(lines.join('\n')).then(function() {
-    var btn = document.getElementById('statsCopyBtn');
+    var btn = els.copyBtn;
     btn.textContent = 'Copied!';
     setTimeout(function() { btn.textContent = 'Copy table'; }, 1500);
   });
@@ -21414,8 +21418,9 @@ function cleanSvgForExport(svgEl) {
   return svgData;
 }
 
-function downloadStatsSvg() {
-  var svgEl = document.getElementById('statsCdfSvg');
+function downloadStatsSvg(root) {
+  var chart = statEls(root).cdfChart;
+  var svgEl = chart ? chart.querySelector('#statsCdfSvg') : null;
   if (!svgEl) return;
   var svgData = cleanSvgForExport(svgEl);
   var blob = new Blob([svgData], { type: 'image/svg+xml' });
@@ -21426,8 +21431,9 @@ function downloadStatsSvg() {
   URL.revokeObjectURL(a.href);
 }
 
-function downloadStatsPng() {
-  var svgEl = document.getElementById('statsCdfSvg');
+function downloadStatsPng(root) {
+  var chart = statEls(root).cdfChart;
+  var svgEl = chart ? chart.querySelector('#statsCdfSvg') : null;
   if (!svgEl) return;
   var svgData = cleanSvgForExport(svgEl);
   var canvas = document.createElement('canvas');

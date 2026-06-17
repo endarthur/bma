@@ -221,7 +221,7 @@ function catStateForRoot(root) {
 // via statEls(root), defaulting to the static #panelStatistics, so behavior is
 // bit-identical (els.X === $statsX) while the code stops depending on unique ids.
 // Clones (st-4) pass their own root; the $stats* consts stay for singleton-only
-// consumers (wireStatsEventsOnce, project.js, workspace.js).
+// consumers (project.js, workspace.js).
 function statPanelRoot() { return document.getElementById('panelStatistics'); }
 function statQ(sel, root) { var r = root || statPanelRoot(); return r ? r.querySelector(sel) : null; }
 function statEls(root) {
