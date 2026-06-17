@@ -192,6 +192,25 @@ function hideSwathColorPicker(root) {
   if ($picker) $picker.classList.remove('open');
 }
 
+// s-3: one document-level handler pair, wired once, that closes ANY open swath
+// colour picker (singleton or clone) on outside-click / Escape — scoped by class
+// so clones don't each register their own.
+var _swPickerCloseWired = false;
+function swWirePickerCloseOnce() {
+  if (_swPickerCloseWired) return;
+  _swPickerCloseWired = true;
+  document.addEventListener('click', function(e) {
+    if (e.target.classList && e.target.classList.contains('swath-color-swatch')) return;
+    document.querySelectorAll('.swath-color-picker.open').forEach(function(pk) {
+      if (!pk.contains(e.target)) pk.classList.remove('open');
+    });
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    document.querySelectorAll('.swath-color-picker.open').forEach(function(pk) { pk.classList.remove('open'); });
+  });
+}
+
 function applySwathColor(colName, color, root) {
   // colName is a primary variable name or a '<dsId>:NAME' comparison color key
   // (aux:NAME, d2:NAME…). Only a known dataset id prefix routes to that dataset.
@@ -630,17 +649,12 @@ function renderSwathConfig(data, root) {
     }
   });
 
-  // Close color picker on click outside
-  document.addEventListener('click', function(e) {
-    if ($swathPicker.classList.contains('open') && !$swathPicker.contains(e.target) && !e.target.classList.contains('swath-color-swatch')) {
-      hideSwathColorPicker();
-    }
-  });
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && $swathPicker.classList.contains('open')) {
-      hideSwathColorPicker();
-    }
-  });
+  // Close any open swath colour picker on outside-click / Escape. Wired ONCE
+  // (s-3): scoped by the .swath-color-picker.open class so the singleton and
+  // every clone share one handler pair, instead of renderSwathConfig adding a
+  // fresh document listener per call (a leak that also bit the singleton across
+  // re-analyses).
+  swWirePickerCloseOnce();
 
   // Autosave on any sidebar change; mark stale on changes needing a re-run.
   // Statistic, display options, Y-scale, layout and per-variable units all
