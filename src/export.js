@@ -74,6 +74,8 @@ function setExportTarget(id) {
   if (id === exportTargetDsId) return;
   exportTargetDsId = id;
   $exportColSearch.value = '';
+  var tds = exportTargetDs();
+  if (tds && tds._pendingExport) applyExportDsRestore(tds);   // restored selection awaiting this switch
   var C = exportCtx();
   if (!C.S.columns || C.S.columns.length === 0) {
     initExportColumns();   // first visit — seed from this dataset's header
@@ -98,6 +100,45 @@ function exportRefreshDatasetPicker() {
     return;
   }
   exportRenderDatasetPicker();
+}
+
+// G5a-3: serialize a comparison dataset's Export column selection — name +
+// outputName + selected (already by name, like the model's exportCols). null when
+// nothing is built; a dataset awaiting reattach re-emits its pending saved list.
+function exportSerializeFor(ds) {
+  if (!ds) return null;
+  var st = ds.export;
+  if (!st || !st.columns || st.columns.length === 0) return ds._pendingExport || null;
+  return st.columns.map(function(c) { return { name: c.name, outputName: c.outputName, selected: c.selected }; });
+}
+// Resolve a comparison dataset's pending (saved) Export columns: rebuild the full
+// column list from its analyzed header, then apply the saved outputName/selected
+// + order by name (new columns appended). Called from the aux complete handler
+// and lazily when the Export tab switches to a not-yet-resolved dataset.
+function applyExportDsRestore(ds) {
+  if (!ds || !ds._pendingExport) return;
+  var c = ds.complete;
+  if (!c || !c.header) return;
+  var origColCount = (c.origColCount != null) ? c.origColCount : (c.header.length - ((ds.calcolMeta || []).length));
+  var cols = [];
+  for (var i = 0; i < c.header.length; i++) {
+    cols.push({ name: c.header[i], outputName: c.header[i], type: (c.colTypes && c.colTypes[i]) || 'numeric', selected: true, isCalcol: i >= origColCount });
+  }
+  var byName = {}; cols.forEach(function(col) { byName[col.name] = col; });
+  var saved = ds._pendingExport;
+  var ordered = [], used = {};
+  saved.forEach(function(s) {
+    var col = byName[s.name];
+    if (!col) return;
+    if (s.outputName != null) col.outputName = s.outputName;
+    col.selected = !!s.selected;
+    ordered.push(col); used[s.name] = true;
+  });
+  cols.forEach(function(col) { if (!used[col.name]) ordered.push(col); });
+  if (!ds.export) ds.export = exportNewState();
+  ds.export.columns = ordered;
+  ds._pendingExport = null;
+  if (exportTargetDsId === ds.id) { detectSourcePrecision(); renderExportColumns(); updateExportRowPreview(); updateExportPreview(); updateExportWarnings(); }
 }
 
 function initExportColumns() {

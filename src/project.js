@@ -359,6 +359,7 @@ function serializeComparisonDatasets() {
       declus: (ds.declus && ds.declus.params) ? { params: ds.declus.params } : null,
       topcut: (ds.topcut && ds.topcut.varName) ? { varName: ds.topcut.varName, cap: ds.topcut.cap, xlog: !!ds.topcut.xlog, useDeclus: !!ds.topcut.useDeclus } : null,
       statsCat: statsCatSerializeFor(ds),   // A10 G4a-3: per-dataset StatsCat selection (by name)
+      export: exportSerializeFor(ds),       // A10 G5a-3: per-dataset Export column selection (by name)
       view: ds.view
     });
   }
@@ -446,6 +447,7 @@ function serializeProject() {
       // Top-cut: variable + cap + scale + weight mode; the distribution is re-loaded on demand
       topcut: (auxTopcut && auxTopcut.varName) ? { varName: auxTopcut.varName, cap: auxTopcut.cap, xlog: !!auxTopcut.xlog, useDeclus: !!auxTopcut.useDeclus } : null,
       statsCat: statsCatSerializeFor(dsById('aux')),   // A10 G4a-3: per-dataset StatsCat selection (by name)
+      export: exportSerializeFor(dsById('aux')),       // A10 G5a-3: per-dataset Export column selection (by name)
       view: auxView
     } : null,
     calcolCode: currentCalcolCode,
@@ -501,6 +503,7 @@ function serializeProject() {
     // Drillhole-set recipe (A7 Phase 2, D8) — file identities + mapping +
     // options; the derived composite CSV is never persisted (re-derived)
     drillholes: dhSerializeAll(),
+    exportTargetDsId: exportTargetDsId,   // A10 G5a-3: which dataset the Export tab targets
     exportCols: exportColumns.map(c => ({
       name: c.name, outputName: c.outputName, selected: c.selected
     })),
@@ -789,6 +792,9 @@ async function applyProject(project) {
   if (sc.selectedVars) statsCatSelectedVars = new Set(sc.selectedVars);
   // G4a-3: which dataset the StatsCat tab targets (self-heals if it never reloads)
   statsCatTargetDsId = sc.targetDsId || 'model';
+  // G5a-3: which dataset the Export tab targets (model columns still build at
+  // displayResults; a non-model target applies lazily when its analysis lands)
+  exportTargetDsId = project.exportTargetDsId || 'model';
 
   // Stash aux config; applied when the aux file is (re)loaded on the Aux tab
   pendingAuxRestore = project.aux || null;
@@ -1067,6 +1073,7 @@ function clearProject() {
   statsCatCrossMode = 'count';
   statsCatShowSelectedOnly = false;
   statsCatTargetDsId = 'model';   // A10 G4a-3: StatsCat target back to the model
+  exportTargetDsId = 'model';     // A10 G5a-3: Export target back to the model
   panelState.categories.focusedCol = null;
   catalog = newCatalog();
   panelState.categories.chartShowAll = false;
@@ -2117,12 +2124,18 @@ function displayResults(data) {
   // StatsCat — render after display state is restored (or with defaults)
   renderStatsCat(data);
 
-  // Export
+  // Export — always (re)build the MODEL's column list here (displayResults =
+  // model analysis complete); a restored non-model target is applied lazily when
+  // the Export tab switches to it (and it appears in the picker once it re-analyzes).
+  var _savedExportTarget = exportTargetDsId;
+  exportTargetDsId = 'model';
   initExportColumns();
   if (restoredProject) {
     if (restoredProject.exportCols) applyExportRestore(restoredProject.exportCols);
     if (restoredProject.exportSettings) restoreExportSettings(restoredProject.exportSettings);
   }
+  exportTargetDsId = (_savedExportTarget && dsById(_savedExportTarget)) ? _savedExportTarget : 'model';
+  if (typeof exportRenderDatasetPicker === 'function') exportRenderDatasetPicker();
 
   // GT, Swath & Section
   // Snapshot current GT/Swath config before renders rebuild sidebars

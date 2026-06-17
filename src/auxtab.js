@@ -740,6 +740,9 @@ function applyAuxRestore(saved, ds) {
   // in the restore pass (a calcol group-by resolves later from the complete header).
   ds._pendingStatsCat = saved.statsCat || null;
   if (ds._pendingStatsCat && typeof applyStatsCatRestore === 'function') applyStatsCatRestore(ds, ds.preflight && ds.preflight.header);
+  // A10 G5a-3: stash this dataset's Export column selection; resolved against its
+  // analyzed header (applyExportDsRestore) on completion / when the tab targets it.
+  ds._pendingExport = saved.export || null;
 }
 
 // When the primary file is a multi-entry archive, offer its other entries
