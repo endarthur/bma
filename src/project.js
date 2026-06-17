@@ -1006,7 +1006,7 @@ function clearProject() {
   statsCatShowSelectedOnly = false;
   panelState.categories.focusedCol = null;
   catalog = newCatalog();
-  catChartShowAll = false;
+  panelState.categories.chartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
@@ -1231,7 +1231,7 @@ async function handleFile(file, handle, skipRecents) {
   statsCatCrossMode = 'count';
   panelState.categories.focusedCol = null;
   catalog = newCatalog();
-  catChartShowAll = false;
+  panelState.categories.chartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];
@@ -1411,7 +1411,7 @@ $backToPreflight.addEventListener('click', () => {
   statsCatShowSelectedOnly = false;
   panelState.categories.focusedCol = null;
   catalog = newCatalog();
-  catChartShowAll = false;
+  panelState.categories.chartShowAll = false;
   statsSelectedVars = null;
   statsVisibleMetrics = null;
   statsPercentiles = [25, 50, 75];

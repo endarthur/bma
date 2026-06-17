@@ -67,8 +67,9 @@ let panelState = {
     dsHidden: new Set()  // comparison dataset ids hidden via the 4c dataset chips
   },
   categories: {
-    dsHidden: new Set(), // comparison dataset ids hidden via the 4c dataset chips
-    focusedCol: null     // column index focused in main area
+    dsHidden: new Set(), // comparison dataset ids hidden via the 4c dataset chips (shared across instances for now — chips only show at 3+ datasets)
+    focusedCol: null,    // column index focused in main area (per-instance, 4e-c-3)
+    chartShowAll: false  // show all bars vs top 20 (per-instance, 4e-c-3 — was catChartShowAll)
   }
 };
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes (aux-only; d2+ ephemeral until phase 6)
@@ -198,6 +199,20 @@ function catEls(root) {
     valueTableWrap: q('valueTableWrap'), valueSearch: q('valueSearch'), sortGroup: q('sortGroup'),
     valueTable: q('valueTable'), colorPicker: q('colorPicker')
   };
+}
+// A10 4e-c-3: per-instance Categories state. The singleton panel uses
+// panelState.categories; clones (4e-c-4, tagged data-cat-inst on their root)
+// get their own {focusedCol, chartShowAll} from catInstances. dsHidden + the
+// catalog (colors/sort/order) stay shared — the catalog legitimately, dsHidden
+// for now (its chips only surface at 3+ datasets; per-instance chips are a
+// follow-up). catStateForRoot resolves the state object for a render root.
+var catInstances = {};
+function catNewInstState() { return { focusedCol: null, chartShowAll: false }; }
+function catStateForRoot(root) {
+  root = root || catPanelRoot();
+  var id = root && root.getAttribute ? root.getAttribute('data-cat-inst') : null;
+  if (id && catInstances[id]) return catInstances[id];
+  return panelState.categories;     // singleton (also holds the shared dsHidden)
 }
 
 // ─── A10 4b: datasets are peers — capabilities are FACETS, not a kind ──────
@@ -362,8 +377,7 @@ let statsCatCdfMax = null;
 let statsCatCrossMode = 'count'; // 'count', 'row', 'col'
 let statsCatShowSelectedOnly = false;
 
-// Categories tab state — focusedCol moved to panelState.categories (4e-a)
-let catChartShowAll = false;        // show all bars vs top 20
+// Categories tab state — focusedCol + chartShowAll on panelState.categories (4e-a/c-3)
 let _catEventsWired = false;
 
 // ─── Property catalog (C1a → A10 4a properties) ─────────────────────────

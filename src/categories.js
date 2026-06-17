@@ -1,6 +1,5 @@
 // ─── Categories Tab ────────────────────────────────────────────────────
 let _catData = null;       // cached { categories, header, origColCount, rowCount }
-let _catColSearch = '';
 
 function renderCategoriesTab(categories, header, origColCount, rowCount) {
   _catData = { categories, header, origColCount, rowCount };
@@ -39,11 +38,12 @@ function renderCategoriesTab(categories, header, origColCount, rowCount) {
 function renderCatSidebar(root) {
   if (!_catData) return;
   var els = catEls(root);
+  var st = catStateForRoot(root);
   var categories = _catData.categories;
   var header = _catData.header;
   var origColCount = _catData.origColCount;
   var catCols = Object.keys(categories).map(Number).sort(function(a,b){return a-b;});
-  var search = _catColSearch.toLowerCase();
+  var search = ((els.colSearch && els.colSearch.value) || '').toLowerCase();
   var html = '';
   for (var ci = 0; ci < catCols.length; ci++) {
     var i = catCols[ci];
@@ -52,7 +52,7 @@ function renderCatSidebar(root) {
     var cat = categories[i];
     var uniqueCount = Object.keys(cat.counts).length + (cat.overflow ? '+' : '');
     var isCalcol = i >= origColCount;
-    var active = i === panelState.categories.focusedCol ? ' active' : '';
+    var active = i === st.focusedCol ? ' active' : '';
     html += '<div class="cat-col-item' + active + '" data-col="' + i + '">';
     html += '<span class="col-name">' + esc(name) + '</span>';
     if (isCalcol) html += '<span class="calcol-tag">CALC</span>';
@@ -187,8 +187,9 @@ function getCatSortedEntries(colIdx) {
 // used to sit in the toolbar above the chart, far from the table).
 function renderCatSortGroup(root) {
   var grp = catEls(root).sortGroup;
-  if (!grp || !_catData || panelState.categories.focusedCol === null) return;
-  var colName = _catData.header[panelState.categories.focusedCol];
+  var st = catStateForRoot(root);
+  if (!grp || !_catData || st.focusedCol === null) return;
+  var colName = _catData.header[st.focusedCol];
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
   var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
   grp.innerHTML =
@@ -200,14 +201,15 @@ function renderCatSortGroup(root) {
 }
 
 function renderCatToolbar(root) {
-  if (!_catData || panelState.categories.focusedCol === null) return;
+  var st = catStateForRoot(root);
+  if (!_catData || st.focusedCol === null) return;
   var els = catEls(root);
   var header = _catData.header;
   var origColCount = _catData.origColCount;
-  var colName = header[panelState.categories.focusedCol];
-  var isCalcol = panelState.categories.focusedCol >= origColCount;
+  var colName = header[st.focusedCol];
+  var isCalcol = st.focusedCol >= origColCount;
 
-  var cat = _catData.categories[panelState.categories.focusedCol];
+  var cat = _catData.categories[st.focusedCol];
   var entries = Object.entries(cat.counts);
   var uniqueCount = entries.length + (cat.overflow ? '+' : '');
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
@@ -265,10 +267,11 @@ function renderCatToolbar(root) {
 }
 
 function renderCatBarChart(root) {
-  if (!_catData || panelState.categories.focusedCol === null) return;
+  var st = catStateForRoot(root);
+  if (!_catData || st.focusedCol === null) return;
   var els = catEls(root);
-  var colName = _catData.header[panelState.categories.focusedCol];
-  var entries = getCatSortedEntries(panelState.categories.focusedCol);
+  var colName = _catData.header[st.focusedCol];
+  var entries = getCatSortedEntries(st.focusedCol);
   if (entries.length === 0) { els.chart.innerHTML = ''; return; }
 
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
@@ -276,7 +279,7 @@ function renderCatBarChart(root) {
   for (var i = 0; i < entries.length; i++) { if (entries[i][1] > maxCount) maxCount = entries[i][1]; }
 
   // Determine how many bars to show
-  var showAll = catChartShowAll || entries.length <= 30;
+  var showAll = st.chartShowAll || entries.length <= 30;
   var showEntries = showAll ? entries : entries.slice(0, 20);
 
   var barH = 18, gap = 2, labelW = 120, rightPad = 60;
@@ -365,7 +368,7 @@ function renderCatBarChart(root) {
   var toggleHtml = '';
   if (!showAll && entries.length > 30) {
     toggleHtml = '<div class="cat-chart-toggle" id="catChartToggle">Show all ' + entries.length + ' values \u25BE</div>';
-  } else if (catChartShowAll && entries.length > 30) {
+  } else if (st.chartShowAll && entries.length > 30) {
     toggleHtml = '<div class="cat-chart-toggle" id="catChartToggle">Show top 20 \u25B4</div>';
   }
 
@@ -373,10 +376,11 @@ function renderCatBarChart(root) {
 }
 
 function renderCatValueTable(root) {
-  if (!_catData || panelState.categories.focusedCol === null) return;
+  var st = catStateForRoot(root);
+  if (!_catData || st.focusedCol === null) return;
   var els = catEls(root);
-  var colName = _catData.header[panelState.categories.focusedCol];
-  var entries = getCatSortedEntries(panelState.categories.focusedCol);
+  var colName = _catData.header[st.focusedCol];
+  var entries = getCatSortedEntries(st.focusedCol);
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
   var maxCount = 0;
   for (var i = 0; i < entries.length; i++) { if (entries[i][1] > maxCount) maxCount = entries[i][1]; }
@@ -423,8 +427,8 @@ function renderCatValueTable(root) {
 
     html += '<tr style="--bar:' + barPct + '%" data-val="' + esc(val) + '">';
     html += '<td class="cat-drag-cell' + (isCustom ? '' : ' cat-drag-cell--dormant') + '" draggable="true" title="Drag to reorder \u2014 sets Custom order">\u2261</td>';
-    html += '<td class="cat-swatch-cell"><span class="cat-swatch" style="background:' + color + '" data-col="' + panelState.categories.focusedCol + '" data-val="' + esc(val) + '"></span></td>';
-    html += '<td class="cat-cb-cell"><input type="checkbox" data-col="' + panelState.categories.focusedCol + '" data-val="' + esc(val) + '"></td>';
+    html += '<td class="cat-swatch-cell"><span class="cat-swatch" style="background:' + color + '" data-col="' + st.focusedCol + '" data-val="' + esc(val) + '"></span></td>';
+    html += '<td class="cat-cb-cell"><input type="checkbox" data-col="' + st.focusedCol + '" data-val="' + esc(val) + '"></td>';
     html += '<td class="cat-val-cell">' + esc(val) + '</td>';
     html += '<td class="cat-count-cell">' + count.toLocaleString() + '</td>';
     html += '<td class="cat-pct-cell">' + pct + '%</td>';
@@ -526,16 +530,15 @@ function wireCatEventsOnce() {
     var colIdx = parseInt(item.dataset.col);
     if (colIdx === panelState.categories.focusedCol) return;
     panelState.categories.focusedCol = colIdx;
-    catChartShowAll = false;
+    panelState.categories.chartShowAll = false;
     $catValueSearch.value = '';
     renderCatSidebar();
     renderCatMain();
     autoSaveProject();
   });
 
-  // Sidebar search
+  // Sidebar search (reads the input directly at render time, so no global mirror)
   $catColSearch.addEventListener('input', function() {
-    _catColSearch = $catColSearch.value;
     renderCatSidebar();
   });
   wireSearchShortcuts($catColSearch, null, null);
@@ -586,7 +589,7 @@ function wireCatEventsOnce() {
   // Chart toggle (delegated on chart area)
   $catChart.addEventListener('click', function(e) {
     if (e.target.closest('.cat-chart-toggle')) {
-      catChartShowAll = !catChartShowAll;
+      panelState.categories.chartShowAll = !panelState.categories.chartShowAll;
       renderCatBarChart();
     }
   });
