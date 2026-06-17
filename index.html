@@ -5889,7 +5889,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build fec2e5b — click to check for updates">fec2e5b</div>
+<div class="build-badge" id="buildBadge" title="build 61c5885 — click to check for updates">61c5885</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -28282,6 +28282,7 @@ function renderCategoriesTab(categories, header, origColCount, rowCount) {
   renderCatSidebar();
   renderCatMain();
   wireCatEvents();
+  catRenderAllInstances();   // keep any live clones in sync with the new analysis
 }
 
 function renderCatSidebar(root) {
@@ -28983,6 +28984,76 @@ function wireCatEvents(root) {
       if (e.key === 'Escape') document.querySelectorAll('.cat-color-picker.open').forEach(function(p) { p.classList.remove('open'); });
     });
   }
+}
+
+// ─── A10 4e-c-4b: cloneable Categories instances ───────────────────────────
+// A clone is a copy of #panelCategories with its ids stripped (DOM resolved by
+// data-cat within the clone root, tagged data-cat-inst). Its {focusedCol,
+// chartShowAll} live in catInstances[id]; the data (_catData) and catalog are
+// shared, so a clone shows its OWN column from the same analysis. rails calls
+// catBuildInstancePanel(id) via renderPanel; wsSpawnCategoriesInstance and the
+// tab "Duplicate" create them.
+var catInstSeq = 1;
+var catInstanceEls = {};   // instId -> the built clone element (one per instance)
+function catNextInstId() { catInstSeq += 1; return 'categories#' + catInstSeq; }
+
+function catBuildInstancePanel(instId) {
+  var tmpl = document.getElementById('panelCategories');
+  if (!tmpl) return null;
+  // rails may call renderPanel more than once for a tab id (addTab re-renders);
+  // return the SAME clone each time (as getElementById does for singletons), so
+  // a second call never leaves a duplicate clone in the DOM.
+  if (catInstanceEls[instId] && document.contains(catInstanceEls[instId])) return catInstanceEls[instId];
+  if (!catInstances[instId]) {
+    catInstances[instId] = catNewInstState();
+    catInstances[instId].focusedCol = panelState.categories.focusedCol;
+  }
+  var el = tmpl.cloneNode(true);
+  el.removeAttribute('id');
+  el.querySelectorAll('[id]').forEach(function(n) { n.removeAttribute('id'); });
+  el.setAttribute('data-cat-inst', instId);
+  el.setAttribute('data-tab', instId);
+  el.classList.add('active');
+  // The clone copied the singleton's rendered DOM — clear the search inputs and
+  // any open colour picker, then render fresh from _catData into the clone.
+  var els = catEls(el);
+  if (els.colSearch) els.colSearch.value = '';
+  if (els.valueSearch) els.valueSearch.value = '';
+  if (els.colorPicker) els.colorPicker.classList.remove('open');
+  wireCatEvents(el);
+  catRenderInstance(el);
+  catInstanceEls[instId] = el;
+  return el;
+}
+
+function catRenderInstance(root) {
+  if (!_catData) return;
+  var st = catStateForRoot(root);
+  if (st.focusedCol == null || !_catData.categories[st.focusedCol]) st.focusedCol = panelState.categories.focusedCol;
+  renderCatSidebar(root);
+  renderCatMain(root);
+  // NB: the tab title is synced by the spawn flow + the column-click handler,
+  // NOT here — updateTab re-renders the strip, and calling it mid-build (while
+  // rails is still inside renderPanel) reentrantly rebuilds the panel.
+}
+
+// Scope-derived tab title — "Categories: <focused column>" (singleton keeps its
+// static "Categories" title).
+function catSyncInstanceTitle(root) {
+  if (!root || typeof wsRails === 'undefined' || !wsRails || typeof findTab !== 'function') return;
+  var instId = root.getAttribute && root.getAttribute('data-cat-inst');
+  if (!instId) return;
+  var st = catInstances[instId];
+  var name = (st && st.focusedCol != null && _catData && _catData.header) ? _catData.header[st.focusedCol] : null;
+  if (findTab(wsRails.state, instId)) wsRails.updateTab(instId, { title: name ? 'Categories: ' + name : 'Categories' });
+}
+
+// Re-render every live clone after a (re)analysis — _catData changed under them.
+function catRenderAllInstances() {
+  Object.keys(catInstances).forEach(function(id) {
+    var root = document.querySelector('[data-cat-inst="' + id + '"]');
+    if (root) { catRenderInstance(root); catSyncInstanceTitle(root); }  // safe here — not inside a renderPanel build
+  });
 }
 
 // ─── Catalog tree (C1a step 2: read-only) ─────────────────────────────
@@ -30451,6 +30522,13 @@ function wsDefaultLayout(activeId) {
 function wsRehomePanel(tab, wrapper) {
   var el = wrapper && wrapper.firstElementChild;
   if (!el) return;
+  // A10 4e-c-4: a closed Categories clone is discarded with its state (the
+  // singleton + its panelState.categories survive).
+  if (typeof catInstances !== 'undefined' && catInstances[tab.id]) {
+    delete catInstances[tab.id];
+    if (typeof catInstanceEls !== 'undefined') delete catInstanceEls[tab.id];
+    return;
+  }
   // A10 1g-c: instance dataset panels (d2+) are throwaway clones — their state
   // lives in the ds object and renderPanel rebuilds on reopen, so discard them
   // (re-home only the static singletons + the tree).
@@ -30542,6 +30620,22 @@ function wsRestoreInstance(cfg) {
     wsRails.addTab({ id: ds.id, title: 'Import: ' + (ds.prefix || 'data'), closeable: true }, wsMainTarget());
   }
   return ds;
+}
+
+// A10 4e-c-4: spawn a cloned Categories analysis panel. seedFocusedCol lets
+// Duplicate carry the source panel's column; default = the singleton's column.
+function wsSpawnCategoriesInstance(seedFocusedCol, seedChartShowAll) {
+  if (!wsRails || typeof catNextInstId !== 'function') { showPanel('categories'); return; }
+  var instId = catNextInstId();
+  catInstances[instId] = catNewInstState();
+  catInstances[instId].focusedCol = (seedFocusedCol != null) ? seedFocusedCol : panelState.categories.focusedCol;
+  catInstances[instId].chartShowAll = !!seedChartShowAll;
+  wsRails.addTab({ id: instId, title: 'Categories', closeable: true }, wsMainTarget());
+  wsRails.activateTab(instId);                 // renderPanel → catBuildInstancePanel
+  if (typeof catSyncInstanceTitle === 'function') {
+    var root = document.querySelector('[data-cat-inst="' + instId + '"]');
+    if (root) catSyncInstanceTitle(root);
+  }
 }
 
 // Track the prefix in the tab title (loadAuxFile on load, onAuxConfigChange on edit)
@@ -30662,6 +30756,8 @@ function wsNewTabMenuItems() {
     items.push({ label: p.title, action: { panel: p.id } });
   });
   if (items.length) items.push('---');
+  items.push({ label: 'New Categories panel', action: 'newCategories' });   // A10 4e-c-4: cloneable analysis panel
+  items.push('---');
   items.push({ label: 'Add point dataset…', action: 'addPoint' });
   items.push({ label: 'Add drillhole set…', action: 'addDrillhole' });
   return items;
@@ -30781,6 +30877,7 @@ function wsMenuAction(a) {
     case 'analyze': executeAnalysis(); break;
     case 'filter': wsFocusFilter(); break;
     case 'calcols': showPanel('calcols'); break;
+    case 'newCategories': if (typeof wsSpawnCategoriesInstance === 'function') wsSpawnCategoriesInstance(); break;
     case 'addPoint': wsAddPointDataset(); break;
     case 'addDrillhole': { showPanel('aux'); var dh = document.getElementById('dhCard'); if (dh && dh.scrollIntoView) dh.scrollIntoView({ block: 'nearest' }); break; }
     case 'help': toggleHelp(); break;
@@ -30804,6 +30901,10 @@ function buildRailsShell(host) {
       if (tab.id === 'data') return document.getElementById('catalogTree');
       var p = wsPanelById(tab.id);
       if (p) return document.getElementById(p.el);
+      // A10 4e-c-4: a cloned Categories analysis panel (categories#N)
+      if (typeof catBuildInstancePanel === 'function' && tab.id.indexOf('categories#') === 0) {
+        return catBuildInstancePanel(tab.id);
+      }
       // A10 1g-c: a dataset instance tab (d2+) → build its panel from the ds
       var ds = (typeof dsById === 'function') ? dsById(tab.id) : null;
       if (ds && ds.id !== 'model') return wsBuildDatasetPanel(ds);
@@ -30881,16 +30982,20 @@ function buildRailsShell(host) {
     if (!ev || !ev.tab || ev.tab.id === 'data') return;
     var hit = findTab(wsRails.state, ev.tab.id);
     var inFloat = hit && hit.container === 'float';
+    var isCat = ev.tab.id === 'categories' || ev.tab.id.indexOf('categories#') === 0;
     var items = [
       inFloat ? { label: 'Dock', action: 'dock' } : { label: 'Float', action: 'float' },
       { label: 'Move to new rail', action: 'rail' },
-      '---',
-      { label: 'Close', action: 'close' },
     ];
+    if (isCat) items.push({ label: 'Duplicate', action: 'duplicate' });   // A10 4e-c-4
+    items.push('---', { label: 'Close', action: 'close' });
     if (ev.stack.tabs.length > 1) items.push({ label: 'Close others in stack', action: 'close-others' });
     Menu.show(items, { x: ev.x, y: ev.y }).then(function(a) {
       if (!a || !wsRails) return;
-      if (a === 'float') {
+      if (a === 'duplicate') {
+        var src = ev.tab.id === 'categories' ? panelState.categories : (typeof catInstances !== 'undefined' ? catInstances[ev.tab.id] : null);
+        wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false);
+      } else if (a === 'float') {
         var hostRect = document.getElementById('resultsMain').getBoundingClientRect();
         wsRails.floatTab(ev.tab.id, {
           x: Math.max(20, ev.x - hostRect.left - 80),

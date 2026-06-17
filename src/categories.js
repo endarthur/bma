@@ -33,6 +33,7 @@ function renderCategoriesTab(categories, header, origColCount, rowCount) {
   renderCatSidebar();
   renderCatMain();
   wireCatEvents();
+  catRenderAllInstances();   // keep any live clones in sync with the new analysis
 }
 
 function renderCatSidebar(root) {
@@ -734,4 +735,74 @@ function wireCatEvents(root) {
       if (e.key === 'Escape') document.querySelectorAll('.cat-color-picker.open').forEach(function(p) { p.classList.remove('open'); });
     });
   }
+}
+
+// ─── A10 4e-c-4b: cloneable Categories instances ───────────────────────────
+// A clone is a copy of #panelCategories with its ids stripped (DOM resolved by
+// data-cat within the clone root, tagged data-cat-inst). Its {focusedCol,
+// chartShowAll} live in catInstances[id]; the data (_catData) and catalog are
+// shared, so a clone shows its OWN column from the same analysis. rails calls
+// catBuildInstancePanel(id) via renderPanel; wsSpawnCategoriesInstance and the
+// tab "Duplicate" create them.
+var catInstSeq = 1;
+var catInstanceEls = {};   // instId -> the built clone element (one per instance)
+function catNextInstId() { catInstSeq += 1; return 'categories#' + catInstSeq; }
+
+function catBuildInstancePanel(instId) {
+  var tmpl = document.getElementById('panelCategories');
+  if (!tmpl) return null;
+  // rails may call renderPanel more than once for a tab id (addTab re-renders);
+  // return the SAME clone each time (as getElementById does for singletons), so
+  // a second call never leaves a duplicate clone in the DOM.
+  if (catInstanceEls[instId] && document.contains(catInstanceEls[instId])) return catInstanceEls[instId];
+  if (!catInstances[instId]) {
+    catInstances[instId] = catNewInstState();
+    catInstances[instId].focusedCol = panelState.categories.focusedCol;
+  }
+  var el = tmpl.cloneNode(true);
+  el.removeAttribute('id');
+  el.querySelectorAll('[id]').forEach(function(n) { n.removeAttribute('id'); });
+  el.setAttribute('data-cat-inst', instId);
+  el.setAttribute('data-tab', instId);
+  el.classList.add('active');
+  // The clone copied the singleton's rendered DOM — clear the search inputs and
+  // any open colour picker, then render fresh from _catData into the clone.
+  var els = catEls(el);
+  if (els.colSearch) els.colSearch.value = '';
+  if (els.valueSearch) els.valueSearch.value = '';
+  if (els.colorPicker) els.colorPicker.classList.remove('open');
+  wireCatEvents(el);
+  catRenderInstance(el);
+  catInstanceEls[instId] = el;
+  return el;
+}
+
+function catRenderInstance(root) {
+  if (!_catData) return;
+  var st = catStateForRoot(root);
+  if (st.focusedCol == null || !_catData.categories[st.focusedCol]) st.focusedCol = panelState.categories.focusedCol;
+  renderCatSidebar(root);
+  renderCatMain(root);
+  // NB: the tab title is synced by the spawn flow + the column-click handler,
+  // NOT here — updateTab re-renders the strip, and calling it mid-build (while
+  // rails is still inside renderPanel) reentrantly rebuilds the panel.
+}
+
+// Scope-derived tab title — "Categories: <focused column>" (singleton keeps its
+// static "Categories" title).
+function catSyncInstanceTitle(root) {
+  if (!root || typeof wsRails === 'undefined' || !wsRails || typeof findTab !== 'function') return;
+  var instId = root.getAttribute && root.getAttribute('data-cat-inst');
+  if (!instId) return;
+  var st = catInstances[instId];
+  var name = (st && st.focusedCol != null && _catData && _catData.header) ? _catData.header[st.focusedCol] : null;
+  if (findTab(wsRails.state, instId)) wsRails.updateTab(instId, { title: name ? 'Categories: ' + name : 'Categories' });
+}
+
+// Re-render every live clone after a (re)analysis — _catData changed under them.
+function catRenderAllInstances() {
+  Object.keys(catInstances).forEach(function(id) {
+    var root = document.querySelector('[data-cat-inst="' + id + '"]');
+    if (root) { catRenderInstance(root); catSyncInstanceTitle(root); }  // safe here — not inside a renderPanel build
+  });
 }

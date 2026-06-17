@@ -126,6 +126,13 @@ function wsDefaultLayout(activeId) {
 function wsRehomePanel(tab, wrapper) {
   var el = wrapper && wrapper.firstElementChild;
   if (!el) return;
+  // A10 4e-c-4: a closed Categories clone is discarded with its state (the
+  // singleton + its panelState.categories survive).
+  if (typeof catInstances !== 'undefined' && catInstances[tab.id]) {
+    delete catInstances[tab.id];
+    if (typeof catInstanceEls !== 'undefined') delete catInstanceEls[tab.id];
+    return;
+  }
   // A10 1g-c: instance dataset panels (d2+) are throwaway clones — their state
   // lives in the ds object and renderPanel rebuilds on reopen, so discard them
   // (re-home only the static singletons + the tree).
@@ -217,6 +224,22 @@ function wsRestoreInstance(cfg) {
     wsRails.addTab({ id: ds.id, title: 'Import: ' + (ds.prefix || 'data'), closeable: true }, wsMainTarget());
   }
   return ds;
+}
+
+// A10 4e-c-4: spawn a cloned Categories analysis panel. seedFocusedCol lets
+// Duplicate carry the source panel's column; default = the singleton's column.
+function wsSpawnCategoriesInstance(seedFocusedCol, seedChartShowAll) {
+  if (!wsRails || typeof catNextInstId !== 'function') { showPanel('categories'); return; }
+  var instId = catNextInstId();
+  catInstances[instId] = catNewInstState();
+  catInstances[instId].focusedCol = (seedFocusedCol != null) ? seedFocusedCol : panelState.categories.focusedCol;
+  catInstances[instId].chartShowAll = !!seedChartShowAll;
+  wsRails.addTab({ id: instId, title: 'Categories', closeable: true }, wsMainTarget());
+  wsRails.activateTab(instId);                 // renderPanel → catBuildInstancePanel
+  if (typeof catSyncInstanceTitle === 'function') {
+    var root = document.querySelector('[data-cat-inst="' + instId + '"]');
+    if (root) catSyncInstanceTitle(root);
+  }
 }
 
 // Track the prefix in the tab title (loadAuxFile on load, onAuxConfigChange on edit)
@@ -337,6 +360,8 @@ function wsNewTabMenuItems() {
     items.push({ label: p.title, action: { panel: p.id } });
   });
   if (items.length) items.push('---');
+  items.push({ label: 'New Categories panel', action: 'newCategories' });   // A10 4e-c-4: cloneable analysis panel
+  items.push('---');
   items.push({ label: 'Add point dataset…', action: 'addPoint' });
   items.push({ label: 'Add drillhole set…', action: 'addDrillhole' });
   return items;
@@ -456,6 +481,7 @@ function wsMenuAction(a) {
     case 'analyze': executeAnalysis(); break;
     case 'filter': wsFocusFilter(); break;
     case 'calcols': showPanel('calcols'); break;
+    case 'newCategories': if (typeof wsSpawnCategoriesInstance === 'function') wsSpawnCategoriesInstance(); break;
     case 'addPoint': wsAddPointDataset(); break;
     case 'addDrillhole': { showPanel('aux'); var dh = document.getElementById('dhCard'); if (dh && dh.scrollIntoView) dh.scrollIntoView({ block: 'nearest' }); break; }
     case 'help': toggleHelp(); break;
@@ -479,6 +505,10 @@ function buildRailsShell(host) {
       if (tab.id === 'data') return document.getElementById('catalogTree');
       var p = wsPanelById(tab.id);
       if (p) return document.getElementById(p.el);
+      // A10 4e-c-4: a cloned Categories analysis panel (categories#N)
+      if (typeof catBuildInstancePanel === 'function' && tab.id.indexOf('categories#') === 0) {
+        return catBuildInstancePanel(tab.id);
+      }
       // A10 1g-c: a dataset instance tab (d2+) → build its panel from the ds
       var ds = (typeof dsById === 'function') ? dsById(tab.id) : null;
       if (ds && ds.id !== 'model') return wsBuildDatasetPanel(ds);
@@ -556,16 +586,20 @@ function buildRailsShell(host) {
     if (!ev || !ev.tab || ev.tab.id === 'data') return;
     var hit = findTab(wsRails.state, ev.tab.id);
     var inFloat = hit && hit.container === 'float';
+    var isCat = ev.tab.id === 'categories' || ev.tab.id.indexOf('categories#') === 0;
     var items = [
       inFloat ? { label: 'Dock', action: 'dock' } : { label: 'Float', action: 'float' },
       { label: 'Move to new rail', action: 'rail' },
-      '---',
-      { label: 'Close', action: 'close' },
     ];
+    if (isCat) items.push({ label: 'Duplicate', action: 'duplicate' });   // A10 4e-c-4
+    items.push('---', { label: 'Close', action: 'close' });
     if (ev.stack.tabs.length > 1) items.push({ label: 'Close others in stack', action: 'close-others' });
     Menu.show(items, { x: ev.x, y: ev.y }).then(function(a) {
       if (!a || !wsRails) return;
-      if (a === 'float') {
+      if (a === 'duplicate') {
+        var src = ev.tab.id === 'categories' ? panelState.categories : (typeof catInstances !== 'undefined' ? catInstances[ev.tab.id] : null);
+        wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false);
+      } else if (a === 'float') {
         var hostRect = document.getElementById('resultsMain').getBoundingClientRect();
         wsRails.floatTab(ev.tab.id, {
           x: Math.max(20, ev.x - hostRect.left - 80),
