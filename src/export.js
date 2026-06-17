@@ -47,6 +47,59 @@ function exportCtx() {
   };
 }
 
+// G5a: datasets the Export tab can target — any with a completed analysis.
+function exportTargetableDatasets() {
+  var out = [];
+  for (var i = 0; i < datasets.length; i++) { if (datasets[i].complete) out.push(datasets[i]); }
+  return out;
+}
+// The "Dataset" picker at the top of the Export sidebar — shown only when 2+
+// datasets are analyzed (with one, Export is implicitly the model, as before).
+function exportRenderDatasetPicker() {
+  var wrap = document.getElementById('exportDatasetWrap');
+  if (!wrap) return;
+  var ts = exportTargetableDatasets();
+  if (ts.length < 2) { wrap.innerHTML = ''; return; }
+  var cur = exportTargetDs().id;
+  wrap.innerHTML = '<div class="export-sidebar-title">Dataset</div>' +
+    '<select class="export-select" id="exportDataset">' +
+    ts.map(function(d) { return '<option value="' + d.id + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
+    '</select>';
+  var sel = document.getElementById('exportDataset');
+  if (sel) sel.onchange = function() { setExportTarget(sel.value); };
+}
+// Switch the Export target dataset: build its column list on first visit (else
+// keep the dataset's existing selection), then re-render the tab for it.
+function setExportTarget(id) {
+  if (id === exportTargetDsId) return;
+  exportTargetDsId = id;
+  $exportColSearch.value = '';
+  var C = exportCtx();
+  if (!C.S.columns || C.S.columns.length === 0) {
+    initExportColumns();   // first visit — seed from this dataset's header
+  } else {
+    detectSourcePrecision();
+    renderExportColumns();
+    updateExportRowPreview();
+    updateExportPreview();
+  }
+  exportRenderDatasetPicker();
+  updateExportWarnings();
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+// Keep the picker current as datasets analyze/clear; bounce to the model if the
+// target is GONE from the registry (not merely unanalyzed, so a restored target
+// awaiting re-analysis survives).
+function exportRefreshDatasetPicker() {
+  if (exportTargetDsId !== 'model' && !dsById(exportTargetDsId)) {
+    exportTargetDsId = 'model';
+    initExportColumns();
+    exportRenderDatasetPicker();
+    return;
+  }
+  exportRenderDatasetPicker();
+}
+
 function initExportColumns() {
   const C = exportCtx();
   const cols = [];
@@ -89,6 +142,7 @@ function detectSourcePrecision() {
 }
 
 function renderExportColumns() {
+  exportRenderDatasetPicker();
   const cols = exportCtx().S.columns;
   const search = $exportColSearch.value.toLowerCase();
   let html = '';

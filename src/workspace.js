@@ -331,6 +331,7 @@ function wsRemoveInstance(ds) {
   if (typeof refreshGtTheoSource === 'function') refreshGtTheoSource();           // G2: drop it from the GT theo source picker
   if (typeof gtRefreshDatasetPicker === 'function') gtRefreshDatasetPicker();     // G3: drop it from the GT dataset picker (bounce to model if targeted)
   if (typeof statsCatRefreshDatasetPicker === 'function') statsCatRefreshDatasetPicker();  // G4a: drop it from the StatsCat dataset picker (bounce to model if targeted)
+  if (typeof exportRefreshDatasetPicker === 'function') exportRefreshDatasetPicker();  // G5a: drop it from the Export dataset picker (bounce to model if targeted)
   if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
     renderStatsSidebar(); renderStatsTable(); renderStatsCdfPanel();
   }

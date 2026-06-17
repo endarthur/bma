@@ -5705,6 +5705,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
       <div class="results-panel" id="panelExport" data-tab="export">
         <div class="export-body" id="exportBody">
           <div class="export-sidebar">
+            <div class="export-sidebar-section" id="exportDatasetWrap"></div>
             <div class="export-sidebar-section">
               <div class="export-sidebar-title">Columns <span class="badge" id="exportBadge">0</span></div>
               <input type="text" class="export-col-search" id="exportColSearch" placeholder="Search columns…" autocomplete="off" spellcheck="false">
@@ -5916,7 +5917,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 04c636f — click to check for updates">04c636f</div>
+<div class="build-badge" id="buildBadge" title="build a6019f1 — click to check for updates">a6019f1</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -15227,6 +15228,8 @@ function runAuxAnalysis(ds, root) {
       if (typeof gtRefreshDatasetPicker === 'function') gtRefreshDatasetPicker();  // G3: this dataset is now GT-targetable
       if (typeof statsCatRefreshDatasetPicker === 'function') statsCatRefreshDatasetPicker();  // G4a: now StatsCat-targetable
       if (typeof applyStatsCatRestore === 'function') applyStatsCatRestore(ds);  // G4a-3: reattach saved statscat selection by name
+      if (typeof exportRefreshDatasetPicker === 'function') exportRefreshDatasetPicker();  // G5a: now Export-targetable
+      if (typeof applyExportDsRestore === 'function') applyExportDsRestore(ds);  // G5a-3: reattach saved export columns by name
       if (typeof statsCatTargetDsId !== 'undefined' && statsCatTargetDsId === ds.id && typeof renderStatsCat === 'function') renderStatsCat();
       autoSaveProject();
     } else if (m.type === 'error') {
@@ -15847,6 +15850,7 @@ function clearAux(ds, root) {
   ds.gridMode = null;   // A10 4f-2: back to default 'auto'
   ds.stale = false;
   ds.statsCat = null;   // A10 G4a: drop its per-dataset StatsCat selection
+  ds.export = null;     // A10 G5a: drop its per-dataset Export column selection
   delete panelState.statistics.cmpSel[ds.id];
   delete panelState.statistics.cdfCmpSel[ds.id];
   panelState.statistics.dsHidden.delete(ds.id);
@@ -15875,6 +15879,7 @@ function clearAux(ds, root) {
   if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
   if (typeof refreshGtTheoSource === 'function') refreshGtTheoSource();   // G2: GT theo source picker
   if (typeof statsCatRefreshDatasetPicker === 'function') statsCatRefreshDatasetPicker();  // G4a: bounce StatsCat off the cleared dataset
+  if (typeof exportRefreshDatasetPicker === 'function') exportRefreshDatasetPicker();  // G5a: bounce Export off the cleared dataset
   if (typeof updateCalcolBadge === 'function') updateCalcolBadge();
   if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
     renderStatsSidebar();
@@ -22286,6 +22291,59 @@ function exportCtx() {
   };
 }
 
+// G5a: datasets the Export tab can target — any with a completed analysis.
+function exportTargetableDatasets() {
+  var out = [];
+  for (var i = 0; i < datasets.length; i++) { if (datasets[i].complete) out.push(datasets[i]); }
+  return out;
+}
+// The "Dataset" picker at the top of the Export sidebar — shown only when 2+
+// datasets are analyzed (with one, Export is implicitly the model, as before).
+function exportRenderDatasetPicker() {
+  var wrap = document.getElementById('exportDatasetWrap');
+  if (!wrap) return;
+  var ts = exportTargetableDatasets();
+  if (ts.length < 2) { wrap.innerHTML = ''; return; }
+  var cur = exportTargetDs().id;
+  wrap.innerHTML = '<div class="export-sidebar-title">Dataset</div>' +
+    '<select class="export-select" id="exportDataset">' +
+    ts.map(function(d) { return '<option value="' + d.id + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
+    '</select>';
+  var sel = document.getElementById('exportDataset');
+  if (sel) sel.onchange = function() { setExportTarget(sel.value); };
+}
+// Switch the Export target dataset: build its column list on first visit (else
+// keep the dataset's existing selection), then re-render the tab for it.
+function setExportTarget(id) {
+  if (id === exportTargetDsId) return;
+  exportTargetDsId = id;
+  $exportColSearch.value = '';
+  var C = exportCtx();
+  if (!C.S.columns || C.S.columns.length === 0) {
+    initExportColumns();   // first visit — seed from this dataset's header
+  } else {
+    detectSourcePrecision();
+    renderExportColumns();
+    updateExportRowPreview();
+    updateExportPreview();
+  }
+  exportRenderDatasetPicker();
+  updateExportWarnings();
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+// Keep the picker current as datasets analyze/clear; bounce to the model if the
+// target is GONE from the registry (not merely unanalyzed, so a restored target
+// awaiting re-analysis survives).
+function exportRefreshDatasetPicker() {
+  if (exportTargetDsId !== 'model' && !dsById(exportTargetDsId)) {
+    exportTargetDsId = 'model';
+    initExportColumns();
+    exportRenderDatasetPicker();
+    return;
+  }
+  exportRenderDatasetPicker();
+}
+
 function initExportColumns() {
   const C = exportCtx();
   const cols = [];
@@ -22328,6 +22386,7 @@ function detectSourcePrecision() {
 }
 
 function renderExportColumns() {
+  exportRenderDatasetPicker();
   const cols = exportCtx().S.columns;
   const search = $exportColSearch.value.toLowerCase();
   let html = '';
@@ -32349,6 +32408,7 @@ function wsRemoveInstance(ds) {
   if (typeof refreshGtTheoSource === 'function') refreshGtTheoSource();           // G2: drop it from the GT theo source picker
   if (typeof gtRefreshDatasetPicker === 'function') gtRefreshDatasetPicker();     // G3: drop it from the GT dataset picker (bounce to model if targeted)
   if (typeof statsCatRefreshDatasetPicker === 'function') statsCatRefreshDatasetPicker();  // G4a: drop it from the StatsCat dataset picker (bounce to model if targeted)
+  if (typeof exportRefreshDatasetPicker === 'function') exportRefreshDatasetPicker();  // G5a: drop it from the Export dataset picker (bounce to model if targeted)
   if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
     renderStatsSidebar(); renderStatsTable(); renderStatsCdfPanel();
   }

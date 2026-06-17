@@ -224,6 +224,8 @@ function runAuxAnalysis(ds, root) {
       if (typeof gtRefreshDatasetPicker === 'function') gtRefreshDatasetPicker();  // G3: this dataset is now GT-targetable
       if (typeof statsCatRefreshDatasetPicker === 'function') statsCatRefreshDatasetPicker();  // G4a: now StatsCat-targetable
       if (typeof applyStatsCatRestore === 'function') applyStatsCatRestore(ds);  // G4a-3: reattach saved statscat selection by name
+      if (typeof exportRefreshDatasetPicker === 'function') exportRefreshDatasetPicker();  // G5a: now Export-targetable
+      if (typeof applyExportDsRestore === 'function') applyExportDsRestore(ds);  // G5a-3: reattach saved export columns by name
       if (typeof statsCatTargetDsId !== 'undefined' && statsCatTargetDsId === ds.id && typeof renderStatsCat === 'function') renderStatsCat();
       autoSaveProject();
     } else if (m.type === 'error') {
@@ -844,6 +846,7 @@ function clearAux(ds, root) {
   ds.gridMode = null;   // A10 4f-2: back to default 'auto'
   ds.stale = false;
   ds.statsCat = null;   // A10 G4a: drop its per-dataset StatsCat selection
+  ds.export = null;     // A10 G5a: drop its per-dataset Export column selection
   delete panelState.statistics.cmpSel[ds.id];
   delete panelState.statistics.cdfCmpSel[ds.id];
   panelState.statistics.dsHidden.delete(ds.id);
@@ -872,6 +875,7 @@ function clearAux(ds, root) {
   if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
   if (typeof refreshGtTheoSource === 'function') refreshGtTheoSource();   // G2: GT theo source picker
   if (typeof statsCatRefreshDatasetPicker === 'function') statsCatRefreshDatasetPicker();  // G4a: bounce StatsCat off the cleared dataset
+  if (typeof exportRefreshDatasetPicker === 'function') exportRefreshDatasetPicker();  // G5a: bounce Export off the cleared dataset
   if (typeof updateCalcolBadge === 'function') updateCalcolBadge();
   if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
     renderStatsSidebar();
