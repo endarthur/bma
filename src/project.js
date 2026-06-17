@@ -349,6 +349,7 @@ function serializeComparisonDatasets() {
       fileName: ds.file.name,
       fileSize: ds.file.size,
       prefix: ds.prefix,
+      gridMode: ds.gridMode || null,   // A10 4f-2: grid override (null = default 'auto')
       xyz: ds.preflight ? ds.preflight.xyz : null,
       zipEntry: ds.preflight ? (ds.preflight.selectedZipEntry || null) : null,
       filter: ds.filter ? ds.filter.expression : '',
@@ -426,12 +427,14 @@ function serializeProject() {
       colFilters: preflightData?.colFilters || {},
       xyz: preflightData?.xyz || { x: -1, y: -1, z: -1 },
       dxyz: preflightData?.dxyz || { dx: -1, dy: -1, dz: -1 },
+      gridMode: currentGridMode,   // A10 4f-2: grid override (null = default 'grid')
       selectedZipEntry: preflightData?.selectedZipEntry || null
     },
     aux: auxFile ? {
       fileName: auxFile.name,
       fileSize: auxFile.size,
       prefix: auxPrefix,
+      gridMode: auxGridMode,   // A10 4f-2: grid override (null = default 'auto')
       xyz: auxPreflightData ? auxPreflightData.xyz : null,
       zipEntry: auxPreflightData ? (auxPreflightData.selectedZipEntry || null) : null,
       filter: auxFilter ? auxFilter.expression : '',
@@ -682,6 +685,7 @@ async function applyProject(project) {
     preflightData.colFilters = pf.colFilters || {};
     if (pf.xyz) preflightData.xyz = pf.xyz;
     if (pf.dxyz) preflightData.dxyz = pf.dxyz;
+    if (pf.gridMode !== undefined) currentGridMode = pf.gridMode;   // A10 4f-2
     renderPreflightSidebar(preflightData);
     renderPreflightTable(preflightData);
   }
@@ -1310,6 +1314,7 @@ async function handleFile(file, handle, skipRecents) {
   sectionTransform = null;
   sectionDefaultBlockSize = null;
   currentDXYZ = { dx: -1, dy: -1, dz: -1 };
+  currentGridMode = null;   // A10 4f-2: back to the model default ('grid')
   hasResults = false;
   $filterExpr.value = '';
   $filterSection.classList.remove('active');
@@ -1482,6 +1487,7 @@ $backToPreflight.addEventListener('click', () => {
   sectionTransform = null;
   sectionDefaultBlockSize = null;
   currentDXYZ = { dx: -1, dy: -1, dz: -1 };
+  currentGridMode = null;   // A10 4f-2: back to the model default ('grid')
 });
 
 // Allow dropping new files onto results area
@@ -1829,6 +1835,9 @@ function displayResults(data) {
   analysisStale = false;
   const execBtn = document.getElementById('executeBtn');
   if (execBtn) execBtn.classList.add('clean');
+
+  // A10 4f-2: the detected-grid badge in the preflight panel is only known now
+  if (typeof refreshModelGridSection === 'function') refreshModelGridSection();
 
   // Show filter section (action bar already visible from handleFile)
   $filterSection.classList.add('active');

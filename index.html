@@ -4128,6 +4128,28 @@ table.cat-values tr.cat-aux-only td { background: color-mix(in srgb, var(--brand
   cursor: default; color: var(--fg-dim);
   border-color: var(--border); border-left: 2px solid var(--sel); background: transparent;
 }
+/* A10 4f-2: grid-classification override (grid/point/auto) + detected badge.
+   A segmented control — mutually-exclusive chips — shared by the model preflight
+   and the comparison-dataset import panels. */
+.ds-grid-chips { display: inline-flex; gap: 0; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+.ds-grid-chip {
+  font: 0.66rem var(--mono); background: var(--bg2); color: var(--fg-dim);
+  border: none; border-left: 1px solid var(--border); padding: 0.2rem 0.55rem;
+  cursor: pointer; line-height: 1.3;
+}
+.ds-grid-chip:first-child { border-left: none; }
+.ds-grid-chip:hover { color: var(--fg-bright); }
+.ds-grid-chip.active { background: var(--sel-soft); color: var(--sel); }
+.ds-grid-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem; margin-top: 0.4rem; }
+.ds-grid-status.ds-grid-muted { font: 0.72rem var(--sans); color: var(--fg-dim); opacity: 0.8; }
+.ds-grid-badge {
+  font: 0.6rem var(--mono); text-transform: uppercase; letter-spacing: 0.04em;
+  border-radius: 999px; padding: 0.05rem 0.4rem;
+}
+.ds-grid-badge.is-grid { color: var(--green); border: 1px solid var(--green); }
+.ds-grid-badge.is-points { color: var(--fg-dim); border: 1px solid var(--border); }
+.ds-grid-sizes { font: 0.7rem var(--mono); color: var(--fg-bright); }
+.ds-grid-note { font: 0.68rem var(--sans); color: var(--fg-dim); opacity: 0.85; flex-basis: 100%; }
 .aux-declus-results {
   margin-top: 0.4rem; padding-top: 0.35rem;
   border-top: 1px dashed var(--border);
@@ -5889,7 +5911,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 83214f8 — click to check for updates">83214f8</div>
+<div class="build-badge" id="buildBadge" title="build 9e4f851 — click to check for updates">9e4f851</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8435,6 +8457,7 @@ let currentXYZ = { x: -1, y: -1, z: -1 };
 let detectedXYZ = { x: -1, y: -1, z: -1 };
 let currentFilter = null; // { expression: string }
 let currentRowVar = 'r';
+let currentGridMode = null; // A10 4f-2: model grid override (null = default 'grid'; or 'grid'/'point'/'auto')
 let worker = null;
 let preflightData = null; // { header, sampleRows, autoTypes, delimiter, zipEntries, selectedZipEntry }
 
@@ -8445,6 +8468,7 @@ let auxPreflightData = null;   // runPreflight() result for the aux file (header
 let auxCompleteData = null;    // snapshot of the last aux analysis (parallel to lastCompleteData)
 let auxData = null;            // aux stats object for comparison rendering
 let auxPrefix = 'aux';         // display-only label prefix for aux pseudo-columns (e.g. "aux:Fe")
+let auxGridMode = null;        // A10 4f-2: aux grid override (null = default 'auto'; or 'grid'/'point'/'auto')
 let auxFilter = null;          // { expression } — references aux columns via the fixed AUX_ROW_VAR handle
 // A10 1g-c: the analysis/declus/topcut worker handles live PER-DATASET on the
 // ds object (ds._worker / ds._declusWorker / ds._topcutWorker) so instance
@@ -8519,6 +8543,7 @@ const datasets = [
     get calcolCode() { return currentCalcolCode; },   set calcolCode(v) { currentCalcolCode = v; },
     get calcolMeta() { return currentCalcolMeta; },   set calcolMeta(v) { currentCalcolMeta = v; },
     get prefix()     { return null; },
+    get gridMode()   { return currentGridMode; },     set gridMode(v)   { currentGridMode = v; },
     get rowVar()     { return currentRowVar; },
     get source()     { return 'file'; }
   },
@@ -8536,6 +8561,7 @@ const datasets = [
     get declus()     { return auxDeclus; },            set declus(v)     { auxDeclus = v; },
     get topcut()     { return auxTopcut; },            set topcut(v)     { auxTopcut = v; },
     get view()       { return auxView; },              set view(v)       { auxView = v; },
+    get gridMode()   { return auxGridMode; },          set gridMode(v)   { auxGridMode = v; },
     get rowVar()     { return AUX_ROW_VAR; }
   }
 ];
@@ -8564,6 +8590,7 @@ function dsCreate(opts) {
     calcolCode: '',
     calcolMeta: [],
     prefix: opts.prefix || 'data',
+    gridMode: opts.gridMode || null,   // A10 4f-2: grid override (null = default 'auto')
     declus: null,
     topcut: null,
     view: 'preview',
@@ -8697,6 +8724,74 @@ function dsGrid(ds) {
   return g.isRegularGrid ? g : null;   // 'auto' — trust the worker's detection
 }
 function dsHasGrid(ds) { return !!dsGrid(ds); }
+
+// A10 4f-2: does this dataset have all three coordinate axes assigned? (XYZ is
+// the precondition for any geometry; geometry itself is only known post-analysis.)
+function dsHasXYZ(ds) {
+  var q = ds && ds.preflight && ds.preflight.xyz;
+  if (ds && ds.id === 'model' && preflightData) q = preflightData.xyz;   // model preflight is the canonical store
+  return !!(q && q.x >= 0 && q.y >= 0 && q.z >= 0);
+}
+
+// A10 4f-2: the grid-classification control for a dataset's import panel — the
+// grid/point/auto override chips + the detected-grid badge. Inferred state stays
+// visible AND overridable (no-magic-only-ui). Shared by the model preflight
+// (renderPreflightSidebar) and the comparison-dataset panels (renderAuxConfig);
+// the chosen mode persists as ds.gridMode. The detected geometry is only known
+// after an analysis (the worker computes it from the full stream), so before
+// that we show only the override + a hint.
+function dsGridSectionHtml(ds) {
+  var mode = dsGridMode(ds);   // effective grid/point/auto (override or default)
+  function chip(val, label, title) {
+    return '<button type="button" class="ds-grid-chip' + (mode === val ? ' active' : '') +
+      '" data-gridmode="' + val + '" title="' + esc(title) + '">' + label + '</button>';
+  }
+  var defLabel = (ds && ds.id === 'model') ? 'detect (default: grid)' : 'detect from data';
+  var chips = '<div class="ds-grid-chips" role="group">' +
+    chip('auto', 'auto', defLabel) +
+    chip('grid', 'grid', 'Always treat as a regular block model') +
+    chip('point', 'point', 'Always treat as scattered points (never a grid)') +
+    '</div>';
+  var g = ds && ds.complete && ds.complete.geometry;
+  var status;
+  if (g && g.x && g.x.blockSize && g.y && g.y.blockSize && g.z && g.z.blockSize) {
+    var fmt = (typeof formatNum === 'function') ? formatNum : function(n) { return String(n); };
+    var sizes = fmt(g.x.blockSize) + '×' + fmt(g.y.blockSize) + '×' + fmt(g.z.blockSize);
+    var isGrid = dsHasGrid(ds);
+    var auto = !!g.isRegularGrid;
+    var badge = isGrid
+      ? '<span class="ds-grid-badge is-grid">▦ grid</span> <span class="ds-grid-sizes">' + sizes + '</span>'
+      : '<span class="ds-grid-badge is-points">∴ points</span>';
+    var note;
+    if (mode === 'grid' && !auto) note = 'forced — auto-detect saw irregular spacing';
+    else if (mode === 'point' && auto) note = 'forced — auto-detect saw a regular grid';
+    else if (mode === 'auto') note = auto ? 'auto-detected a regular grid' : 'auto-detected scattered points';
+    else note = (mode === 'grid') ? 'forced to grid' : 'forced to points';
+    status = '<div class="ds-grid-status">' + badge +
+      '<span class="ds-grid-note">' + note + '</span></div>';
+  } else if (!dsHasXYZ(ds)) {
+    status = '<div class="ds-grid-status ds-grid-muted">Assign X/Y/Z to enable grid detection</div>';
+  } else {
+    status = '<div class="ds-grid-status ds-grid-muted">Run analysis to detect grid geometry</div>';
+  }
+  return chips + status;
+}
+
+// A10 4f-2: a dataset's grid classification changed (override flipped). Refresh
+// the grid-dependent surfaces. Today that's the catalog tree (geometry facet);
+// the Summary geometry table (4f-3) and GT/Export gating (4g/4h) hook in here as
+// they generalize past the model-only paths.
+function dsGridModeChanged(ds) {
+  if (typeof refreshCatalogTree === 'function') refreshCatalogTree();
+}
+
+// A10 4f-2: repaint the model preflight's grid section in place (the detected
+// badge is only known post-analysis, but the preflight sidebar isn't rebuilt
+// then — so refresh just the wrap from displayResults). No-op if absent.
+function refreshModelGridSection() {
+  var wrap = document.getElementById('pfGridWrap');
+  if (wrap) wrap.innerHTML = dsGridSectionHtml(dsById('model'));
+}
 
 var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
 
@@ -14339,6 +14434,15 @@ function renderPreflightSidebar(data) {
     <div id="pfDxyzWrap"></div>
   </div>`;
 
+  // A10 4f-2: grid classification — visible + overridable (no-magic-only-ui).
+  // The model defaults to 'grid' (an explicit block-model import); the detected
+  // geometry badge appears here once analysis has run.
+  html += `<div class="pf-sidebar-section" data-sb="geometry">
+    <div class="pf-sidebar-section-title">Block geometry</div>
+    <div id="pfGridWrap">${dsGridSectionHtml(dsById('model'))}</div>
+    <div class="help-row"><span>Treat this dataset as a regular grid (block model) or scattered points. <code>auto</code> trusts the detected spacing; the default for an imported model is <code>grid</code>.</span></div>
+  </div>`;
+
   // DM format options (only shown for .dm files)
   if (data.isDm) {
     html += `<div class="pf-sidebar-section" id="pfDmOptions" data-sb="dm">
@@ -14493,6 +14597,22 @@ function renderPreflightSidebar(data) {
     const $pfFmt = document.getElementById('pfDmFormat');
     if ($pfEnd) $pfEnd.addEventListener('change', () => handleDmFormatChange(data));
     if ($pfFmt) $pfFmt.addEventListener('change', () => handleDmFormatChange(data));
+  }
+
+  // A10 4f-2: grid-classification override chips (grid/point/auto). Changing the
+  // mode never re-runs the analysis — it only flips whether the model COUNTS as
+  // a grid downstream; re-render the section + refresh grid-dependent surfaces.
+  const $pfGridWrap = document.getElementById('pfGridWrap');
+  if ($pfGridWrap) {
+    $pfGridWrap.addEventListener('click', (e) => {
+      const chip = e.target.closest('.ds-grid-chip');
+      if (!chip || !chip.dataset.gridmode) return;
+      const model = dsById('model');
+      model.gridMode = chip.dataset.gridmode;
+      $pfGridWrap.innerHTML = dsGridSectionHtml(model);
+      if (typeof dsGridModeChanged === 'function') dsGridModeChanged(model);
+      if (typeof autoSaveProject === 'function') autoSaveProject();
+    });
   }
 
 }
@@ -14933,6 +15053,11 @@ function renderAuxConfig(ds, root) {
       '<div class="aux-xyz-row"><label>Z</label><select class="aux-select" data-aux="z">' + auxColOptions(xyz.z, ds) + '</select></div>' +
       '<div class="aux-hint">Aux and the block model must share the same coordinate space for swath overlays to line up.</div>' +
     '</div>' +
+    '<div class="pf-sidebar-section" data-sb="geometry">' +
+      '<div class="pf-sidebar-section-title">Block geometry</div>' +
+      '<div data-aux="gridWrap">' + dsGridSectionHtml(ds) + '</div>' +
+      '<div class="aux-hint">Whether this dataset is treated as a regular grid (block model) or scattered points — gates grade-tonnage and geometry features. <code>auto</code> trusts the detected spacing.</div>' +
+    '</div>' +
     '<div class="pf-sidebar-section" data-sb="auxfilter">' +
       '<div class="pf-sidebar-section-title">Aux filter</div>' +
       '<textarea class="aux-input aux-filter" data-aux="filter" rows="2" spellcheck="false" placeholder="aux.Au > 0">' + esc(ds.filter ? ds.filter.expression : '') + '</textarea>' +
@@ -14965,6 +15090,15 @@ function renderAuxConfig(ds, root) {
   // Drillhole sets are aux-scoped until phase 5, so only the singleton aux's
   // panel carries the banner (renderDhProvenance resolves the singleton head).
   if (ds.id === 'aux' && typeof renderDhProvenance === 'function') renderDhProvenance();
+}
+
+// A10 4f-2: repaint just the grid section (detected badge known post-analysis)
+// without rebuilding the whole config sidebar. Mirrors refreshModelGridSection.
+function refreshAuxGridSection(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var wrap = auxQ('[data-aux="gridWrap"]', root);
+  if (wrap) wrap.innerHTML = dsGridSectionHtml(ds);
 }
 
 function runAuxAnalysis(ds, root) {
@@ -15045,6 +15179,7 @@ function runAuxAnalysis(ds, root) {
       ds.stale = false;
       if ($btn) $btn.disabled = false;
       if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]', root), false);  // C6-5 dim-when-done
+      refreshAuxGridSection(ds, root);  // A10 4f-2: detected-grid badge now known
       if ($status) { $status.textContent = m.rowCount.toLocaleString() + ' rows analyzed'; $status.style.color = ''; }
       ds._worker.terminate();
       ds._worker = null;
@@ -15500,6 +15635,7 @@ function runAuxDeclus(ds, root) {
 function applyAuxRestore(saved, ds) {
   ds = ds || dsById('aux');
   ds.prefix = saved.prefix || 'aux';
+  if (saved.gridMode !== undefined) ds.gridMode = saved.gridMode;   // A10 4f-2: grid override
   ds.filter = saved.filter ? { expression: saved.filter } : null;
   // Legacy projects carried the aux weight here; the catalog is canonical
   // now (a project.catalog, when present, was applied before this runs)
@@ -15618,6 +15754,7 @@ function clearAux(ds, root) {
   auxData = null;
   ds.filter = null;
   ds.prefix = 'aux';
+  ds.gridMode = null;   // A10 4f-2: back to default 'auto'
   ds.stale = false;
   delete panelState.statistics.cmpSel[ds.id];
   delete panelState.statistics.cdfCmpSel[ds.id];
@@ -15711,6 +15848,18 @@ function wireDatasetPanel(root, ds) {
     sidebar.addEventListener('change', function(e) { onAuxConfigChange(e, ds, root); });
     sidebar.addEventListener('click', function(e) {
       if (!e.target) return;
+      // A10 4f-2: grid-classification override chips. Changing the mode never
+      // re-runs the analysis (geometry is already computed) — it only flips
+      // whether the dataset COUNTS as a grid downstream; re-render to update the
+      // active chip + badge and refresh grid-dependent surfaces.
+      var gm = e.target.closest ? e.target.closest('.ds-grid-chip') : null;
+      if (gm && gm.dataset.gridmode) {
+        ds.gridMode = gm.dataset.gridmode;
+        renderAuxConfig(ds, root);
+        if (typeof dsGridModeChanged === 'function') dsGridModeChanged(ds);
+        if (typeof autoSaveProject === 'function') autoSaveProject();
+        return;
+      }
       var act = e.target.dataset ? e.target.dataset.act : null;
       if (act === 'auxAnalyze') runAuxAnalysis(ds, root);
       else if (act === 'auxDeclusRun') {
@@ -17388,6 +17537,7 @@ function serializeComparisonDatasets() {
       fileName: ds.file.name,
       fileSize: ds.file.size,
       prefix: ds.prefix,
+      gridMode: ds.gridMode || null,   // A10 4f-2: grid override (null = default 'auto')
       xyz: ds.preflight ? ds.preflight.xyz : null,
       zipEntry: ds.preflight ? (ds.preflight.selectedZipEntry || null) : null,
       filter: ds.filter ? ds.filter.expression : '',
@@ -17465,12 +17615,14 @@ function serializeProject() {
       colFilters: preflightData?.colFilters || {},
       xyz: preflightData?.xyz || { x: -1, y: -1, z: -1 },
       dxyz: preflightData?.dxyz || { dx: -1, dy: -1, dz: -1 },
+      gridMode: currentGridMode,   // A10 4f-2: grid override (null = default 'grid')
       selectedZipEntry: preflightData?.selectedZipEntry || null
     },
     aux: auxFile ? {
       fileName: auxFile.name,
       fileSize: auxFile.size,
       prefix: auxPrefix,
+      gridMode: auxGridMode,   // A10 4f-2: grid override (null = default 'auto')
       xyz: auxPreflightData ? auxPreflightData.xyz : null,
       zipEntry: auxPreflightData ? (auxPreflightData.selectedZipEntry || null) : null,
       filter: auxFilter ? auxFilter.expression : '',
@@ -17721,6 +17873,7 @@ async function applyProject(project) {
     preflightData.colFilters = pf.colFilters || {};
     if (pf.xyz) preflightData.xyz = pf.xyz;
     if (pf.dxyz) preflightData.dxyz = pf.dxyz;
+    if (pf.gridMode !== undefined) currentGridMode = pf.gridMode;   // A10 4f-2
     renderPreflightSidebar(preflightData);
     renderPreflightTable(preflightData);
   }
@@ -18349,6 +18502,7 @@ async function handleFile(file, handle, skipRecents) {
   sectionTransform = null;
   sectionDefaultBlockSize = null;
   currentDXYZ = { dx: -1, dy: -1, dz: -1 };
+  currentGridMode = null;   // A10 4f-2: back to the model default ('grid')
   hasResults = false;
   $filterExpr.value = '';
   $filterSection.classList.remove('active');
@@ -18521,6 +18675,7 @@ $backToPreflight.addEventListener('click', () => {
   sectionTransform = null;
   sectionDefaultBlockSize = null;
   currentDXYZ = { dx: -1, dy: -1, dz: -1 };
+  currentGridMode = null;   // A10 4f-2: back to the model default ('grid')
 });
 
 // Allow dropping new files onto results area
@@ -18868,6 +19023,9 @@ function displayResults(data) {
   analysisStale = false;
   const execBtn = document.getElementById('executeBtn');
   if (execBtn) execBtn.classList.add('clean');
+
+  // A10 4f-2: the detected-grid badge in the preflight panel is only known now
+  if (typeof refreshModelGridSection === 'function') refreshModelGridSection();
 
   // Show filter section (action bar already visible from handleFile)
   $filterSection.classList.add('active');
@@ -31334,7 +31492,7 @@ function wsRestoreInstance(cfg, skipTab) {
   if (typeof dsCreate !== 'function' || !cfg || !cfg.id) return null;
   var ds = (typeof dsById === 'function') ? dsById(cfg.id) : null;
   if (!ds) {
-    ds = dsCreate({ id: cfg.id, prefix: cfg.prefix || 'data' });
+    ds = dsCreate({ id: cfg.id, prefix: cfg.prefix || 'data', gridMode: cfg.gridMode || null });
     ds._pendingRestore = cfg;
     dsAdd(ds);
     var n = parseInt(String(cfg.id).replace(/^d/, ''), 10);

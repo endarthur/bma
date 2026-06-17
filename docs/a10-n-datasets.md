@@ -646,9 +646,28 @@ as grids.
   block-size-on-all-axes AND (`mode==='grid'` OR (`auto` AND `isRegularGrid`)),
   `'point'` forces null. Model stays bit-identical (grandfathered by the default).
   `ds.gridMode` override is in-memory here.
-- **4f-2** (next) — import-panel UI: show the geometry/DXYZ (Block Dimensions)
-  section conditionally for any dataset, surface the detected-grid badge + the
-  grid/point override, and PERSIST `gridMode` (datasets / aux / preflight keys).
+- **4f-2 ✅** — import-panel UI: a **Block geometry** section now lives in BOTH
+  the model preflight (`renderPreflightSidebar`, `#pfGridWrap`) and the
+  comparison-dataset panels (`renderAuxConfig`, `[data-aux="gridWrap"]`). It
+  surfaces a grid/point/auto override (a segmented `.ds-grid-chip` control;
+  model default `grid`, comparisons `auto`) plus a post-analysis detected-grid
+  badge (`▦ grid <sizes>` / `∴ points`) with a note when an override disagrees
+  with auto-detection — inferred state visible + overridable (no-magic-only-ui).
+  Shared renderer `dsGridSectionHtml(ds)` + `dsHasXYZ(ds)` in core.js; the badge
+  refreshes post-analysis via `refreshModelGridSection()` (from `displayResults`)
+  and `refreshAuxGridSection(ds, root)` (from the aux complete handler) since
+  neither sidebar is otherwise rebuilt then. `gridMode` is now a real registry
+  field: model/aux views back it with `currentGridMode`/`auxGridMode`,
+  `dsCreate` carries it for d2+. PERSISTED in three keys — `preflight.gridMode`,
+  `aux.gridMode`, `datasets[].gridMode` — restored in `applyProject`,
+  `applyAuxRestore`, and `wsRestoreInstance`; reset at the model+aux clear sites.
+  Changing a mode never re-runs analysis (geometry is already computed); it only
+  flips `dsHasGrid` downstream (`dsGridModeChanged` refreshes the tree today;
+  4f-3/4g/4h hook in as they generalize). DXYZ sub-block assignment for
+  comparisons was scoped OUT (Arthur, 2026-06-17). Guard
+  `experiments/4f-gridmode-smoke.js` (22 asserts — model default+detect, override
+  flips dsHasGrid, scattered comparison auto-detects points, force-grid, reload
+  round-trip both sides). Worker untouched — b1-differential 29/29 bit-identical.
 - **4f-3** — generalize the Summary "Grid Geometry" table beyond the model-only
   `lastGeoData` to any `dsHasGrid` dataset.
 - **4f-4** — de-special-case the naming/branches so the model's preflight panel

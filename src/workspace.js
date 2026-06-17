@@ -230,7 +230,7 @@ function wsRestoreInstance(cfg, skipTab) {
   if (typeof dsCreate !== 'function' || !cfg || !cfg.id) return null;
   var ds = (typeof dsById === 'function') ? dsById(cfg.id) : null;
   if (!ds) {
-    ds = dsCreate({ id: cfg.id, prefix: cfg.prefix || 'data' });
+    ds = dsCreate({ id: cfg.id, prefix: cfg.prefix || 'data', gridMode: cfg.gridMode || null });
     ds._pendingRestore = cfg;
     dsAdd(ds);
     var n = parseInt(String(cfg.id).replace(/^d/, ''), 10);

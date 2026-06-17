@@ -636,6 +636,15 @@ function renderPreflightSidebar(data) {
     <div id="pfDxyzWrap"></div>
   </div>`;
 
+  // A10 4f-2: grid classification — visible + overridable (no-magic-only-ui).
+  // The model defaults to 'grid' (an explicit block-model import); the detected
+  // geometry badge appears here once analysis has run.
+  html += `<div class="pf-sidebar-section" data-sb="geometry">
+    <div class="pf-sidebar-section-title">Block geometry</div>
+    <div id="pfGridWrap">${dsGridSectionHtml(dsById('model'))}</div>
+    <div class="help-row"><span>Treat this dataset as a regular grid (block model) or scattered points. <code>auto</code> trusts the detected spacing; the default for an imported model is <code>grid</code>.</span></div>
+  </div>`;
+
   // DM format options (only shown for .dm files)
   if (data.isDm) {
     html += `<div class="pf-sidebar-section" id="pfDmOptions" data-sb="dm">
@@ -790,6 +799,22 @@ function renderPreflightSidebar(data) {
     const $pfFmt = document.getElementById('pfDmFormat');
     if ($pfEnd) $pfEnd.addEventListener('change', () => handleDmFormatChange(data));
     if ($pfFmt) $pfFmt.addEventListener('change', () => handleDmFormatChange(data));
+  }
+
+  // A10 4f-2: grid-classification override chips (grid/point/auto). Changing the
+  // mode never re-runs the analysis — it only flips whether the model COUNTS as
+  // a grid downstream; re-render the section + refresh grid-dependent surfaces.
+  const $pfGridWrap = document.getElementById('pfGridWrap');
+  if ($pfGridWrap) {
+    $pfGridWrap.addEventListener('click', (e) => {
+      const chip = e.target.closest('.ds-grid-chip');
+      if (!chip || !chip.dataset.gridmode) return;
+      const model = dsById('model');
+      model.gridMode = chip.dataset.gridmode;
+      $pfGridWrap.innerHTML = dsGridSectionHtml(model);
+      if (typeof dsGridModeChanged === 'function') dsGridModeChanged(model);
+      if (typeof autoSaveProject === 'function') autoSaveProject();
+    });
   }
 
 }

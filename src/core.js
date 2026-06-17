@@ -9,6 +9,7 @@ let currentXYZ = { x: -1, y: -1, z: -1 };
 let detectedXYZ = { x: -1, y: -1, z: -1 };
 let currentFilter = null; // { expression: string }
 let currentRowVar = 'r';
+let currentGridMode = null; // A10 4f-2: model grid override (null = default 'grid'; or 'grid'/'point'/'auto')
 let worker = null;
 let preflightData = null; // { header, sampleRows, autoTypes, delimiter, zipEntries, selectedZipEntry }
 
@@ -19,6 +20,7 @@ let auxPreflightData = null;   // runPreflight() result for the aux file (header
 let auxCompleteData = null;    // snapshot of the last aux analysis (parallel to lastCompleteData)
 let auxData = null;            // aux stats object for comparison rendering
 let auxPrefix = 'aux';         // display-only label prefix for aux pseudo-columns (e.g. "aux:Fe")
+let auxGridMode = null;        // A10 4f-2: aux grid override (null = default 'auto'; or 'grid'/'point'/'auto')
 let auxFilter = null;          // { expression } — references aux columns via the fixed AUX_ROW_VAR handle
 // A10 1g-c: the analysis/declus/topcut worker handles live PER-DATASET on the
 // ds object (ds._worker / ds._declusWorker / ds._topcutWorker) so instance
@@ -93,6 +95,7 @@ const datasets = [
     get calcolCode() { return currentCalcolCode; },   set calcolCode(v) { currentCalcolCode = v; },
     get calcolMeta() { return currentCalcolMeta; },   set calcolMeta(v) { currentCalcolMeta = v; },
     get prefix()     { return null; },
+    get gridMode()   { return currentGridMode; },     set gridMode(v)   { currentGridMode = v; },
     get rowVar()     { return currentRowVar; },
     get source()     { return 'file'; }
   },
@@ -110,6 +113,7 @@ const datasets = [
     get declus()     { return auxDeclus; },            set declus(v)     { auxDeclus = v; },
     get topcut()     { return auxTopcut; },            set topcut(v)     { auxTopcut = v; },
     get view()       { return auxView; },              set view(v)       { auxView = v; },
+    get gridMode()   { return auxGridMode; },          set gridMode(v)   { auxGridMode = v; },
     get rowVar()     { return AUX_ROW_VAR; }
   }
 ];
@@ -138,6 +142,7 @@ function dsCreate(opts) {
     calcolCode: '',
     calcolMeta: [],
     prefix: opts.prefix || 'data',
+    gridMode: opts.gridMode || null,   // A10 4f-2: grid override (null = default 'auto')
     declus: null,
     topcut: null,
     view: 'preview',
@@ -271,6 +276,74 @@ function dsGrid(ds) {
   return g.isRegularGrid ? g : null;   // 'auto' — trust the worker's detection
 }
 function dsHasGrid(ds) { return !!dsGrid(ds); }
+
+// A10 4f-2: does this dataset have all three coordinate axes assigned? (XYZ is
+// the precondition for any geometry; geometry itself is only known post-analysis.)
+function dsHasXYZ(ds) {
+  var q = ds && ds.preflight && ds.preflight.xyz;
+  if (ds && ds.id === 'model' && preflightData) q = preflightData.xyz;   // model preflight is the canonical store
+  return !!(q && q.x >= 0 && q.y >= 0 && q.z >= 0);
+}
+
+// A10 4f-2: the grid-classification control for a dataset's import panel — the
+// grid/point/auto override chips + the detected-grid badge. Inferred state stays
+// visible AND overridable (no-magic-only-ui). Shared by the model preflight
+// (renderPreflightSidebar) and the comparison-dataset panels (renderAuxConfig);
+// the chosen mode persists as ds.gridMode. The detected geometry is only known
+// after an analysis (the worker computes it from the full stream), so before
+// that we show only the override + a hint.
+function dsGridSectionHtml(ds) {
+  var mode = dsGridMode(ds);   // effective grid/point/auto (override or default)
+  function chip(val, label, title) {
+    return '<button type="button" class="ds-grid-chip' + (mode === val ? ' active' : '') +
+      '" data-gridmode="' + val + '" title="' + esc(title) + '">' + label + '</button>';
+  }
+  var defLabel = (ds && ds.id === 'model') ? 'detect (default: grid)' : 'detect from data';
+  var chips = '<div class="ds-grid-chips" role="group">' +
+    chip('auto', 'auto', defLabel) +
+    chip('grid', 'grid', 'Always treat as a regular block model') +
+    chip('point', 'point', 'Always treat as scattered points (never a grid)') +
+    '</div>';
+  var g = ds && ds.complete && ds.complete.geometry;
+  var status;
+  if (g && g.x && g.x.blockSize && g.y && g.y.blockSize && g.z && g.z.blockSize) {
+    var fmt = (typeof formatNum === 'function') ? formatNum : function(n) { return String(n); };
+    var sizes = fmt(g.x.blockSize) + '×' + fmt(g.y.blockSize) + '×' + fmt(g.z.blockSize);
+    var isGrid = dsHasGrid(ds);
+    var auto = !!g.isRegularGrid;
+    var badge = isGrid
+      ? '<span class="ds-grid-badge is-grid">▦ grid</span> <span class="ds-grid-sizes">' + sizes + '</span>'
+      : '<span class="ds-grid-badge is-points">∴ points</span>';
+    var note;
+    if (mode === 'grid' && !auto) note = 'forced — auto-detect saw irregular spacing';
+    else if (mode === 'point' && auto) note = 'forced — auto-detect saw a regular grid';
+    else if (mode === 'auto') note = auto ? 'auto-detected a regular grid' : 'auto-detected scattered points';
+    else note = (mode === 'grid') ? 'forced to grid' : 'forced to points';
+    status = '<div class="ds-grid-status">' + badge +
+      '<span class="ds-grid-note">' + note + '</span></div>';
+  } else if (!dsHasXYZ(ds)) {
+    status = '<div class="ds-grid-status ds-grid-muted">Assign X/Y/Z to enable grid detection</div>';
+  } else {
+    status = '<div class="ds-grid-status ds-grid-muted">Run analysis to detect grid geometry</div>';
+  }
+  return chips + status;
+}
+
+// A10 4f-2: a dataset's grid classification changed (override flipped). Refresh
+// the grid-dependent surfaces. Today that's the catalog tree (geometry facet);
+// the Summary geometry table (4f-3) and GT/Export gating (4g/4h) hook in here as
+// they generalize past the model-only paths.
+function dsGridModeChanged(ds) {
+  if (typeof refreshCatalogTree === 'function') refreshCatalogTree();
+}
+
+// A10 4f-2: repaint the model preflight's grid section in place (the detected
+// badge is only known post-analysis, but the preflight sidebar isn't rebuilt
+// then — so refresh just the wrap from displayResults). No-op if absent.
+function refreshModelGridSection() {
+  var wrap = document.getElementById('pfGridWrap');
+  if (wrap) wrap.innerHTML = dsGridSectionHtml(dsById('model'));
+}
 
 var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
 

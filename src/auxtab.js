@@ -64,6 +64,11 @@ function renderAuxConfig(ds, root) {
       '<div class="aux-xyz-row"><label>Z</label><select class="aux-select" data-aux="z">' + auxColOptions(xyz.z, ds) + '</select></div>' +
       '<div class="aux-hint">Aux and the block model must share the same coordinate space for swath overlays to line up.</div>' +
     '</div>' +
+    '<div class="pf-sidebar-section" data-sb="geometry">' +
+      '<div class="pf-sidebar-section-title">Block geometry</div>' +
+      '<div data-aux="gridWrap">' + dsGridSectionHtml(ds) + '</div>' +
+      '<div class="aux-hint">Whether this dataset is treated as a regular grid (block model) or scattered points — gates grade-tonnage and geometry features. <code>auto</code> trusts the detected spacing.</div>' +
+    '</div>' +
     '<div class="pf-sidebar-section" data-sb="auxfilter">' +
       '<div class="pf-sidebar-section-title">Aux filter</div>' +
       '<textarea class="aux-input aux-filter" data-aux="filter" rows="2" spellcheck="false" placeholder="aux.Au > 0">' + esc(ds.filter ? ds.filter.expression : '') + '</textarea>' +
@@ -96,6 +101,15 @@ function renderAuxConfig(ds, root) {
   // Drillhole sets are aux-scoped until phase 5, so only the singleton aux's
   // panel carries the banner (renderDhProvenance resolves the singleton head).
   if (ds.id === 'aux' && typeof renderDhProvenance === 'function') renderDhProvenance();
+}
+
+// A10 4f-2: repaint just the grid section (detected badge known post-analysis)
+// without rebuilding the whole config sidebar. Mirrors refreshModelGridSection.
+function refreshAuxGridSection(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || dsConfigRoot(ds);
+  var wrap = auxQ('[data-aux="gridWrap"]', root);
+  if (wrap) wrap.innerHTML = dsGridSectionHtml(ds);
 }
 
 function runAuxAnalysis(ds, root) {
@@ -176,6 +190,7 @@ function runAuxAnalysis(ds, root) {
       ds.stale = false;
       if ($btn) $btn.disabled = false;
       if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]', root), false);  // C6-5 dim-when-done
+      refreshAuxGridSection(ds, root);  // A10 4f-2: detected-grid badge now known
       if ($status) { $status.textContent = m.rowCount.toLocaleString() + ' rows analyzed'; $status.style.color = ''; }
       ds._worker.terminate();
       ds._worker = null;
@@ -631,6 +646,7 @@ function runAuxDeclus(ds, root) {
 function applyAuxRestore(saved, ds) {
   ds = ds || dsById('aux');
   ds.prefix = saved.prefix || 'aux';
+  if (saved.gridMode !== undefined) ds.gridMode = saved.gridMode;   // A10 4f-2: grid override
   ds.filter = saved.filter ? { expression: saved.filter } : null;
   // Legacy projects carried the aux weight here; the catalog is canonical
   // now (a project.catalog, when present, was applied before this runs)
@@ -749,6 +765,7 @@ function clearAux(ds, root) {
   auxData = null;
   ds.filter = null;
   ds.prefix = 'aux';
+  ds.gridMode = null;   // A10 4f-2: back to default 'auto'
   ds.stale = false;
   delete panelState.statistics.cmpSel[ds.id];
   delete panelState.statistics.cdfCmpSel[ds.id];
@@ -842,6 +859,18 @@ function wireDatasetPanel(root, ds) {
     sidebar.addEventListener('change', function(e) { onAuxConfigChange(e, ds, root); });
     sidebar.addEventListener('click', function(e) {
       if (!e.target) return;
+      // A10 4f-2: grid-classification override chips. Changing the mode never
+      // re-runs the analysis (geometry is already computed) — it only flips
+      // whether the dataset COUNTS as a grid downstream; re-render to update the
+      // active chip + badge and refresh grid-dependent surfaces.
+      var gm = e.target.closest ? e.target.closest('.ds-grid-chip') : null;
+      if (gm && gm.dataset.gridmode) {
+        ds.gridMode = gm.dataset.gridmode;
+        renderAuxConfig(ds, root);
+        if (typeof dsGridModeChanged === 'function') dsGridModeChanged(ds);
+        if (typeof autoSaveProject === 'function') autoSaveProject();
+        return;
+      }
       var act = e.target.dataset ? e.target.dataset.act : null;
       if (act === 'auxAnalyze') runAuxAnalysis(ds, root);
       else if (act === 'auxDeclusRun') {
