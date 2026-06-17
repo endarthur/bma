@@ -91,15 +91,25 @@ function gtStateForRoot(root) {
   }
   return _gtSingleton;
 }
+// renderGtConfig emits its generated controls with data-gt="gtX" (so clones carry
+// no duplicate ids). On the SINGLETON, stamp the id back onto each so #gtX
+// getElementById lookups (gtQ + project.js serialize/restore) keep working.
+function gtStampSingletonIds(root, $scope) {
+  if (gtIsInst(root)) return;
+  ($scope || gtPanelRoot() || document).querySelectorAll('[data-gt]').forEach(function(el) {
+    var id = el.getAttribute('data-gt');
+    if (id && !el.id) el.id = id;
+  });
+}
 
 // The dataset the GT tab targets, and its analysis context. GT generalizes
 // beyond the model: a gridded comparison dataset gets its own grade-tonnage
 // curves. The model resolves through its current* globals (bit-identical); a
 // comparison dataset reads its registry view (ds.complete/file/filter/calcols/
 // preflight/rowVar). Only datasets with a completed analysis are targetable.
-function gtTargetDs() { return dsById(gtTargetDsId) || dsById('model'); }
-function gtCtx() {
-  var ds = gtTargetDs();
+function gtTargetDs(root) { return dsById(gtStateForRoot(root).gtTargetDsId) || dsById('model'); }
+function gtCtx(root) {
+  var ds = gtTargetDs(root);
   var isModel = ds.id === 'model';
   var c = ds.complete || {};
   return {
@@ -125,44 +135,47 @@ function gtTargetableDatasets() {
 }
 // The "Dataset" picker at the top of the GT sidebar — shown only when 2+ datasets
 // are analyzed (with one, GT is implicitly the model, as before).
-function gtDatasetPickerHtml() {
+function gtDatasetPickerHtml(root) {
   var ts = gtTargetableDatasets();
   if (ts.length < 2) return '';
-  var cur = gtTargetDs().id;
+  var cur = gtTargetDs(root).id;
   return '<div class="gt-sidebar-section" data-sb="dataset">' +
     '<div class="gt-sidebar-title">Dataset</div>' +
-    '<select class="gt-select" id="gtDataset">' +
+    '<select class="gt-select" data-gt="gtDataset">' +
     ts.map(function(d) { return '<option value="' + d.id + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
     '</select></div>';
 }
 // Switch the GT target dataset and rebuild the sidebar for it.
-function setGtTarget(id) {
-  if (id === gtTargetDsId) return;
-  gtTargetDsId = id;
-  lastGtData = null; gtStale = false;
-  renderGtConfig();
-  var $c = document.getElementById('gtContent');
-  if ($c) $c.innerHTML = '<div class="gt-hint">Pick grade variables and Generate for ' + esc(dsLabel(gtTargetDs().id)) + '.</div>';
+function setGtTarget(id, root) {
+  var S = gtStateForRoot(root);
+  if (id === S.gtTargetDsId) return;
+  S.gtTargetDsId = id;
+  S.lastGtData = null; S.gtStale = false;
+  renderGtConfig(undefined, root);
+  var $c = gtContentEl(root);
+  if ($c) $c.innerHTML = '<div class="gt-hint">Pick grade variables and Generate for ' + esc(dsLabel(gtTargetDs(root).id)) + '.</div>';
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
 // Keep the picker current as datasets analyze/clear (the model GT sidebar is
 // built once); falls back to the model if the target's analysis went away.
-function gtRefreshDatasetPicker() {
-  if (gtTargetDsId !== 'model' && !(dsById(gtTargetDsId) && dsById(gtTargetDsId).complete)) {
-    setGtTarget('model'); return;
+function gtRefreshDatasetPicker(root) {
+  var S = gtStateForRoot(root);
+  if (S.gtTargetDsId !== 'model' && !(dsById(S.gtTargetDsId) && dsById(S.gtTargetDsId).complete)) {
+    setGtTarget('model', root); return;
   }
-  var sel = document.getElementById('gtDataset');
-  if (!sel) { if (gtTargetableDatasets().length >= 2 && lastDisplayedStats) renderGtConfig(); return; }
-  var ts = gtTargetableDatasets(), cur = gtTargetDs().id;
+  var sel = gtQ('gtDataset', root);
+  if (!sel) { if (gtTargetableDatasets().length >= 2 && lastDisplayedStats) renderGtConfig(undefined, root); return; }
+  var ts = gtTargetableDatasets(), cur = gtTargetDs(root).id;
   sel.innerHTML = ts.map(function(d) { return '<option value="' + d.id + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('');
 }
 
 // Mark the GT result stale (config changed since the last Generate). Live
 // re-render controls (units/dp/group-values) are excluded by the callers.
-function gtMarkStale() {
-  if (gtStale || !lastGtData) return;
-  gtStale = true;
-  if (typeof setGenStale === 'function') setGenStale('gtGenerate', true);
+function gtMarkStale(root) {
+  var S = gtStateForRoot(root);
+  if (S.gtStale || !S.lastGtData) return;
+  S.gtStale = true;
+  if (typeof setGenStale === 'function') setGenStale(gtQ('gtGenerate', root) || 'gtGenerate', true);
 }
 
 // A10 4g: feature-detect the block-volume source. Volume-weighted tonnage needs
@@ -172,8 +185,8 @@ function gtMarkStale() {
 // it COUNTS as a grid (dsHasGrid respects the 4f grid/point override, so a model
 // classified as points no longer silently uses its geometry volume) → else
 // count-based. Returns { display, hint, value, kind }.
-function gtVolumeSource() {
-  var ctx = gtCtx();
+function gtVolumeSource(root) {
+  var ctx = gtCtx(root);
   var hasDXYZ = ctx.dxyz.dx >= 0 && ctx.dxyz.dy >= 0 && ctx.dxyz.dz >= 0;
   if (hasDXYZ) return { display: 'Per-row DXYZ columns', hint: '', value: '', kind: 'dxyz' };
   var geo = ctx.geometry;
@@ -197,33 +210,36 @@ function gtVolumeSource() {
 // the model's grid classification changes (4f override). No-op if GT isn't built
 // yet. The override is auto-managed only while it carries data-gt-auto (set on
 // the geometry prefill, cleared once the user types a value).
-function gtRefreshVolumeSource() {
-  var $d = document.getElementById('gtVolDisplay');
+function gtRefreshVolumeSource(root) {
+  var $d = gtQ('gtVolDisplay', root);
   if (!$d) return;
-  var info = gtVolumeSource();
+  var info = gtVolumeSource(root);
   $d.textContent = info.display;
-  var $h = document.getElementById('gtVolHint');
+  var $h = gtQ('gtVolHint', root);
   if ($h) { $h.innerHTML = info.hint ? esc(info.hint) : ''; $h.style.display = info.hint ? '' : 'none'; }
-  var $ov = document.getElementById('gtVolOverride');
+  var $ov = gtQ('gtVolOverride', root);
   if ($ov && ($ov.dataset.gtAuto || $ov.value === '')) {
     if (info.kind === 'geometry') { $ov.value = info.value; $ov.dataset.gtAuto = '1'; }
     else { $ov.value = ''; delete $ov.dataset.gtAuto; }
   }
-  gtMarkStale();
+  gtMarkStale(root);
 }
 
-function renderGtConfig(data) {
-  var $sidebar = document.getElementById('gtSidebar');
-  var $content = document.getElementById('gtContent');
+function renderGtConfig(data, root) {
+  var S = gtStateForRoot(root);
+  var $sidebar = gtSidebarEl(root);
+  var $content = gtContentEl(root);
   if (!$sidebar) return;
+  var instId = gtIsInst(root) ? root.getAttribute('data-gt-inst') : null;
+  var cutoffName = instId ? ('gtCutoffMode_' + instId) : 'gtCutoffMode';   // per-clone radio group
   // A10 G3: the GT tab analyzes gtTargetDs() (the model by default). data (the
   // model's analysis, passed from displayResults) is ignored — the context is
   // resolved per target so a comparison dataset gets its own GT.
-  var ctx = gtCtx();
+  var ctx = gtCtx(root);
   var header = ctx.header, colTypes = ctx.colTypes, geometry = ctx.geometry;
 
   // Reset cached results
-  lastGtData = null;
+  S.lastGtData = null;
 
   // Gather numeric columns (excluding XYZ/DXYZ)
   var excludeSet = new Set();
@@ -234,11 +250,13 @@ function renderGtConfig(data) {
   if (ctx.dxyz.dy >= 0) excludeSet.add(ctx.dxyz.dy);
   if (ctx.dxyz.dz >= 0) excludeSet.add(ctx.dxyz.dz);
 
-  gtNumCols = header.map(function(h, i) { return { name: h, idx: i, type: colTypes[i] }; })
+  var gtNumCols = header.map(function(h, i) { return { name: h, idx: i, type: colTypes[i] }; })
     .filter(function(c) { return c.type === 'numeric' && !excludeSet.has(c.idx); });
+  S.gtNumCols = gtNumCols;
 
-  gtCatCols = header.map(function(h, i) { return { name: h, idx: i, type: colTypes[i] }; })
+  var gtCatCols = header.map(function(h, i) { return { name: h, idx: i, type: colTypes[i] }; })
     .filter(function(c) { return c.type === 'categorical'; });
+  S.gtCatCols = gtCatCols;
 
   if (gtNumCols.length === 0) {
     $sidebar.innerHTML = '';
@@ -295,7 +313,7 @@ function renderGtConfig(data) {
   }
 
   $sidebar.innerHTML =
-    gtDatasetPickerHtml() +
+    gtDatasetPickerHtml(root) +
     '<div class="gt-sidebar-section--grow" data-sb="vars">' +
       '<div class="gt-sidebar-title">Grade Variables</div>' +
       '<input type="text" class="gt-input gt-var-search" id="gtVarSearch" placeholder="search\u2026" spellcheck="false">' +
@@ -381,7 +399,7 @@ function renderGtConfig(data) {
         '<option value="affine">Affine correction</option>' +
         '<option value="dgm" disabled>DGM (Hermite) — next</option>' +
       '</select>' +
-      gtTheoSourceSelectHtml() +
+      gtTheoSourceSelectHtml(root) +
       '<div style="display:flex;gap:0.3rem;align-items:center;margin-top:0.3rem">' +
         '<span style="font-size:0.62rem;color:var(--fg-dim);white-space:nowrap" title="variance reduction factor: Var(blocks)/Var(samples). From your estimation work, or explore — never derived from the model (circular)">f</span>' +
         '<input type="range" id="gtTheoF" min="0.05" max="1" step="0.01" value="0.6" style="flex:1">' +
@@ -398,6 +416,17 @@ function renderGtConfig(data) {
       '</div>' +
     '</div>';
 
+  // G3b: the generated controls carry id="gtX" (singleton — keeps getElementById +
+  // project.js serialize/restore working). A CLONE must not duplicate those ids:
+  // convert them to data-gt="gtX" and give its cutoff radios a unique name so the
+  // two clones' radio groups don't interfere. gtQ resolves both forms.
+  if (gtIsInst(root)) {
+    $sidebar.querySelectorAll('[id]').forEach(function(el) { el.setAttribute('data-gt', el.id); el.removeAttribute('id'); });
+    $sidebar.querySelectorAll('input[name="gtCutoffMode"]').forEach(function(r) { r.name = cutoffName; });
+  } else {
+    gtStampSingletonIds(root, $sidebar);   // stamp the data-gt-only controls (gtDataset) back to ids
+  }
+
   // C6-4b — collapsible sections; everything past Grade Variables collapsed
   // by default (the "nine sections in a wall" fix), Generate in a sticky footer
   wsEnhanceSidebar('gt', $sidebar, {
@@ -413,166 +442,168 @@ function renderGtConfig(data) {
   var GT_LIVE_IDS = ['gtTonnageUnit', 'gtMetalUnit', 'gtTonnageDp', 'gtGradeDp', 'gtMetalDp',
     'gtCustomTonnageSym', 'gtCustomTonnageDiv', 'gtCustomMetalSym', 'gtCustomMetalDiv', 'gtGrpAll', 'gtGrpNone', 'gtVarSearch',
     'gtTheoEnabled', 'gtTheoEngine', 'gtTheoF', 'gtTheoFNum'];  // theo re-renders client-side from cache
+  var grpListEl = gtQ('gtGrpList', root);   // for the live-target closest() check
+  function gtKey(t) { return t ? (t.id || t.getAttribute('data-gt')) : null; }   // singleton id | clone data-gt
   function gtIsLiveTarget(t) {
-    return !t || GT_LIVE_IDS.indexOf(t.id) >= 0 || t.classList.contains('gt-var-unit') || (t.closest && t.closest('#gtGrpList'));
+    return !t || GT_LIVE_IDS.indexOf(gtKey(t)) >= 0 || t.classList.contains('gt-var-unit') || (grpListEl && grpListEl.contains(t));
   }
   $sidebar.addEventListener('change', function(e) {
-    if (e.target.id === 'gtDataset') { setGtTarget(e.target.value); return; }   // G3: switch target dataset
+    if (gtKey(e.target) === 'gtDataset') { setGtTarget(e.target.value, root); return; }   // G3: switch target dataset
     autoSaveProject();
-    if (!gtIsLiveTarget(e.target)) gtMarkStale();
+    if (!gtIsLiveTarget(e.target)) gtMarkStale(root);
   });
   $sidebar.addEventListener('input', function(e) {
     // 4g: a user-typed Override is no longer the auto geometry value
-    if (e.target.id === 'gtVolOverride') delete e.target.dataset.gtAuto;
+    if (gtKey(e.target) === 'gtVolOverride') delete e.target.dataset.gtAuto;
     if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox' && e.target.type !== 'radio') autoSaveProject();
-    if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && !gtIsLiveTarget(e.target)) gtMarkStale();
+    if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && !gtIsLiveTarget(e.target)) gtMarkStale(root);
   });
 
-  var $tonnageUnit = document.getElementById('gtTonnageUnit');
+  var $tonnageUnit = gtQ('gtTonnageUnit', root);
 
   // Variable search filter
-  var $gtVarSearch = document.getElementById('gtVarSearch');
+  var $gtVarSearch = gtQ('gtVarSearch', root);
   $gtVarSearch.addEventListener('input', function() {
     var q = this.value.toLowerCase();
-    document.querySelectorAll('#gtVarList .gt-var-item').forEach(function(item) {
+    gtQA('gtVarList', '.gt-var-item', root).forEach(function(item) {
       var name = item.querySelector('span').textContent.toLowerCase();
       item.style.display = fuzzyMatch(q, name) ? '' : 'none';
     });
   });
-  wireSearchShortcuts($gtVarSearch, document.getElementById('gtVarAll'), document.getElementById('gtVarNone'));
+  wireSearchShortcuts($gtVarSearch, gtQ('gtVarAll', root), gtQ('gtVarNone', root));
 
   // All/None buttons for grade variables (only affect visible items)
-  document.getElementById('gtVarAll').addEventListener('click', function() {
-    document.querySelectorAll('#gtVarList .gt-var-item').forEach(function(item) {
+  gtQ('gtVarAll', root).addEventListener('click', function() {
+    gtQA('gtVarList', '.gt-var-item', root).forEach(function(item) {
       if (item.style.display !== 'none') item.querySelector('input[type="checkbox"]').checked = true;
     });
   });
-  document.getElementById('gtVarNone').addEventListener('click', function() {
-    document.querySelectorAll('#gtVarList .gt-var-item').forEach(function(item) {
+  gtQ('gtVarNone', root).addEventListener('click', function() {
+    gtQA('gtVarList', '.gt-var-item', root).forEach(function(item) {
       if (item.style.display !== 'none') item.querySelector('input[type="checkbox"]').checked = false;
     });
   });
 
   // Theoretical overlay controls — slider re-renders through a small
   // debounce so dragging f stays smooth
-  var $theoCb = document.getElementById('gtTheoEnabled');
-  var $theoF = document.getElementById('gtTheoF');
-  var $theoFNum = document.getElementById('gtTheoFNum');
+  var $theoCb = gtQ('gtTheoEnabled', root);
+  var $theoF = gtQ('gtTheoF', root);
+  var $theoFNum = gtQ('gtTheoFNum', root);
   var theoRerender = (function() {
     var t = null;
     return function() {
       if (t) return;
-      t = setTimeout(function() { t = null; if (lastGtData) renderGtOutput(); }, 60);
+      t = setTimeout(function() { t = null; if (gtStateForRoot(root).lastGtData) renderGtOutput(root); }, 60);
     };
   })();
   if ($theoCb) $theoCb.addEventListener('change', function() {
-    gtTheoSetStatus($theoCb.checked && !lastGtData ? 'Generate to draw the overlay' : '');
-    if (lastGtData) renderGtOutput();
+    gtTheoSetStatus($theoCb.checked && !gtStateForRoot(root).lastGtData ? 'Generate to draw the overlay' : '', false, root);
+    if (gtStateForRoot(root).lastGtData) renderGtOutput(root);
   });
   if ($theoF) $theoF.addEventListener('input', function() {
     if ($theoFNum) $theoFNum.value = $theoF.value;
-    if (gtTheoActive()) theoRerender();
+    if (gtTheoActive(root)) theoRerender();
   });
   if ($theoFNum) $theoFNum.addEventListener('input', function() {
     var fv = parseFloat($theoFNum.value);
     if (isFinite(fv) && fv >= 0.05 && fv <= 1 && $theoF) $theoF.value = fv;
-    if (gtTheoActive()) theoRerender();
+    if (gtTheoActive(root)) theoRerender();
   });
   // G2: wire the theoretical-curve source picker (rebuilt + bound here)
-  refreshGtTheoSource();
+  refreshGtTheoSource(root);
 
   // Cutoff mode radio
-  document.querySelectorAll('input[name="gtCutoffMode"]').forEach(function(r) {
+  gtSidebarEl(root).querySelectorAll('input[name="' + cutoffName + '"]').forEach(function(r) {
     r.addEventListener('change', function() {
-      document.getElementById('gtCutoffRange').style.display = r.value === 'range' ? '' : 'none';
-      document.getElementById('gtCutoffCustom').style.display = r.value === 'custom' ? '' : 'none';
+      gtQ('gtCutoffRange', root).style.display = r.value === 'range' ? '' : 'none';
+      gtQ('gtCutoffCustom', root).style.display = r.value === 'custom' ? '' : 'none';
     });
   });
 
   // Unit custom toggles
   $tonnageUnit.addEventListener('change', function() {
     var idx = parseInt($tonnageUnit.value);
-    document.getElementById('gtCustomTonnageWrap').style.display = GT_TONNAGE_UNITS[idx].divisor === null ? '' : 'none';
-    if (lastGtData) renderGtOutput();
+    gtQ('gtCustomTonnageWrap', root).style.display = GT_TONNAGE_UNITS[idx].divisor === null ? '' : 'none';
+    if (gtStateForRoot(root).lastGtData) renderGtOutput(root);
   });
-  var $metalUnit = document.getElementById('gtMetalUnit');
+  var $metalUnit = gtQ('gtMetalUnit', root);
   $metalUnit.addEventListener('change', function() {
     var idx = parseInt($metalUnit.value);
-    document.getElementById('gtCustomMetalWrap').style.display = (GT_METAL_UNITS[idx] || {}).divisor === null ? '' : 'none';
-    if (lastGtData) renderGtOutput();
+    gtQ('gtCustomMetalWrap', root).style.display = (GT_METAL_UNITS[idx] || {}).divisor === null ? '' : 'none';
+    if (gtStateForRoot(root).lastGtData) renderGtOutput(root);
   });
   // Decimal-place selects and custom unit fields — live re-render
   ['gtTonnageDp', 'gtGradeDp', 'gtMetalDp', 'gtCustomTonnageSym', 'gtCustomTonnageDiv', 'gtCustomMetalSym', 'gtCustomMetalDiv'].forEach(function(id) {
-    document.getElementById(id).addEventListener('change', function() {
-      if (lastGtData) renderGtOutput();
+    gtQ(id, root).addEventListener('change', function() {
+      if (gtStateForRoot(root).lastGtData) renderGtOutput(root);
     });
   });
 
   // Copy cutoff Min/Max/Step from a variable's analyzed range
-  document.getElementById('gtRangeFrom').addEventListener('change', function() {
+  gtQ('gtRangeFrom', root).addEventListener('change', function() {
     var idx = parseInt(this.value);
     this.value = '';
-    var gctx = gtCtx();
+    var gctx = gtCtx(root);
     if (!(idx >= 0) || !gctx.stats || !gctx.stats[idx]) return;
     var st = gctx.stats[idx];
     if (st.min == null || st.max == null) return;
     var mn = Math.floor(st.min * 100) / 100;
     var mx = Math.ceil(st.max * 100) / 100;
-    document.getElementById('gtCutoffMin').value = mn;
-    document.getElementById('gtCutoffMax').value = mx;
-    document.getElementById('gtCutoffStep').value = +((mx - mn) / 20).toPrecision(2) || 0.05;
+    gtQ('gtCutoffMin', root).value = mn;
+    gtQ('gtCutoffMax', root).value = mx;
+    gtQ('gtCutoffStep', root).value = +((mx - mn) / 20).toPrecision(2) || 0.05;
     autoSaveProject();
   });
   // Constant density input toggle
-  document.getElementById('gtDensityCol').addEventListener('change', function() {
-    document.getElementById('gtDensityConstWrap').style.display = this.value === 'const' ? 'flex' : 'none';
+  gtQ('gtDensityCol', root).addEventListener('change', function() {
+    gtQ('gtDensityConstWrap', root).style.display = this.value === 'const' ? 'flex' : 'none';
   });
   // Per-variable grade unit change — write-through to the catalog (one unit
   // per variable, D2), mirror the other unit selects, re-render if results
-  document.getElementById('gtVarList').addEventListener('change', function(e) {
+  gtQ('gtVarList', root).addEventListener('change', function(e) {
     if (e.target.classList.contains('gt-var-unit')) {
-      var uctx = gtCtx();
+      var uctx = gtCtx(root);
       var un = uctx.header[parseInt(e.target.dataset.col)];
       if (un) catSetUnit(uctx.ds.id, un, parseInt(e.target.value));
       catRefreshUnitSelects();
-      if (lastGtData) renderGtOutput();
+      if (gtStateForRoot(root).lastGtData) renderGtOutput(root);
       autoSaveProject();
     }
   });
 
   // Group-by dropdown change — populate group value checkboxes
-  document.getElementById('gtGroupBy').addEventListener('change', function() {
-    updateGroupByValues();
+  gtQ('gtGroupBy', root).addEventListener('change', function() {
+    updateGroupByValues(root);
   });
 
   // Group value All/None buttons
-  document.getElementById('gtGrpAll').addEventListener('click', function() {
-    document.querySelectorAll('#gtGrpList input[type="checkbox"]').forEach(function(cb) { cb.checked = true; });
-    if (lastGtData) renderGtOutput();
+  gtQ('gtGrpAll', root).addEventListener('click', function() {
+    gtQA('gtGrpList', 'input[type="checkbox"]', root).forEach(function(cb) { cb.checked = true; });
+    if (gtStateForRoot(root).lastGtData) renderGtOutput(root);
   });
-  document.getElementById('gtGrpNone').addEventListener('click', function() {
-    document.querySelectorAll('#gtGrpList input[type="checkbox"]').forEach(function(cb) { cb.checked = false; });
-    if (lastGtData) renderGtOutput();
+  gtQ('gtGrpNone', root).addEventListener('click', function() {
+    gtQA('gtGrpList', 'input[type="checkbox"]', root).forEach(function(cb) { cb.checked = false; });
+    if (gtStateForRoot(root).lastGtData) renderGtOutput(root);
   });
 
   // Group value checkbox change — re-render
-  document.getElementById('gtGrpList').addEventListener('change', function() {
-    if (lastGtData) renderGtOutput();
+  gtQ('gtGrpList', root).addEventListener('change', function() {
+    if (gtStateForRoot(root).lastGtData) renderGtOutput(root);
   });
 
   // Generate button
-  document.getElementById('gtGenerate').addEventListener('click', runGt);
+  gtQ('gtGenerate', root).addEventListener('click', function() { runGt(root); });
 
   // Local filter autocomplete
-  if (gtExprController) gtExprController.destroy();
-  gtExprController = createExprInput(document.getElementById('gtLocalFilter'), { mode: 'filter' });
+  if (S.gtExprController) S.gtExprController.destroy();
+  S.gtExprController = createExprInput(gtQ('gtLocalFilter', root), { mode: 'filter' });
 }
 
-function updateGroupByValues() {
-  var $wrap = document.getElementById('gtGroupValues');
-  var $list = document.getElementById('gtGrpList');
-  var colIdx = parseInt(document.getElementById('gtGroupBy').value);
-  var gbctx = gtCtx();
+function updateGroupByValues(root) {
+  var $wrap = gtQ('gtGroupValues', root);
+  var $list = gtQ('gtGrpList', root);
+  var colIdx = parseInt(gtQ('gtGroupBy', root).value);
+  var gbctx = gtCtx(root);
   if (colIdx < 0 || !gbctx.categories) {
     $wrap.style.display = 'none';
     $list.innerHTML = '';
@@ -601,16 +632,16 @@ function updateGroupByValues() {
   $wrap.style.display = '';
 }
 
-function getGtTonnageUnit() {
-  var tIdx = parseInt(document.getElementById('gtTonnageUnit').value);
+function getGtTonnageUnit(root) {
+  var tIdx = parseInt(gtQ('gtTonnageUnit', root).value);
   var tu = GT_TONNAGE_UNITS[tIdx] || GT_TONNAGE_UNITS[0];
   var tonnageDivisor = tu.divisor;
   var tonnageSymbol = tu.symbol;
   if (tonnageDivisor === null) {
-    tonnageSymbol = document.getElementById('gtCustomTonnageSym').value || 'units';
-    tonnageDivisor = parseFloat(document.getElementById('gtCustomTonnageDiv').value) || 1;
+    tonnageSymbol = gtQ('gtCustomTonnageSym', root).value || 'units';
+    tonnageDivisor = parseFloat(gtQ('gtCustomTonnageDiv', root).value) || 1;
   }
-  var mSel = document.getElementById('gtMetalUnit');
+  var mSel = gtQ('gtMetalUnit', root);
   var mu = GT_METAL_UNITS[mSel ? parseInt(mSel.value) : 0] || GT_METAL_UNITS[0];
   var metalDivisor = mu.divisor;
   var metalSymbol = mu.symbol;
@@ -618,14 +649,14 @@ function getGtTonnageUnit() {
     metalDivisor = tonnageDivisor;
     metalSymbol = tonnageSymbol;
   } else if (metalDivisor === null) {
-    metalSymbol = document.getElementById('gtCustomMetalSym').value || 'units';
-    metalDivisor = parseFloat(document.getElementById('gtCustomMetalDiv').value) || 1;
+    metalSymbol = gtQ('gtCustomMetalSym', root).value || 'units';
+    metalDivisor = parseFloat(gtQ('gtCustomMetalDiv', root).value) || 1;
   }
   return { tonnageDivisor: tonnageDivisor, tonnageSymbol: tonnageSymbol, metalDivisor: metalDivisor, metalSymbol: metalSymbol };
 }
 
-function getGtFormats() {
-  function dp(id) { var el = document.getElementById(id); return el && el.value !== '' ? parseInt(el.value) : null; }
+function getGtFormats(root) {
+  function dp(id) { var el = gtQ(id, root); return el && el.value !== '' ? parseInt(el.value) : null; }
   return { tonnageDp: dp('gtTonnageDp'), gradeDp: dp('gtGradeDp'), metalDp: dp('gtMetalDp') };
 }
 
@@ -635,26 +666,28 @@ function gtFmt(v, dp) {
   return addThousandsSep(v.toFixed(dp));
 }
 
-function getGtGradeUnit(colIdx) {
-  var guctx = gtCtx();
+function getGtGradeUnit(colIdx, root) {
+  var guctx = gtCtx(root);
   var idx = guctx.header[colIdx] ? catPropUnit(guctx.ds.id, guctx.header[colIdx]) : 0;
   var gu = GT_GRADE_UNITS[idx] || GT_GRADE_UNITS[0];
   return { gradeFactor: gu.factor, gradeSymbol: gu.symbol };
 }
 
-function getGtCutoffs() {
-  var mode = document.querySelector('input[name="gtCutoffMode"]:checked').value;
+function getGtCutoffs(root) {
+  var sb = gtSidebarEl(root);
+  var checkedRadio = sb ? sb.querySelector('input[name^="gtCutoffMode"]:checked') : null;
+  var mode = checkedRadio ? checkedRadio.value : 'range';
   var cutoffs = [];
   if (mode === 'range') {
-    var mn = parseFloat(document.getElementById('gtCutoffMin').value);
-    var mx = parseFloat(document.getElementById('gtCutoffMax').value);
-    var step = parseFloat(document.getElementById('gtCutoffStep').value);
+    var mn = parseFloat(gtQ('gtCutoffMin', root).value);
+    var mx = parseFloat(gtQ('gtCutoffMax', root).value);
+    var step = parseFloat(gtQ('gtCutoffStep', root).value);
     if (!isFinite(mn) || !isFinite(mx) || !isFinite(step) || step <= 0) return [];
     for (var v = mn; v <= mx + step * 0.001; v += step) {
       cutoffs.push(+v.toPrecision(10));
     }
   } else {
-    var txt = document.getElementById('gtCutoffCustomText').value;
+    var txt = gtQ('gtCutoffCustomText', root).value;
     txt.split(/[,;\s]+/).forEach(function(s) {
       var v = parseFloat(s.trim());
       if (isFinite(v)) cutoffs.push(v);
@@ -664,31 +697,32 @@ function getGtCutoffs() {
   return cutoffs;
 }
 
-function getGtCheckedGradeCols() {
+function getGtCheckedGradeCols(root) {
   var checked = [];
-  document.querySelectorAll('#gtVarList input[type="checkbox"]:checked').forEach(function(cb) {
+  gtQA('gtVarList', 'input[type="checkbox"]:checked', root).forEach(function(cb) {
     checked.push(parseInt(cb.value));
   });
   return checked;
 }
 
-function runGt() {
-  if (gtExprController) { var r = gtExprController.validate(); if (!r.valid) return; }
-  var gradeCols = getGtCheckedGradeCols();
+function runGt(root) {
+  var S = gtStateForRoot(root);
+  if (S.gtExprController) { var r = S.gtExprController.validate(); if (!r.valid) return; }
+  var gradeCols = getGtCheckedGradeCols(root);
   if (gradeCols.length === 0) return;
 
-  var densitySel = document.getElementById('gtDensityCol').value;
+  var densitySel = gtQ('gtDensityCol', root).value;
   var densityCol = densitySel === 'const' ? -1 : parseInt(densitySel);
   var densityConst = null;
   if (densitySel === 'const') {
-    densityConst = parseFloat(document.getElementById('gtDensityConst').value);
+    densityConst = parseFloat(gtQ('gtDensityConst', root).value);
     if (!(densityConst > 0)) densityConst = null;
   }
-  var weightCol = parseInt(document.getElementById('gtWeightCol').value);
-  var groupByCol = parseInt(document.getElementById('gtGroupBy').value);
-  var localFilter = document.getElementById('gtLocalFilter').value.trim();
-  var volOverride = parseFloat(document.getElementById('gtVolOverride').value);
-  var ctx = gtCtx();   // G3: the dataset GT is analyzing (model by default)
+  var weightCol = parseInt(gtQ('gtWeightCol', root).value);
+  var groupByCol = parseInt(gtQ('gtGroupBy', root).value);
+  var localFilter = gtQ('gtLocalFilter', root).value.trim();
+  var volOverride = parseFloat(gtQ('gtVolOverride', root).value);
+  var ctx = gtCtx(root);   // G3: the dataset GT is analyzing (model by default)
 
   // Compute per-variable grade ranges from the target dataset's stats
   var gradeRanges = [];
@@ -724,26 +758,26 @@ function runGt() {
     }
   }
 
-  if (gtWorker) gtWorker.terminate();
-  gtWorker = new Worker(workerUrl);
+  if (S.gtWorker) S.gtWorker.terminate();
+  S.gtWorker = new Worker(workerUrl);
 
-  var $progress = document.getElementById('gtProgress');
-  var $fill = document.getElementById('gtProgressFill');
-  var $label = document.getElementById('gtProgressLabel');
-  var $content = document.getElementById('gtContent');
+  var $progress = gtQ('gtProgress', root);
+  var $fill = gtQ('gtProgressFill', root);
+  var $label = gtQ('gtProgressLabel', root);
+  var $content = gtContentEl(root);
   $progress.classList.add('active');
   $fill.style.width = '0%';
   $label.textContent = '0%';
   $content.innerHTML = '';
 
-  var $btn = document.getElementById('gtGenerate');
+  var $btn = gtQ('gtGenerate', root);
   if ($btn) $btn.disabled = true;
 
   var resolvedTypes = ctx.resolvedTypes;
   var filterPayload = ctx.filter ? { expression: ctx.filter.expression } : null;
   var zipEntry = ctx.preflight ? (ctx.preflight.selectedZipEntry || null) : null;
 
-  gtWorker.postMessage({
+  S.gtWorker.postMessage({
     mode: 'gt',
     file: ctx.file,
     zipEntry: zipEntry,
@@ -765,16 +799,16 @@ function runGt() {
     dmFormat: (ctx.preflight && ctx.preflight.dmFormat) || null
   });
 
-  gtWorker.onerror = function(e) {
+  S.gtWorker.onerror = function(e) {
     $label.textContent = 'Worker error: ' + (e.message || 'unknown error');
     $label.style.color = 'var(--red)';
     setTimeout(function() { $progress.classList.remove('active'); $label.style.color = ''; }, 3000);
     if ($btn) $btn.disabled = false;
-    gtWorker.terminate();
-    gtWorker = null;
+    if (S.gtWorker) S.gtWorker.terminate();
+    S.gtWorker = null;
   };
 
-  gtWorker.onmessage = function(e) {
+  S.gtWorker.onmessage = function(e) {
     var m = e.data;
     if (m.type === 'gt-progress') {
       var pct = Math.min(99, m.percent);
@@ -785,33 +819,38 @@ function runGt() {
       $label.textContent = 'Done';
       setTimeout(function() { $progress.classList.remove('active'); }, 800);
       if ($btn) $btn.disabled = false;
-      lastGtData = m;
-      gtStale = false;
-      if (typeof setGenStale === 'function') setGenStale('gtGenerate', false);
-      renderGtOutput();
-      // Update tab badge with number of selected grade variables
-      if (m.gradeResults) wsTabBadge('gt', 'GT', m.gradeResults.length);
-      gtWorker.terminate();
-      gtWorker = null;
+      S.lastGtData = m;
+      S.gtStale = false;
+      if ($btn) setGenStale($btn, false);
+      renderGtOutput(root);
+      // Update tab badge / clone tab title with the grade-variable count
+      if (m.gradeResults) {
+        if (gtIsInst(root) && wsRails) { try { wsRails.updateTab(root.getAttribute('data-gt-inst'), { title: 'GT: ' + m.gradeResults.length }); } catch (e2) {} }
+        else wsTabBadge('gt', 'GT', m.gradeResults.length);
+      }
+      if (S.gtWorker) S.gtWorker.terminate();
+      S.gtWorker = null;
     } else if (m.type === 'error') {
       $label.textContent = 'Error: ' + m.message;
       setTimeout(function() { $progress.classList.remove('active'); }, 2000);
       if ($btn) $btn.disabled = false;
-      gtWorker.terminate();
-      gtWorker = null;
+      if (S.gtWorker) S.gtWorker.terminate();
+      S.gtWorker = null;
     }
   };
 }
 
-function renderGtOutput() {
+function renderGtOutput(root) {
+  var S = gtStateForRoot(root);
+  var lastGtData = S.lastGtData;
   if (!lastGtData || !lastGtData.gradeResults) return;
-  var $content = document.getElementById('gtContent');
+  var $content = gtContentEl(root);
   if (!$content) return;
-  var cutoffs = getGtCutoffs();
-  var tonnageUnit = getGtTonnageUnit();
-  var fmts = getGtFormats();
+  var cutoffs = getGtCutoffs(root);
+  var tonnageUnit = getGtTonnageUnit(root);
+  var fmts = getGtFormats(root);
   function unitsFor(colIdx) {
-    var g = getGtGradeUnit(colIdx);
+    var g = getGtGradeUnit(colIdx, root);
     return {
       tonnageDivisor: tonnageUnit.tonnageDivisor,
       tonnageSymbol: tonnageUnit.tonnageSymbol,
@@ -834,7 +873,7 @@ function renderGtOutput() {
   var showTotal = false;
   var isGrouped = lastGtData.grouped;
   if (isGrouped) {
-    document.querySelectorAll('#gtGrpList input:checked').forEach(function(cb) {
+    gtQA('gtGrpList', 'input:checked', root).forEach(function(cb) {
       if (cb.value === '__total__') showTotal = true;
       else selectedGroups.add(cb.value);
     });
@@ -861,23 +900,24 @@ function renderGtOutput() {
 
   // Theoretical overlay: kick a (re)load when enabled but not covered/fresh;
   // the load completion re-renders. Grouped charts skip the overlay.
-  var theoOn = gtTheoActive();
-  if (theoOn && isGrouped) gtTheoSetStatus('overlay shows on ungrouped charts only');
-  if (theoOn && !isGrouped && !gtTheoLoading && gtTheoSourceDs()) {
-    var matchedNow = gtTheoMatchedVars();
-    var covered = gtTheo && gtTheo.fingerprint === gtTheoFingerprintNow(Object.keys(gtTheo.byVar)) &&
+  var theoOn = gtTheoActive(root);
+  var gtTheo = S.gtTheo;
+  if (theoOn && isGrouped) gtTheoSetStatus('overlay shows on ungrouped charts only', false, root);
+  if (theoOn && !isGrouped && !S.gtTheoLoading && gtTheoSourceDs(root)) {
+    var matchedNow = gtTheoMatchedVars(root);
+    var covered = gtTheo && gtTheo.fingerprint === gtTheoFingerprintNow(Object.keys(gtTheo.byVar), root) &&
       matchedNow.length > 0 && matchedNow.every(function(v) { return gtTheo.byVar[v.auxName]; });
-    if (!covered && matchedNow.length > 0) runGtTheoLoad();
+    if (!covered && matchedNow.length > 0) runGtTheoLoad(root);
   }
 
   for (var gi = 0; gi < gradeResults.length; gi++) {
     var gr = gradeResults[gi];
     var units = unitsFor(gr.colIdx);
     var theo = null;
-    if (theoOn && !isGrouped && gtTheo && gtTheo.fingerprint === gtTheoFingerprintNow(Object.keys(gtTheo.byVar))) {
-      var mv = gtTheoMatchedVars().filter(function(v) { return v.colName === gr.colName; })[0];
+    if (theoOn && !isGrouped && gtTheo && gtTheo.fingerprint === gtTheoFingerprintNow(Object.keys(gtTheo.byVar), root)) {
+      var mv = gtTheoMatchedVars(root).filter(function(v) { return v.colName === gr.colName; })[0];
       if (mv && gtTheo.byVar[mv.auxName]) {
-        var fVal = gtTheoF();
+        var fVal = gtTheoF(root);
         theo = {
           f: fVal,
           points: gtTheoCurve(gtTheo.byVar[mv.auxName], cutoffs, fVal).map(function(p) {
@@ -893,19 +933,19 @@ function renderGtOutput() {
       '<button class="swath-chart-btn" data-gt-copysvg="' + gi + '">Copy SVG</button>' +
       '<button class="swath-chart-btn" data-gt-png="' + gi + '" data-col-name="' + esc(gr.colName || '') + '">Download PNG</button>' +
     '</div>';
-    html += '<div class="gt-chart-wrap">' + renderGtChart(gr, cutoffs, units, isGrouped, gi, selectedGroups, showTotal, theo) + '</div>';
+    html += '<div class="gt-chart-wrap">' + renderGtChart(gr, cutoffs, units, isGrouped, gi, selectedGroups, showTotal, theo, root) + '</div>';
     // Collapsible table with per-table copy button. Collapse state lives in
     // gtTableCollapsed (by column name), not the DOM \u2014 the chart-width
     // observers rebuild this area (a collapse changes the scrollbar, which
     // changes content width), and DOM-only state reopened the table (C6-0)
     var tableTitle = gradeResults.length > 1 ? esc(gr.colName) + (units.gradeSymbol ? ' (' + esc(units.gradeSymbol) + ')' : '') : 'Table';
-    var tCollapsed = gtTableCollapsed.has(gr.colName);
+    var tCollapsed = S.gtTableCollapsed.has(gr.colName);
     html += '<div class="gt-table-section">' +
       '<div class="gt-table-header" data-gt-collapse="' + gi + '">' +
         '<span class="gt-table-toggle">' + (tCollapsed ? '\u25B6' : '\u25BC') + '</span> ' + tableTitle +
         '<button class="gt-copy-btn" data-gt-copy="' + gi + '">Copy</button>' +
       '</div>' +
-      '<div class="gt-table-body" id="gtTableBody' + gi + '"' + (tCollapsed ? ' style="display:none"' : '') + '>' +
+      '<div class="gt-table-body" data-gtbody="' + gi + '"' + (tCollapsed ? ' style="display:none"' : '') + '>' +
         '<div class="gt-table-wrap">' + renderGtTable(gr, cutoffs, units, isGrouped, gi, selectedGroups, showTotal) + '</div>' +
       '</div>' +
     '</div>';
@@ -918,7 +958,8 @@ function renderGtOutput() {
     btn.addEventListener('click', function(e) {
       e.stopPropagation();
       var idx = btn.dataset.gtCopy;
-      var table = document.querySelector('#gtTableBody' + idx + ' .gt-table');
+      var bodyEl = $content.querySelector('[data-gtbody="' + idx + '"]');
+      var table = bodyEl ? bodyEl.querySelector('.gt-table') : null;
       if (!table) return;
       var tsv = [];
       table.querySelectorAll('tr').forEach(function(row) {
@@ -935,10 +976,10 @@ function renderGtOutput() {
 
   // Wire chart export buttons
   $content.querySelectorAll('[data-gt-copysvg]').forEach(function(btn) {
-    btn.addEventListener('click', function() { copyGtSvg(btn.dataset.gtCopysvg, btn); });
+    btn.addEventListener('click', function() { copyGtSvg(btn.dataset.gtCopysvg, btn, root); });
   });
   $content.querySelectorAll('[data-gt-png]').forEach(function(btn) {
-    btn.addEventListener('click', function() { downloadGtPng(btn.dataset.gtPng, btn.dataset.colName); });
+    btn.addEventListener('click', function() { downloadGtPng(btn.dataset.gtPng, btn.dataset.colName, root); });
   });
 
   // Wire collapsible table headers \u2014 state in gtTableCollapsed (C6-0)
@@ -946,23 +987,23 @@ function renderGtOutput() {
     hdr.addEventListener('click', function() {
       var idx = hdr.dataset.gtCollapse;
       var colName = (lastGtData.gradeResults[idx] || {}).colName;
-      var body = document.getElementById('gtTableBody' + idx);
+      var body = $content.querySelector('[data-gtbody="' + idx + '"]');
       var toggle = hdr.querySelector('.gt-table-toggle');
       if (body.style.display === 'none') {
         body.style.display = '';
         toggle.textContent = '\u25BC';
-        gtTableCollapsed.delete(colName);
+        S.gtTableCollapsed.delete(colName);
       } else {
         body.style.display = 'none';
         toggle.textContent = '\u25B6';
-        gtTableCollapsed.add(colName);
+        S.gtTableCollapsed.add(colName);
       }
     });
   });
 
   // Wire crosshairs for each chart
   for (var ci = 0; ci < gradeResults.length; ci++) {
-    wireGtCrosshair(gradeResults[ci], cutoffs, unitsFor(gradeResults[ci].colIdx), ci);
+    wireGtCrosshair(gradeResults[ci], cutoffs, unitsFor(gradeResults[ci].colIdx), ci, root);
   }
 }
 
@@ -979,14 +1020,15 @@ function renderGtOutput() {
 
 // The comparison dataset the theoretical curve is drawn from (any d2+, not just
 // the singleton aux). Defaults to the first comparison dataset with a file.
-function gtTheoSourceDs() {
-  if (gtTheoDsId) { var d = dsById(gtTheoDsId); if (d && d.id !== 'model' && d.file) return d; }
+function gtTheoSourceDs(root) {
+  var tid = gtStateForRoot(root).gtTheoDsId;
+  if (tid) { var d = dsById(tid); if (d && d.id !== 'model' && d.file) return d; }
   for (var i = 1; i < datasets.length; i++) { if (datasets[i].file) return datasets[i]; }
   return null;
 }
 
-function gtTheoFingerprintNow(srcNames) {
-  var ds = gtTheoSourceDs();
+function gtTheoFingerprintNow(srcNames, root) {
+  var ds = gtTheoSourceDs(root);
   if (!ds || !ds.file || !ds.preflight) return null;
   return JSON.stringify({
     ds: ds.id,
@@ -1002,8 +1044,8 @@ function gtTheoFingerprintNow(srcNames) {
 
 // Checked GT grade variables matched to the source dataset's numeric columns/
 // calcols through the catalog grouping — the same grouping as Statistics/Swath
-function gtTheoMatchedVars() {
-  var ds = gtTheoSourceDs();
+function gtTheoMatchedVars(root) {
+  var ds = gtTheoSourceDs(root);
   if (!ds || !ds.preflight) return [];
   catEnsureSeeded();
   var srcNumeric = {};
@@ -1014,9 +1056,10 @@ function gtTheoMatchedVars() {
     if (ds.calcolMeta[ci].type === 'numeric') srcNumeric[ds.calcolMeta[ci].name] = true;
   }
   var out = [];
-  document.querySelectorAll('#gtVarList input[type="checkbox"]:checked').forEach(function(cb) {
+  var hdr = gtCtx(root).header;
+  gtQA('gtVarList', 'input[type="checkbox"]:checked', root).forEach(function(cb) {
     var colIdx = parseInt(cb.value);
-    var colName = currentHeader[colIdx];
+    var colName = hdr[colIdx];
     if (!colName) return;
     var srcName = catGroupMembers(colName, ds.id).filter(function(n) { return srcNumeric[n]; })[0];
     if (srcName) out.push({ colIdx: colIdx, colName: colName, auxName: srcName });
@@ -1024,8 +1067,8 @@ function gtTheoMatchedVars() {
   return out;
 }
 
-function gtTheoSetStatus(msg, isErr) {
-  var el = document.getElementById('gtTheoStatus');
+function gtTheoSetStatus(msg, isErr, root) {
+  var el = gtQ('gtTheoStatus', root);
   if (el) { el.textContent = msg || ''; el.style.color = isErr ? 'var(--red)' : ''; }
 }
 
@@ -1034,43 +1077,46 @@ function gtTheoSetStatus(msg, isErr) {
 // curve be drawn from any comparison dataset, not just the singleton aux. The
 // picker lives in a stable wrapper so it can be refreshed in place as datasets
 // load/clear (the GT sidebar itself is built once, on the model analysis).
-function gtTheoSourceInnerHtml() {
+function gtTheoSourceInnerHtml(root) {
   var srcs = [];
   for (var i = 1; i < datasets.length; i++) { if (datasets[i].file) srcs.push(datasets[i]); }
   if (srcs.length < 2) return '';
-  var cur = (gtTheoSourceDs() || {}).id;
+  var cur = (gtTheoSourceDs(root) || {}).id;
   return '<div style="display:flex;gap:0.3rem;align-items:center;margin-top:0.3rem">' +
     '<span style="font-size:0.62rem;color:var(--fg-dim);white-space:nowrap">from</span>' +
-    '<select class="gt-select" id="gtTheoSource" style="flex:1">' +
+    '<select class="gt-select" data-gt="gtTheoSource" style="flex:1">' +
     srcs.map(function(d) { return '<option value="' + d.id + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
     '</select></div>';
 }
-function gtTheoSourceSelectHtml() { return '<div id="gtTheoSourceWrap">' + gtTheoSourceInnerHtml() + '</div>'; }
+function gtTheoSourceSelectHtml(root) { return '<div data-gt="gtTheoSourceWrap">' + gtTheoSourceInnerHtml(root) + '</div>'; }
 
 // Rebuild the source picker in place + (re)wire it — called when comparison
 // datasets change so the picker reflects the current set without a full GT
 // sidebar rebuild (which would drop the user's grade selections).
-function refreshGtTheoSource() {
-  var wrap = document.getElementById('gtTheoSourceWrap');
+function refreshGtTheoSource(root) {
+  var wrap = gtQ('gtTheoSourceWrap', root);
   if (!wrap) return;
-  wrap.innerHTML = gtTheoSourceInnerHtml();
-  var sel = document.getElementById('gtTheoSource');
+  wrap.innerHTML = gtTheoSourceInnerHtml(root);
+  gtStampSingletonIds(root, wrap);   // re-stamp the rebuilt select id on the singleton
+  var sel = gtQ('gtTheoSource', root);
   if (sel) sel.addEventListener('change', function() {
-    gtTheoDsId = sel.value;
-    gtTheo = null;
-    if (gtTheoActive() && lastGtData) renderGtOutput();
+    var S = gtStateForRoot(root);
+    S.gtTheoDsId = sel.value;
+    S.gtTheo = null;
+    if (gtTheoActive(root) && S.lastGtData) renderGtOutput(root);
     if (typeof autoSaveProject === 'function') autoSaveProject();
   });
 }
 
 // Sequential colvalues passes (one per matched variable) → weighted sorted
 // distributions with prefix sums of w and w·v
-function runGtTheoLoad() {
-  if (gtTheoLoading) return;
-  var ds = gtTheoSourceDs();
-  var matched = gtTheoMatchedVars();
+function runGtTheoLoad(root) {
+  var S = gtStateForRoot(root);
+  if (S.gtTheoLoading) return;
+  var ds = gtTheoSourceDs(root);
+  var matched = gtTheoMatchedVars(root);
   if (!ds || !ds.file || matched.length === 0) {
-    gtTheoSetStatus(ds && ds.file ? 'no checked grade variable has a match in ' + dsLabel(ds.id) : 'load a comparison dataset first', true);
+    gtTheoSetStatus(ds && ds.file ? 'no checked grade variable has a match in ' + dsLabel(ds.id) : 'load a comparison dataset first', true, root);
     return;
   }
   // Weight resolution mirrors the source dataset's analyze pass
@@ -1078,26 +1124,26 @@ function runGtTheoLoad() {
   var theoWeight = catRole(ds.id, 'weight');
   if (theoWeight === AUX_DECLUS_WEIGHT) {
     if (typeof auxDeclusFresh === 'function' && auxDeclusFresh(ds) && ds.declus) weightArray = ds.declus.weights;
-    else { gtTheoSetStatus('declustered weights missing or stale — re-run Declustering on ' + dsLabel(ds.id), true); return; }
+    else { gtTheoSetStatus('declustered weights missing or stale — re-run Declustering on ' + dsLabel(ds.id), true, root); return; }
   } else if (theoWeight) {
     weightCol = theoWeight;
   }
 
-  gtTheoLoading = true;
+  S.gtTheoLoading = true;
   var byVar = {}, queue = matched.slice();
-  var fp = gtTheoFingerprintNow(matched.map(function(v) { return v.auxName; }));
+  var fp = gtTheoFingerprintNow(matched.map(function(v) { return v.auxName; }), root);
 
   function fail(msg) {
-    gtTheoLoading = false;
-    gtTheoSetStatus('Error: ' + msg, true);
+    S.gtTheoLoading = false;
+    gtTheoSetStatus('Error: ' + msg, true, root);
   }
   function next() {
     if (queue.length === 0) {
-      gtTheo = { byVar: byVar, fingerprint: fp };
-      gtTheoLoading = false;
+      S.gtTheo = { byVar: byVar, fingerprint: fp };
+      S.gtTheoLoading = false;
       var names = Object.keys(byVar);
-      gtTheoSetStatus(names.map(function(nm) { return nm + ' (' + byVar[nm].values.length.toLocaleString() + ')'; }).join(' · '));
-      if (lastGtData) renderGtOutput();
+      gtTheoSetStatus(names.map(function(nm) { return nm + ' (' + byVar[nm].values.length.toLocaleString() + ')'; }).join(' · '), false, root);
+      if (S.lastGtData) renderGtOutput(root);
       return;
     }
     var v = queue.shift();
@@ -1161,14 +1207,14 @@ function gtTheoCurve(dist, cutoffs, f) {
   });
 }
 
-function gtTheoF() {
-  var el = document.getElementById('gtTheoFNum');
+function gtTheoF(root) {
+  var el = gtQ('gtTheoFNum', root);
   var f = el ? parseFloat(el.value) : 0.6;
   return isFinite(f) && f > 0 && f <= 1 ? f : 0.6;
 }
 
-function gtTheoActive() {
-  var cb = document.getElementById('gtTheoEnabled');
+function gtTheoActive(root) {
+  var cb = gtQ('gtTheoEnabled', root);
   return !!(cb && cb.checked);
 }
 
@@ -1196,7 +1242,7 @@ function interpolateGt(results, cutoff, binWidth, gradeMin) {
   };
 }
 
-function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGroups, showTotal, theo) {
+function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGroups, showTotal, theo, root) {
   var results = grData.results;
   if (!results || results.length === 0) return '<div class="gt-hint">No GT data available.</div>';
   // A8: zero total tonnage = no row contributed (empty column, everything
@@ -1211,7 +1257,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
   var td = units.tonnageDivisor || 1;
   var gf = units.gradeFactor || 1;
   var md = units.metalDivisor || td;
-  var clipId = 'gt-clip-' + chartIdx;
+  var clipId = 'gt-clip-' + (gtIsInst(root) ? root.getAttribute('data-gt-inst').replace(/[^a-z0-9]/gi, '') + '-' : '') + chartIdx;
 
   // Determine if we render grouped overlay
   var groupResults = isGrouped && grData.groupResults ? grData.groupResults : null;
@@ -1230,7 +1276,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
     return { cutoff: c, tonnage: p.tonnage / td, grade: p.grade, metal: p.metal * gf / md };
   });
 
-  var W = chartHostWidth(document.getElementById('gtContent'), 720, 560, 34), H = 380;
+  var W = chartHostWidth(gtContentEl(root) || document.getElementById('gtContent'), 720, 560, 34), H = 380;
   var pad = { top: 30, right: 75, bottom: 50, left: 75 };
   var plotW = W - pad.left - pad.right;
   var plotH = H - pad.top - pad.bottom;
@@ -1416,8 +1462,9 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
     '</svg>';
 }
 
-function copyGtSvg(chartIdx, btn) {
-  var svgEl = document.querySelector('.gt-svg[data-chart-idx="' + chartIdx + '"]');
+function copyGtSvg(chartIdx, btn, root) {
+  var cEl = gtContentEl(root) || document;
+  var svgEl = cEl.querySelector('.gt-svg[data-chart-idx="' + chartIdx + '"]');
   if (!svgEl) return;
   navigator.clipboard.writeText(svgEl.outerHTML).then(function() {
     btn.textContent = 'Copied!';
@@ -1425,8 +1472,9 @@ function copyGtSvg(chartIdx, btn) {
   });
 }
 
-function downloadGtPng(chartIdx, colName) {
-  var svgEl = document.querySelector('.gt-svg[data-chart-idx="' + chartIdx + '"]');
+function downloadGtPng(chartIdx, colName, root) {
+  var cEl = gtContentEl(root) || document;
+  var svgEl = cEl.querySelector('.gt-svg[data-chart-idx="' + chartIdx + '"]');
   if (!svgEl) return;
   var clone = svgEl.cloneNode(true);
   var area = clone.querySelector('.gt-crosshair-area');
@@ -1471,8 +1519,9 @@ function downloadGtPng(chartIdx, colName) {
   img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
 }
 
-function wireGtCrosshair(grData, cutoffs, units, chartIdx) {
-  var svgEl = document.querySelector('.gt-svg[data-chart-idx="' + chartIdx + '"]');
+function wireGtCrosshair(grData, cutoffs, units, chartIdx, root) {
+  var cEl = gtContentEl(root) || document;
+  var svgEl = cEl.querySelector('.gt-svg[data-chart-idx="' + chartIdx + '"]');
   if (!svgEl) return;
   var area = svgEl.querySelector('.gt-crosshair-area');
   var line = svgEl.querySelector('.gt-crosshair-line');
