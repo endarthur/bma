@@ -130,6 +130,130 @@ function statDisposeInstance(instId) {
   delete statInstanceEls[instId];
 }
 
+// ─── A10 Statistics st-5: persist clone VIEWS (not the analysis) ───────────
+// selectedVars/cdfSelected by model-column NAME; cmpSel/cdfCmpSel by comparison-
+// column NAME (per ds); metrics/percentiles/scale/mode/dsHidden/refDs by value.
+// Mirrors the singleton's project.stats + panels.statistics + the swath s-5 /
+// cat 4e-c-5 pending-re-emit loss-safety. The RESULTS are shared (lastDisplayedStats).
+function statNamesFromColSet(set, hdr) {
+  if (!set || !hdr) return [];
+  return Array.from(set).map(function(i) { return hdr[i]; }).filter(function(n) { return n != null; });
+}
+function statColSetFromNames(names, hdr) {
+  var s = new Set();
+  if (!names || !hdr) return s;
+  var byName = {};
+  for (var i = 0; i < hdr.length; i++) byName[hdr[i]] = i;
+  names.forEach(function(n) { if (byName[n] !== undefined) s.add(byName[n]); });
+  return s;
+}
+function statCmpByName(map) {
+  var o = {};
+  Object.keys(map).forEach(function(dsId) {
+    var sel = map[dsId];
+    if (sel == null) return;
+    var ds = dsById(dsId), dh = ds && ds.complete && ds.complete.header;
+    if (!dh) return;
+    o[dsId] = statNamesFromColSet(sel, dh);
+  });
+  return o;
+}
+
+function statSerializeInstances() {
+  var out = [], hdr = lastDisplayedHeader;
+  Object.keys(statInstances).forEach(function(id) {
+    var S = statInstances[id], pv = S._pendingView, view;
+    if (pv && 'percentiles' in pv) {
+      view = pv;   // analysis not landed yet — the pending view is the source of truth
+    } else {
+      view = {
+        selectedVars: S.statsSelectedVars ? statNamesFromColSet(S.statsSelectedVars, hdr) : null,
+        visibleMetrics: S.statsVisibleMetrics ? Array.from(S.statsVisibleMetrics) : null,
+        percentiles: S.statsPercentiles,
+        cdfSelected: statNamesFromColSet(S.statsCdfSelected, hdr),
+        cdfScale: S.statsCdfScale, cdfMode: S.statsCdfMode,
+        cmpSel: statCmpByName(S.cmpSel), cdfCmpSel: statCmpByName(S.cdfCmpSel),
+        dsHidden: Array.from(S.dsHidden), refDs: S.refDs
+      };
+      // loss-safety: re-emit comparison selections still pending (their ds isn't back)
+      if (pv) ['cmpSel', 'cdfCmpSel'].forEach(function(k) {
+        if (!pv[k]) return;
+        Object.keys(pv[k]).forEach(function(dsId) { if (!(dsId in view[k])) view[k][dsId] = pv[k][dsId]; });
+      });
+    }
+    out.push({ id: id, view: view });
+  });
+  return out;
+}
+
+// Drop all clone state (+ tabs) — new file / clear project.
+function statResetInstances() {
+  Object.keys(statInstances).forEach(function(id) {
+    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) {
+      try { wsRails.closeTab(id); } catch (e) {}
+    }
+    statDisposeInstance(id);
+  });
+  statInstances = {}; statInstanceEls = {}; statInstSeq = 1;
+}
+
+// Recreate clone instances from a serialized list BEFORE the layout deserialize
+// rebuilds their tabs (statBuildInstancePanel reads the seeded state). The view
+// stays pending until statApplyAllInstances resolves names→indices post-analysis.
+function statRestoreInstances(list) {
+  statResetInstances();
+  if (!Array.isArray(list)) return;
+  var maxSeq = 1;
+  list.forEach(function(rec) {
+    if (!rec || !rec.id) return;
+    var st = statNewInstState();
+    if (rec.view) st._pendingView = rec.view;
+    statInstances[rec.id] = st;
+    var m = /^statistics#(\d+)$/.exec(rec.id);
+    if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+  });
+  statInstSeq = maxSeq;
+}
+
+// Resolve each restored clone's pending view against current headers. Model
+// parts resolve once the model analysis lands; comparison parts resolve per-ds
+// as each completes (called again from the comparison analysis-complete handler).
+// Resolve-only — the caller pairs it with statRenderAllInstances to repaint.
+function statApplyAllInstances() {
+  if (!lastDisplayedStats || !lastDisplayedHeader) return;
+  Object.keys(statInstances).forEach(function(id) {
+    var S = statInstances[id], pv = S._pendingView;
+    if (!pv) return;
+    if ('percentiles' in pv) {                 // model parts — resolve once
+      S.statsSelectedVars = pv.selectedVars ? statColSetFromNames(pv.selectedVars, lastDisplayedHeader) : null;
+      S.statsVisibleMetrics = pv.visibleMetrics ? new Set(pv.visibleMetrics) : null;
+      S.statsPercentiles = pv.percentiles || [25, 50, 75];
+      S.statsCdfSelected = statColSetFromNames(pv.cdfSelected, lastDisplayedHeader);
+      S.statsCdfScale = pv.cdfScale || 'linear';
+      S.statsCdfMode = pv.cdfMode || 'cdf';
+      S.dsHidden = new Set(pv.dsHidden || []);
+      S.refDs = pv.refDs || null;
+      var rem = {};                            // keep only the comparison remainders pending
+      if (pv.cmpSel && Object.keys(pv.cmpSel).length) rem.cmpSel = pv.cmpSel;
+      if (pv.cdfCmpSel && Object.keys(pv.cdfCmpSel).length) rem.cdfCmpSel = pv.cdfCmpSel;
+      S._pendingView = (rem.cmpSel || rem.cdfCmpSel) ? rem : null;
+      pv = S._pendingView;
+    }
+    if (pv) ['cmpSel', 'cdfCmpSel'].forEach(function(k) {   // comparison parts, per-ds
+      if (!pv[k]) return;
+      var live = (k === 'cmpSel') ? S.cmpSel : S.cdfCmpSel;
+      Object.keys(pv[k]).forEach(function(dsId) {
+        var ds = dsById(dsId), dh = ds && ds.complete && ds.complete.header;
+        if (!dh) return;
+        live[dsId] = statColSetFromNames(pv[k][dsId], dh);
+        delete pv[k][dsId];
+      });
+      if (Object.keys(pv[k]).length === 0) delete pv[k];
+    });
+    if (pv && !pv.cmpSel && !pv.cdfCmpSel) S._pendingView = null;
+  });
+}
+
 function tdQuantileFromCentroids(centroids, totalCount, q) {
   if (!centroids || centroids.length === 0) return null;
   if (centroids.length === 1) return centroids[0][0];

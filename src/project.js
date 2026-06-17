@@ -399,7 +399,8 @@ function serializePanelState() {
       cmpSel: selByName(panelState.statistics.cmpSel, pps && pps.cmpSel),
       cdfCmpSel: selByName(panelState.statistics.cdfCmpSel, pps && pps.cdfCmpSel),
       dsHidden: Array.from(panelState.statistics.dsHidden),
-      refDs: panelState.statistics.refDs            // 4d per-panel reference (no global star), by id
+      refDs: panelState.statistics.refDs,           // 4d per-panel reference (no global star), by id
+      instances: (typeof statSerializeInstances === 'function') ? statSerializeInstances() : []   // st-5: cloned Statistics panels
     },
     swath: {
       dsHidden: Array.from(panelState.swath.dsHidden),
@@ -750,6 +751,11 @@ async function applyProject(project) {
   if (typeof swRestoreInstances === 'function') {
     swRestoreInstances(project.panels && project.panels.swath && project.panels.swath.instances);
   }
+  // A10 Statistics st-5: same — recreate cloned Statistics instances (view pending)
+  // before the layout deserialize; resolved post-analysis by statApplyAllInstances.
+  if (typeof statRestoreInstances === 'function') {
+    statRestoreInstances(project.panels && project.panels.statistics && project.panels.statistics.instances);
+  }
 
   // Restore the rails workspace arrangement (missing/invalid → default)
   wsRestoreProjectLayout(project.layout);
@@ -1040,6 +1046,7 @@ function clearProject() {
   panelState.categories.dsHidden = new Set();
   if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
   if (typeof swResetInstances === 'function') swResetInstances();    // Swath s-5: drop cloned Swath panels
+  if (typeof statResetInstances === 'function') statResetInstances();  // Statistics st-5: drop cloned Statistics panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -1267,6 +1274,7 @@ async function handleFile(file, handle, skipRecents) {
   panelState.categories.dsHidden = new Set();
   if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
   if (typeof swResetInstances === 'function') swResetInstances();    // Swath s-5: drop cloned Swath panels
+  if (typeof statResetInstances === 'function') statResetInstances();  // Statistics st-5: drop cloned Statistics panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -1449,6 +1457,7 @@ $backToPreflight.addEventListener('click', () => {
   panelState.categories.dsHidden = new Set();
   if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
   if (typeof swResetInstances === 'function') swResetInstances();    // Swath s-5: drop cloned Swath panels
+  if (typeof statResetInstances === 'function') statResetInstances();  // Statistics st-5: drop cloned Statistics panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -1972,6 +1981,7 @@ function displayResults(data) {
   const origColCount = data.origColCount || header.length;
   const numCols = Object.keys(stats).map(Number).sort((a, b) => a - b);
   renderStatsTab(stats, header, origColCount, isFiltered, rowCount);
+  if (typeof statApplyAllInstances === 'function') statApplyAllInstances();    // st-5: resolve restored clone views
   if (typeof statRenderAllInstances === 'function') statRenderAllInstances();  // st-4: keep clones in sync
 
   // Categories

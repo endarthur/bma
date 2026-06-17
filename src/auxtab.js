@@ -176,10 +176,12 @@ function runAuxAnalysis(ds, root) {
       ds._worker = null;
       if (typeof applyStatsAuxRestore === 'function') applyStatsAuxRestore();
       if (typeof applyStatsCmpRestore === 'function') applyStatsCmpRestore(ds);  // 4e-b: instance (d2+) selection by name
+      if (typeof statApplyAllInstances === 'function') statApplyAllInstances();  // st-5: resolve clone cmp selection for this ds
       if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
         renderStatsSidebar();
         renderStatsTable();
         renderStatsCdfPanel();
+        if (typeof statRenderAllInstances === 'function') statRenderAllInstances();  // st-4/5: repaint clones
       }
       if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();
       if (ds.view === 'summary' && typeof renderAuxSummary === 'function') renderAuxSummary(ds, root);  // A10 per-dataset summary
