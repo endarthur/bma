@@ -1285,6 +1285,9 @@ async function exportCSV(data) {
     src = await makeRowSource(file, {
       zipEntry, dmEndianness: data.dmEndianness, dmFormat: data.dmFormat,
       resolvedTypes, calcolCode, calcolMeta,
+      // A10 4h: per-dataset export honors the dataset's row handle (aux./d2.…);
+      // undefined for the model export → default 'r', so the model is unchanged.
+      rowVarOverride: data.rowVarOverride,
       emptyMessage: 'File appears empty or has no data rows.'
     });
   } catch(e) {

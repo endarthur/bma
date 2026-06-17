@@ -507,76 +507,94 @@ function startExport() {
     dmFormat: preflightData && preflightData.dmFormat || null
   };
 
-  $exportDownload.disabled = true;
-  $exportProgress.classList.add('active');
-  $exportProgressFill.style.width = '0%';
-  $exportProgressLabel.textContent = 'Exporting...';
-  $exportInfo.textContent = '';
-
   if (exportWorker) exportWorker.terminate();
 
+  // A10 4h: the model export now runs through the shared, dataset-generic
+  // exportRunWorker; this UI object drives the Export-tab elements exactly as
+  // before (byte-identical strings + reset behavior).
+  exportRunWorker(msg, suggestedName, {
+    start: function() {
+      $exportDownload.disabled = true;
+      $exportProgress.classList.add('active');
+      $exportProgressFill.style.width = '0%';
+      $exportProgressLabel.textContent = 'Exporting...';
+      $exportInfo.textContent = '';
+    },
+    progress: function(pct, rowCount) {
+      $exportProgressFill.style.width = pct.toFixed(1) + '%';
+      $exportProgressLabel.textContent = 'Exporting... ' + pct.toFixed(0) + '% (' + rowCount.toLocaleString() + ' rows)';
+    },
+    complete: function(rowCount, elapsed) {
+      $exportProgressFill.style.width = '100%';
+      $exportProgressLabel.textContent = 'Done \u2014 ' + rowCount.toLocaleString() + ' rows in ' + (elapsed / 1000).toFixed(1) + 's';
+      $exportDownload.disabled = false;
+    },
+    error: function(text) {
+      $exportInfo.textContent = text;
+      $exportProgress.classList.remove('active');
+      $exportDownload.disabled = false;
+    },
+    cancelled: function() {
+      $exportProgress.classList.remove('active');
+      $exportDownload.disabled = false;
+    },
+    setWorker: function(w) { exportWorker = w; }
+  });
+}
+
+// A10 4h: run the streaming CSV export worker for a prepared message, driving an
+// arbitrary UI through callbacks so the model Export tab (startExport) and the
+// per-dataset row export (dsExportRows) share one code path. FSAA stream-to-disk
+// when available, else accumulate chunks \u2192 blob download. ui = { start, progress,
+// complete, error, cancelled, setWorker }. error strings are pre-formatted here
+// so both surfaces report identically.
+function exportRunWorker(msg, suggestedName, ui) {
+  ui.start();
   if (window.showSaveFilePicker) {
     window.showSaveFilePicker({
       suggestedName,
       types: [{ description: 'CSV', accept: { 'text/csv': ['.csv', '.tsv'] } }]
     }).then(async (handle) => {
       const writable = await handle.createWritable();
-      exportWorker = new Worker(workerUrl);
-      exportWorker.onerror = async (e) => {
+      const worker = new Worker(workerUrl);
+      ui.setWorker(worker);
+      worker.onerror = async (e) => {
         await writable.abort();
-        $exportInfo.textContent = 'Worker error: ' + (e.message || 'unknown error');
-        $exportProgress.classList.remove('active');
-        $exportDownload.disabled = false;
-        exportWorker.terminate();
-        exportWorker = null;
+        ui.error('Worker error: ' + (e.message || 'unknown error'));
+        worker.terminate(); ui.setWorker(null);
       };
-      exportWorker.onmessage = async (e) => {
+      worker.onmessage = async (e) => {
         const m = e.data;
         if (m.type === 'export-chunk') {
           await writable.write(m.csv);
         } else if (m.type === 'export-progress') {
-          const pct = Math.min(99, m.percent);
-          $exportProgressFill.style.width = pct.toFixed(1) + '%';
-          $exportProgressLabel.textContent = 'Exporting... ' + pct.toFixed(0) + '% (' + m.rowCount.toLocaleString() + ' rows)';
+          ui.progress(Math.min(99, m.percent), m.rowCount);
         } else if (m.type === 'export-complete') {
           await writable.close();
-          $exportProgressFill.style.width = '100%';
-          $exportProgressLabel.textContent = 'Done \u2014 ' + m.rowCount.toLocaleString() + ' rows in ' + (m.elapsed / 1000).toFixed(1) + 's';
-          $exportDownload.disabled = false;
-          exportWorker.terminate();
-          exportWorker = null;
+          ui.complete(m.rowCount, m.elapsed);
+          worker.terminate(); ui.setWorker(null);
         } else if (m.type === 'error') {
           await writable.abort();
-          $exportInfo.textContent = 'Error: ' + m.message;
-          $exportProgress.classList.remove('active');
-          $exportDownload.disabled = false;
-          exportWorker.terminate();
-          exportWorker = null;
+          ui.error('Error: ' + m.message);
+          worker.terminate(); ui.setWorker(null);
         }
       };
-      exportWorker.postMessage(msg);
-    }).catch((err) => {
-      $exportProgress.classList.remove('active');
-      $exportDownload.disabled = false;
-    });
+      worker.postMessage(msg);
+    }).catch(() => { ui.cancelled(); });
   } else {
     const chunks = [];
-    exportWorker = new Worker(workerUrl);
-    exportWorker.onerror = (e) => {
-      $exportInfo.textContent = 'Worker error: ' + (e.message || 'unknown error');
-      $exportProgress.classList.remove('active');
-      $exportDownload.disabled = false;
-      exportWorker.terminate();
-      exportWorker = null;
+    const worker = new Worker(workerUrl);
+    ui.setWorker(worker);
+    worker.onerror = (e) => {
+      ui.error('Worker error: ' + (e.message || 'unknown error'));
+      worker.terminate(); ui.setWorker(null);
     };
-    exportWorker.onmessage = (e) => {
+    worker.onmessage = (e) => {
       const m = e.data;
       if (m.type === 'export-chunk') {
         chunks.push(m.csv);
       } else if (m.type === 'export-progress') {
-        const pct = Math.min(99, m.percent);
-        $exportProgressFill.style.width = pct.toFixed(1) + '%';
-        $exportProgressLabel.textContent = 'Exporting... ' + pct.toFixed(0) + '% (' + m.rowCount.toLocaleString() + ' rows)';
+        ui.progress(Math.min(99, m.percent), m.rowCount);
       } else if (m.type === 'export-complete') {
         const blob = new Blob(chunks, { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
@@ -587,21 +605,60 @@ function startExport() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        $exportProgressFill.style.width = '100%';
-        $exportProgressLabel.textContent = 'Done \u2014 ' + m.rowCount.toLocaleString() + ' rows in ' + (m.elapsed / 1000).toFixed(1) + 's';
-        $exportDownload.disabled = false;
-        exportWorker.terminate();
-        exportWorker = null;
+        ui.complete(m.rowCount, m.elapsed);
+        worker.terminate(); ui.setWorker(null);
       } else if (m.type === 'error') {
-        $exportInfo.textContent = 'Error: ' + m.message;
-        $exportProgress.classList.remove('active');
-        $exportDownload.disabled = false;
-        exportWorker.terminate();
-        exportWorker = null;
+        ui.error('Error: ' + m.message);
+        worker.terminate(); ui.setWorker(null);
       }
     };
-    exportWorker.postMessage(msg);
+    worker.postMessage(msg);
   }
+}
+
+// A10 4h: export any dataset's rows as CSV \u2014 all columns + calcols, the
+// dataset's global filter applied, sensible defaults (comma, header, source
+// precision). Points and drillhole-derived datasets emit the same shape as the
+// model; reuses the worker 'export' mode via exportRunWorker. Status renders on
+// the dataset summary's export button/line.
+function dsExportRows(ds, root) {
+  ds = ds || dsById('aux');
+  root = root || (typeof dsConfigRoot === 'function' ? dsConfigRoot(ds) : null);
+  if (!ds || !ds.file || !ds.preflight) return;
+  var hdr = ds.preflight.header || [];
+  var exportCols = hdr.map(function(n) { return { name: n, outputName: n }; });
+  (ds.calcolMeta || []).forEach(function(cm) { exportCols.push({ name: cm.name, outputName: cm.name }); });
+  if (exportCols.length === 0) return;
+
+  var msg = {
+    mode: 'export',
+    file: ds.file,
+    filter: ds.filter ? { expression: ds.filter.expression } : null,
+    zipEntry: ds.preflight.selectedZipEntry || null,
+    calcolCode: ds.calcolCode || null,
+    calcolMeta: (ds.calcolMeta && ds.calcolMeta.length > 0) ? ds.calcolMeta : null,
+    resolvedTypes: (ds.preflight.autoTypes || []).slice(),
+    exportCols: exportCols,
+    rowVarOverride: ds.rowVar,
+    delimiter: ',', includeHeader: true, commentLines: null,
+    quoteChar: '"', lineEnding: '\n', nullValue: '', precision: null, decimalSep: '.',
+    dmEndianness: ds.preflight.dmEndianness || null,
+    dmFormat: ds.preflight.dmFormat || null
+  };
+  var baseName = (ds.file.name || ds.prefix || 'data').replace(/\.[^.]+$/, '');
+  var suggestedName = baseName + '_export.csv';
+
+  var $btn = auxQ('[data-act="auxExportRows"]', root);
+  var $status = auxQ('[data-aux="exportStatus"]', root);
+  if (ds._exportWorker) { try { ds._exportWorker.terminate(); } catch (e) {} ds._exportWorker = null; }
+  exportRunWorker(msg, suggestedName, {
+    start: function() { if ($btn) $btn.disabled = true; if ($status) { $status.textContent = 'Exporting\u2026'; $status.style.color = ''; } },
+    progress: function(pct, rowCount) { if ($status) $status.textContent = pct.toFixed(0) + '% (' + rowCount.toLocaleString() + ' rows)'; },
+    complete: function(rowCount) { if ($btn) $btn.disabled = false; if ($status) { $status.textContent = 'Exported ' + rowCount.toLocaleString() + ' rows'; $status.style.color = ''; } },
+    error: function(text) { if ($btn) $btn.disabled = false; if ($status) { $status.textContent = text; $status.style.color = 'var(--red)'; } },
+    cancelled: function() { if ($btn) $btn.disabled = false; if ($status) $status.textContent = ''; },
+    setWorker: function(w) { ds._exportWorker = w; }
+  });
 }
 
 $exportDownload.addEventListener('click', startExport);

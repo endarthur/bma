@@ -713,6 +713,27 @@ needs the GT clone arc — out of scope here). Worker untouched (b1-differential
 Guard `experiments/4g-gt-volume-smoke.js` (11 asserts: grid→point→grid, count-based
 fallback = row count, geometry volume = rows × block volume).
 
+### Phase 4h — Export generalize (2026-06-17)
+
+**4h ✅** — CSV row export is now dataset-generic. The model Export tab and a new
+per-dataset row export share one path: `exportRunWorker(msg, suggestedName, ui)`
+(export.js) runs the worker `export` mode (FSAA stream-to-disk, else blob
+download) driving an arbitrary UI through callbacks (`start`/`progress`/
+`complete`/`error`/`cancelled`/`setWorker`). `startExport` was refactored onto
+it (byte-identical strings + reset behavior). `dsExportRows(ds, root)` builds the
+message from any dataset — all columns + calcols, the dataset's global filter,
+sensible defaults (comma, header, source precision) — and reuses the runner. The
+comparison-dataset **summary** (`renderAuxSummary`) gains an **Export** section
+with an "Export rows (CSV)" button + status; bbox/OBJ already lived there
+(`downloadBboxObj`), so points and drillhole-derived sets now emit the same shape
+(rows / bbox / OBJ) as the model. Worker change: `exportCSV` passes
+`rowVarOverride` to `makeRowSource` so a dataset's `aux.`/`d2.` row handle
+compiles in its filter + calcols — additive (undefined for the model →
+b1-differential 29/29 bit-identical). GT/Export stay model-tab singletons; true
+cloned Export panels are a later C9 lift. Guard `experiments/4h-export-smoke.js`
+(7 asserts: model all-columns export = every row; d2 export honors `d2.Fe>50`
+filter — count = survivors, every row passes — via the d2 row handle).
+
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
 Phase 1 is being executed as fine slices (B1/C1a playbook — de-risk first):

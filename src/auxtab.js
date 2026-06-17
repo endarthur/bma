@@ -320,12 +320,29 @@ function renderAuxSummary(ds, root) {
         '<div class="section-body">' + geoContentHtml(g, d.rowCount, { coordInvalidCells: d.coordInvalidCells }) + '</div></div>';
   }
 
+  // A10 4h: export this dataset's rows (all columns + calcols, its filter
+  // applied) as CSV — points and drillhole-derived sets emit the same shape as
+  // the model. bbox/OBJ live in the Bounding Box section above when XYZ exists.
+  var exportHtml =
+    '<button class="copy-table-btn" data-act="auxExportRows">Export rows (CSV)</button>' +
+    '<span class="aux-hint" data-aux="exportStatus" style="margin-left:0.6rem"></span>' +
+    '<div class="aux-hint">All ' + (d.header ? d.header.length : 0) + ' columns' +
+      ((ds.calcolMeta && ds.calcolMeta.length) ? ' + ' + ds.calcolMeta.length + ' calc' : '') +
+      (ds.filter ? ', with this dataset’s filter applied' : '') + '.</div>';
+
   $s.innerHTML =
     geoHtml +
     '<div class="section" style="margin:0.7rem"><div class="section-head">Bounding Box <span class="badge">' + esc(label) + '</span></div>' +
       '<div class="section-body">' + bboxHtml + '</div></div>' +
+    '<div class="section" style="margin:0.7rem"><div class="section-head">Export</div>' +
+      '<div class="section-body">' + exportHtml + '</div></div>' +
     '<div class="section" style="margin:0.7rem"><div class="section-head">Data Health ' + hBadge + '</div>' +
       '<div class="section-body">' + healthHtml + '</div></div>';
+
+  var $expBtn = auxQ('[data-act="auxExportRows"]', root);
+  if ($expBtn && typeof dsExportRows === 'function') {
+    $expBtn.addEventListener('click', function() { dsExportRows(ds, root); });
+  }
 
   var $obj = auxQ('[data-act="auxExportObj"]', root);
   if ($obj && haveBox && typeof downloadBboxObj === 'function') {
