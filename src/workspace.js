@@ -143,6 +143,11 @@ function wsRehomePanel(tab, wrapper) {
     statDisposeInstance(tab.id);
     return;
   }
+  // A10 G3b: a closed GT clone is discarded with its state + worker.
+  if (typeof gtInstances !== 'undefined' && gtInstances[tab.id]) {
+    gtDisposeInstance(tab.id);
+    return;
+  }
   // A10 1g-c: instance dataset panels (d2+) are throwaway clones — their state
   // lives in the ds object and renderPanel rebuilds on reopen, so discard them
   // (re-home only the static singletons + the tree).
@@ -309,6 +314,21 @@ function wsSpawnStatisticsInstance(seedView) {
   }
 }
 
+// A10 G3b: spawn a cloned GT analysis panel. Each clone runs its OWN worker on
+// its OWN target dataset (independent grade-tonnage curves). Duplicate carries the
+// source panel's config (target/grades/cutoffs/units) via gtApplyConfig (G3b-4).
+function wsSpawnGtInstance(seedConfig) {
+  if (!wsRails || typeof gtNextInstId !== 'function') { showPanel('gt'); return; }
+  var instId = gtNextInstId();
+  if (typeof gtInstances !== 'undefined' && typeof gtNewInstState === 'function') gtInstances[instId] = gtNewInstState();
+  wsRails.addTab({ id: instId, title: 'GT', closeable: true }, wsMainTarget());
+  wsRails.activateTab(instId);                 // renderPanel → gtBuildInstancePanel
+  if (seedConfig && typeof gtApplyConfig === 'function') {
+    var root = document.querySelector('[data-gt-inst="' + instId + '"]');
+    if (root) gtApplyConfig(root, seedConfig);
+  }
+}
+
 // Track the prefix in the tab title (loadAuxFile on load, onAuxConfigChange on edit)
 function wsSetDatasetTabTitle(ds) {
   if (!wsRails || !ds || ds.id === 'aux' || ds.id === 'model') return;
@@ -436,6 +456,7 @@ function wsNewTabMenuItems() {
   items.push({ label: 'New Categories panel', action: 'newCategories' });   // A10 4e-c-4: cloneable analysis panel
   items.push({ label: 'New Swath panel', action: 'newSwath' });             // A10 Swath s-4b
   items.push({ label: 'New Statistics panel', action: 'newStatistics' });   // A10 Statistics st-4
+  items.push({ label: 'New GT panel', action: 'newGt' });                   // A10 G3b
   items.push('---');
   items.push({ label: 'Add point dataset…', action: 'addPoint' });
   items.push({ label: 'Add drillhole set…', action: 'addDrillhole' });
@@ -559,6 +580,7 @@ function wsMenuAction(a) {
     case 'newCategories': if (typeof wsSpawnCategoriesInstance === 'function') wsSpawnCategoriesInstance(); break;
     case 'newSwath': if (typeof wsSpawnSwathInstance === 'function') wsSpawnSwathInstance(); break;
     case 'newStatistics': if (typeof wsSpawnStatisticsInstance === 'function') wsSpawnStatisticsInstance(); break;
+    case 'newGt': if (typeof wsSpawnGtInstance === 'function') wsSpawnGtInstance(); break;
     case 'addPoint': wsAddPointDataset(); break;
     case 'addDrillhole': wsAddDrillholeDataset(); break;
     case 'help': toggleHelp(); break;
@@ -593,6 +615,10 @@ function buildRailsShell(host) {
       // A10 Statistics st-4: a cloned Statistics analysis panel (statistics#N)
       if (typeof statBuildInstancePanel === 'function' && tab.id.indexOf('statistics#') === 0) {
         return statBuildInstancePanel(tab.id);
+      }
+      // A10 G3b: a cloned GT analysis panel (gt#N)
+      if (typeof gtBuildInstancePanel === 'function' && tab.id.indexOf('gt#') === 0) {
+        return gtBuildInstancePanel(tab.id);
       }
       // A10 1g-c: a dataset instance tab (d2+) → build its panel from the ds
       var ds = (typeof dsById === 'function') ? dsById(tab.id) : null;
@@ -674,11 +700,12 @@ function buildRailsShell(host) {
     var isCat = ev.tab.id === 'categories' || ev.tab.id.indexOf('categories#') === 0;
     var isSwath = ev.tab.id === 'swath' || ev.tab.id.indexOf('swath#') === 0;
     var isStats = ev.tab.id === 'statistics' || ev.tab.id.indexOf('statistics#') === 0;
+    var isGt = ev.tab.id === 'gt' || ev.tab.id.indexOf('gt#') === 0;
     var items = [
       inFloat ? { label: 'Dock', action: 'dock' } : { label: 'Float', action: 'float' },
       { label: 'Move to new rail', action: 'rail' },
     ];
-    if (isCat || isSwath || isStats) items.push({ label: 'Duplicate', action: 'duplicate' });   // A10 4e-c-4 / Swath s-4b / Stats st-4
+    if (isCat || isSwath || isStats || isGt) items.push({ label: 'Duplicate', action: 'duplicate' });   // A10 4e-c-4 / Swath s-4b / Stats st-4 / GT G3b
     items.push('---', { label: 'Close', action: 'close' });
     if (ev.stack.tabs.length > 1) items.push({ label: 'Close others in stack', action: 'close-others' });
     Menu.show(items, { x: ev.x, y: ev.y }).then(function(a) {
@@ -692,6 +719,10 @@ function buildRailsShell(host) {
           var stRoot = ev.tab.id === 'statistics' ? document.getElementById('panelStatistics') : document.querySelector('[data-stat-inst="' + ev.tab.id + '"]');
           var stView = (stRoot && typeof statSerializeView === 'function' && typeof statStateForRoot === 'function') ? statSerializeView(statStateForRoot(stRoot)) : null;
           wsSpawnStatisticsInstance(stView);   // carry the source panel's var/metric/CDF/comparison view
+        } else if (isGt) {
+          var gtRoot = ev.tab.id === 'gt' ? document.getElementById('panelGt') : document.querySelector('[data-gt-inst="' + ev.tab.id + '"]');
+          var gtCfg = (gtRoot && typeof gtSerializeConfig === 'function') ? gtSerializeConfig(gtRoot) : null;
+          wsSpawnGtInstance(gtCfg);   // carry the source panel's target/grades/cutoffs/units (G3b-4)
         } else {
           var src = ev.tab.id === 'categories' ? panelState.categories : (typeof catInstances !== 'undefined' ? catInstances[ev.tab.id] : null);
           wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false);
@@ -826,6 +857,7 @@ function wsSanitizeLayout(st) {
   // persistence is s-5; until then they exist only for the session).
   if (typeof swathInstances !== 'undefined') Object.keys(swathInstances).forEach(function(id) { known[id] = true; });
   if (typeof statInstances !== 'undefined') Object.keys(statInstances).forEach(function(id) { known[id] = true; });
+  if (typeof gtInstances !== 'undefined') Object.keys(gtInstances).forEach(function(id) { known[id] = true; });
   // Phase 6: comparison-dataset instance tabs (d2+) survive sanitize once their
   // registry entry exists (registered before the layout deserialize), so their
   // saved dock position is preserved across a reload.

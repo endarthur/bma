@@ -101,6 +101,38 @@ function gtStampSingletonIds(root, $scope) {
     if (id && !el.id) el.id = id;
   });
 }
+// A10 G3b clone+spawn: build a cloned GT panel for instId. Clones #panelGt, strips
+// ids (so renderGtConfig's id→data-gt conversion + gtQ resolve cleanly), tags the
+// root data-gt-inst + the two static children data-gt, and renders the sidebar for
+// the clone (its own target dataset, fresh result). Caches the element so rails'
+// double renderPanel returns the same node.
+function gtBuildInstancePanel(instId) {
+  var tmpl = document.getElementById('panelGt');
+  if (!tmpl) return null;
+  if (gtInstanceEls[instId] && document.contains(gtInstanceEls[instId])) return gtInstanceEls[instId];
+  if (!gtInstances[instId]) gtInstances[instId] = gtNewInstState();
+  var el = tmpl.cloneNode(true);
+  el.removeAttribute('id');
+  el.querySelectorAll('[id]').forEach(function(n) { n.removeAttribute('id'); });
+  el.setAttribute('data-gt-inst', instId);
+  el.setAttribute('data-tab', instId);
+  el.classList.add('active');
+  var sb = el.querySelector('.gt-sidebar'); if (sb) sb.setAttribute('data-gt', 'gtSidebar');
+  var ct = el.querySelector('.gt-content'); if (ct) ct.setAttribute('data-gt', 'gtContent');
+  if (_gtData) renderGtConfig(_gtData, el);
+  gtInstanceEls[instId] = el;
+  return el;
+}
+// Discard a clone's run state, terminating any worker still in flight.
+function gtDisposeInstance(instId) {
+  var st = gtInstances[instId];
+  if (st) {
+    if (st.gtWorker) { try { st.gtWorker.terminate(); } catch (e) {} }
+    if (st.gtExprController) { try { st.gtExprController.destroy(); } catch (e) {} }
+    delete gtInstances[instId];
+  }
+  delete gtInstanceEls[instId];
+}
 
 // The dataset the GT tab targets, and its analysis context. GT generalizes
 // beyond the model: a gridded comparison dataset gets its own grade-tonnage
@@ -235,6 +267,7 @@ function renderGtConfig(data, root) {
   // A10 G3: the GT tab analyzes gtTargetDs() (the model by default). data (the
   // model's analysis, passed from displayResults) is ignored — the context is
   // resolved per target so a comparison dataset gets its own GT.
+  if (data) _gtData = data;   // cache the model analysis for clone sidebar builds
   var ctx = gtCtx(root);
   var header = ctx.header, colTypes = ctx.colTypes, geometry = ctx.geometry;
 
