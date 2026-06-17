@@ -5915,7 +5915,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 950f7f2 — click to check for updates">950f7f2</div>
+<div class="build-badge" id="buildBadge" title="build 27b0761 — click to check for updates">27b0761</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -19681,10 +19681,86 @@ function displayResults(data) {
   enableSimulatedDataSource();
 }
 
+// A10 G4a: which DATASET the StatsCat tab analyzes ('model' | 'aux' | 'd2' …).
+// StatsCat generalizes beyond the model: any dataset can be broken down by a
+// group-by category. The model resolves its UI state through the existing
+// current*/statsCat* globals (so serializeProject, analysisFingerprint and the
+// model startAnalysis keep reading them, and they are never polluted by a
+// comparison's selection); a comparison dataset gets its own plain state object
+// on ds.statsCat. There is ONE StatsCat panel (singleton DOM), so the render/
+// wire functions resolve the current target internally via statsCatCtx() — no
+// root threading needed (that is the G4b clone arc, later).
+let statsCatTargetDsId = 'model';
+
+function statsCatNewState() {
+  return { groupBy: null, selectedVars: new Set(), displayVar: null, checkedGroups: null, sortMode: null, showSelectedOnly: false };
+}
+// Accessor proxy: for the model, get/set route to the live core.js globals so
+// every external reader (fingerprint/serialize/startAnalysis) stays bit-identical.
+const _statsCatSingleton = {
+  get groupBy() { return currentGroupBy; }, set groupBy(v) { currentGroupBy = v; },
+  get selectedVars() { return statsCatSelectedVars; }, set selectedVars(v) { statsCatSelectedVars = v; },
+  get displayVar() { return currentStatsCatVar; }, set displayVar(v) { currentStatsCatVar = v; },
+  get checkedGroups() { return currentStatsCatChecked; }, set checkedGroups(v) { currentStatsCatChecked = v; },
+  get sortMode() { return statsCatGroupSortMode; }, set sortMode(v) { statsCatGroupSortMode = v; },
+  get showSelectedOnly() { return statsCatShowSelectedOnly; }, set showSelectedOnly(v) { statsCatShowSelectedOnly = v; }
+};
+function statsCatStateFor(dsId) {
+  if (!dsId || dsId === 'model') return _statsCatSingleton;
+  var ds = dsById(dsId);
+  if (!ds) return _statsCatSingleton;
+  if (!ds.statsCat) ds.statsCat = statsCatNewState();
+  return ds.statsCat;
+}
+// Resolve the current StatsCat target + its analysis data + UI state. For the
+// model: data is the cached lastStatsCatData; schema is the live current*
+// globals (identical contents to the cached data → bit-identical render). For a
+// comparison: data is ds.complete (group stats computed on demand by its own
+// analyze pass, G4a-2); origColCount derives from header minus its calcols.
+function statsCatCtx() {
+  var ds = dsById(statsCatTargetDsId) || dsById('model');
+  var isModel = ds.id === 'model';
+  var S = statsCatStateFor(ds.id);
+  var data, header, colTypes, origColCount;
+  if (isModel) {
+    data = lastStatsCatData;
+    header = currentHeader || []; colTypes = currentColTypes || [];
+    origColCount = currentOrigColCount || header.length;
+  } else {
+    data = ds.complete || null;
+    header = (data && data.header) || []; colTypes = (data && data.colTypes) || [];
+    origColCount = (data && data.origColCount) || (header.length - ((ds.calcolMeta || []).length));
+  }
+  return { ds: ds, isModel: isModel, S: S, data: data, header: header, colTypes: colTypes, origColCount: origColCount };
+}
+
+// G4a: the group stats StatsCat needs are produced by an analyze pass. When the
+// config changes, the model marks the global analysis stale (its Analyze button);
+// a comparison dataset marks ITS OWN analysis stale so its panel's Analyze button
+// recomputes the group stats on demand (runAuxAnalysis now passes groupBy).
+function statsCatMarkTargetStale(C) {
+  C = C || statsCatCtx();
+  if (C.isModel) { markAnalysisStale(); return; }
+  if (C.ds && typeof markAuxStale === 'function') markAuxStale(C.ds, (typeof dsConfigRoot === 'function') ? dsConfigRoot(C.ds) : null);
+}
+
 function renderStatsCat(data) {
-  const { header, colTypes, groupStats, groupCategories } = data;
-  const origColCount = data.origColCount || header.length;
-  lastStatsCatData = data;
+  // The data arg is always the MODEL's analysis (displayResults/applyProject).
+  // Cache it as the model's regardless of the current target, so switching back
+  // shows fresh model results; then render whichever dataset is targeted.
+  if (data) lastStatsCatData = data;
+  const C = statsCatCtx();
+  data = C.data;
+  if (!data) {
+    $statsCatVarList.innerHTML = '';
+    $statsCatGroupList.innerHTML = '';
+    $statsCatContent.innerHTML = '<div class="statscat-empty">Analyze ' + esc(dsLabel(C.ds.id)) + ' to see grouped statistics.</div>';
+    return;
+  }
+  const S = C.S;
+  const header = C.header, colTypes = C.colTypes;
+  const groupStats = data.groupStats, groupCategories = data.groupCategories;
+  const origColCount = C.origColCount;
 
   // Populate dropdown with categorical columns
   const catColIdxs = [];
@@ -19693,14 +19769,14 @@ function renderStatsCat(data) {
   }
   let opts = '<option value="">— select grouping column —</option>';
   for (const i of catColIdxs) {
-    const sel = currentGroupBy === i ? ' selected' : '';
+    const sel = S.groupBy === i ? ' selected' : '';
     const isCalcol = i >= origColCount;
     opts += '<option value="' + i + '"' + sel + '>' + esc(header[i]) + (isCalcol ? ' (calc)' : '') + '</option>';
   }
   $statsCatGroupBy.innerHTML = opts;
 
   // If no groupBy selected or no groupStats, show empty states
-  if (currentGroupBy === null || !groupStats) {
+  if (S.groupBy === null || !groupStats) {
     $statsCatVarList.innerHTML = '';
     $statsCatGroupList.innerHTML = '';
     $statsCatContent.innerHTML = '<div class="statscat-empty">Select a categorical column to see statistics broken down by group.</div>';
@@ -19711,7 +19787,7 @@ function renderStatsCat(data) {
   const numCols = Object.keys(data.stats).map(Number).sort((a, b) => a - b);
   const catVarCols = [];
   for (let i = 0; i < header.length; i++) {
-    if (colTypes[i] === 'categorical' && i !== currentGroupBy) catVarCols.push(i);
+    if (colTypes[i] === 'categorical' && i !== S.groupBy) catVarCols.push(i);
   }
   const allVarCols = [...numCols, ...catVarCols].sort((a, b) => a - b);
 
@@ -19723,22 +19799,22 @@ function renderStatsCat(data) {
   }
 
   // Initialize selected vars if empty (first time or after file change)
-  if (statsCatSelectedVars.size === 0) {
-    for (const i of allVarCols) statsCatSelectedVars.add(i);
+  if (S.selectedVars.size === 0) {
+    for (const i of allVarCols) S.selectedVars.add(i);
   }
 
   // Auto-select first variable that has data for display
-  if (currentStatsCatVar === null || (!groupStats[currentStatsCatVar] && !(groupCategories && groupCategories[currentStatsCatVar]))) {
+  if (S.displayVar === null || (!groupStats[S.displayVar] && !(groupCategories && groupCategories[S.displayVar]))) {
     const analyzed = allVarCols.filter(i => groupStats[i] || (groupCategories && groupCategories[i]));
-    currentStatsCatVar = analyzed.length > 0 ? analyzed[0] : allVarCols[0];
+    S.displayVar = analyzed.length > 0 ? analyzed[0] : allVarCols[0];
   }
 
   // Populate variable list
   renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
 
   // Determine group values from selected variable (use whichever data source exists)
-  const gs = groupStats[currentStatsCatVar];
-  const gc = groupCategories && groupCategories[currentStatsCatVar];
+  const gs = groupStats[S.displayVar];
+  const gc = groupCategories && groupCategories[S.displayVar];
   let allGroupKeys;
   if (gs) {
     allGroupKeys = Object.keys(gs);
@@ -19759,8 +19835,8 @@ function renderStatsCat(data) {
   });
 
   // Initialize checked set to all if null
-  if (currentStatsCatChecked === null) {
-    currentStatsCatChecked = new Set(allGroupKeys);
+  if (S.checkedGroups === null) {
+    S.checkedGroups = new Set(allGroupKeys);
   }
 
   // Populate group list
@@ -19774,17 +19850,18 @@ function renderStatsCat(data) {
 }
 
 function renderStatsCatVarList(allVarCols, header, origColCount, colTypes) {
+  const S = statsCatCtx().S;
   const search = $statsCatVarSearch.value.toLowerCase();
   let html = '';
   for (const colIdx of allVarCols) {
-    if (statsCatShowSelectedOnly && !statsCatSelectedVars.has(colIdx)) continue;
+    if (S.showSelectedOnly && !S.selectedVars.has(colIdx)) continue;
     const name = header[colIdx];
     if (search && !fuzzyMatch(search, name.toLowerCase())) continue;
     const isCalcol = colIdx >= origColCount;
     const isCat = colTypes[colIdx] === 'categorical';
-    const active = colIdx === currentStatsCatVar ? ' active' : '';
-    const checked = statsCatSelectedVars.has(colIdx) ? ' checked' : '';
-    const unchecked = !statsCatSelectedVars.has(colIdx) ? ' unchecked' : '';
+    const active = colIdx === S.displayVar ? ' active' : '';
+    const checked = S.selectedVars.has(colIdx) ? ' checked' : '';
+    const unchecked = !S.selectedVars.has(colIdx) ? ' unchecked' : '';
     html += '<div class="statscat-var-item' + active + unchecked + '" data-col="' + colIdx + '">';
     html += '<input type="checkbox"' + checked + ' data-col="' + colIdx + '">';
     html += '<span class="var-name">' + esc(name) + '</span>';
@@ -19794,15 +19871,16 @@ function renderStatsCatVarList(allVarCols, header, origColCount, colTypes) {
   }
   $statsCatVarList.innerHTML = html;
   // Update filter toggle state
-  $statsCatVarFilter.textContent = statsCatShowSelectedOnly ? 'Selected' : 'All';
-  $statsCatVarFilter.classList.toggle('active', statsCatShowSelectedOnly);
+  $statsCatVarFilter.textContent = S.showSelectedOnly ? 'Selected' : 'All';
+  $statsCatVarFilter.classList.toggle('active', S.showSelectedOnly);
 }
 
 function getEffectiveStatsCatSort() {
-  if (statsCatGroupSortMode !== null) return statsCatGroupSortMode;
-  // Inherit from Categories tab
-  const gbColName = currentGroupBy !== null && currentHeader[currentGroupBy] ? currentHeader[currentGroupBy] : null;
-  const inh = gbColName ? (catVarPeek('model', gbColName) || {}).sortMode : null;
+  const C = statsCatCtx();
+  if (C.S.sortMode !== null) return C.S.sortMode;
+  // Inherit from Categories tab (the target dataset's group-by column)
+  const gbColName = C.S.groupBy !== null && C.header[C.S.groupBy] ? C.header[C.S.groupBy] : null;
+  const inh = gbColName ? (catVarPeek(C.ds.id, gbColName) || {}).sortMode : null;
   if (inh) return inh;
   return 'count-desc';
 }
@@ -19816,8 +19894,9 @@ function sortStatsCatGroups(groups) {
     return groups.slice().sort((a, b) => a[1].count - b[1].count);
   }
   if (mode === 'custom') {
-    const gbColName = currentGroupBy !== null && currentHeader[currentGroupBy] ? currentHeader[currentGroupBy] : null;
-    const order = gbColName ? ((catVarPeek('model', gbColName) || {}).valueOrder || null) : null;
+    const C = statsCatCtx();
+    const gbColName = C.S.groupBy !== null && C.header[C.S.groupBy] ? C.header[C.S.groupBy] : null;
+    const order = gbColName ? ((catVarPeek(C.ds.id, gbColName) || {}).valueOrder || null) : null;
     if (order) {
       const pos = {};
       for (let i = 0; i < order.length; i++) pos[order[i]] = i;
@@ -19834,13 +19913,14 @@ function sortStatsCatGroups(groups) {
 }
 
 function renderStatsCatGroupList(allGroups) {
+  const S = statsCatCtx().S;
   const sorted = sortStatsCatGroups(allGroups);
   const search = $statsCatGroupSearch.value.toLowerCase();
   let html = '';
   for (const [gv, s] of sorted) {
     const label = gv || '(empty)';
     if (search && !fuzzyMatch(search, label.toLowerCase())) continue;
-    const checked = currentStatsCatChecked && currentStatsCatChecked.has(gv) ? ' checked' : '';
+    const checked = S.checkedGroups && S.checkedGroups.has(gv) ? ' checked' : '';
     html += '<div class="statscat-group-item">';
     html += '<label><input type="checkbox"' + checked + ' data-gv="' + esc(gv) + '"> <span class="gname">' + esc(label) + '</span></label>';
     html += '<span class="gcount">' + s.count.toLocaleString() + '</span>';
@@ -19850,23 +19930,30 @@ function renderStatsCatGroupList(allGroups) {
 }
 
 function getStatsCatGroupEntries() {
-  const data = lastStatsCatData;
-  if (!data) return [];
-  const gs = data.groupStats[currentStatsCatVar];
-  const gc = data.groupCategories && data.groupCategories[currentStatsCatVar];
+  const C = statsCatCtx();
+  const data = C.data;
+  if (!data || !data.groupStats) return [];
+  const gs = data.groupStats[C.S.displayVar];
+  const gc = data.groupCategories && data.groupCategories[C.S.displayVar];
   if (gs) return Object.entries(gs);
   if (gc) return Object.entries(gc).map(([gv, counts]) => [gv, { count: Object.values(counts).reduce((s, c) => s + c, 0) }]);
   return [];
 }
 
 function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
+  const C = statsCatCtx();
+  const S = C.S;
+  // G4a: re-analysis signal routes to the target — the model marks the global
+  // analysis stale; a comparison dataset marks ITS OWN analysis stale (its
+  // Analyze button recomputes the group stats on demand).
+  const markTargetStale = () => statsCatMarkTargetStale(C);
   // Variable row click — select for display (ignore if click was on checkbox)
   $statsCatVarList.querySelectorAll('.statscat-var-item').forEach(el => {
     el.addEventListener('click', (e) => {
       if (e.target.tagName === 'INPUT') return;
       const colIdx = parseInt(el.dataset.col);
-      if (colIdx === currentStatsCatVar) return;
-      currentStatsCatVar = colIdx;
+      if (colIdx === S.displayVar) return;
+      S.displayVar = colIdx;
 
       renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
       renderStatsCatGroupList(getStatsCatGroupEntries());
@@ -19882,13 +19969,13 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
       e.stopPropagation();
       const colIdx = parseInt(cb.dataset.col);
       if (cb.checked) {
-        statsCatSelectedVars.add(colIdx);
+        S.selectedVars.add(colIdx);
         // Only mark stale if this column lacks data from last analysis
-        if (lastStatsCatData && !(lastStatsCatData.groupStats[colIdx] || (lastStatsCatData.groupCategories && lastStatsCatData.groupCategories[colIdx]))) {
-          markAnalysisStale();
+        if (C.data && C.data.groupStats && !(C.data.groupStats[colIdx] || (C.data.groupCategories && C.data.groupCategories[colIdx]))) {
+          markTargetStale();
         }
       } else {
-        statsCatSelectedVars.delete(colIdx);
+        S.selectedVars.delete(colIdx);
         // Unchecking never needs re-analysis — data already computed
       }
       renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
@@ -19902,19 +19989,19 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
     let needsStale = false;
     $statsCatVarList.querySelectorAll('.statscat-var-item').forEach(el => {
       const ci = parseInt(el.dataset.col);
-      statsCatSelectedVars.add(ci);
-      if (lastStatsCatData && !(lastStatsCatData.groupStats[ci] || (lastStatsCatData.groupCategories && lastStatsCatData.groupCategories[ci]))) {
+      S.selectedVars.add(ci);
+      if (C.data && C.data.groupStats && !(C.data.groupStats[ci] || (C.data.groupCategories && C.data.groupCategories[ci]))) {
         needsStale = true;
       }
     });
     renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
-    if (needsStale) markAnalysisStale();
+    if (needsStale) markTargetStale();
     autoSaveProject();
   };
   $statsCatVarNone.onclick = () => {
     $statsCatVarList.querySelectorAll('.statscat-var-item').forEach(el => {
-      statsCatSelectedVars.delete(parseInt(el.dataset.col));
+      S.selectedVars.delete(parseInt(el.dataset.col));
     });
     renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
@@ -19924,7 +20011,7 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
 
   // Variable filter toggle (All / Selected)
   $statsCatVarFilter.onclick = () => {
-    statsCatShowSelectedOnly = !statsCatShowSelectedOnly;
+    S.showSelectedOnly = !S.showSelectedOnly;
     renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
     autoSaveProject();
@@ -19934,7 +20021,7 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
   $statsCatGroupList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
     cb.addEventListener('change', () => {
       const gv = cb.dataset.gv;
-      if (cb.checked) { currentStatsCatChecked.add(gv); } else { currentStatsCatChecked.delete(gv); }
+      if (cb.checked) { S.checkedGroups.add(gv); } else { S.checkedGroups.delete(gv); }
       renderStatsCatContent();
       autoSaveProject();
     });
@@ -19943,14 +20030,14 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
   // All/None buttons
   $statsCatGroupAll.onclick = () => {
     const entries = getStatsCatGroupEntries();
-    currentStatsCatChecked = new Set(entries.map(e => e[0]));
+    S.checkedGroups = new Set(entries.map(e => e[0]));
     renderStatsCatGroupList(entries);
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
     renderStatsCatContent();
     autoSaveProject();
   };
   $statsCatGroupNone.onclick = () => {
-    currentStatsCatChecked = new Set();
+    S.checkedGroups = new Set();
     renderStatsCatGroupList(getStatsCatGroupEntries());
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
     renderStatsCatContent();
@@ -19962,13 +20049,13 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
   $statsCatGroupSort.textContent = sortLabels[getEffectiveStatsCatSort()] || 'Count\u2193';
   $statsCatGroupSort.onclick = () => {
     var eff = getEffectiveStatsCatSort();
-    var gbColName = currentGroupBy !== null && currentHeader[currentGroupBy] ? currentHeader[currentGroupBy] : null;
-    var gbOrder = gbColName ? (catVarPeek('model', gbColName) || {}).valueOrder : null;
+    var gbColName = S.groupBy !== null && C.header[S.groupBy] ? C.header[S.groupBy] : null;
+    var gbOrder = gbColName ? (catVarPeek(C.ds.id, gbColName) || {}).valueOrder : null;
     var hasCustom = !!(gbOrder && gbOrder.length > 0);
     var cycle = ['count-desc', 'count-asc', 'alpha'];
     if (hasCustom) cycle.push('custom');
     var idx = cycle.indexOf(eff);
-    statsCatGroupSortMode = cycle[(idx + 1) % cycle.length];
+    S.sortMode = cycle[(idx + 1) % cycle.length];
     $statsCatGroupSort.textContent = sortLabels[getEffectiveStatsCatSort()];
     renderStatsCatGroupList(getStatsCatGroupEntries());
     wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
@@ -19993,26 +20080,28 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
 }
 
 function renderStatsCatContent() {
-  const data = lastStatsCatData;
+  const C = statsCatCtx();
+  const S = C.S;
+  const data = C.data;
   if (!data) {
     $statsCatContent.innerHTML = '<div class="statscat-empty">No grouped statistics available.</div>';
     return;
   }
-  if (currentStatsCatVar === null) {
+  if (S.displayVar === null) {
     $statsCatContent.innerHTML = '<div class="statscat-empty">Select a variable from the sidebar.</div>';
     return;
   }
-  if (!currentStatsCatChecked || currentStatsCatChecked.size === 0) {
+  if (!S.checkedGroups || S.checkedGroups.size === 0) {
     $statsCatContent.innerHTML = '<div class="statscat-empty">No groups selected. Check groups in the sidebar to view statistics.</div>';
     return;
   }
 
-  const header = data.header;
-  const colTypes = data.colTypes;
-  const origColCount = data.origColCount || header.length;
-  const varName = header[currentStatsCatVar];
-  const isCalcol = currentStatsCatVar >= origColCount;
-  const isCatVar = colTypes[currentStatsCatVar] === 'categorical';
+  const header = C.header;
+  const colTypes = C.colTypes;
+  const origColCount = C.origColCount;
+  const varName = header[S.displayVar];
+  const isCalcol = S.displayVar >= origColCount;
+  const isCatVar = colTypes[S.displayVar] === 'categorical';
 
   if (isCatVar) {
     renderStatsCatCrossTab(data, varName, isCalcol);
@@ -20030,7 +20119,8 @@ function statsCatOverflowNote(data) {
 }
 
 function renderStatsCatNumeric(data, varName, isCalcol) {
-  const gs = data.groupStats[currentStatsCatVar];
+  const S = statsCatCtx().S;
+  const gs = data.groupStats[S.displayVar];
   if (!gs) {
     $statsCatContent.innerHTML = '<div class="statscat-empty">This variable was not included in the analysis. Check its checkbox and click Analyze.</div>';
     return;
@@ -20038,7 +20128,7 @@ function renderStatsCatNumeric(data, varName, isCalcol) {
 
   // Filter entries to checked groups, apply current sort
   const entries = sortStatsCatGroups(
-    Object.entries(gs).filter(([gv]) => currentStatsCatChecked.has(gv))
+    Object.entries(gs).filter(([gv]) => S.checkedGroups.has(gv))
   );
 
   // Header with copy button
@@ -20095,7 +20185,8 @@ function renderStatsCatNumeric(data, varName, isCalcol) {
 }
 
 function renderStatsCatCrossTab(data, varName, isCalcol) {
-  const gc = data.groupCategories && data.groupCategories[currentStatsCatVar];
+  const S = statsCatCtx().S;
+  const gc = data.groupCategories && data.groupCategories[S.displayVar];
   if (!gc) {
     $statsCatContent.innerHTML = '<div class="statscat-empty">This variable was not included in the analysis. Check its checkbox and click Analyze.</div>';
     return;
@@ -20103,7 +20194,7 @@ function renderStatsCatCrossTab(data, varName, isCalcol) {
 
   // Get checked groups
   const groupKeys = sortStatsCatGroups(
-    Object.entries(gc).filter(([gv]) => currentStatsCatChecked.has(gv)).map(([gv, counts]) => [gv, { count: Object.values(counts).reduce((s, c) => s + c, 0) }])
+    Object.entries(gc).filter(([gv]) => S.checkedGroups.has(gv)).map(([gv, counts]) => [gv, { count: Object.values(counts).reduce((s, c) => s + c, 0) }])
   ).map(([gv]) => gv);
 
   // Collect all unique values across checked groups
@@ -20272,7 +20363,8 @@ function renderOverlaidCDF(entries, varName) {
 
   let curvesSvg = '';
   let meansSvg = '';
-  const gbColName = currentGroupBy !== null ? currentHeader[currentGroupBy] : '';
+  const _scC = statsCatCtx();
+  const gbColName = _scC.S.groupBy !== null ? _scC.header[_scC.S.groupBy] : '';
   for (let gi = 0; gi < plotEntries.length; gi++) {
     const [gv, s] = plotEntries[gi];
     const color = getCategoryColor(gbColName, gv, gi);
@@ -20430,27 +20522,29 @@ function wireStatsCatCopyBtn() {
 
 // Pre-populate variable list from known column metadata (no analysis needed)
 function prePopulateStatsCatVars() {
-  const header = currentHeader;
-  const colTypes = currentColTypes;
-  const origColCount = currentOrigColCount || header.length;
+  const C = statsCatCtx();
+  const S = C.S;
+  const header = C.header;
+  const colTypes = C.colTypes;
+  const origColCount = C.origColCount;
   if (header.length === 0) return;
 
   // Build combined variable list: numeric + categorical (excluding groupBy)
   const allVarCols = [];
   for (let i = 0; i < header.length; i++) {
-    if (i === currentGroupBy) continue;
+    if (i === S.groupBy) continue;
     if (colTypes[i] === 'numeric' || colTypes[i] === 'categorical') allVarCols.push(i);
   }
   allVarCols.sort((a, b) => a - b);
 
   // Initialize selected vars if empty
-  if (statsCatSelectedVars.size === 0) {
-    for (const i of allVarCols) statsCatSelectedVars.add(i);
+  if (S.selectedVars.size === 0) {
+    for (const i of allVarCols) S.selectedVars.add(i);
   }
 
   // Auto-select first variable for display
-  if (currentStatsCatVar === null) {
-    currentStatsCatVar = allVarCols.length > 0 ? allVarCols[0] : null;
+  if (S.displayVar === null) {
+    S.displayVar = allVarCols.length > 0 ? allVarCols[0] : null;
   }
 
   // Render variable list
@@ -20468,22 +20562,24 @@ function prePopulateStatsCatVars() {
 
 // StatsCat dropdown handler
 $statsCatGroupBy.addEventListener('change', () => {
+  const C = statsCatCtx();
+  const S = C.S;
   const val = $statsCatGroupBy.value;
-  currentGroupBy = val ? parseInt(val) : null;
-  currentStatsCatVar = null;
-  currentStatsCatChecked = null;
-  statsCatGroupSortMode = null; // re-inherit from Categories
-  statsCatShowSelectedOnly = false;
+  S.groupBy = val ? parseInt(val) : null;
+  S.displayVar = null;
+  S.checkedGroups = null;
+  S.sortMode = null; // re-inherit from Categories
+  S.showSelectedOnly = false;
   $statsCatVarSearch.value = '';
   $statsCatGroupSearch.value = '';
-  if (currentGroupBy !== null) {
+  if (S.groupBy !== null) {
     prePopulateStatsCatVars();
   } else {
     $statsCatVarList.innerHTML = '';
     $statsCatGroupList.innerHTML = '';
     $statsCatContent.innerHTML = '<div class="statscat-empty">Select a categorical column to see statistics broken down by group.</div>';
   }
-  markAnalysisStale();
+  statsCatMarkTargetStale(C);
   autoSaveProject();
 });
 
