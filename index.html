@@ -5889,7 +5889,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 6840039 — click to check for updates">6840039</div>
+<div class="build-badge" id="buildBadge" title="build 77a688f — click to check for updates">77a688f</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -22133,6 +22133,16 @@ function swQA(id, sel, root) {
   var el = swQ(id, root);
   return el ? el.querySelectorAll(sel) : [];
 }
+// s-4a: renderSwathConfig emits its controls with data-sw="<id>" (duplicate-safe
+// across clones). The SINGLETON stamps the matching id back on so getElementById
+// (swQ's singleton path + project.js's swath serialize/restore) resolves them;
+// clones keep no id (resolved purely by data-sw within their root).
+function swStampSingletonIds(root, $scope) {
+  if (swIsInst(root) || !$scope) return;
+  $scope.querySelectorAll('[data-sw]').forEach(function(el) {
+    if (!el.id) el.id = el.getAttribute('data-sw');
+  });
+}
 
 // ─── A10 Swath clone arc (s-2): per-instance run state ─────────────────────
 // "Independent runs" — each Swath panel owns its results + workers + crosshair
@@ -22511,7 +22521,7 @@ function renderSwathConfig(data, root) {
   function dirRow(key, label, bs, checked, title) {
     return '<div class="swath-dir-row">' +
       '<label' + (title ? ' title="' + esc(title) + '"' : '') + '><input type="checkbox" class="swath-dir-on" data-dir="' + key + '"' + (checked ? ' checked' : '') + '> ' + label + '</label>' +
-      '<input type="number" class="swath-input swath-dir-bin" id="swathBin_' + key + '" value="' + bs + '" min="0.001" step="any" title="Bin width (m)">' +
+      '<input type="number" class="swath-input swath-dir-bin" data-sw="swathBin_' + key + '" value="' + bs + '" min="0.001" step="any" title="Bin width (m)">' +
     '</div>';
   }
   const varItems = swathNumCols.map(function(c, vi) {
@@ -22530,21 +22540,21 @@ function renderSwathConfig(data, root) {
   $sidebar.innerHTML =
     '<div class="swath-sidebar-section" data-sb="dir">' +
       '<div class="swath-sidebar-title">Directions</div>' +
-      '<select class="swath-select" id="swathDirMode">' +
+      '<select class="swath-select" data-sw="swathDirMode">' +
         '<option value="ortho">Orthogonal X/Y/Z</option>' +
         '<option value="custom">Custom (rotated U/V/W)</option>' +
       '</select>' +
       '<div class="swath-dir-hint">check directions to swath \u00b7 bin width (m) per direction</div>' +
-      '<div id="swathOrthoDirs">' +
+      '<div data-sw="swathOrthoDirs">' +
         dirRow('x', 'X', bsx, true) +
         dirRow('y', 'Y', bsy, false) +
         dirRow('z', 'Z', bsz, false) +
       '</div>' +
-      '<div id="swathCustomDirs" style="display:none">' +
+      '<div data-sw="swathCustomDirs" style="display:none">' +
         '<div class="swath-angle-row">' +
-          '<label title="Dip direction (\u00b0 from N, clockwise)">Dipdir<input type="number" class="swath-input" id="swathDipDir" value="0" min="0" max="360" step="1"></label>' +
-          '<label title="Dip (\u00b0 below horizontal)">Dip<input type="number" class="swath-input" id="swathDip" value="0" min="0" max="90" step="1"></label>' +
-          '<label title="Rake of U in the plane (\u00b0 from strike, 90 = down-dip)">Rake<input type="number" class="swath-input" id="swathRake" value="90" min="-180" max="180" step="1"></label>' +
+          '<label title="Dip direction (\u00b0 from N, clockwise)">Dipdir<input type="number" class="swath-input" data-sw="swathDipDir" value="0" min="0" max="360" step="1"></label>' +
+          '<label title="Dip (\u00b0 below horizontal)">Dip<input type="number" class="swath-input" data-sw="swathDip" value="0" min="0" max="90" step="1"></label>' +
+          '<label title="Rake of U in the plane (\u00b0 from strike, 90 = down-dip)">Rake<input type="number" class="swath-input" data-sw="swathRake" value="90" min="-180" max="180" step="1"></label>' +
         '</div>' +
         dirRow('u', 'U', inPlaneBs, true, 'In-plane, along the rake direction') +
         dirRow('v', 'V', inPlaneBs, false, 'In-plane, perpendicular to U') +
@@ -22554,59 +22564,65 @@ function renderSwathConfig(data, root) {
     '</div>' +
     '<div class="swath-sidebar-section" data-sb="stat">' +
       '<div class="swath-sidebar-title">Statistic</div>' +
-      '<select class="swath-select" id="swathStat">' +
+      '<select class="swath-select" data-sw="swathStat">' +
         '<option value="mean_std">Mean \u00b1 Std</option>' +
         '<option value="p25_50_75">P25 / P50 / P75</option>' +
         '<option value="p10_50_90">P10 / P50 / P90</option>' +
       '</select>' +
       '<div style="margin-top:0.3rem">' +
         '<div class="swath-sidebar-title">Weight (model)</div>' +
-        '<select class="swath-select" id="swathWeight"><option value="">\u2014 none</option>' +
+        '<select class="swath-select" data-sw="swathWeight"><option value="">\u2014 none</option>' +
           swathNumCols.map(function(c) { return '<option value="' + esc(c.name) + '"' + (c.name === catRole('model', 'weight') ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') +
         '</select>' +
       '</div>' +
     '</div>' +
     '<div class="swath-sidebar-section" data-sb="display">' +
       '<div class="swath-sidebar-title">Display</div>' +
-      '<label class="swath-display-opt"><input type="checkbox" id="swathShowBands" checked> Show bands</label>' +
-      '<label class="swath-display-opt"><input type="checkbox" id="swathShowCounts" checked> Show count bars</label>' +
-      '<label class="swath-display-opt"><input type="checkbox" id="swathShowTable" checked> Show table</label>' +
+      '<label class="swath-display-opt"><input type="checkbox" data-sw="swathShowBands" checked> Show bands</label>' +
+      '<label class="swath-display-opt"><input type="checkbox" data-sw="swathShowCounts" checked> Show count bars</label>' +
+      '<label class="swath-display-opt"><input type="checkbox" data-sw="swathShowTable" checked> Show table</label>' +
       '<div style="margin-top:0.3rem">' +
         '<div class="swath-sidebar-title">Y Scale</div>' +
-        '<select class="swath-select" id="swathYScale"><option value="linear">Linear</option><option value="log">Log</option></select>' +
+        '<select class="swath-select" data-sw="swathYScale"><option value="linear">Linear</option><option value="log">Log</option></select>' +
       '</div>' +
       '<div style="margin-top:0.3rem">' +
         '<div class="swath-sidebar-title">Layout</div>' +
-        '<select class="swath-select" id="swathLayout"><option value="overlay">Overlay</option><option value="split">Split</option></select>' +
+        '<select class="swath-select" data-sw="swathLayout"><option value="overlay">Overlay</option><option value="split">Split</option></select>' +
       '</div>' +
     '</div>' +
     '<div class="swath-sidebar-section" data-sb="filter">' +
       '<div class="swath-sidebar-title">Local Filter</div>' +
-      '<input type="text" class="swath-search" id="swathLocalFilter" placeholder="e.g. r.zone == 1" autocomplete="off" spellcheck="false">' +
+      '<input type="text" class="swath-search" data-sw="swathLocalFilter" placeholder="e.g. r.zone == 1" autocomplete="off" spellcheck="false">' +
     '</div>' +
     '<div class="swath-sidebar-section--grow" data-sb="vars">' +
       '<div class="swath-sidebar-title">Variables</div>' +
       // Dataset chips (progressive disclosure) \u2014 only once a second comparison
       // dataset joins (3+ total), so the common model+aux case stays uncluttered.
-      '<div id="swathDatasetsSection" style="display:none;margin-bottom:0.4rem">' +
-        '<div class="stats-ds-chips" id="swathDatasetChips"></div>' +
+      '<div data-sw="swathDatasetsSection" style="display:none;margin-bottom:0.4rem">' +
+        '<div class="stats-ds-chips" data-sw="swathDatasetChips"></div>' +
       '</div>' +
-      '<input type="text" class="swath-search" id="swathVarSearch" placeholder="search\u2026" autocomplete="off" spellcheck="false">' +
+      '<input type="text" class="swath-search" data-sw="swathVarSearch" placeholder="search\u2026" autocomplete="off" spellcheck="false">' +
       '<div class="swath-var-btns">' +
-        '<button id="swathVarAll">All</button>' +
-        '<button id="swathVarNone">None</button>' +
+        '<button data-sw="swathVarAll">All</button>' +
+        '<button data-sw="swathVarNone">None</button>' +
       '</div>' +
-      '<div class="swath-var-list" id="swathVarList">' + varItems + '<div id="swathAuxVars"></div></div>' +
+      '<div class="swath-var-list" data-sw="swathVarList">' + varItems + '<div data-sw="swathAuxVars"></div></div>' +
     '</div>' +
     '<div class="sb-footer">' +
-      '<button class="swath-generate" id="swathGenerate">Generate</button>' +
+      '<button class="swath-generate" data-sw="swathGenerate">Generate</button>' +
       '<div class="gen-stale-note">↻ config changed — re-run</div>' +
-      '<div class="swath-progress" id="swathProgress">' +
-        '<div class="swath-progress-bar"><div class="swath-progress-fill" id="swathProgressFill"></div></div>' +
-        '<div class="swath-progress-label" id="swathProgressLabel"></div>' +
+      '<div class="swath-progress" data-sw="swathProgress">' +
+        '<div class="swath-progress-bar"><div class="swath-progress-fill" data-sw="swathProgressFill"></div></div>' +
+        '<div class="swath-progress-label" data-sw="swathProgressLabel"></div>' +
       '</div>' +
     '</div>' +
-    '<div class="swath-color-picker" id="swathColorPicker"></div>';
+    '<div class="swath-color-picker" data-sw="swathColorPicker"></div>';
+
+  // s-4a: the generated controls carry data-sw (duplicate-safe across clones).
+  // On the SINGLETON, stamp the matching id so swQ's getElementById path AND the
+  // external project.js reads (#swathVarList, getElementById('swathDirMode')\u2026)
+  // keep working unchanged; clones stay id-free so the DOM has no duplicate ids.
+  swStampSingletonIds(root, $sidebar);
 
   // C6-4b \u2014 promote sections to collapsible; advanced ones collapsed by default
   wsEnhanceSidebar('swath', $sidebar, { stat: 'collapsed', display: 'collapsed', filter: 'collapsed' });
