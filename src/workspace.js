@@ -221,16 +221,22 @@ function wsAddPointDataset() {
 // file (loadAuxFile applies ds._pendingRestore when it lands, like aux). State
 // stays on the ds, so this is just wsAddPointDataset with a fixed id + pending
 // config. dsNextNum is advanced past restored ids so a later Add won't collide.
-function wsRestoreInstance(cfg) {
+// skipTab: register the registry entry only (no rails tab) — used for the early
+// pass in applyProject so the instance exists BEFORE the layout deserialize, which
+// lets wsSanitizeLayout keep its tab at the SAVED dock position. The later
+// displayResults call (no skipTab) then ensures a tab only if the layout didn't
+// already place one (a stale/invalid layout → the default-position safety net).
+function wsRestoreInstance(cfg, skipTab) {
   if (typeof dsCreate !== 'function' || !cfg || !cfg.id) return null;
-  var existing = (typeof dsById === 'function') ? dsById(cfg.id) : null;
-  if (existing) return existing;
-  var ds = dsCreate({ id: cfg.id, prefix: cfg.prefix || 'data' });
-  ds._pendingRestore = cfg;
-  dsAdd(ds);
-  var n = parseInt(String(cfg.id).replace(/^d/, ''), 10);
-  if (typeof dsNextNum !== 'undefined' && isFinite(n) && n >= dsNextNum) dsNextNum = n + 1;
-  if (wsRails && !findTab(wsRails.state, ds.id)) {
+  var ds = (typeof dsById === 'function') ? dsById(cfg.id) : null;
+  if (!ds) {
+    ds = dsCreate({ id: cfg.id, prefix: cfg.prefix || 'data' });
+    ds._pendingRestore = cfg;
+    dsAdd(ds);
+    var n = parseInt(String(cfg.id).replace(/^d/, ''), 10);
+    if (typeof dsNextNum !== 'undefined' && isFinite(n) && n >= dsNextNum) dsNextNum = n + 1;
+  }
+  if (!skipTab && wsRails && !findTab(wsRails.state, ds.id)) {
     wsRails.addTab({ id: ds.id, title: 'Import: ' + (ds.prefix || 'data'), closeable: true }, wsMainTarget());
   }
   return ds;
@@ -779,6 +785,10 @@ function wsSanitizeLayout(st) {
   // persistence is s-5; until then they exist only for the session).
   if (typeof swathInstances !== 'undefined') Object.keys(swathInstances).forEach(function(id) { known[id] = true; });
   if (typeof statInstances !== 'undefined') Object.keys(statInstances).forEach(function(id) { known[id] = true; });
+  // Phase 6: comparison-dataset instance tabs (d2+) survive sanitize once their
+  // registry entry exists (registered before the layout deserialize), so their
+  // saved dock position is preserved across a reload.
+  if (typeof datasets !== 'undefined') datasets.forEach(function(d) { if (d && d.id) known[d.id] = true; });
   var seen = {};
   function cleanStack(s) {
     s.tabs = (s.tabs || []).filter(function(t) {

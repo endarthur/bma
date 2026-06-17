@@ -756,6 +756,14 @@ async function applyProject(project) {
   if (typeof statRestoreInstances === 'function') {
     statRestoreInstances(project.panels && project.panels.statistics && project.panels.statistics.instances);
   }
+  // Phase 6: register comparison-dataset instances (d2+) in the registry NOW —
+  // before the layout deserialize — so wsSanitizeLayout keeps their tabs at the
+  // SAVED dock position instead of dropping them (displayResults would re-add at
+  // the default spot). Registry only (skipTab); the file + full config restore
+  // still happens in displayResults via the same wsRestoreInstance(cfg).
+  if (typeof wsRestoreInstance === 'function') {
+    (project.datasets || []).forEach(function(cfg) { wsRestoreInstance(cfg, true); });
+  }
 
   // Restore the rails workspace arrangement (missing/invalid → default)
   wsRestoreProjectLayout(project.layout);
