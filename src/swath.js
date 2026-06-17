@@ -79,6 +79,50 @@ function swStateForRoot(root) {
   return _swSingleton;     // singleton — proxies to the module/core globals
 }
 
+// ─── A10 Swath s-4b: cloneable Swath instances ─────────────────────────────
+// A clone is a copy of #panelSwath with its ids stripped (DOM resolved by
+// data-sw within the root, tagged data-sw-inst). Its run state lives in
+// swathInstances[id] (s-2); it builds its OWN sidebar from the shared analysis
+// data (_swathData) and runs its OWN worker fan-out — two clones can swath
+// different directions/vars concurrently. rails calls swBuildInstancePanel(id)
+// via renderPanel; wsSpawnSwathInstance + the tab "Duplicate" create them.
+var swInstSeq = 1;
+var swInstanceEls = {};   // instId -> the built clone element (one per instance)
+var _swathData = null;    // last analysis data {header,colTypes,geometry} for clone builds
+function swNextInstId() { swInstSeq += 1; return 'swath#' + swInstSeq; }
+
+function swBuildInstancePanel(instId) {
+  var tmpl = document.getElementById('panelSwath');
+  if (!tmpl) return null;
+  // rails may call renderPanel more than once per tab id — return the SAME clone
+  // (cache it) so a second build never leaves a duplicate in the DOM.
+  if (swInstanceEls[instId] && document.contains(swInstanceEls[instId])) return swInstanceEls[instId];
+  if (!swathInstances[instId]) swathInstances[instId] = swNewInstState();
+  var el = tmpl.cloneNode(true);
+  el.removeAttribute('id');
+  el.querySelectorAll('[id]').forEach(function(n) { n.removeAttribute('id'); });
+  el.setAttribute('data-sw-inst', instId);
+  el.setAttribute('data-tab', instId);
+  el.classList.add('active');
+  // tag the two static children so swQ('swathSidebar'/'swathContent', el) resolves
+  var sb = el.querySelector('.swath-sidebar'); if (sb) sb.setAttribute('data-sw', 'swathSidebar');
+  var ct = el.querySelector('.swath-content'); if (ct) ct.setAttribute('data-sw', 'swathContent');
+  if (_swathData) { renderSwathConfig(_swathData, el); renderSwathOutput(undefined, el); }
+  swInstanceEls[instId] = el;
+  return el;
+}
+
+// Discard a clone's run state, terminating any workers still in flight.
+function swDisposeInstance(instId) {
+  var st = swathInstances[instId];
+  if (st) {
+    if (st.swathWorker) { try { st.swathWorker.terminate(); } catch (e) {} }
+    (st.swathCmpWorkers || []).forEach(function(w) { try { w.terminate(); } catch (e) {} });
+    delete swathInstances[instId];
+  }
+  delete swInstanceEls[instId];
+}
+
 // A10 4c-iii-c: dataset chips let the user hide a comparison dataset (sidebar
 // rows + chart series) without un-checking each variable. Keyed by dsId; lives
 // on panelState.swath.dsHidden (4e-a), serialized in 4e-b.
@@ -403,6 +447,7 @@ function renderSwathOutput(stat, root) {
 }
 
 function renderSwathConfig(data, root) {
+  if (data) _swathData = data;   // s-4b: cache the analysis data so clone builds can render their own sidebar
   const $sidebar = swQ('swathSidebar', root);
   const $content = swQ('swathContent', root);
   if (!$sidebar) return;
@@ -958,7 +1003,15 @@ function runSwath(root) {
     }
     scanBins(out.results);
     cmp.forEach(function(c) { scanBins(c.results); });
-    wsTabBadge('swath', 'Swath', totalBins + ' bins');
+    // s-4b: a clone updates its OWN tab title (not the singleton's badge).
+    if (swIsInst(root)) {
+      var instId = root.getAttribute('data-sw-inst');
+      if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, instId)) {
+        wsRails.updateTab(instId, { title: 'Swath: ' + totalBins + ' bins' });
+      }
+    } else {
+      wsTabBadge('swath', 'Swath', totalBins + ' bins');
+    }
     autoSaveProject();
   }
 

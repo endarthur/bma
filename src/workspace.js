@@ -133,6 +133,11 @@ function wsRehomePanel(tab, wrapper) {
     if (typeof catInstanceEls !== 'undefined') delete catInstanceEls[tab.id];
     return;
   }
+  // A10 Swath s-4b: a closed Swath clone is discarded with its state + workers.
+  if (typeof swathInstances !== 'undefined' && swathInstances[tab.id]) {
+    swDisposeInstance(tab.id);
+    return;
+  }
   // A10 1g-c: instance dataset panels (d2+) are throwaway clones — their state
   // lives in the ds object and renderPanel rebuilds on reopen, so discard them
   // (re-home only the static singletons + the tree).
@@ -240,6 +245,16 @@ function wsSpawnCategoriesInstance(seedFocusedCol, seedChartShowAll) {
     var root = document.querySelector('[data-cat-inst="' + instId + '"]');
     if (root) catSyncInstanceTitle(root);
   }
+}
+
+// A10 Swath s-4b: spawn a cloned Swath analysis panel. Starts with a fresh
+// (default) config; the user picks directions/vars and Generates its own run.
+function wsSpawnSwathInstance() {
+  if (!wsRails || typeof swNextInstId !== 'function') { showPanel('swath'); return; }
+  var instId = swNextInstId();
+  if (typeof swathInstances !== 'undefined' && typeof swNewInstState === 'function') swathInstances[instId] = swNewInstState();
+  wsRails.addTab({ id: instId, title: 'Swath', closeable: true }, wsMainTarget());
+  wsRails.activateTab(instId);                 // renderPanel → swBuildInstancePanel
 }
 
 // Track the prefix in the tab title (loadAuxFile on load, onAuxConfigChange on edit)
@@ -361,6 +376,7 @@ function wsNewTabMenuItems() {
   });
   if (items.length) items.push('---');
   items.push({ label: 'New Categories panel', action: 'newCategories' });   // A10 4e-c-4: cloneable analysis panel
+  items.push({ label: 'New Swath panel', action: 'newSwath' });             // A10 Swath s-4b
   items.push('---');
   items.push({ label: 'Add point dataset…', action: 'addPoint' });
   items.push({ label: 'Add drillhole set…', action: 'addDrillhole' });
@@ -482,6 +498,7 @@ function wsMenuAction(a) {
     case 'filter': wsFocusFilter(); break;
     case 'calcols': showPanel('calcols'); break;
     case 'newCategories': if (typeof wsSpawnCategoriesInstance === 'function') wsSpawnCategoriesInstance(); break;
+    case 'newSwath': if (typeof wsSpawnSwathInstance === 'function') wsSpawnSwathInstance(); break;
     case 'addPoint': wsAddPointDataset(); break;
     case 'addDrillhole': { showPanel('aux'); var dh = document.getElementById('dhCard'); if (dh && dh.scrollIntoView) dh.scrollIntoView({ block: 'nearest' }); break; }
     case 'help': toggleHelp(); break;
@@ -508,6 +525,10 @@ function buildRailsShell(host) {
       // A10 4e-c-4: a cloned Categories analysis panel (categories#N)
       if (typeof catBuildInstancePanel === 'function' && tab.id.indexOf('categories#') === 0) {
         return catBuildInstancePanel(tab.id);
+      }
+      // A10 Swath s-4b: a cloned Swath analysis panel (swath#N)
+      if (typeof swBuildInstancePanel === 'function' && tab.id.indexOf('swath#') === 0) {
+        return swBuildInstancePanel(tab.id);
       }
       // A10 1g-c: a dataset instance tab (d2+) → build its panel from the ds
       var ds = (typeof dsById === 'function') ? dsById(tab.id) : null;
@@ -587,18 +608,23 @@ function buildRailsShell(host) {
     var hit = findTab(wsRails.state, ev.tab.id);
     var inFloat = hit && hit.container === 'float';
     var isCat = ev.tab.id === 'categories' || ev.tab.id.indexOf('categories#') === 0;
+    var isSwath = ev.tab.id === 'swath' || ev.tab.id.indexOf('swath#') === 0;
     var items = [
       inFloat ? { label: 'Dock', action: 'dock' } : { label: 'Float', action: 'float' },
       { label: 'Move to new rail', action: 'rail' },
     ];
-    if (isCat) items.push({ label: 'Duplicate', action: 'duplicate' });   // A10 4e-c-4
+    if (isCat || isSwath) items.push({ label: 'Duplicate', action: 'duplicate' });   // A10 4e-c-4 / Swath s-4b
     items.push('---', { label: 'Close', action: 'close' });
     if (ev.stack.tabs.length > 1) items.push({ label: 'Close others in stack', action: 'close-others' });
     Menu.show(items, { x: ev.x, y: ev.y }).then(function(a) {
       if (!a || !wsRails) return;
       if (a === 'duplicate') {
-        var src = ev.tab.id === 'categories' ? panelState.categories : (typeof catInstances !== 'undefined' ? catInstances[ev.tab.id] : null);
-        wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false);
+        if (isSwath) {
+          wsSpawnSwathInstance();   // s-4b: fresh-config Swath instance (config-copy is a follow-up)
+        } else {
+          var src = ev.tab.id === 'categories' ? panelState.categories : (typeof catInstances !== 'undefined' ? catInstances[ev.tab.id] : null);
+          wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false);
+        }
       } else if (a === 'float') {
         var hostRect = document.getElementById('resultsMain').getBoundingClientRect();
         wsRails.floatTab(ev.tab.id, {
@@ -725,6 +751,9 @@ function wsSanitizeLayout(st) {
   // once their state has been recreated (catRestoreInstances runs before the
   // layout deserialize). An unknown instance id (no state) is still dropped.
   if (typeof catInstances !== 'undefined') Object.keys(catInstances).forEach(function(id) { known[id] = true; });
+  // A10 Swath s-4b: live swath clones survive breakpoint crossings (project
+  // persistence is s-5; until then they exist only for the session).
+  if (typeof swathInstances !== 'undefined') Object.keys(swathInstances).forEach(function(id) { known[id] = true; });
   var seen = {};
   function cleanStack(s) {
     s.tabs = (s.tabs || []).filter(function(t) {
