@@ -734,6 +734,42 @@ cloned Export panels are a later C9 lift. Guard `experiments/4h-export-smoke.js`
 (7 asserts: model all-columns export = every row; d2 export honors `d2.Fe>50`
 filter — count = survivors, every row passes — via the d2 row handle).
 
+### Phase 5 — drillhole sets as instances (2026-06-17)
+
+**Full lift (Arthur's call).** The drillhole pipeline (A7) was built on ~10
+singleton module-globals all wired to `dsById('aux')`. Phase 5 makes drillhole
+sets per-dataset, so a project can hold several independent drillhole-derived
+datasets. Executed as clone-arc slices:
+
+- **p5-1 (inert seam, `32bd4c6`)** — `dhStateFor(ds)` returns a per-`ds.id`
+  bundle (`{files, parsed, map, dipConvention, opts, lastReport, derivedName,
+  provFiles, pendingRestore}`); every dh function takes `ds`. The card DOM moved
+  off unique ids onto `data-dh` attributes, resolved via `dhQ(sel, dhCardRoot(ds))`
+  (the shared report modal stays global). The load-time IIFE became
+  `wireDhCard(root, ds)`, called from `wireDatasetPanel`. Compositing targets the
+  owning ds (`loadAuxFile(…, ds, root)`, `catSetRole(ds.id, …)`, `ds.prefix='dh'`).
+  External call sites pass `dsById('aux')` → singleton bit-identical
+  (drillhole-smoke 29 asserts).
+- **p5-2 (enablement, `d4aa3d2`)** — `wsBuildDatasetPanel` stops removing the
+  `.dh-card`, so every instance panel hosts its own set. **Data ▸ Add drillhole
+  set** spawns a fresh instance (`wsAddDrillholeDataset`). Smoke
+  `dh-instance-smoke` (composite into d2; aux untouched).
+- **p5-3a (persistence, `20df4ce`)** — the `drillholes` project key is now a
+  per-ds map `{ dsId: recipe }` (`dhSerializeAll`); a legacy flat recipe
+  normalizes to `{ aux }`. The aux set restores in `applyProject`; each d2+ set
+  restores in the `displayResults` datasets loop (seeds the pending recipe → the
+  card shows the "drop the trio" hint → re-derives on re-drop). `dhResetAll`
+  clears all sets. Smoke `dh-inst-persist-smoke` (d2 reload round-trip).
+- **p5-3b (pack, `20df4ce`)** — a drillhole-derived comparison dataset packs its
+  RAW trio, not the frozen composite (`runPack` branches on `dhIsDerivedAux(ds)`;
+  `tryPackedProject` extracts a `{dsId: trio}` map; `displayResults` re-derives
+  each via `dhLoadTrio`). So a packed project with N drillhole sets re-derives
+  all of them — proved by each carrying a fresh consistency report (a frozen
+  composite load would have none). Smoke `dh-inst-pack-smoke`.
+
+Per-dataset **declus / top-cut targeting** (the rest of the phase-5 line) already
+shipped via the converged model (`ds.declus`/`ds.topcut`). **Phase 5 COMPLETE.**
+
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
 Phase 1 is being executed as fine slices (B1/C1a playbook — de-risk first):
