@@ -89,9 +89,15 @@ Type detection samples rows until every non-forced column has ≥20 non-null val
 {
   type: 'complete',
   stats,               // { [extIdx]: StatsObject } — numeric columns + numeric calcols
-  geometry,            // { x|y|z: {origin, max, blockSize, minBlockSize, subBlockSizes,
-                       //   isSubBlocked, uniqueCount, gridCount, extent, decimals} } | null
+  geometry,            // { isRegularGrid, x|y|z: {origin, max, blockSize, minBlockSize,
+                       //   subBlockSizes, isSubBlocked, uniqueCount, gridCount, extent,
+                       //   decimals, regularity} } | null
                        //   (computed from ALL rows — geometry ignores the filter)
+                       //   A10 4f: `regularity` = dominant spacing's share of gaps between
+                       //   sorted unique coords per axis (~1 regular grid, ~0 scatter);
+                       //   `isRegularGrid` = all 3 axes have blockSize AND regularity>=0.5.
+                       //   Computed for ANY XYZ dataset; the main thread's dsGridMode decides
+                       //   whether it counts as a grid (model='grid', else 'auto'→isRegularGrid).
   coordOrder,          // {fastest, middle, slowest, transitions, sampleSize} | null
   maxDecimals,         // {x, y, z}
   categories,          // { [extIdx]: { counts: {value: count}, overflow: bool } }

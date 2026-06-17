@@ -584,6 +584,77 @@ d2+ to any instance id.
   `swathCmpWorkers[]` moves onto the instance) **and Statistics** (most state is
   already in `panelState`/globals; biggest render surface).
 
+#### Status — CLONEABLE ANALYSIS PANELS COMPLETE (2026-06-17)
+
+All three arcs landed; the playbook held across all of them. The reusable
+five-beat (use it for any future panel):
+
+1. **seam** — `data-<x>` attrs on the template (ids kept), `<x>PanelRoot()` /
+   `<x>Q(sel,root)` / `<x>Els(root)`; render fns take `(…, root)`; singleton
+   resolves to the same nodes → bit-identical.
+2. **per-instance state** — `<x>StateForRoot(root)`: the SINGLETON proxies to the
+   existing module/`panelState` globals via an accessor object (so external
+   readers stay bit-identical), a CLONE gets a plain `<x>NewInstState()` object.
+3. **root-scoped events** — `wire<X>Events(root)` (was a `…Once` singleton), all
+   handlers resolve via `Els(root)` and write `StateForRoot(root)`; de-id the
+   generated controls (detect by `data-<x>` / class, not `#id`).
+4. **clone + spawn** — `<x>BuildInstancePanel(id)` clones `#panel<X>`, strips ids,
+   tags `data-<x>-inst`, caches the clone (rails calls `renderPanel` twice — return
+   the same node); `renderPanel` dispatch on `<x>#N`; `wsSpawn<X>Instance` via the
+   `[+]` launcher + tab **Duplicate** (carries the source view/config);
+   `wsSanitizeLayout` whitelists the live instance ids so tabs survive crossings.
+5. **persist** — `panels.<x>.instances=[{id,view}]`, selection BY NAME / rest by
+   value; `<x>RestoreInstances` seeds a `_pending…` before the layout deserialize;
+   `<x>ApplyAllInstances` resolves it once the analysis lands (per-ds parts as each
+   comparison dataset completes); loss-safe pending re-emit through autosave.
+
+Per-panel specifics:
+- **Categories** (`bd4f4dd`/`5adb071`/`2d1667f`/`17a94d1` + persist `fb3da53`):
+  `catInstances[id]={focusedCol,chartShowAll}`; shares `_catData` + catalog; scope
+  title "Categories: <col>".
+- **Swath** (`2fd81fa`→`1f4c908`): "independent runs" — each clone owns its
+  `lastSwathData`/`swathWorker`/`swathCmpWorkers[]`/`_swathChartParams`/`swathStale`
+  via `swStateForRoot`; `swathNumCols` stays shared; config (not results) persists
+  by name; live clone sidebars refresh on re-analysis (`swRefreshAllInstances`).
+- **Statistics** (`3576c7e`→`d0620dd`): independent VIEW of the shared analysis
+  (no worker fan-out); `_statSingleton` proxies all 11 fields (7 module globals +
+  4 `panelState.statistics`); comparison selection resolves per-ds in the analysis-
+  complete handler.
+
+Rails gotchas (recorded so they don't bite again): (1) `addTab` calls
+`renderPanel` TWICE → cache the clone per id, return the same node; (2) never
+`updateTab` mid-`renderPanel` (reentrant rebuild) — sync titles after the build /
+in `finalize`; (3) generated control ids collide across clones → emit `data-<x>`
+and (for the singleton, where `project.js` reads ids) stamp the id back on the
+singleton render only.
+
+### Phase 4f — import unification (2026-06-17)
+
+**Decision (Arthur):** grid classification = AUTO-detect + VISIBLE + OVERRIDE
+(no-magic-only-ui). `computeGeometry` always returns block sizes (most-frequent
+spacing even for scatter), so naive capture would mis-classify drillhole points
+as grids.
+
+- **4f-1 ✅ (`80385b2`)** — grid-detection foundation. `computeGeometry` emits a
+  per-axis `regularity` (dominant spacing's share of inter-value gaps — ~1 for a
+  regular grid, ~0 for scatter) + a geometry-level `isRegularGrid` (all three axes
+  carry a block size AND `regularity ≥ 0.5`). ADDITIVE — `b1-differential` is
+  byte-identical with `--ignore-keys=isRegularGrid,regularity`. The comparison-
+  dataset complete handler now captures `m.geometry` (was discarded).
+  `dsGridMode(ds)` is a tri-state `grid|point|auto` — default `'grid'` for the
+  model (an explicit block-model import), `'auto'` elsewhere; `dsGrid` gates on
+  block-size-on-all-axes AND (`mode==='grid'` OR (`auto` AND `isRegularGrid`)),
+  `'point'` forces null. Model stays bit-identical (grandfathered by the default).
+  `ds.gridMode` override is in-memory here.
+- **4f-2** (next) — import-panel UI: show the geometry/DXYZ (Block Dimensions)
+  section conditionally for any dataset, surface the detected-grid badge + the
+  grid/point override, and PERSIST `gridMode` (datasets / aux / preflight keys).
+- **4f-3** — generalize the Summary "Grid Geometry" table beyond the model-only
+  `lastGeoData` to any `dsHasGrid` dataset.
+- **4f-4** — de-special-case the naming/branches so the model's preflight panel
+  and the dataset import panels converge ("Import Block Model" stops being the
+  only geometry-bearing surface).
+
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
 Phase 1 is being executed as fine slices (B1/C1a playbook — de-risk first):
