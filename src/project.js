@@ -2105,7 +2105,8 @@ function displayResults(data) {
   }
   renderGtConfig(data);
   renderSwathConfig(data);
-  if (typeof swApplyAllInstances === 'function') swApplyAllInstances();  // s-5: re-apply restored clone configs
+  if (typeof swApplyAllInstances === 'function') swApplyAllInstances();      // s-5: re-apply restored clone configs
+  if (typeof swRefreshAllInstances === 'function') swRefreshAllInstances();  // follow-up: refresh live clone sidebars on re-analysis
   renderSectionConfig(data);
 
   // Restore GT sidebar from project or snapshot

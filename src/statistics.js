@@ -159,22 +159,29 @@ function statCmpByName(map) {
   return o;
 }
 
+// Serialize one instance's live view (by NAME/value) — used by both the project
+// serialize and Duplicate (carry the source panel's view to the new clone).
+function statSerializeView(S) {
+  var hdr = lastDisplayedHeader;
+  return {
+    selectedVars: S.statsSelectedVars ? statNamesFromColSet(S.statsSelectedVars, hdr) : null,
+    visibleMetrics: S.statsVisibleMetrics ? Array.from(S.statsVisibleMetrics) : null,
+    percentiles: S.statsPercentiles,
+    cdfSelected: statNamesFromColSet(S.statsCdfSelected, hdr),
+    cdfScale: S.statsCdfScale, cdfMode: S.statsCdfMode,
+    cmpSel: statCmpByName(S.cmpSel), cdfCmpSel: statCmpByName(S.cdfCmpSel),
+    dsHidden: Array.from(S.dsHidden), refDs: S.refDs
+  };
+}
+
 function statSerializeInstances() {
-  var out = [], hdr = lastDisplayedHeader;
+  var out = [];
   Object.keys(statInstances).forEach(function(id) {
     var S = statInstances[id], pv = S._pendingView, view;
     if (pv && 'percentiles' in pv) {
       view = pv;   // analysis not landed yet — the pending view is the source of truth
     } else {
-      view = {
-        selectedVars: S.statsSelectedVars ? statNamesFromColSet(S.statsSelectedVars, hdr) : null,
-        visibleMetrics: S.statsVisibleMetrics ? Array.from(S.statsVisibleMetrics) : null,
-        percentiles: S.statsPercentiles,
-        cdfSelected: statNamesFromColSet(S.statsCdfSelected, hdr),
-        cdfScale: S.statsCdfScale, cdfMode: S.statsCdfMode,
-        cmpSel: statCmpByName(S.cmpSel), cdfCmpSel: statCmpByName(S.cdfCmpSel),
-        dsHidden: Array.from(S.dsHidden), refDs: S.refDs
-      };
+      view = statSerializeView(S);
       // loss-safety: re-emit comparison selections still pending (their ds isn't back)
       if (pv) ['cmpSel', 'cdfCmpSel'].forEach(function(k) {
         if (!pv[k]) return;

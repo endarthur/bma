@@ -5889,7 +5889,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build c6743c9 — click to check for updates">c6743c9</div>
+<div class="build-badge" id="buildBadge" title="build 3d4887a — click to check for updates">3d4887a</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -19107,7 +19107,8 @@ function displayResults(data) {
   }
   renderGtConfig(data);
   renderSwathConfig(data);
-  if (typeof swApplyAllInstances === 'function') swApplyAllInstances();  // s-5: re-apply restored clone configs
+  if (typeof swApplyAllInstances === 'function') swApplyAllInstances();      // s-5: re-apply restored clone configs
+  if (typeof swRefreshAllInstances === 'function') swRefreshAllInstances();  // follow-up: refresh live clone sidebars on re-analysis
   renderSectionConfig(data);
 
   // Restore GT sidebar from project or snapshot
@@ -20304,22 +20305,29 @@ function statCmpByName(map) {
   return o;
 }
 
+// Serialize one instance's live view (by NAME/value) — used by both the project
+// serialize and Duplicate (carry the source panel's view to the new clone).
+function statSerializeView(S) {
+  var hdr = lastDisplayedHeader;
+  return {
+    selectedVars: S.statsSelectedVars ? statNamesFromColSet(S.statsSelectedVars, hdr) : null,
+    visibleMetrics: S.statsVisibleMetrics ? Array.from(S.statsVisibleMetrics) : null,
+    percentiles: S.statsPercentiles,
+    cdfSelected: statNamesFromColSet(S.statsCdfSelected, hdr),
+    cdfScale: S.statsCdfScale, cdfMode: S.statsCdfMode,
+    cmpSel: statCmpByName(S.cmpSel), cdfCmpSel: statCmpByName(S.cdfCmpSel),
+    dsHidden: Array.from(S.dsHidden), refDs: S.refDs
+  };
+}
+
 function statSerializeInstances() {
-  var out = [], hdr = lastDisplayedHeader;
+  var out = [];
   Object.keys(statInstances).forEach(function(id) {
     var S = statInstances[id], pv = S._pendingView, view;
     if (pv && 'percentiles' in pv) {
       view = pv;   // analysis not landed yet — the pending view is the source of truth
     } else {
-      view = {
-        selectedVars: S.statsSelectedVars ? statNamesFromColSet(S.statsSelectedVars, hdr) : null,
-        visibleMetrics: S.statsVisibleMetrics ? Array.from(S.statsVisibleMetrics) : null,
-        percentiles: S.statsPercentiles,
-        cdfSelected: statNamesFromColSet(S.statsCdfSelected, hdr),
-        cdfScale: S.statsCdfScale, cdfMode: S.statsCdfMode,
-        cmpSel: statCmpByName(S.cmpSel), cdfCmpSel: statCmpByName(S.cdfCmpSel),
-        dsHidden: Array.from(S.dsHidden), refDs: S.refDs
-      };
+      view = statSerializeView(S);
       // loss-safety: re-emit comparison selections still pending (their ds isn't back)
       if (pv) ['cmpSel', 'cdfCmpSel'].forEach(function(k) {
         if (!pv[k]) return;
@@ -22631,6 +22639,24 @@ function swRestoreInstances(list) {
     if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
   });
   swInstSeq = maxSeq;
+}
+
+// Refresh LIVE clones (no pending config) after a model re-analysis: rebuild the
+// sidebar from the new analysis while preserving the clone's own directions/vars/
+// stat/display (capture → renderSwathConfig → re-apply by name). Matches the
+// singleton, which renderSwathConfig rebuilds + resets the output to its hint
+// (a re-Generate is needed for fresh results). Restored-pending clones are owned
+// by swApplyAllInstances instead.
+function swRefreshAllInstances() {
+  if (!_swathData) return;
+  Object.keys(swathInstances).forEach(function(id) {
+    if (swathInstances[id]._pendingConfig) return;
+    var root = swInstanceEls[id];
+    if (!root || !document.contains(root)) return;
+    var cfg = swSerializeConfig(root);
+    renderSwathConfig(_swathData, root);
+    if (cfg) swApplyConfig(root, cfg);
+  });
 }
 
 // After an analysis lands (_swathData set, clone roots built), rebuild each
@@ -31301,22 +31327,33 @@ function wsSpawnCategoriesInstance(seedFocusedCol, seedChartShowAll) {
 
 // A10 Swath s-4b: spawn a cloned Swath analysis panel. Starts with a fresh
 // (default) config; the user picks directions/vars and Generates its own run.
-function wsSpawnSwathInstance() {
+function wsSpawnSwathInstance(seedConfig) {
   if (!wsRails || typeof swNextInstId !== 'function') { showPanel('swath'); return; }
   var instId = swNextInstId();
   if (typeof swathInstances !== 'undefined' && typeof swNewInstState === 'function') swathInstances[instId] = swNewInstState();
   wsRails.addTab({ id: instId, title: 'Swath', closeable: true }, wsMainTarget());
   wsRails.activateTab(instId);                 // renderPanel → swBuildInstancePanel
+  if (seedConfig && typeof swApplyConfig === 'function') {   // Duplicate: carry the source config
+    var root = document.querySelector('[data-sw-inst="' + instId + '"]');
+    if (root) swApplyConfig(root, seedConfig);
+  }
 }
 
 // A10 Statistics st-4: spawn a cloned Statistics analysis panel. Renders the
 // shared analysis through fresh per-instance view state.
-function wsSpawnStatisticsInstance() {
+function wsSpawnStatisticsInstance(seedView) {
   if (!wsRails || typeof statNextInstId !== 'function') { showPanel('statistics'); return; }
   var instId = statNextInstId();
-  if (typeof statInstances !== 'undefined' && typeof statNewInstState === 'function') statInstances[instId] = statNewInstState();
+  if (typeof statInstances !== 'undefined' && typeof statNewInstState === 'function') {
+    statInstances[instId] = statNewInstState();
+    if (seedView) statInstances[instId]._pendingView = seedView;   // Duplicate: carry the source view
+  }
   wsRails.addTab({ id: instId, title: 'Statistics', closeable: true }, wsMainTarget());
   wsRails.activateTab(instId);                 // renderPanel → statBuildInstancePanel
+  if (seedView && typeof statApplyAllInstances === 'function') {   // resolve + repaint the seeded view now
+    statApplyAllInstances();
+    if (typeof statRenderAllInstances === 'function') statRenderAllInstances();
+  }
 }
 
 // Track the prefix in the tab title (loadAuxFile on load, onAuxConfigChange on edit)
@@ -31689,9 +31726,13 @@ function buildRailsShell(host) {
       if (!a || !wsRails) return;
       if (a === 'duplicate') {
         if (isSwath) {
-          wsSpawnSwathInstance();   // s-4b: fresh-config Swath instance (config-copy is a follow-up)
+          var swRoot = ev.tab.id === 'swath' ? document.getElementById('panelSwath') : document.querySelector('[data-sw-inst="' + ev.tab.id + '"]');
+          var swCfg = (swRoot && typeof swSerializeConfig === 'function') ? swSerializeConfig(swRoot) : null;
+          wsSpawnSwathInstance(swCfg);   // carry the source panel's directions/vars/stat/display
         } else if (isStats) {
-          wsSpawnStatisticsInstance();   // st-4: fresh-view Statistics instance
+          var stRoot = ev.tab.id === 'statistics' ? document.getElementById('panelStatistics') : document.querySelector('[data-stat-inst="' + ev.tab.id + '"]');
+          var stView = (stRoot && typeof statSerializeView === 'function' && typeof statStateForRoot === 'function') ? statSerializeView(statStateForRoot(stRoot)) : null;
+          wsSpawnStatisticsInstance(stView);   // carry the source panel's var/metric/CDF/comparison view
         } else {
           var src = ev.tab.id === 'categories' ? panelState.categories : (typeof catInstances !== 'undefined' ? catInstances[ev.tab.id] : null);
           wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false);

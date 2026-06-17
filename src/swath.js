@@ -243,6 +243,24 @@ function swRestoreInstances(list) {
   swInstSeq = maxSeq;
 }
 
+// Refresh LIVE clones (no pending config) after a model re-analysis: rebuild the
+// sidebar from the new analysis while preserving the clone's own directions/vars/
+// stat/display (capture → renderSwathConfig → re-apply by name). Matches the
+// singleton, which renderSwathConfig rebuilds + resets the output to its hint
+// (a re-Generate is needed for fresh results). Restored-pending clones are owned
+// by swApplyAllInstances instead.
+function swRefreshAllInstances() {
+  if (!_swathData) return;
+  Object.keys(swathInstances).forEach(function(id) {
+    if (swathInstances[id]._pendingConfig) return;
+    var root = swInstanceEls[id];
+    if (!root || !document.contains(root)) return;
+    var cfg = swSerializeConfig(root);
+    renderSwathConfig(_swathData, root);
+    if (cfg) swApplyConfig(root, cfg);
+  });
+}
+
 // After an analysis lands (_swathData set, clone roots built), rebuild each
 // freshly-restored clone's sidebar and apply its pending config. Only touches
 // instances with a _pendingConfig, so live-session clones keep their sidebar.

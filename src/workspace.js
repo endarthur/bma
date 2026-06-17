@@ -260,22 +260,33 @@ function wsSpawnCategoriesInstance(seedFocusedCol, seedChartShowAll) {
 
 // A10 Swath s-4b: spawn a cloned Swath analysis panel. Starts with a fresh
 // (default) config; the user picks directions/vars and Generates its own run.
-function wsSpawnSwathInstance() {
+function wsSpawnSwathInstance(seedConfig) {
   if (!wsRails || typeof swNextInstId !== 'function') { showPanel('swath'); return; }
   var instId = swNextInstId();
   if (typeof swathInstances !== 'undefined' && typeof swNewInstState === 'function') swathInstances[instId] = swNewInstState();
   wsRails.addTab({ id: instId, title: 'Swath', closeable: true }, wsMainTarget());
   wsRails.activateTab(instId);                 // renderPanel → swBuildInstancePanel
+  if (seedConfig && typeof swApplyConfig === 'function') {   // Duplicate: carry the source config
+    var root = document.querySelector('[data-sw-inst="' + instId + '"]');
+    if (root) swApplyConfig(root, seedConfig);
+  }
 }
 
 // A10 Statistics st-4: spawn a cloned Statistics analysis panel. Renders the
 // shared analysis through fresh per-instance view state.
-function wsSpawnStatisticsInstance() {
+function wsSpawnStatisticsInstance(seedView) {
   if (!wsRails || typeof statNextInstId !== 'function') { showPanel('statistics'); return; }
   var instId = statNextInstId();
-  if (typeof statInstances !== 'undefined' && typeof statNewInstState === 'function') statInstances[instId] = statNewInstState();
+  if (typeof statInstances !== 'undefined' && typeof statNewInstState === 'function') {
+    statInstances[instId] = statNewInstState();
+    if (seedView) statInstances[instId]._pendingView = seedView;   // Duplicate: carry the source view
+  }
   wsRails.addTab({ id: instId, title: 'Statistics', closeable: true }, wsMainTarget());
   wsRails.activateTab(instId);                 // renderPanel → statBuildInstancePanel
+  if (seedView && typeof statApplyAllInstances === 'function') {   // resolve + repaint the seeded view now
+    statApplyAllInstances();
+    if (typeof statRenderAllInstances === 'function') statRenderAllInstances();
+  }
 }
 
 // Track the prefix in the tab title (loadAuxFile on load, onAuxConfigChange on edit)
@@ -648,9 +659,13 @@ function buildRailsShell(host) {
       if (!a || !wsRails) return;
       if (a === 'duplicate') {
         if (isSwath) {
-          wsSpawnSwathInstance();   // s-4b: fresh-config Swath instance (config-copy is a follow-up)
+          var swRoot = ev.tab.id === 'swath' ? document.getElementById('panelSwath') : document.querySelector('[data-sw-inst="' + ev.tab.id + '"]');
+          var swCfg = (swRoot && typeof swSerializeConfig === 'function') ? swSerializeConfig(swRoot) : null;
+          wsSpawnSwathInstance(swCfg);   // carry the source panel's directions/vars/stat/display
         } else if (isStats) {
-          wsSpawnStatisticsInstance();   // st-4: fresh-view Statistics instance
+          var stRoot = ev.tab.id === 'statistics' ? document.getElementById('panelStatistics') : document.querySelector('[data-stat-inst="' + ev.tab.id + '"]');
+          var stView = (stRoot && typeof statSerializeView === 'function' && typeof statStateForRoot === 'function') ? statSerializeView(statStateForRoot(stRoot)) : null;
+          wsSpawnStatisticsInstance(stView);   // carry the source panel's var/metric/CDF/comparison view
         } else {
           var src = ev.tab.id === 'categories' ? panelState.categories : (typeof catInstances !== 'undefined' ? catInstances[ev.tab.id] : null);
           wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false);
