@@ -401,7 +401,10 @@ function serializePanelState() {
       dsHidden: Array.from(panelState.statistics.dsHidden),
       refDs: panelState.statistics.refDs            // 4d per-panel reference (no global star), by id
     },
-    swath: { dsHidden: Array.from(panelState.swath.dsHidden) },
+    swath: {
+      dsHidden: Array.from(panelState.swath.dsHidden),
+      instances: (typeof swSerializeInstances === 'function') ? swSerializeInstances() : []
+    },
     categories: {
       dsHidden: Array.from(panelState.categories.dsHidden),
       instances: (typeof serializeCatInstances === 'function') ? serializeCatInstances() : []
@@ -741,6 +744,12 @@ async function applyProject(project) {
   if (typeof catRestoreInstances === 'function') {
     catRestoreInstances(project.panels && project.panels.categories && project.panels.categories.instances);
   }
+  // A10 Swath s-5: same dance for cloned Swath instances — recreate them (config
+  // pending) before the layout deserialize rebuilds their tabs; the config is
+  // re-applied once the analysis lands (swApplyAllInstances in displayResults).
+  if (typeof swRestoreInstances === 'function') {
+    swRestoreInstances(project.panels && project.panels.swath && project.panels.swath.instances);
+  }
 
   // Restore the rails workspace arrangement (missing/invalid → default)
   wsRestoreProjectLayout(project.layout);
@@ -1030,6 +1039,7 @@ function clearProject() {
   panelState.swath.dsHidden = new Set();
   panelState.categories.dsHidden = new Set();
   if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
+  if (typeof swResetInstances === 'function') swResetInstances();    // Swath s-5: drop cloned Swath panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -1256,6 +1266,7 @@ async function handleFile(file, handle, skipRecents) {
   panelState.swath.dsHidden = new Set();
   panelState.categories.dsHidden = new Set();
   if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
+  if (typeof swResetInstances === 'function') swResetInstances();    // Swath s-5: drop cloned Swath panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -1437,6 +1448,7 @@ $backToPreflight.addEventListener('click', () => {
   panelState.swath.dsHidden = new Set();
   panelState.categories.dsHidden = new Set();
   if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
+  if (typeof swResetInstances === 'function') swResetInstances();    // Swath s-5: drop cloned Swath panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -2074,6 +2086,7 @@ function displayResults(data) {
   }
   renderGtConfig(data);
   renderSwathConfig(data);
+  if (typeof swApplyAllInstances === 'function') swApplyAllInstances();  // s-5: re-apply restored clone configs
   renderSectionConfig(data);
 
   // Restore GT sidebar from project or snapshot

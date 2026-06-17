@@ -123,6 +123,142 @@ function swDisposeInstance(instId) {
   delete swInstanceEls[instId];
 }
 
+// ─── A10 Swath s-5: persist clone CONFIGS (not results) ────────────────────
+// A swath clone's config lives in its sidebar DOM (like the singleton's, which
+// project.js serializes). These read/apply it through a per-instance root so the
+// arrangement + each clone's directions/vars/stat/display survive a reload; the
+// RESULTS are not stored (re-run on demand). Mirrors the project.js singleton
+// swath block + Categories 4e-c-5.
+function swSerializeConfig(root) {
+  var $dirMode = swQ('swathDirMode', root);
+  if (!$dirMode) return null;
+  var $stat = swQ('swathStat', root), $filter = swQ('swathLocalFilter', root);
+  var $sb = swQ('swathSidebar', root), $vl = swQ('swathVarList', root);
+  var checkedVars = [];
+  if ($vl) $vl.querySelectorAll('input[type="checkbox"]:not([data-aux]):checked').forEach(function(cb) {
+    var name = currentHeader[parseInt(cb.value)];
+    if (name) checkedVars.push(name);
+  });
+  var auxChecked = null;
+  if (typeof auxFile !== 'undefined' && auxFile && $vl) {
+    auxChecked = [];
+    $vl.querySelectorAll('input[data-aux="1"][data-ds="aux"]:checked').forEach(function(cb) {
+      if (cb.dataset.name) auxChecked.push(cb.dataset.name);
+    });
+  }
+  var dirs = {};
+  if ($sb) $sb.querySelectorAll('.swath-dir-on').forEach(function(cb) {
+    var bin = parseFloat((swQ('swathBin_' + cb.dataset.dir, root) || {}).value);
+    dirs[cb.dataset.dir] = { on: cb.checked, bin: isFinite(bin) ? bin : null };
+  });
+  return {
+    dirMode: $dirMode.value, directions: dirs,
+    dipDir: parseFloat((swQ('swathDipDir', root) || {}).value) || 0,
+    dip: parseFloat((swQ('swathDip', root) || {}).value) || 0,
+    rake: (function() { var v = parseFloat((swQ('swathRake', root) || {}).value); return isFinite(v) ? v : 90; })(),
+    stat: $stat ? $stat.value : 'mean_std',
+    checkedVars: checkedVars, localFilter: $filter ? $filter.value : '',
+    auxCheckedVars: auxChecked, display: getSwathDisplay(root)
+  };
+}
+
+function swApplyConfig(root, cfg) {
+  if (!cfg) return;
+  var $dirMode = swQ('swathDirMode', root);
+  if ($dirMode && cfg.dirMode) { $dirMode.value = cfg.dirMode; $dirMode.dispatchEvent(new Event('change')); }
+  var $sb = swQ('swathSidebar', root);
+  if (cfg.directions && $sb) $sb.querySelectorAll('.swath-dir-on').forEach(function(cb) {
+    var conf = cfg.directions[cb.dataset.dir];
+    if (!conf) return;
+    cb.checked = conf.on !== false;
+    if (conf.bin) { var bi = swQ('swathBin_' + cb.dataset.dir, root); if (bi) bi.value = conf.bin; }
+  });
+  if (cfg.dipDir != null && swQ('swathDipDir', root)) swQ('swathDipDir', root).value = cfg.dipDir;
+  if (cfg.dip != null && swQ('swathDip', root)) swQ('swathDip', root).value = cfg.dip;
+  if (cfg.rake != null && swQ('swathRake', root)) swQ('swathRake', root).value = cfg.rake;
+  var $stat = swQ('swathStat', root); if ($stat && cfg.stat) $stat.value = cfg.stat;
+  var $filter = swQ('swathLocalFilter', root); if ($filter && cfg.localFilter) $filter.value = cfg.localFilter;
+  var $vl = swQ('swathVarList', root);
+  if (cfg.checkedVars && $vl) {
+    var nameSet = {}; cfg.checkedVars.forEach(function(n) { nameSet[n] = true; });
+    $vl.querySelectorAll('.swath-var-item:not(.swath-var-item--aux)').forEach(function(item) {
+      var cb = item.querySelector('input[type="checkbox"]');
+      if (cb) cb.checked = !!nameSet[item.querySelector('span').textContent];
+    });
+  }
+  if (cfg.display) {
+    var b = swQ('swathShowBands', root); if (b) b.checked = cfg.display.showBands !== false;
+    var c = swQ('swathShowCounts', root); if (c) c.checked = cfg.display.showCounts !== false;
+    var t = swQ('swathShowTable', root); if (t) t.checked = cfg.display.showTable !== false;
+    var ys = swQ('swathYScale', root); if (ys && cfg.display.yScale) ys.value = cfg.display.yScale;
+    var ly = swQ('swathLayout', root); if (ly && cfg.display.layout) ly.value = cfg.display.layout;
+  }
+  // aux rows (rendered fresh by renderSwathConfig above) — re-check by name
+  if (cfg.auxCheckedVars && $vl) {
+    var auxSet = {}; cfg.auxCheckedVars.forEach(function(n) { auxSet[n] = true; });
+    $vl.querySelectorAll('input[data-aux="1"][data-ds="aux"]').forEach(function(cb) {
+      if (cb.dataset.name) cb.checked = !!auxSet[cb.dataset.name];
+    });
+  }
+}
+
+// Serialize every live clone's config (re-emit a not-yet-rebuilt clone's pending
+// config so an autosave mid-restore loses nothing — loss-safe, the standing rule).
+function swSerializeInstances() {
+  var out = [];
+  Object.keys(swathInstances).forEach(function(id) {
+    var root = swInstanceEls[id];
+    var cfg = (root && document.contains(root) && swQ('swathDirMode', root)) ? swSerializeConfig(root) : swathInstances[id]._pendingConfig;
+    out.push({ id: id, config: cfg || null });
+  });
+  return out;
+}
+
+// Drop all clone state (+ tabs + workers) — new file / clear project.
+function swResetInstances() {
+  Object.keys(swathInstances).forEach(function(id) {
+    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) {
+      try { wsRails.closeTab(id); } catch (e) {}
+    }
+    swDisposeInstance(id);
+  });
+  swathInstances = {}; swInstanceEls = {}; swInstSeq = 1;
+}
+
+// Recreate clone instances from a serialized list BEFORE the layout deserialize
+// rebuilds their tabs (swBuildInstancePanel reads the seeded state). The config
+// stays pending until swApplyAllInstances re-applies it post-analysis.
+function swRestoreInstances(list) {
+  swResetInstances();
+  if (!Array.isArray(list)) return;
+  var maxSeq = 1;
+  list.forEach(function(rec) {
+    if (!rec || !rec.id) return;
+    var st = swNewInstState();
+    if (rec.config) st._pendingConfig = rec.config;
+    swathInstances[rec.id] = st;
+    var m = /^swath#(\d+)$/.exec(rec.id);
+    if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+  });
+  swInstSeq = maxSeq;
+}
+
+// After an analysis lands (_swathData set, clone roots built), rebuild each
+// freshly-restored clone's sidebar and apply its pending config. Only touches
+// instances with a _pendingConfig, so live-session clones keep their sidebar.
+function swApplyAllInstances() {
+  if (!_swathData) return;
+  Object.keys(swathInstances).forEach(function(id) {
+    var st = swathInstances[id];
+    if (!st._pendingConfig) return;
+    var root = swInstanceEls[id];
+    if (!root || !document.contains(root)) return;
+    renderSwathConfig(_swathData, root);
+    swApplyConfig(root, st._pendingConfig);
+    delete st._pendingConfig;
+  });
+}
+
 // A10 4c-iii-c: dataset chips let the user hide a comparison dataset (sidebar
 // rows + chart series) without un-checking each variable. Keyed by dsId; lives
 // on panelState.swath.dsHidden (4e-a), serialized in 4e-b.
