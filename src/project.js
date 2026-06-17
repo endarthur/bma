@@ -415,6 +415,9 @@ function serializePanelState() {
     },
     gt: {
       instances: (typeof gtSerializeInstances === 'function') ? gtSerializeInstances() : []   // A10 G3b: cloned GT panels
+    },
+    statscat: {
+      instances: (typeof statsCatSerializeInstances === 'function') ? statsCatSerializeInstances() : []   // A10 G4b: cloned StatsCat panels
     }
   };
 }
@@ -776,6 +779,11 @@ async function applyProject(project) {
   if (typeof gtRestoreInstances === 'function') {
     gtRestoreInstances(project.panels && project.panels.gt && project.panels.gt.instances);
   }
+  // A10 G4b: same — recreate cloned StatsCat instances (target) before the layout
+  // deserialize; each repaints once its dataset's group stats are available.
+  if (typeof statsCatRestoreInstances === 'function') {
+    statsCatRestoreInstances(project.panels && project.panels.statscat && project.panels.statscat.instances);
+  }
   // Phase 6: register comparison-dataset instances (d2+) in the registry NOW —
   // before the layout deserialize — so wsSanitizeLayout keeps their tabs at the
   // SAVED dock position instead of dropping them (displayResults would re-add at
@@ -1099,6 +1107,7 @@ function clearProject() {
   if (typeof swResetInstances === 'function') swResetInstances();    // Swath s-5: drop cloned Swath panels
   if (typeof statResetInstances === 'function') statResetInstances();  // Statistics st-5: drop cloned Statistics panels
   if (typeof gtResetInstances === 'function') gtResetInstances();      // G3b-4: drop cloned GT panels
+  if (typeof statsCatResetInstances === 'function') statsCatResetInstances();  // G4b: drop cloned StatsCat panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -1355,6 +1364,7 @@ async function handleFile(file, handle, skipRecents) {
   if (typeof swResetInstances === 'function') swResetInstances();    // Swath s-5: drop cloned Swath panels
   if (typeof statResetInstances === 'function') statResetInstances();  // Statistics st-5: drop cloned Statistics panels
   if (typeof gtResetInstances === 'function') gtResetInstances();      // G3b-4: drop cloned GT panels
+  if (typeof statsCatResetInstances === 'function') statsCatResetInstances();  // G4b: drop cloned StatsCat panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -1540,6 +1550,7 @@ $backToPreflight.addEventListener('click', () => {
   if (typeof swResetInstances === 'function') swResetInstances();    // Swath s-5: drop cloned Swath panels
   if (typeof statResetInstances === 'function') statResetInstances();  // Statistics st-5: drop cloned Statistics panels
   if (typeof gtResetInstances === 'function') gtResetInstances();      // G3b-4: drop cloned GT panels
+  if (typeof statsCatResetInstances === 'function') statsCatResetInstances();  // G4b: drop cloned StatsCat panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -2134,6 +2145,7 @@ function displayResults(data) {
 
   // StatsCat — render after display state is restored (or with defaults)
   renderStatsCat(data);
+  if (typeof statsCatRenderAllInstances === 'function') statsCatRenderAllInstances();   // G4b: repaint cloned StatsCat panels
 
   // Export — always (re)build the MODEL's column list here (displayResults =
   // model analysis complete); a restored non-model target is applied lazily when
@@ -2394,6 +2406,44 @@ function displayResults(data) {
 // root threading needed (that is the G4b clone arc, later).
 let statsCatTargetDsId = 'model';
 
+// A10 G4b: clone arc. StatsCat clones into independent dockable panels. Group
+// stats are dataset-bound (computed in the dataset's analyze pass with one
+// group-by), so a clone is an independent VIEW onto a dataset's group stats — its
+// independence is the TARGET DATASET (per-instance). The per-dataset selection
+// (group-by/vars/display) still lives on the dataset (statsCatStateFor), so two
+// clones on the SAME dataset mirror; the useful case is comparing DIFFERENT
+// datasets side by side. The singleton resolves DOM via the $statsCat* refs +
+// target via statsCatTargetDsId; a clone carries data-statcat-inst on its root,
+// resolves DOM by [data-statcat=…] within root, and holds its own targetDsId.
+var statsCatInstances = {};   // instId -> { targetDsId }
+var statsCatInstanceEls = {}; // instId -> cloned DOM element
+var statsCatInstSeq = 0;
+function statsCatNextInstId() { return 'statscat#' + (++statsCatInstSeq); }
+function statsCatNewInstState() { return { targetDsId: 'model' }; }
+function statcatIsInst(root) { return !!(root && root.getAttribute && root.getAttribute('data-statcat-inst')); }
+function statsCatInstTarget(root) {
+  if (!statcatIsInst(root)) return statsCatTargetDsId;
+  var id = root.getAttribute('data-statcat-inst');
+  if (!statsCatInstances[id]) statsCatInstances[id] = statsCatNewInstState();
+  return statsCatInstances[id].targetDsId;
+}
+// DOM bundle for a panel: singleton → the $statsCat* refs; clone → [data-statcat].
+function statcatEls(root) {
+  if (!statcatIsInst(root)) {
+    return { content: $statsCatContent, badge: $statsCatBadge, groupBy: $statsCatGroupBy, varList: $statsCatVarList,
+      groupList: $statsCatGroupList, varSearch: $statsCatVarSearch, groupSearch: $statsCatGroupSearch,
+      groupAll: $statsCatGroupAll, groupNone: $statsCatGroupNone, groupSort: $statsCatGroupSort,
+      varAll: $statsCatVarAll, varNone: $statsCatVarNone, varFilter: $statsCatVarFilter,
+      datasetWrap: document.getElementById('statsCatDatasetWrap') };
+  }
+  function q(n) { return root.querySelector('[data-statcat="' + n + '"]'); }
+  return { content: q('statsCatContent'), badge: q('statsCatBadge'), groupBy: q('statsCatGroupBy'), varList: q('statsCatVarList'),
+    groupList: q('statsCatGroupList'), varSearch: q('statsCatVarSearch'), groupSearch: q('statsCatGroupSearch'),
+    groupAll: q('statsCatGroupAll'), groupNone: q('statsCatGroupNone'), groupSort: q('statsCatGroupSort'),
+    varAll: q('statsCatVarAll'), varNone: q('statsCatVarNone'), varFilter: q('statsCatVarFilter'),
+    datasetWrap: q('statsCatDatasetWrap') };
+}
+
 function statsCatNewState() {
   return { groupBy: null, selectedVars: new Set(), displayVar: null, checkedGroups: null, sortMode: null, showSelectedOnly: false };
 }
@@ -2419,8 +2469,8 @@ function statsCatStateFor(dsId) {
 // globals (identical contents to the cached data → bit-identical render). For a
 // comparison: data is ds.complete (group stats computed on demand by its own
 // analyze pass, G4a-2); origColCount derives from header minus its calcols.
-function statsCatCtx() {
-  var ds = dsById(statsCatTargetDsId) || dsById('model');
+function statsCatCtx(root) {
+  var ds = dsById(statsCatInstTarget(root)) || dsById('model');
   var isModel = ds.id === 'model';
   var S = statsCatStateFor(ds.id);
   var data, header, colTypes, origColCount;
@@ -2433,7 +2483,7 @@ function statsCatCtx() {
     header = (data && data.header) || []; colTypes = (data && data.colTypes) || [];
     origColCount = (data && data.origColCount) || (header.length - ((ds.calcolMeta || []).length));
   }
-  return { ds: ds, isModel: isModel, S: S, data: data, header: header, colTypes: colTypes, origColCount: origColCount };
+  return { ds: ds, isModel: isModel, S: S, data: data, header: header, colTypes: colTypes, origColCount: origColCount, els: statcatEls(root), root: root || null };
 }
 
 // G4a: the group stats StatsCat needs are produced by an analyze pass. When the
@@ -2454,26 +2504,34 @@ function statsCatTargetableDatasets() {
 }
 // The "Dataset" picker at the top of the StatsCat sidebar — shown only when 2+
 // datasets are analyzed (with one, StatsCat is implicitly the model, as before).
-function statsCatRenderDatasetPicker() {
-  var wrap = document.getElementById('statsCatDatasetWrap');
+function statsCatRenderDatasetPicker(root) {
+  var els = statcatEls(root);
+  var wrap = els.datasetWrap;
   if (!wrap) return;
   var ts = statsCatTargetableDatasets();
   if (ts.length < 2) { wrap.innerHTML = ''; return; }
-  var cur = (dsById(statsCatTargetDsId) || dsById('model')).id;
+  var cur = (dsById(statsCatInstTarget(root)) || dsById('model')).id;
   wrap.innerHTML = '<div class="statscat-sidebar-title">Dataset</div>' +
-    '<select class="statscat-select" id="statsCatDataset">' +
+    '<select class="statscat-select" data-statcat-ds="1">' +
     ts.map(function(d) { return '<option value="' + d.id + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
     '</select>';
-  var sel = document.getElementById('statsCatDataset');
-  if (sel) sel.onchange = function() { setStatsCatTarget(sel.value); };
+  var sel = wrap.querySelector('[data-statcat-ds]');
+  if (sel) sel.onchange = function() { setStatsCatTarget(sel.value, root); };
 }
-// Switch the StatsCat target dataset and re-render the panel for it.
-function setStatsCatTarget(id) {
-  if (id === statsCatTargetDsId) return;
-  statsCatTargetDsId = id;
-  $statsCatVarSearch.value = '';
-  $statsCatGroupSearch.value = '';
-  renderStatsCat();
+// Switch the StatsCat target dataset (per-panel) and re-render that panel.
+function setStatsCatTarget(id, root) {
+  if (id === statsCatInstTarget(root)) return;
+  if (statcatIsInst(root)) {
+    var iid = root.getAttribute('data-statcat-inst');
+    if (!statsCatInstances[iid]) statsCatInstances[iid] = statsCatNewInstState();
+    statsCatInstances[iid].targetDsId = id;
+  } else {
+    statsCatTargetDsId = id;
+  }
+  var els = statcatEls(root);
+  if (els.varSearch) els.varSearch.value = '';
+  if (els.groupSearch) els.groupSearch.value = '';
+  renderStatsCat(undefined, root);
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
 // G4a-3: serialize a comparison dataset's StatsCat selection BY NAME (loss-safe,
@@ -2515,35 +2573,104 @@ function applyStatsCatRestore(ds, hdr) {
   sc.showSelectedOnly = !!pend.showSelectedOnly;
   ds.statsCat = sc;
   ds._pendingStatsCat = null;
-  if (statsCatTargetDsId === ds.id && typeof renderStatsCat === 'function') renderStatsCat();
+  // Repaint any panel (singleton or clone) currently targeting this dataset.
+  statsCatForEachPanelTargeting(ds.id, function(root) { renderStatsCat(undefined, root); });
 }
 
-// Keep the picker current as datasets analyze/clear; fall back to the model if
-// the target's analysis went away.
+// Run fn(root) for every StatsCat panel (singleton + clones) targeting dsId.
+function statsCatForEachPanelTargeting(dsId, fn) {
+  if (statsCatTargetDsId === dsId) fn(undefined);
+  Object.keys(statsCatInstances).forEach(function(iid) {
+    if (statsCatInstances[iid].targetDsId === dsId) {
+      var root = document.querySelector('[data-statcat-inst="' + iid + '"]');
+      if (root) fn(root);
+    }
+  });
+}
+
+// Keep every panel's picker current as datasets analyze/clear; bounce a panel to
+// the model only if its target is GONE from the registry (not merely unanalyzed).
 function statsCatRefreshDatasetPicker() {
-  // Bounce to the model only if the target dataset is GONE from the registry
-  // (removed/cleared) — NOT merely unanalyzed, so a restored dataset awaiting its
-  // re-analysis keeps the target until its group stats land.
   if (statsCatTargetDsId !== 'model' && !dsById(statsCatTargetDsId)) {
     statsCatTargetDsId = 'model';
-    renderStatsCat();
-    return;
+    renderStatsCat(undefined, undefined);
+  } else {
+    statsCatRenderDatasetPicker(undefined);
   }
-  statsCatRenderDatasetPicker();
+  Object.keys(statsCatInstances).forEach(function(iid) {
+    var root = document.querySelector('[data-statcat-inst="' + iid + '"]');
+    if (!root) return;
+    if (statsCatInstances[iid].targetDsId !== 'model' && !dsById(statsCatInstances[iid].targetDsId)) {
+      statsCatInstances[iid].targetDsId = 'model';
+      renderStatsCat(undefined, root);
+    } else {
+      statsCatRenderDatasetPicker(root);
+    }
+  });
 }
 
-function renderStatsCat(data) {
+// A10 G4b: build a cloned StatsCat panel. Clones #panelStatsCat, strips ids
+// (DOM resolves by [data-statcat] within root), tags data-statcat-inst, wires the
+// clone's group-by dropdown, and renders for the clone's target. Cached so rails'
+// double renderPanel returns the same node.
+function statsCatBuildInstancePanel(instId) {
+  var tmpl = document.getElementById('panelStatsCat');
+  if (!tmpl) return null;
+  if (statsCatInstanceEls[instId] && document.contains(statsCatInstanceEls[instId])) return statsCatInstanceEls[instId];
+  if (!statsCatInstances[instId]) statsCatInstances[instId] = statsCatNewInstState();
+  var el = tmpl.cloneNode(true);
+  el.removeAttribute('id');
+  el.querySelectorAll('[id]').forEach(function(n) { n.removeAttribute('id'); });
+  el.setAttribute('data-statcat-inst', instId);
+  el.setAttribute('data-tab', instId);
+  el.classList.add('active');
+  var gb = el.querySelector('[data-statcat="statsCatGroupBy"]');
+  if (gb) gb.addEventListener('change', function() { statsCatGroupByChanged(el); });
+  renderStatsCat(lastStatsCatData, el);
+  statsCatInstanceEls[instId] = el;
+  return el;
+}
+function statsCatDisposeInstance(instId) { delete statsCatInstances[instId]; delete statsCatInstanceEls[instId]; }
+// Re-render every clone (the shared per-dataset analysis changed).
+function statsCatRenderAllInstances() {
+  Object.keys(statsCatInstances).forEach(function(id) {
+    var root = document.querySelector('[data-statcat-inst="' + id + '"]');
+    if (root) renderStatsCat(undefined, root);
+  });
+}
+function statsCatSerializeInstances() {
+  return Object.keys(statsCatInstances).map(function(id) { return { id: id, targetDsId: statsCatInstances[id].targetDsId }; });
+}
+function statsCatRestoreInstances(list) {
+  if (!Array.isArray(list)) return;
+  list.forEach(function(rec) {
+    if (!rec || !rec.id) return;
+    statsCatInstances[rec.id] = { targetDsId: rec.targetDsId || 'model' };
+    var n = parseInt(String(rec.id).replace(/^statscat#/, ''), 10);
+    if (isFinite(n) && n > statsCatInstSeq) statsCatInstSeq = n;
+  });
+}
+function statsCatResetInstances() {
+  Object.keys(statsCatInstances).forEach(function(id) {
+    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) { try { wsRails.closeTab(id); } catch (e) {} }
+    statsCatDisposeInstance(id);
+  });
+  statsCatInstances = {}; statsCatInstanceEls = {};
+}
+
+function renderStatsCat(data, root) {
   // The data arg is always the MODEL's analysis (displayResults/applyProject).
   // Cache it as the model's regardless of the current target, so switching back
   // shows fresh model results; then render whichever dataset is targeted.
   if (data) lastStatsCatData = data;
-  const C = statsCatCtx();
-  statsCatRenderDatasetPicker();
+  const C = statsCatCtx(root);
+  const els = C.els;
+  statsCatRenderDatasetPicker(root);
   data = C.data;
   if (!data) {
-    $statsCatVarList.innerHTML = '';
-    $statsCatGroupList.innerHTML = '';
-    $statsCatContent.innerHTML = '<div class="statscat-empty">Analyze ' + esc(dsLabel(C.ds.id)) + ' to see grouped statistics.</div>';
+    els.varList.innerHTML = '';
+    els.groupList.innerHTML = '';
+    els.content.innerHTML = '<div class="statscat-empty">Analyze ' + esc(dsLabel(C.ds.id)) + ' to see grouped statistics.</div>';
     return;
   }
   const S = C.S;
@@ -2562,13 +2689,13 @@ function renderStatsCat(data) {
     const isCalcol = i >= origColCount;
     opts += '<option value="' + i + '"' + sel + '>' + esc(header[i]) + (isCalcol ? ' (calc)' : '') + '</option>';
   }
-  $statsCatGroupBy.innerHTML = opts;
+  els.groupBy.innerHTML = opts;
 
   // If no groupBy selected or no groupStats, show empty states
   if (S.groupBy === null || !groupStats) {
-    $statsCatVarList.innerHTML = '';
-    $statsCatGroupList.innerHTML = '';
-    $statsCatContent.innerHTML = '<div class="statscat-empty">Select a categorical column to see statistics broken down by group.</div>';
+    els.varList.innerHTML = '';
+    els.groupList.innerHTML = '';
+    els.content.innerHTML = '<div class="statscat-empty">Select a categorical column to see statistics broken down by group.</div>';
     return;
   }
 
@@ -2581,9 +2708,9 @@ function renderStatsCat(data) {
   const allVarCols = [...numCols, ...catVarCols].sort((a, b) => a - b);
 
   if (allVarCols.length === 0) {
-    $statsCatVarList.innerHTML = '';
-    $statsCatGroupList.innerHTML = '';
-    $statsCatContent.innerHTML = '<div class="statscat-empty">No variables available for analysis.</div>';
+    els.varList.innerHTML = '';
+    els.groupList.innerHTML = '';
+    els.content.innerHTML = '<div class="statscat-empty">No variables available for analysis.</div>';
     return;
   }
 
@@ -2599,7 +2726,7 @@ function renderStatsCat(data) {
   }
 
   // Populate variable list
-  renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
+  renderStatsCatVarList(allVarCols, header, origColCount, colTypes, root);
 
   // Determine group values from selected variable (use whichever data source exists)
   const gs = groupStats[S.displayVar];
@@ -2629,18 +2756,19 @@ function renderStatsCat(data) {
   }
 
   // Populate group list
-  renderStatsCatGroupList(allGroups);
+  renderStatsCatGroupList(allGroups, root);
 
   // Wire sidebar events
-  wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+  wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes, root);
 
   // Render right content
-  renderStatsCatContent();
+  renderStatsCatContent(root);
 }
 
-function renderStatsCatVarList(allVarCols, header, origColCount, colTypes) {
-  const S = statsCatCtx().S;
-  const search = $statsCatVarSearch.value.toLowerCase();
+function renderStatsCatVarList(allVarCols, header, origColCount, colTypes, root) {
+  const C = statsCatCtx(root);
+  const S = C.S, els = C.els;
+  const search = els.varSearch.value.toLowerCase();
   let html = '';
   for (const colIdx of allVarCols) {
     if (S.showSelectedOnly && !S.selectedVars.has(colIdx)) continue;
@@ -2658,14 +2786,14 @@ function renderStatsCatVarList(allVarCols, header, origColCount, colTypes) {
     html += '<span class="var-type-tag ' + (isCat ? 'cat' : 'num') + '">' + (isCat ? 'CAT' : 'NUM') + '</span>';
     html += '</div>';
   }
-  $statsCatVarList.innerHTML = html;
+  els.varList.innerHTML = html;
   // Update filter toggle state
-  $statsCatVarFilter.textContent = S.showSelectedOnly ? 'Selected' : 'All';
-  $statsCatVarFilter.classList.toggle('active', S.showSelectedOnly);
+  els.varFilter.textContent = S.showSelectedOnly ? 'Selected' : 'All';
+  els.varFilter.classList.toggle('active', S.showSelectedOnly);
 }
 
-function getEffectiveStatsCatSort() {
-  const C = statsCatCtx();
+function getEffectiveStatsCatSort(root) {
+  const C = statsCatCtx(root);
   if (C.S.sortMode !== null) return C.S.sortMode;
   // Inherit from Categories tab (the target dataset's group-by column)
   const gbColName = C.S.groupBy !== null && C.header[C.S.groupBy] ? C.header[C.S.groupBy] : null;
@@ -2674,8 +2802,8 @@ function getEffectiveStatsCatSort() {
   return 'count-desc';
 }
 
-function sortStatsCatGroups(groups) {
-  const mode = getEffectiveStatsCatSort();
+function sortStatsCatGroups(groups, root) {
+  const mode = getEffectiveStatsCatSort(root);
   if (mode === 'alpha') {
     return groups.slice().sort((a, b) => (a[0] || '').localeCompare(b[0] || ''));
   }
@@ -2683,7 +2811,7 @@ function sortStatsCatGroups(groups) {
     return groups.slice().sort((a, b) => a[1].count - b[1].count);
   }
   if (mode === 'custom') {
-    const C = statsCatCtx();
+    const C = statsCatCtx(root);
     const gbColName = C.S.groupBy !== null && C.header[C.S.groupBy] ? C.header[C.S.groupBy] : null;
     const order = gbColName ? ((catVarPeek(C.ds.id, gbColName) || {}).valueOrder || null) : null;
     if (order) {
@@ -2701,10 +2829,11 @@ function sortStatsCatGroups(groups) {
   return groups.slice().sort((a, b) => b[1].count - a[1].count);
 }
 
-function renderStatsCatGroupList(allGroups) {
-  const S = statsCatCtx().S;
-  const sorted = sortStatsCatGroups(allGroups);
-  const search = $statsCatGroupSearch.value.toLowerCase();
+function renderStatsCatGroupList(allGroups, root) {
+  const C = statsCatCtx(root);
+  const S = C.S, els = C.els;
+  const sorted = sortStatsCatGroups(allGroups, root);
+  const search = els.groupSearch.value.toLowerCase();
   let html = '';
   for (const [gv, s] of sorted) {
     const label = gv || '(empty)';
@@ -2715,11 +2844,11 @@ function renderStatsCatGroupList(allGroups) {
     html += '<span class="gcount">' + s.count.toLocaleString() + '</span>';
     html += '</div>';
   }
-  $statsCatGroupList.innerHTML = html;
+  els.groupList.innerHTML = html;
 }
 
-function getStatsCatGroupEntries() {
-  const C = statsCatCtx();
+function getStatsCatGroupEntries(root) {
+  const C = statsCatCtx(root);
   const data = C.data;
   if (!data || !data.groupStats) return [];
   const gs = data.groupStats[C.S.displayVar];
@@ -2729,31 +2858,36 @@ function getStatsCatGroupEntries() {
   return [];
 }
 
-function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
-  const C = statsCatCtx();
-  const S = C.S;
+function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes, root) {
+  const C = statsCatCtx(root);
+  const S = C.S, els = C.els;
+  const rewire = () => wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes, root);
+  const reVarList = () => renderStatsCatVarList(allVarCols, header, origColCount, colTypes, root);
+  const reGroupList = (g) => renderStatsCatGroupList(g || getStatsCatGroupEntries(root), root);
+  const reContent = () => renderStatsCatContent(root);
+  const groupEntries = () => getStatsCatGroupEntries(root);
   // G4a: re-analysis signal routes to the target — the model marks the global
   // analysis stale; a comparison dataset marks ITS OWN analysis stale (its
   // Analyze button recomputes the group stats on demand).
   const markTargetStale = () => statsCatMarkTargetStale(C);
   // Variable row click — select for display (ignore if click was on checkbox)
-  $statsCatVarList.querySelectorAll('.statscat-var-item').forEach(el => {
+  els.varList.querySelectorAll('.statscat-var-item').forEach(el => {
     el.addEventListener('click', (e) => {
       if (e.target.tagName === 'INPUT') return;
       const colIdx = parseInt(el.dataset.col);
       if (colIdx === S.displayVar) return;
       S.displayVar = colIdx;
 
-      renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
-      renderStatsCatGroupList(getStatsCatGroupEntries());
-      wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
-      renderStatsCatContent();
+      reVarList();
+      reGroupList();
+      rewire();
+      reContent();
       autoSaveProject();
     });
   });
 
   // Variable checkboxes — toggle inclusion for analysis
-  $statsCatVarList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+  els.varList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
     cb.addEventListener('change', (e) => {
       e.stopPropagation();
       const colIdx = parseInt(cb.dataset.col);
@@ -2767,77 +2901,77 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
         S.selectedVars.delete(colIdx);
         // Unchecking never needs re-analysis — data already computed
       }
-      renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
-      wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+      reVarList();
+      rewire();
       autoSaveProject();
     });
   });
 
   // Variable All/None — affect only search-filtered results
-  $statsCatVarAll.onclick = () => {
+  els.varAll.onclick = () => {
     let needsStale = false;
-    $statsCatVarList.querySelectorAll('.statscat-var-item').forEach(el => {
+    els.varList.querySelectorAll('.statscat-var-item').forEach(el => {
       const ci = parseInt(el.dataset.col);
       S.selectedVars.add(ci);
       if (C.data && C.data.groupStats && !(C.data.groupStats[ci] || (C.data.groupCategories && C.data.groupCategories[ci]))) {
         needsStale = true;
       }
     });
-    renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
-    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+    reVarList();
+    rewire();
     if (needsStale) markTargetStale();
     autoSaveProject();
   };
-  $statsCatVarNone.onclick = () => {
-    $statsCatVarList.querySelectorAll('.statscat-var-item').forEach(el => {
+  els.varNone.onclick = () => {
+    els.varList.querySelectorAll('.statscat-var-item').forEach(el => {
       S.selectedVars.delete(parseInt(el.dataset.col));
     });
-    renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
-    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+    reVarList();
+    rewire();
     // Unchecking never needs re-analysis
     autoSaveProject();
   };
 
   // Variable filter toggle (All / Selected)
-  $statsCatVarFilter.onclick = () => {
+  els.varFilter.onclick = () => {
     S.showSelectedOnly = !S.showSelectedOnly;
-    renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
-    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+    reVarList();
+    rewire();
     autoSaveProject();
   };
 
   // Group checkboxes
-  $statsCatGroupList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+  els.groupList.querySelectorAll('input[type="checkbox"]').forEach(cb => {
     cb.addEventListener('change', () => {
       const gv = cb.dataset.gv;
       if (cb.checked) { S.checkedGroups.add(gv); } else { S.checkedGroups.delete(gv); }
-      renderStatsCatContent();
+      reContent();
       autoSaveProject();
     });
   });
 
   // All/None buttons
-  $statsCatGroupAll.onclick = () => {
-    const entries = getStatsCatGroupEntries();
+  els.groupAll.onclick = () => {
+    const entries = groupEntries();
     S.checkedGroups = new Set(entries.map(e => e[0]));
-    renderStatsCatGroupList(entries);
-    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
-    renderStatsCatContent();
+    reGroupList(entries);
+    rewire();
+    reContent();
     autoSaveProject();
   };
-  $statsCatGroupNone.onclick = () => {
+  els.groupNone.onclick = () => {
     S.checkedGroups = new Set();
-    renderStatsCatGroupList(getStatsCatGroupEntries());
-    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
-    renderStatsCatContent();
+    reGroupList();
+    rewire();
+    reContent();
     autoSaveProject();
   };
 
   // Sort toggle — cycle: count-desc → count-asc → alpha → custom (if exists) → count-desc
   var sortLabels = { 'count-desc': 'Count\u2193', 'count-asc': 'Count\u2191', 'alpha': 'A-Z', 'custom': 'Custom' };
-  $statsCatGroupSort.textContent = sortLabels[getEffectiveStatsCatSort()] || 'Count\u2193';
-  $statsCatGroupSort.onclick = () => {
-    var eff = getEffectiveStatsCatSort();
+  els.groupSort.textContent = sortLabels[getEffectiveStatsCatSort(root)] || 'Count\u2193';
+  els.groupSort.onclick = () => {
+    var eff = getEffectiveStatsCatSort(root);
     var gbColName = S.groupBy !== null && C.header[S.groupBy] ? C.header[S.groupBy] : null;
     var gbOrder = gbColName ? (catVarPeek(C.ds.id, gbColName) || {}).valueOrder : null;
     var hasCustom = !!(gbOrder && gbOrder.length > 0);
@@ -2845,43 +2979,37 @@ function wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes) {
     if (hasCustom) cycle.push('custom');
     var idx = cycle.indexOf(eff);
     S.sortMode = cycle[(idx + 1) % cycle.length];
-    $statsCatGroupSort.textContent = sortLabels[getEffectiveStatsCatSort()];
-    renderStatsCatGroupList(getStatsCatGroupEntries());
-    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
-    renderStatsCatContent();
+    els.groupSort.textContent = sortLabels[getEffectiveStatsCatSort(root)];
+    reGroupList();
+    rewire();
+    reContent();
     autoSaveProject();
   };
 
   // Variable search
-  $statsCatVarSearch.oninput = () => {
-    renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
-    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
-  };
-  wireSearchShortcuts($statsCatVarSearch, $statsCatVarAll, $statsCatVarNone);
+  els.varSearch.oninput = () => { reVarList(); rewire(); };
+  wireSearchShortcuts(els.varSearch, els.varAll, els.varNone);
 
   // Group search
-  $statsCatGroupSearch.oninput = () => {
-    renderStatsCatGroupList(getStatsCatGroupEntries());
-    wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
-  };
-  wireSearchShortcuts($statsCatGroupSearch, $statsCatGroupAll, $statsCatGroupNone);
+  els.groupSearch.oninput = () => { reGroupList(); rewire(); };
+  wireSearchShortcuts(els.groupSearch, els.groupAll, els.groupNone);
 
 }
 
-function renderStatsCatContent() {
-  const C = statsCatCtx();
-  const S = C.S;
+function renderStatsCatContent(root) {
+  const C = statsCatCtx(root);
+  const S = C.S, els = C.els;
   const data = C.data;
   if (!data) {
-    $statsCatContent.innerHTML = '<div class="statscat-empty">No grouped statistics available.</div>';
+    els.content.innerHTML = '<div class="statscat-empty">No grouped statistics available.</div>';
     return;
   }
   if (S.displayVar === null) {
-    $statsCatContent.innerHTML = '<div class="statscat-empty">Select a variable from the sidebar.</div>';
+    els.content.innerHTML = '<div class="statscat-empty">Select a variable from the sidebar.</div>';
     return;
   }
   if (!S.checkedGroups || S.checkedGroups.size === 0) {
-    $statsCatContent.innerHTML = '<div class="statscat-empty">No groups selected. Check groups in the sidebar to view statistics.</div>';
+    els.content.innerHTML = '<div class="statscat-empty">No groups selected. Check groups in the sidebar to view statistics.</div>';
     return;
   }
 
@@ -2893,9 +3021,9 @@ function renderStatsCatContent() {
   const isCatVar = colTypes[S.displayVar] === 'categorical';
 
   if (isCatVar) {
-    renderStatsCatCrossTab(data, varName, isCalcol);
+    renderStatsCatCrossTab(data, varName, isCalcol, root);
   } else {
-    renderStatsCatNumeric(data, varName, isCalcol);
+    renderStatsCatNumeric(data, varName, isCalcol, root);
   }
 }
 
@@ -2907,17 +3035,18 @@ function statsCatOverflowNote(data) {
     : '';
 }
 
-function renderStatsCatNumeric(data, varName, isCalcol) {
-  const S = statsCatCtx().S;
+function renderStatsCatNumeric(data, varName, isCalcol, root) {
+  const C = statsCatCtx(root);
+  const S = C.S, els = C.els;
   const gs = data.groupStats[S.displayVar];
   if (!gs) {
-    $statsCatContent.innerHTML = '<div class="statscat-empty">This variable was not included in the analysis. Check its checkbox and click Analyze.</div>';
+    els.content.innerHTML = '<div class="statscat-empty">This variable was not included in the analysis. Check its checkbox and click Analyze.</div>';
     return;
   }
 
   // Filter entries to checked groups, apply current sort
   const entries = sortStatsCatGroups(
-    Object.entries(gs).filter(([gv]) => S.checkedGroups.has(gv))
+    Object.entries(gs).filter(([gv]) => S.checkedGroups.has(gv)), root
   );
 
   // Header with copy button
@@ -2966,24 +3095,25 @@ function renderStatsCatNumeric(data, varName, isCalcol) {
   html += '</div>';
 
   // CDF plot
-  html += renderOverlaidCDF(entries, varName);
+  html += renderOverlaidCDF(entries, varName, root);
 
-  $statsCatContent.innerHTML = html;
-  wireStatsCatCopyBtn();
-  wireStatsCatCdfToolbar();
+  els.content.innerHTML = html;
+  wireStatsCatCopyBtn(root);
+  wireStatsCatCdfToolbar(root);
 }
 
-function renderStatsCatCrossTab(data, varName, isCalcol) {
-  const S = statsCatCtx().S;
+function renderStatsCatCrossTab(data, varName, isCalcol, root) {
+  const C = statsCatCtx(root);
+  const S = C.S, els = C.els;
   const gc = data.groupCategories && data.groupCategories[S.displayVar];
   if (!gc) {
-    $statsCatContent.innerHTML = '<div class="statscat-empty">This variable was not included in the analysis. Check its checkbox and click Analyze.</div>';
+    els.content.innerHTML = '<div class="statscat-empty">This variable was not included in the analysis. Check its checkbox and click Analyze.</div>';
     return;
   }
 
   // Get checked groups
   const groupKeys = sortStatsCatGroups(
-    Object.entries(gc).filter(([gv]) => S.checkedGroups.has(gv)).map(([gv, counts]) => [gv, { count: Object.values(counts).reduce((s, c) => s + c, 0) }])
+    Object.entries(gc).filter(([gv]) => S.checkedGroups.has(gv)).map(([gv, counts]) => [gv, { count: Object.values(counts).reduce((s, c) => s + c, 0) }]), root
   ).map(([gv]) => gv);
 
   // Collect all unique values across checked groups
@@ -3066,27 +3196,28 @@ function renderStatsCatCrossTab(data, varName, isCalcol) {
 
   html += '</tbody></table></div>';
 
-  $statsCatContent.innerHTML = html;
-  wireStatsCatCopyBtn();
-  wireStatsCatCrossMode();
+  els.content.innerHTML = html;
+  wireStatsCatCopyBtn(root);
+  wireStatsCatCrossMode(root);
 }
 
-function wireStatsCatCrossMode() {
-  $statsCatContent.querySelectorAll('.ct-mode').forEach(btn => {
+function wireStatsCatCrossMode(root) {
+  var content = statcatEls(root).content;
+  content.querySelectorAll('.ct-mode').forEach(btn => {
     btn.addEventListener('click', () => {
       statsCatCrossMode = btn.dataset.mode;
-      renderStatsCatContent();
+      renderStatsCatContent(root);
       autoSaveProject();
     });
   });
 }
 
-function renderOverlaidCDF(entries, varName) {
+function renderOverlaidCDF(entries, varName, root) {
   const plotEntries = entries.filter(([, s]) => s.centroids && s.centroids.length > 0);
   if (plotEntries.length === 0) return '';
 
   const isLog = statsCatCdfScale === 'log';
-  const W = chartHostWidth(document.getElementById('statsCatContent'), 700, 560, 40), plotBaseH = 380;
+  const W = chartHostWidth(statcatEls(root).content || document.getElementById('statsCatContent'), 700, 560, 40), plotBaseH = 380;
   const pad = { top: 20, right: 30, bottom: 50, left: 60 };
   const plotW = W - pad.left - pad.right;
   const plotH = plotBaseH - pad.top - pad.bottom;
@@ -3152,7 +3283,7 @@ function renderOverlaidCDF(entries, varName) {
 
   let curvesSvg = '';
   let meansSvg = '';
-  const _scC = statsCatCtx();
+  const _scC = statsCatCtx(root);
   const gbColName = _scC.S.groupBy !== null ? _scC.header[_scC.S.groupBy] : '';
   for (let gi = 0; gi < plotEntries.length; gi++) {
     const [gv, s] = plotEntries[gi];
@@ -3205,47 +3336,49 @@ function renderOverlaidCDF(entries, varName) {
   return '<div class="statscat-cdf-plot">' + svg + '</div>';
 }
 
-function wireStatsCatCdfToolbar() {
+function wireStatsCatCdfToolbar(root) {
+  const content = statcatEls(root).content;
+  const q = (sel) => content.querySelector(sel);
   // Scale buttons
-  $statsCatContent.querySelectorAll('.sc-scale').forEach(btn => {
+  content.querySelectorAll('.sc-scale').forEach(btn => {
     btn.addEventListener('click', () => {
       statsCatCdfScale = btn.dataset.scale;
-      renderStatsCatContent();
+      renderStatsCatContent(root);
       autoSaveProject();
     });
   });
   // Manual checkbox
-  const manualCb = document.getElementById('scManualCb');
+  const manualCb = q('#scManualCb');
   if (manualCb) {
     manualCb.addEventListener('change', () => {
       statsCatCdfManual = manualCb.checked;
       if (!statsCatCdfManual) { statsCatCdfMin = null; statsCatCdfMax = null; }
-      renderStatsCatContent();
+      renderStatsCatContent(root);
       autoSaveProject();
     });
   }
   // Manual min/max inputs
-  const minInput = document.getElementById('scManualMin');
-  const maxInput = document.getElementById('scManualMax');
+  const minInput = q('#scManualMin');
+  const maxInput = q('#scManualMax');
   if (minInput) {
     minInput.addEventListener('change', () => {
       statsCatCdfMin = minInput.value !== '' ? parseFloat(minInput.value) : null;
-      renderStatsCatContent();
+      renderStatsCatContent(root);
       autoSaveProject();
     });
   }
   if (maxInput) {
     maxInput.addEventListener('change', () => {
       statsCatCdfMax = maxInput.value !== '' ? parseFloat(maxInput.value) : null;
-      renderStatsCatContent();
+      renderStatsCatContent(root);
       autoSaveProject();
     });
   }
   // Copy SVG
-  const copySvg = document.getElementById('scCopySvg');
+  const copySvg = q('#scCopySvg');
   if (copySvg) {
     copySvg.addEventListener('click', () => {
-      const svgEl = document.getElementById('statsCatCdfSvg');
+      const svgEl = q('#statsCatCdfSvg');
       if (!svgEl) return;
       navigator.clipboard.writeText(svgEl.outerHTML).then(() => {
         copySvg.textContent = 'Copied!';
@@ -3254,10 +3387,10 @@ function wireStatsCatCdfToolbar() {
     });
   }
   // Download PNG — light theme for documents
-  const dlPng = document.getElementById('scDownloadPng');
+  const dlPng = q('#scDownloadPng');
   if (dlPng) {
     dlPng.addEventListener('click', () => {
-      const svgEl = document.getElementById('statsCatCdfSvg');
+      const svgEl = q('#statsCatCdfSvg');
       if (!svgEl) return;
       let svgData = new XMLSerializer().serializeToString(svgEl);
       // Retheme for light background: white bg, dark text/lines
@@ -3288,11 +3421,12 @@ function wireStatsCatCdfToolbar() {
   }
 }
 
-function wireStatsCatCopyBtn() {
-  const btn = document.getElementById('statsCatCopyBtn');
+function wireStatsCatCopyBtn(root) {
+  const content = statcatEls(root).content;
+  const btn = content.querySelector('#statsCatCopyBtn');
   if (!btn) return;
   btn.addEventListener('click', () => {
-    const table = $statsCatContent.querySelector('table.stats');
+    const table = content.querySelector('table.stats');
     if (!table) return;
     const rows = table.querySelectorAll('tr');
     const lines = [];
@@ -3310,9 +3444,9 @@ function wireStatsCatCopyBtn() {
 }
 
 // Pre-populate variable list from known column metadata (no analysis needed)
-function prePopulateStatsCatVars() {
-  const C = statsCatCtx();
-  const S = C.S;
+function prePopulateStatsCatVars(root) {
+  const C = statsCatCtx(root);
+  const S = C.S, els = C.els;
   const header = C.header;
   const colTypes = C.colTypes;
   const origColCount = C.origColCount;
@@ -3337,40 +3471,42 @@ function prePopulateStatsCatVars() {
   }
 
   // Render variable list
-  renderStatsCatVarList(allVarCols, header, origColCount, colTypes);
+  renderStatsCatVarList(allVarCols, header, origColCount, colTypes, root);
 
   // Clear group list (no data yet)
-  $statsCatGroupList.innerHTML = '';
+  els.groupList.innerHTML = '';
 
   // Show prompt in content
-  $statsCatContent.innerHTML = '<div class="statscat-empty">Configure variables and click Analyze to compute grouped statistics.</div>';
+  els.content.innerHTML = '<div class="statscat-empty">Configure variables and click Analyze to compute grouped statistics.</div>';
 
   // Wire sidebar events (variable clicks, checkboxes, search, analyze button)
-  wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes);
+  wireStatsCatSidebarEvents(allVarCols, header, origColCount, colTypes, root);
 }
 
-// StatsCat dropdown handler
-$statsCatGroupBy.addEventListener('change', () => {
-  const C = statsCatCtx();
-  const S = C.S;
-  const val = $statsCatGroupBy.value;
+// StatsCat group-by dropdown — singleton (#statsCatGroupBy) directly; clones via
+// delegation in statsCatBuildInstancePanel. statsCatGroupByChanged does the work.
+function statsCatGroupByChanged(root) {
+  const C = statsCatCtx(root);
+  const S = C.S, els = C.els;
+  const val = els.groupBy.value;
   S.groupBy = val ? parseInt(val) : null;
   S.displayVar = null;
   S.checkedGroups = null;
   S.sortMode = null; // re-inherit from Categories
   S.showSelectedOnly = false;
-  $statsCatVarSearch.value = '';
-  $statsCatGroupSearch.value = '';
+  els.varSearch.value = '';
+  els.groupSearch.value = '';
   if (S.groupBy !== null) {
-    prePopulateStatsCatVars();
+    prePopulateStatsCatVars(root);
   } else {
-    $statsCatVarList.innerHTML = '';
-    $statsCatGroupList.innerHTML = '';
-    $statsCatContent.innerHTML = '<div class="statscat-empty">Select a categorical column to see statistics broken down by group.</div>';
+    els.varList.innerHTML = '';
+    els.groupList.innerHTML = '';
+    els.content.innerHTML = '<div class="statscat-empty">Select a categorical column to see statistics broken down by group.</div>';
   }
   statsCatMarkTargetStale(C);
   autoSaveProject();
-});
+}
+$statsCatGroupBy.addEventListener('change', () => statsCatGroupByChanged());
 
 // Mobile collapsible StatsCat sections (one-time delegation)
 if (window.matchMedia('(max-width: 700px)').matches) {

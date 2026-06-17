@@ -225,6 +225,7 @@ function runAuxAnalysis(ds, root) {
       if (typeof gtApplyAllInstances === 'function') gtApplyAllInstances();  // G3b-4: resolve a restored GT clone that targets this dataset
       if (typeof statsCatRefreshDatasetPicker === 'function') statsCatRefreshDatasetPicker();  // G4a: now StatsCat-targetable
       if (typeof applyStatsCatRestore === 'function') applyStatsCatRestore(ds);  // G4a-3: reattach saved statscat selection by name
+      if (typeof statsCatRenderAllInstances === 'function') statsCatRenderAllInstances();  // G4b: repaint cloned StatsCat panels targeting this ds
       if (typeof exportRefreshDatasetPicker === 'function') exportRefreshDatasetPicker();  // G5a: now Export-targetable
       if (typeof applyExportDsRestore === 'function') applyExportDsRestore(ds);  // G5a-3: reattach saved export columns by name
       if (typeof statsCatTargetDsId !== 'undefined' && statsCatTargetDsId === ds.id && typeof renderStatsCat === 'function') renderStatsCat();

@@ -442,35 +442,35 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
       <div class="results-panel" id="panelStatsCat" data-tab="statscat">
         <div class="statscat-body">
           <div class="statscat-sidebar">
-            <div class="statscat-sidebar-section" data-sb="dataset" id="statsCatDatasetWrap"></div>
+            <div class="statscat-sidebar-section" data-sb="dataset" id="statsCatDatasetWrap" data-statcat="statsCatDatasetWrap"></div>
             <div class="statscat-sidebar-section" data-sb="groupby">
-              <div class="statscat-sidebar-title">Group By <span class="badge" id="statsCatBadge"></span></div>
-              <select class="statscat-select" id="statsCatGroupBy">
+              <div class="statscat-sidebar-title">Group By <span class="badge" id="statsCatBadge" data-statcat="statsCatBadge"></span></div>
+              <select class="statscat-select" id="statsCatGroupBy" data-statcat="statsCatGroupBy">
                 <option value="">— select grouping column —</option>
               </select>
             </div>
             <div class="statscat-sidebar-section--grow">
-              <div class="statscat-sidebar-title">Variables <button id="statsCatVarFilter" class="statscat-filter-toggle" title="Show only selected variables">All</button></div>
-              <input type="text" class="statscat-search" id="statsCatVarSearch" placeholder="Search variables…" autocomplete="off" spellcheck="false">
+              <div class="statscat-sidebar-title">Variables <button id="statsCatVarFilter" data-statcat="statsCatVarFilter" class="statscat-filter-toggle" title="Show only selected variables">All</button></div>
+              <input type="text" class="statscat-search" id="statsCatVarSearch" data-statcat="statsCatVarSearch" placeholder="Search variables…" autocomplete="off" spellcheck="false">
               <div class="statscat-group-actions">
-                <button id="statsCatVarAll">All</button>
-                <button id="statsCatVarNone">None</button>
+                <button id="statsCatVarAll" data-statcat="statsCatVarAll">All</button>
+                <button id="statsCatVarNone" data-statcat="statsCatVarNone">None</button>
               </div>
-              <div class="statscat-var-list" id="statsCatVarList"></div>
+              <div class="statscat-var-list" id="statsCatVarList" data-statcat="statsCatVarList"></div>
             </div>
             <div class="statscat-sidebar-section--grow">
               <div class="statscat-sidebar-title">Groups</div>
               <div class="statscat-group-actions">
-                <button id="statsCatGroupAll">All</button>
-                <button id="statsCatGroupNone">None</button>
+                <button id="statsCatGroupAll" data-statcat="statsCatGroupAll">All</button>
+                <button id="statsCatGroupNone" data-statcat="statsCatGroupNone">None</button>
                 <span style="margin-left:auto"></span>
-                <button id="statsCatGroupSort" title="Toggle sort: count / name">Sort: count</button>
+                <button id="statsCatGroupSort" data-statcat="statsCatGroupSort" title="Toggle sort: count / name">Sort: count</button>
               </div>
-              <input type="text" class="statscat-search" id="statsCatGroupSearch" placeholder="Search groups…" autocomplete="off" spellcheck="false">
-              <div class="statscat-group-list" id="statsCatGroupList"></div>
+              <input type="text" class="statscat-search" id="statsCatGroupSearch" data-statcat="statsCatGroupSearch" placeholder="Search groups…" autocomplete="off" spellcheck="false">
+              <div class="statscat-group-list" id="statsCatGroupList" data-statcat="statsCatGroupList"></div>
             </div>
           </div>
-          <div class="statscat-content" id="statsCatContent"></div>
+          <div class="statscat-content" id="statsCatContent" data-statcat="statsCatContent"></div>
         </div>
       </div>
       <div class="results-panel" id="panelExport" data-tab="export">

@@ -148,6 +148,11 @@ function wsRehomePanel(tab, wrapper) {
     gtDisposeInstance(tab.id);
     return;
   }
+  // A10 G4b: a closed StatsCat clone is discarded with its state.
+  if (typeof statsCatInstances !== 'undefined' && statsCatInstances[tab.id]) {
+    statsCatDisposeInstance(tab.id);
+    return;
+  }
   // A10 1g-c: instance dataset panels (d2+) are throwaway clones — their state
   // lives in the ds object and renderPanel rebuilds on reopen, so discard them
   // (re-home only the static singletons + the tree).
@@ -329,6 +334,16 @@ function wsSpawnGtInstance(seedConfig) {
   }
 }
 
+// A10 G4b: spawn a cloned StatsCat panel — an independent VIEW onto a dataset's
+// group stats (own target dataset). Duplicate carries the source panel's target.
+function wsSpawnStatsCatInstance(seedTargetDsId) {
+  if (!wsRails || typeof statsCatNextInstId !== 'function') { showPanel('statscat'); return; }
+  var instId = statsCatNextInstId();
+  if (typeof statsCatInstances !== 'undefined') statsCatInstances[instId] = { targetDsId: seedTargetDsId || 'model' };
+  wsRails.addTab({ id: instId, title: 'StatsCat', closeable: true }, wsMainTarget());
+  wsRails.activateTab(instId);                 // renderPanel → statsCatBuildInstancePanel
+}
+
 // Track the prefix in the tab title (loadAuxFile on load, onAuxConfigChange on edit)
 function wsSetDatasetTabTitle(ds) {
   if (!wsRails || !ds || ds.id === 'aux' || ds.id === 'model') return;
@@ -457,6 +472,7 @@ function wsNewTabMenuItems() {
   items.push({ label: 'New Swath panel', action: 'newSwath' });             // A10 Swath s-4b
   items.push({ label: 'New Statistics panel', action: 'newStatistics' });   // A10 Statistics st-4
   items.push({ label: 'New GT panel', action: 'newGt' });                   // A10 G3b
+  items.push({ label: 'New StatsCat panel', action: 'newStatsCat' });       // A10 G4b
   items.push('---');
   items.push({ label: 'Add point dataset…', action: 'addPoint' });
   items.push({ label: 'Add drillhole set…', action: 'addDrillhole' });
@@ -581,6 +597,7 @@ function wsMenuAction(a) {
     case 'newSwath': if (typeof wsSpawnSwathInstance === 'function') wsSpawnSwathInstance(); break;
     case 'newStatistics': if (typeof wsSpawnStatisticsInstance === 'function') wsSpawnStatisticsInstance(); break;
     case 'newGt': if (typeof wsSpawnGtInstance === 'function') wsSpawnGtInstance(); break;
+    case 'newStatsCat': if (typeof wsSpawnStatsCatInstance === 'function') wsSpawnStatsCatInstance(); break;
     case 'addPoint': wsAddPointDataset(); break;
     case 'addDrillhole': wsAddDrillholeDataset(); break;
     case 'help': toggleHelp(); break;
@@ -619,6 +636,10 @@ function buildRailsShell(host) {
       // A10 G3b: a cloned GT analysis panel (gt#N)
       if (typeof gtBuildInstancePanel === 'function' && tab.id.indexOf('gt#') === 0) {
         return gtBuildInstancePanel(tab.id);
+      }
+      // A10 G4b: a cloned StatsCat analysis panel (statscat#N)
+      if (typeof statsCatBuildInstancePanel === 'function' && tab.id.indexOf('statscat#') === 0) {
+        return statsCatBuildInstancePanel(tab.id);
       }
       // A10 1g-c: a dataset instance tab (d2+) → build its panel from the ds
       var ds = (typeof dsById === 'function') ? dsById(tab.id) : null;
@@ -701,11 +722,12 @@ function buildRailsShell(host) {
     var isSwath = ev.tab.id === 'swath' || ev.tab.id.indexOf('swath#') === 0;
     var isStats = ev.tab.id === 'statistics' || ev.tab.id.indexOf('statistics#') === 0;
     var isGt = ev.tab.id === 'gt' || ev.tab.id.indexOf('gt#') === 0;
+    var isStatsCat = ev.tab.id === 'statscat' || ev.tab.id.indexOf('statscat#') === 0;
     var items = [
       inFloat ? { label: 'Dock', action: 'dock' } : { label: 'Float', action: 'float' },
       { label: 'Move to new rail', action: 'rail' },
     ];
-    if (isCat || isSwath || isStats || isGt) items.push({ label: 'Duplicate', action: 'duplicate' });   // A10 4e-c-4 / Swath s-4b / Stats st-4 / GT G3b
+    if (isCat || isSwath || isStats || isGt || isStatsCat) items.push({ label: 'Duplicate', action: 'duplicate' });   // A10 clone arcs
     items.push('---', { label: 'Close', action: 'close' });
     if (ev.stack.tabs.length > 1) items.push({ label: 'Close others in stack', action: 'close-others' });
     Menu.show(items, { x: ev.x, y: ev.y }).then(function(a) {
@@ -723,6 +745,10 @@ function buildRailsShell(host) {
           var gtRoot = ev.tab.id === 'gt' ? document.getElementById('panelGt') : document.querySelector('[data-gt-inst="' + ev.tab.id + '"]');
           var gtCfg = (gtRoot && typeof gtSerializeConfig === 'function') ? gtSerializeConfig(gtRoot) : null;
           wsSpawnGtInstance(gtCfg);   // carry the source panel's target/grades/cutoffs/units (G3b-4)
+        } else if (isStatsCat) {
+          var scRoot = ev.tab.id === 'statscat' ? null : document.querySelector('[data-statcat-inst="' + ev.tab.id + '"]');
+          var scTarget = (typeof statsCatInstTarget === 'function') ? statsCatInstTarget(scRoot) : 'model';
+          wsSpawnStatsCatInstance(scTarget);   // carry the source panel's target dataset (G4b)
         } else {
           var src = ev.tab.id === 'categories' ? panelState.categories : (typeof catInstances !== 'undefined' ? catInstances[ev.tab.id] : null);
           wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false);
@@ -858,6 +884,7 @@ function wsSanitizeLayout(st) {
   if (typeof swathInstances !== 'undefined') Object.keys(swathInstances).forEach(function(id) { known[id] = true; });
   if (typeof statInstances !== 'undefined') Object.keys(statInstances).forEach(function(id) { known[id] = true; });
   if (typeof gtInstances !== 'undefined') Object.keys(gtInstances).forEach(function(id) { known[id] = true; });
+  if (typeof statsCatInstances !== 'undefined') Object.keys(statsCatInstances).forEach(function(id) { known[id] = true; });
   // Phase 6: comparison-dataset instance tabs (d2+) survive sanitize once their
   // registry entry exists (registered before the layout deserialize), so their
   // saved dock position is preserved across a reload.
