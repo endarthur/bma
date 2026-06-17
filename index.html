@@ -5889,7 +5889,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 14d2550 — click to check for updates">14d2550</div>
+<div class="build-badge" id="buildBadge" title="build 457248f — click to check for updates">457248f</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -22114,6 +22114,25 @@ function resetSwathState() {
   _swathChartParams = null;
 }
 
+// ─── A10 Swath clone arc (s-1): per-instance DOM root seam ──────────────────
+// So N Swath panels can coexist, every swath DOM lookup resolves through an
+// optional per-instance ROOT instead of the document. The SINGLETON (root
+// null/undefined) falls through to getElementById — bit-identical until clones
+// exist. A clone (s-4) carries data-sw-inst and its generated controls are
+// tagged data-sw="<id>" (the singleton keeps raw ids because project.js reads
+// them); the root branch below reads that marker. swQA scopes a querySelectorAll
+// to a swath sub-element (null-safe: [] when the element isn't built yet).
+function swPanelRoot() { return document.getElementById('panelSwath'); }
+function swIsInst(root) { return !!(root && root.getAttribute && root.getAttribute('data-sw-inst')); }
+function swQ(id, root) {
+  if (swIsInst(root)) return root.querySelector('[data-sw="' + id + '"]');
+  return document.getElementById(id);
+}
+function swQA(id, sel, root) {
+  var el = swQ(id, root);
+  return el ? el.querySelectorAll(sel) : [];
+}
+
 // A10 4c-iii-c: dataset chips let the user hide a comparison dataset (sidebar
 // rows + chart series) without un-checking each variable. Keyed by dsId; lives
 // on panelState.swath.dsHidden (4e-a), serialized in 4e-b.
@@ -22195,14 +22214,14 @@ function cleanupSwathCmpWorker(w) {
   if (i >= 0) swathCmpWorkers.splice(i, 1);
 }
 
-function showSwathColorPicker(colName, colIdx, anchorEl, presetColor) {
-  var $picker = document.getElementById('swathColorPicker');
+function showSwathColorPicker(colName, colIdx, anchorEl, presetColor, root) {
+  var $picker = swQ('swathColorPicker', root);
   if (!$picker) return;
   var currentColor = presetColor;
   if (!currentColor) {
     // Find palette index for this variable based on its position in the checked list
     var vi = 0;
-    var items = document.querySelectorAll('#swathVarList .swath-var-item');
+    var items = swQA('swathVarList', '.swath-var-item', root);
     items.forEach(function(item, idx) {
       if (parseInt(item.querySelector('input').value) === colIdx) vi = idx;
     });
@@ -22224,19 +22243,19 @@ function showSwathColorPicker(colName, colIdx, anchorEl, presetColor) {
 
   // Position near the anchor
   var rect = anchorEl.getBoundingClientRect();
-  var sidebar = document.getElementById('swathSidebar');
+  var sidebar = swQ('swathSidebar', root);
   var sidebarRect = sidebar.getBoundingClientRect();
   $picker.style.top = (rect.bottom - sidebarRect.top + 4) + 'px';
   $picker.style.left = Math.max(0, rect.left - sidebarRect.left - 60) + 'px';
   $picker.classList.add('open');
 }
 
-function hideSwathColorPicker() {
-  var $picker = document.getElementById('swathColorPicker');
+function hideSwathColorPicker(root) {
+  var $picker = swQ('swathColorPicker', root);
   if ($picker) $picker.classList.remove('open');
 }
 
-function applySwathColor(colName, color) {
+function applySwathColor(colName, color, root) {
   // colName is a primary variable name or a '<dsId>:NAME' comparison color key
   // (aux:NAME, d2:NAME…). Only a known dataset id prefix routes to that dataset.
   var ci = colName.indexOf(':');
@@ -22244,7 +22263,7 @@ function applySwathColor(colName, color) {
   if (ds) catVar(ds.id, colName.slice(ci + 1)).color = color;
   else catVar('model', colName).color = color;
   // Update the swatch in the sidebar (aux swatches carry data-color-key, primary carry data-col)
-  document.querySelectorAll('#swathVarList .swath-color-swatch').forEach(function(sw) {
+  swQA('swathVarList', '.swath-color-swatch', root).forEach(function(sw) {
     if (sw.dataset.colorKey != null) {
       if (sw.dataset.colorKey === colName) sw.style.background = color;
       return;
@@ -22253,7 +22272,7 @@ function applySwathColor(colName, color) {
     if (currentHeader[ci] === colName) sw.style.background = color;
   });
   // Re-render chart from cache
-  if (lastSwathData) renderSwathOutput();
+  if (lastSwathData) renderSwathOutput(undefined, root);
   autoSaveProject();
 }
 
@@ -22287,13 +22306,14 @@ function getAuxSwathUnit(auxColIdx, baseName, dsId) {
   return { unitIdx: idx, symbol: u.symbol };
 }
 
-function getSwathDisplay() {
+function getSwathDisplay(root) {
+  var b = swQ('swathShowBands', root), c = swQ('swathShowCounts', root), t = swQ('swathShowTable', root);
   return {
-    showBands: document.getElementById('swathShowBands') ? document.getElementById('swathShowBands').checked : true,
-    showCounts: document.getElementById('swathShowCounts') ? document.getElementById('swathShowCounts').checked : true,
-    showTable: document.getElementById('swathShowTable') ? document.getElementById('swathShowTable').checked : true,
-    yScale: (document.getElementById('swathYScale') || {}).value || 'linear',
-    layout: (document.getElementById('swathLayout') || {}).value || 'overlay'
+    showBands: b ? b.checked : true,
+    showCounts: c ? c.checked : true,
+    showTable: t ? t.checked : true,
+    yScale: (swQ('swathYScale', root) || {}).value || 'linear',
+    layout: (swQ('swathLayout', root) || {}).value || 'overlay'
   };
 }
 
@@ -22369,14 +22389,14 @@ function swathDirView(sd, key) {
 
 // Render the swath output area: a tab per computed direction (when more
 // than one), with the active direction's chart + table below.
-function renderSwathOutput(stat) {
-  var $content = document.getElementById('swathContent');
+function renderSwathOutput(stat, root) {
+  var $content = swQ('swathContent', root);
   if (!$content) return;
   if (!lastSwathData || !lastSwathData.directions) {
     $content.innerHTML = '<div class="swath-hint">Configure settings and click Generate to create swath plots.</div>';
     return;
   }
-  if (!stat) stat = (document.getElementById('swathStat') || {}).value || 'mean_std';
+  if (!stat) stat = (swQ('swathStat', root) || {}).value || 'mean_std';
   var sd = lastSwathData;
   var keys = sd.directions.map(function(d) { return d.key; });
   if (!sd.activeKey || keys.indexOf(sd.activeKey) < 0) sd.activeKey = keys[0];
@@ -22408,16 +22428,16 @@ function renderSwathOutput(stat) {
   $content.querySelectorAll('.swath-dir-tab').forEach(function(btn) {
     btn.addEventListener('click', function() {
       sd.activeKey = btn.dataset.dirKey;
-      renderSwathOutput();
+      renderSwathOutput(undefined, root);
     });
   });
 
-  renderSwathCharts(swathDirView(sd, sd.activeKey), stat, document.getElementById('swathDirPanel'));
+  renderSwathCharts(swathDirView(sd, sd.activeKey), stat, $content.querySelector('#swathDirPanel'), root);
 }
 
-function renderSwathConfig(data) {
-  const $sidebar = document.getElementById('swathSidebar');
-  const $content = document.getElementById('swathContent');
+function renderSwathConfig(data, root) {
+  const $sidebar = swQ('swathSidebar', root);
+  const $content = swQ('swathContent', root);
   if (!$sidebar) return;
   const { header, colTypes, geometry } = data;
   const hasXYZ = currentXYZ.x >= 0 && currentXYZ.y >= 0 && currentXYZ.z >= 0;
@@ -22542,31 +22562,31 @@ function renderSwathConfig(data) {
   $content.innerHTML = '<div class="swath-hint">Select variables and click Generate to create swath plots.</div>';
 
   // Direction mode toggle — show the matching direction rows
-  var $dirMode = document.getElementById('swathDirMode');
+  var $dirMode = swQ('swathDirMode', root);
   $dirMode.addEventListener('change', function() {
-    document.getElementById('swathOrthoDirs').style.display = $dirMode.value === 'ortho' ? '' : 'none';
-    document.getElementById('swathCustomDirs').style.display = $dirMode.value === 'custom' ? '' : 'none';
+    swQ('swathOrthoDirs', root).style.display = $dirMode.value === 'ortho' ? '' : 'none';
+    swQ('swathCustomDirs', root).style.display = $dirMode.value === 'custom' ? '' : 'none';
   });
 
   // Variable search filter (fuzzy)
-  var $swathVarSearch = document.getElementById('swathVarSearch');
+  var $swathVarSearch = swQ('swathVarSearch', root);
   $swathVarSearch.addEventListener('input', function() {
     var q = this.value.toLowerCase();
-    document.querySelectorAll('#swathVarList .swath-var-item').forEach(function(item) {
+    swQA('swathVarList', '.swath-var-item', root).forEach(function(item) {
       var name = item.querySelector('span').textContent.toLowerCase();
       item.style.display = fuzzyMatch(q, name) ? '' : 'none';
     });
   });
-  wireSearchShortcuts($swathVarSearch, document.getElementById('swathVarAll'), document.getElementById('swathVarNone'));
+  wireSearchShortcuts($swathVarSearch, swQ('swathVarAll', root), swQ('swathVarNone', root));
 
   // All/None buttons — only affect visible (non-filtered) items
-  document.getElementById('swathVarAll').addEventListener('click', function() {
-    document.querySelectorAll('#swathVarList .swath-var-item').forEach(function(item) {
+  swQ('swathVarAll', root).addEventListener('click', function() {
+    swQA('swathVarList', '.swath-var-item', root).forEach(function(item) {
       if (item.style.display !== 'none') item.querySelector('input[type="checkbox"]').checked = true;
     });
   });
-  document.getElementById('swathVarNone').addEventListener('click', function() {
-    document.querySelectorAll('#swathVarList .swath-var-item').forEach(function(item) {
+  swQ('swathVarNone', root).addEventListener('click', function() {
+    swQA('swathVarList', '.swath-var-item', root).forEach(function(item) {
       if (item.style.display !== 'none') item.querySelector('input[type="checkbox"]').checked = false;
     });
   });
@@ -22574,23 +22594,23 @@ function renderSwathConfig(data) {
   // Dataset chips (4c-iii-c) — toggle a comparison dataset's sidebar rows and
   // its chart series; re-renders from cache (no re-run needed). Marks stale only
   // if the toggle reveals a dataset not yet in the last result.
-  var $swathDsChips = document.getElementById('swathDatasetChips');
+  var $swathDsChips = swQ('swathDatasetChips', root);
   if ($swathDsChips) $swathDsChips.addEventListener('click', function(e) {
     var b = e.target.closest('[data-ds-chip]');
     if (!b) return;
     var id = b.dataset.dsChip;
     if (panelState.swath.dsHidden.has(id)) panelState.swath.dsHidden.delete(id);
     else panelState.swath.dsHidden.add(id);
-    renderSwathAuxVars();
-    if (lastSwathData) renderSwathOutput();
+    renderSwathAuxVars(root);
+    if (lastSwathData) renderSwathOutput(undefined, root);
   });
 
   // Generate button
-  document.getElementById('swathGenerate').addEventListener('click', runSwath);
+  swQ('swathGenerate', root).addEventListener('click', function() { runSwath(root); });
 
   // Shared support weight (D3): writing here also re-points the Statistics
   // tab's weight select — one role, two views
-  document.getElementById('swathWeight').addEventListener('change', function() {
+  swQ('swathWeight', root).addEventListener('change', function() {
     catSetRole('model', 'weight', this.value || null);
     var $ssel = document.getElementById('statsWeightSel');
     if ($ssel) $ssel.value = this.value || '';
@@ -22599,21 +22619,21 @@ function renderSwathConfig(data) {
   });
 
   // Stat change re-renders from cache
-  document.getElementById('swathStat').addEventListener('change', function() {
-    if (lastSwathData) renderSwathOutput();
+  swQ('swathStat', root).addEventListener('change', function() {
+    if (lastSwathData) renderSwathOutput(undefined, root);
   });
 
   // Display option changes re-render from cache
   ['swathShowBands','swathShowCounts','swathShowTable','swathYScale','swathLayout'].forEach(function(id) {
-    document.getElementById(id).addEventListener('change', function() {
-      if (lastSwathData) renderSwathOutput();
+    swQ(id, root).addEventListener('change', function() {
+      if (lastSwathData) renderSwathOutput(undefined, root);
       autoSaveProject();
     });
   });
 
   // Swath per-variable unit change — write-through to the catalog (one unit
   // per variable, D2), mirror every other unit select, re-render from cache
-  document.getElementById('swathVarList').addEventListener('change', function(e) {
+  swQ('swathVarList', root).addEventListener('change', function(e) {
     if (e.target.classList.contains('swath-var-unit')) {
       var uv = parseInt(e.target.value);
       if (e.target.dataset.auxCol != null) {
@@ -22623,17 +22643,17 @@ function renderSwathConfig(data) {
         if (un) catSetUnit('model', un, uv);
       }
       catRefreshUnitSelects();
-      if (lastSwathData) renderSwathOutput();
+      if (lastSwathData) renderSwathOutput(undefined, root);
       autoSaveProject();
     }
   });
 
   // Local filter autocomplete
   if (swathExprController) swathExprController.destroy();
-  swathExprController = createExprInput(document.getElementById('swathLocalFilter'), { mode: 'filter' });
+  swathExprController = createExprInput(swQ('swathLocalFilter', root), { mode: 'filter' });
 
   // Color swatch click handler
-  document.getElementById('swathVarList').addEventListener('click', function(e) {
+  swQ('swathVarList', root).addEventListener('click', function(e) {
     var swatch = e.target.closest('.swath-color-swatch');
     if (swatch) {
       e.preventDefault();
@@ -22642,22 +22662,22 @@ function renderSwathConfig(data) {
         // Comparison swatch — override key is '<dsId>:NAME' (stable across display-prefix changes)
         var swDsId = swatch.dataset.auxDs || 'aux';
         var curColor = getAuxSwathVarColor(swatch.dataset.auxName, swathNumCols.length + parseInt(swatch.dataset.auxIdx || 0), swDsId);
-        showSwathColorPicker(swatch.dataset.colorKey, null, swatch, curColor);
+        showSwathColorPicker(swatch.dataset.colorKey, null, swatch, curColor, root);
         return;
       }
       var colIdx = parseInt(swatch.dataset.col);
-      showSwathColorPicker(currentHeader[colIdx], colIdx, swatch);
+      showSwathColorPicker(currentHeader[colIdx], colIdx, swatch, undefined, root);
     }
   });
 
   // Color picker delegation
-  var $swathPicker = document.getElementById('swathColorPicker');
+  var $swathPicker = swQ('swathColorPicker', root);
   $swathPicker.addEventListener('click', function(e) {
     var swatch = e.target.closest('.cat-color-swatch');
     if (swatch) {
       var cn = $swathPicker.dataset.colName;
-      applySwathColor(cn, swatch.dataset.color);
-      hideSwathColorPicker();
+      applySwathColor(cn, swatch.dataset.color, root);
+      hideSwathColorPicker(root);
     }
   });
   $swathPicker.addEventListener('change', function(e) {
@@ -22666,8 +22686,8 @@ function renderSwathConfig(data) {
       if (/^#?[0-9a-fA-F]{3,8}$/.test(hex)) {
         if (hex[0] !== '#') hex = '#' + hex;
         var cn = $swathPicker.dataset.colName;
-        applySwathColor(cn, hex);
-        hideSwathColorPicker();
+        applySwathColor(cn, hex, root);
+        hideSwathColorPicker(root);
       }
     }
   });
@@ -22702,15 +22722,15 @@ function renderSwathConfig(data) {
     if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && !swathIsLiveTarget(e.target)) swathMarkStale();
   });
 
-  renderSwathAuxVars();
+  renderSwathAuxVars(root);
 }
 
 // A10 4c-iii-c: render the dataset show/hide chips. Progressive disclosure —
 // the section appears only once a second comparison dataset joins (3+ total),
 // so the common model+aux case stays uncluttered. The model is a static
 // (non-toggleable) baseline chip; each comparison dataset is a toggle.
-function renderSwathDatasetChips() {
-  var section = document.getElementById('swathDatasetsSection');
+function renderSwathDatasetChips(root) {
+  var section = swQ('swathDatasetsSection', root);
   if (!section) return;
   var allCmp = swathCmpDatasets();
   if (allCmp.length < 2) { section.style.display = 'none'; return; }
@@ -22721,7 +22741,7 @@ function renderSwathDatasetChips() {
       '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) +
       '">' + esc(dsLabel(ds.id)) + '</button>';
   });
-  document.getElementById('swathDatasetChips').innerHTML = chips;
+  swQ('swathDatasetChips', root).innerHTML = chips;
   section.style.display = '';
 }
 
@@ -22729,8 +22749,8 @@ function renderSwathDatasetChips() {
 // anytime (no-op when the sidebar isn't built). Checkbox/unit state is keyed
 // by variable name and preserved across rebuilds; a pending project restore
 // takes precedence and is only consumed once rows actually render.
-function renderSwathAuxVars() {
-  var wrap = document.getElementById('swathAuxVars');
+function renderSwathAuxVars(root) {
+  var wrap = swQ('swathAuxVars', root);
   if (!wrap) return;
 
   // Capture current DOM checked state before wiping, keyed '<dsId>:name' so
@@ -22746,7 +22766,7 @@ function renderSwathAuxVars() {
     if (cb.checked && cb.dataset.name) prevChecked[dsId + ':' + cb.dataset.name] = true;
   });
 
-  renderSwathDatasetChips();
+  renderSwathDatasetChips(root);
   var cmpDatasets = swathShownCmpDatasets();
   if (swathCmpDatasets().length === 0) { wrap.innerHTML = ''; return; }
   catEnsureSeeded();
@@ -22822,13 +22842,14 @@ function computeSwathUVW(dipDirDeg, dipDeg, rakeDeg) {
 
 // Read the checked directions (+ per-direction bin widths) from the sidebar.
 // Vector directions carry display azimuth/plunge derived from the vector.
-function getSwathDirections() {
-  var mode = (document.getElementById('swathDirMode') || {}).value || 'ortho';
+function getSwathDirections(root) {
+  var mode = (swQ('swathDirMode', root) || {}).value || 'ortho';
+  var $sb = swQ('swathSidebar', root);
   var dirs = [];
   function pushDir(key, axis, vec) {
-    var cb = document.querySelector('#swathSidebar .swath-dir-on[data-dir="' + key + '"]');
+    var cb = $sb && $sb.querySelector('.swath-dir-on[data-dir="' + key + '"]');
     if (!cb || !cb.checked) return;
-    var bw = parseFloat((document.getElementById('swathBin_' + key) || {}).value);
+    var bw = parseFloat((swQ('swathBin_' + key, root) || {}).value);
     var d = { key: key, axis: axis, dir: vec, binWidth: bw };
     if (vec) {
       d.azimuth = (Math.atan2(vec[0], vec[1]) * 180 / Math.PI + 360) % 360;
@@ -22842,9 +22863,9 @@ function getSwathDirections() {
     pushDir('y', 1, null);
     pushDir('z', 2, null);
   } else {
-    var dipDir = parseFloat((document.getElementById('swathDipDir') || {}).value) || 0;
-    var dip = parseFloat((document.getElementById('swathDip') || {}).value) || 0;
-    var rake = parseFloat((document.getElementById('swathRake') || {}).value);
+    var dipDir = parseFloat((swQ('swathDipDir', root) || {}).value) || 0;
+    var dip = parseFloat((swQ('swathDip', root) || {}).value) || 0;
+    var rake = parseFloat((swQ('swathRake', root) || {}).value);
     if (isNaN(rake)) rake = 90;
     angles = { dipDir: dipDir, dip: dip, rake: rake };
     var f = computeSwathUVW(dipDir, dip, rake);
@@ -22855,9 +22876,9 @@ function getSwathDirections() {
   return { mode: mode, dirs: dirs, angles: angles };
 }
 
-function swathConfigError(msg) {
-  var $progress = document.getElementById('swathProgress');
-  var $label = document.getElementById('swathProgressLabel');
+function swathConfigError(msg, root) {
+  var $progress = swQ('swathProgress', root);
+  var $label = swQ('swathProgressLabel', root);
   if (!$progress || !$label) return;
   $progress.classList.add('active');
   $label.textContent = msg;
@@ -22865,20 +22886,20 @@ function swathConfigError(msg) {
   setTimeout(function() { $progress.classList.remove('active'); $label.style.color = ''; $label.textContent = ''; }, 2500);
 }
 
-function runSwath() {
+function runSwath(root) {
   if (swathExprController) { var r = swathExprController.validate(); if (!r.valid) return; }
-  var stat = document.getElementById('swathStat').value;
-  var localFilter = document.getElementById('swathLocalFilter').value.trim();
+  var stat = swQ('swathStat', root).value;
+  var localFilter = swQ('swathLocalFilter', root).value.trim();
 
-  var dcfg = getSwathDirections();
+  var dcfg = getSwathDirections(root);
   if (dcfg.dirs.length === 0) {
-    swathConfigError('Check at least one direction');
+    swathConfigError('Check at least one direction', root);
     return;
   }
   for (var di = 0; di < dcfg.dirs.length; di++) {
     var dbw = dcfg.dirs[di].binWidth;
     if (!dbw || dbw <= 0 || isNaN(dbw)) {
-      swathConfigError('Invalid bin width for ' + dcfg.dirs[di].key.toUpperCase());
+      swathConfigError('Invalid bin width for ' + dcfg.dirs[di].key.toUpperCase(), root);
       return;
     }
   }
@@ -22887,7 +22908,7 @@ function runSwath() {
   // comparison dataset live in separate index spaces — comparison indices
   // point into that dataset's own header).
   var varCols = [];
-  document.querySelectorAll('#swathVarList input[type="checkbox"]:not([data-aux]):checked').forEach(function(cb) {
+  swQA('swathVarList', 'input[type="checkbox"]:not([data-aux]):checked', root).forEach(function(cb) {
     varCols.push(parseInt(cb.value));
   });
   // A10 4c-iii-b: build a run per comparison dataset that has selected vars —
@@ -22897,7 +22918,7 @@ function runSwath() {
   swathShownCmpDatasets().forEach(function(ds) {
     if (!swathCmpReady(ds)) return;
     var sel = [];
-    document.querySelectorAll('#swathVarList input[type="checkbox"][data-aux][data-ds="' + ds.id + '"]:checked').forEach(function(cb) {
+    swQA('swathVarList', 'input[type="checkbox"][data-aux][data-ds="' + ds.id + '"]:checked', root).forEach(function(cb) {
       sel.push(parseInt(cb.value));
     });
     if (sel.length === 0) return;
@@ -22916,16 +22937,16 @@ function runSwath() {
   // comparison worker (so a comparison-only run still animates).
   var barDriverId = varCols.length > 0 ? 'model' : (cmpRuns[0] ? cmpRuns[0].ds.id : null);
 
-  var $progress = document.getElementById('swathProgress');
-  var $fill = document.getElementById('swathProgressFill');
-  var $label = document.getElementById('swathProgressLabel');
-  var $content = document.getElementById('swathContent');
+  var $progress = swQ('swathProgress', root);
+  var $fill = swQ('swathProgressFill', root);
+  var $label = swQ('swathProgressLabel', root);
+  var $content = swQ('swathContent', root);
   $progress.classList.add('active');
   $fill.style.width = '0%';
   $label.textContent = '0%';
   $content.innerHTML = '';
 
-  var $btn = document.getElementById('swathGenerate');
+  var $btn = swQ('swathGenerate', root);
   if ($btn) $btn.disabled = true;
 
   var pending = 0;
@@ -22956,8 +22977,8 @@ function runSwath() {
       activeKey: dcfg.dirs.some(function(d) { return d.key === prevKey; }) ? prevKey : dcfg.dirs[0].key
     };
     swathStale = false;
-    if (typeof setGenStale === 'function') setGenStale('swathGenerate', false);
-    renderSwathOutput(stat);
+    if (typeof setGenStale === 'function') setGenStale($btn || 'swathGenerate', false);
+    renderSwathOutput(stat, root);
     // Update tab badge: max bin count across directions and variables
     var totalBins = 0;
     function scanBins(res) {
@@ -23159,8 +23180,8 @@ function buildSwathScaleGroups(varEntries) {
   return groups;
 }
 
-function renderSwathCharts(swathData, stat, $target) {
-  var $content = $target || document.getElementById('swathContent');
+function renderSwathCharts(swathData, stat, $target, root) {
+  var $content = $target || swQ('swathContent', root);
   if (!$content || !swathData || !swathData.vars) {
     if ($content) $content.innerHTML = '<div class="swath-hint">No data.</div>';
     return;
@@ -23238,10 +23259,10 @@ function renderSwathCharts(swathData, stat, $target) {
     return;
   }
 
-  var display = getSwathDisplay();
+  var display = getSwathDisplay(root);
   var chartSvg = display.layout === 'split'
-    ? renderSwathSplitSvg(varEntries, swathData, stat, display)
-    : renderSwathOverlaySvg(varEntries, swathData, stat, display);
+    ? renderSwathSplitSvg(varEntries, swathData, stat, display, root)
+    : renderSwathOverlaySvg(varEntries, swathData, stat, display, root);
   var html = '';
   cmp.forEach(function(c) {
     if (c.error) html += '<div class="warn-note">' + esc(dsLabel(c.dsId)) + ' swath failed: ' + esc(c.error) + ' — showing primary only.</div>';
@@ -23259,12 +23280,12 @@ function renderSwathCharts(swathData, stat, $target) {
   if (display.showTable) html += renderSwathTable(varEntries, swathData, stat);
   $content.innerHTML = html;
 
-  wireSwathCrosshair();
-  wireSwathChartActions();
-  if (display.showTable) wireSwathTableEvents();
+  wireSwathCrosshair($content);
+  wireSwathChartActions($content);
+  if (display.showTable) wireSwathTableEvents($content);
 }
 
-function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
+function renderSwathOverlaySvg(varEntries, swathData, stat, display, root) {
   var numVars = varEntries.length;
   var bw = swathData.binWidth;
 
@@ -23281,7 +23302,7 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
 
   // Dimensions — extra right axes for 3+ scale groups
   var extraAxes = Math.max(0, numGroups - 2);
-  var W = chartHostWidth(document.getElementById('swathContent'), 720 + extraAxes * 55, 560 + extraAxes * 55, 34);
+  var W = chartHostWidth(swQ('swathContent', root), 720 + extraAxes * 55, 560 + extraAxes * 55, 34);
   var padRight = 55 + extraAxes * 55;
   var pad = { top: 30, right: padRight, bottom: 70, left: 65 };
   var plotW = W - pad.left - pad.right;
@@ -23538,7 +23559,7 @@ function renderSwathOverlaySvg(varEntries, swathData, stat, display) {
     svg + '</svg>';
 }
 
-function renderSwathSplitSvg(varEntries, swathData, stat, display) {
+function renderSwathSplitSvg(varEntries, swathData, stat, display, root) {
   var bw = swathData.binWidth;
 
   // One sub-chart per scale group: a same-named aux series shares its
@@ -23554,7 +23575,7 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
   var refBins = refEntry.bins;
 
   // Dimensions
-  var W = chartHostWidth(document.getElementById('swathContent'), 720, 560, 34);
+  var W = chartHostWidth(swQ('swathContent', root), 720, 560, 34);
   var pad = { top: 20, right: 20, bottom: 40, left: 65 };
   var plotW = W - pad.left - pad.right;
   var subH = 150; // height per sub-chart
@@ -23783,8 +23804,8 @@ function renderSwathSplitSvg(varEntries, swathData, stat, display) {
     svg + '</svg>';
 }
 
-function wireSwathCrosshair() {
-  var svgEl = document.querySelector('.swath-overlay-svg');
+function wireSwathCrosshair($scope) {
+  var svgEl = ($scope || document).querySelector('.swath-overlay-svg');
   if (!svgEl || !_swathChartParams) return;
   var area = svgEl.querySelector('.swath-crosshair-area');
   var line = svgEl.querySelector('.swath-crosshair-line');
@@ -23948,10 +23969,11 @@ function renderSwathTable(varEntries, swathData, stat) {
   '</div>';
 }
 
-function wireSwathChartActions() {
-  var copySvg = document.getElementById('swathCopySvg');
-  var dlPng = document.getElementById('swathDownloadPng');
-  var svgEl = document.querySelector('.swath-overlay-svg');
+function wireSwathChartActions($scope) {
+  $scope = $scope || document;
+  var copySvg = $scope.querySelector('#swathCopySvg');
+  var dlPng = $scope.querySelector('#swathDownloadPng');
+  var svgEl = $scope.querySelector('.swath-overlay-svg');
   if (!svgEl) return;
 
   if (copySvg) {
@@ -24008,8 +24030,8 @@ function wireSwathChartActions() {
   }
 }
 
-function wireSwathTableEvents() {
-  var $content = document.getElementById('swathContent');
+function wireSwathTableEvents($scope) {
+  var $content = $scope || swQ('swathContent');
   if (!$content) return;
 
   // Copy button
@@ -24017,7 +24039,7 @@ function wireSwathTableEvents() {
     btn.addEventListener('click', function(e) {
       e.stopPropagation();
       var idx = btn.dataset.swathCopy;
-      var table = document.querySelector('#swathTableBody' + idx + ' .swath-table');
+      var table = $content.querySelector('#swathTableBody' + idx + ' .swath-table');
       if (!table) return;
       var tsv = [];
       table.querySelectorAll('tr').forEach(function(row) {
@@ -24036,7 +24058,7 @@ function wireSwathTableEvents() {
   $content.querySelectorAll('[data-swath-collapse]').forEach(function(hdr) {
     hdr.addEventListener('click', function() {
       var idx = hdr.dataset.swathCollapse;
-      var body = document.getElementById('swathTableBody' + idx);
+      var body = $content.querySelector('#swathTableBody' + idx);
       var toggle = hdr.querySelector('.swath-table-toggle');
       if (body.style.display === 'none') {
         body.style.display = '';
