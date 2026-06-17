@@ -693,6 +693,26 @@ as grids.
   stay. Example CSV bytes verified byte-identical vs HEAD (only the tutorial
   prose changed). **Phase 4f COMPLETE.**
 
+### Phase 4g — GT feature-detect (2026-06-17)
+
+**4g ✅** — the model GT tab's block-volume source is now feature-detected and
+respects the 4f grid/point classification. `gtVolumeSource()` (gt.js) resolves
+the source by priority — per-row **DXYZ** columns → the model's **grid geometry**
+*but only when `dsHasGrid('model')`* (so a model classified as `point` no longer
+silently uses its geometry volume) → else **count-based** (1 per row), with the
+**Weight** select serving as the per-row tonnage/volume multiplier (the roadmap's
+"tonnage/volume column"). `renderGtConfig` consumes it; `runGt`'s geometry
+fallback is gated on `dsHasGrid`; a points-classified model surfaces a `.gt-vol-hint`
+explaining how to get volume-weighting (set to grid in Import Model / assign DXYZ /
+Override / pick a Weight column). The geometry Override prefill carries
+`data-gt-auto` (cleared once the user types), so `gtRefreshVolumeSource()` — hooked
+into `dsGridModeChanged` for the model — keeps the display + auto override in sync
+when the grid override flips live. GT stays **model-only** (true per-dataset GT
+needs the GT clone arc — out of scope here). Worker untouched (b1-differential
+29/29 bit-identical incl. the GT case); grid path byte-identical (gt-theo green).
+Guard `experiments/4g-gt-volume-smoke.js` (11 asserts: grid→point→grid, count-based
+fallback = row count, geometry volume = rows × block volume).
+
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 
 Phase 1 is being executed as fine slices (B1/C1a playbook — de-risk first):

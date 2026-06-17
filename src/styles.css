@@ -3459,6 +3459,10 @@ table.cat-values td.cat-pct-cell {
 .gt-vol-display {
   font-size: 0.65rem; color: var(--fg-dim); margin-bottom: 0.2rem;
 }
+/* A10 4g: points-classified model → why tonnage is count-based + how to get volume */
+.gt-vol-hint {
+  font-size: 0.62rem; color: var(--warn); line-height: 1.4; margin-bottom: 0.2rem;
+}
 .gt-unit-row { display: flex; gap: 0.3rem; align-items: center; margin-bottom: 0.3rem; }
 .gt-unit-row:last-child { margin-bottom: 0; }
 .gt-unit-label { font-size: 0.65rem; color: var(--fg-dim); width: 3.2rem; flex-shrink: 0; }

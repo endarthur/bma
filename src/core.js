@@ -335,6 +335,9 @@ function dsGridSectionHtml(ds) {
 // they generalize past the model-only paths.
 function dsGridModeChanged(ds) {
   if (typeof refreshCatalogTree === 'function') refreshCatalogTree();
+  // 4g: the model GT tab's block-volume source is gated on the grid
+  // classification — refresh its display + auto-managed override when it flips.
+  if (ds && ds.id === 'model' && typeof gtRefreshVolumeSource === 'function') gtRefreshVolumeSource();
 }
 
 // A10 4f-2: repaint the model preflight's grid section in place (the detected

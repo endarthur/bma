@@ -3474,6 +3474,10 @@ table.cat-values td.cat-pct-cell {
 .gt-vol-display {
   font-size: 0.65rem; color: var(--fg-dim); margin-bottom: 0.2rem;
 }
+/* A10 4g: points-classified model → why tonnage is count-based + how to get volume */
+.gt-vol-hint {
+  font-size: 0.62rem; color: var(--warn); line-height: 1.4; margin-bottom: 0.2rem;
+}
 .gt-unit-row { display: flex; gap: 0.3rem; align-items: center; margin-bottom: 0.3rem; }
 .gt-unit-row:last-child { margin-bottom: 0; }
 .gt-unit-label { font-size: 0.65rem; color: var(--fg-dim); width: 3.2rem; flex-shrink: 0; }
@@ -5911,7 +5915,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build dd35de5 — click to check for updates">dd35de5</div>
+<div class="build-badge" id="buildBadge" title="build b799e62 — click to check for updates">b799e62</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8783,6 +8787,9 @@ function dsGridSectionHtml(ds) {
 // they generalize past the model-only paths.
 function dsGridModeChanged(ds) {
   if (typeof refreshCatalogTree === 'function') refreshCatalogTree();
+  // 4g: the model GT tab's block-volume source is gated on the grid
+  // classification — refresh its display + auto-managed override when it flips.
+  if (ds && ds.id === 'model' && typeof gtRefreshVolumeSource === 'function') gtRefreshVolumeSource();
 }
 
 // A10 4f-2: repaint the model preflight's grid section in place (the detected
@@ -24868,6 +24875,52 @@ function gtMarkStale() {
   if (typeof setGenStale === 'function') setGenStale('gtGenerate', true);
 }
 
+// A10 4g: feature-detect the block-volume source. Volume-weighted tonnage needs
+// a volume source; without one GT falls back to count-based (1 per row), with
+// the Weight select available as a per-row tonnage/volume multiplier. Sources,
+// in priority: per-row DXYZ columns → the model's grid geometry — but only when
+// it COUNTS as a grid (dsHasGrid respects the 4f grid/point override, so a model
+// classified as points no longer silently uses its geometry volume) → else
+// count-based. Returns { display, hint, value, kind }.
+function gtVolumeSource() {
+  var hasDXYZ = currentDXYZ.dx >= 0 && currentDXYZ.dy >= 0 && currentDXYZ.dz >= 0;
+  if (hasDXYZ) return { display: 'Per-row DXYZ columns', hint: '', value: '', kind: 'dxyz' };
+  var geo = lastCompleteData && lastCompleteData.geometry;
+  var isGrid = (typeof dsHasGrid === 'function') && dsHasGrid(dsById('model'));
+  if (isGrid && geo && geo.x && geo.y && geo.z && geo.x.blockSize && geo.y.blockSize && geo.z.blockSize) {
+    var bv = geo.x.blockSize * geo.y.blockSize * geo.z.blockSize;
+    return {
+      display: 'Geometry: ' + geo.x.blockSize + ' × ' + geo.y.blockSize + ' × ' + geo.z.blockSize + ' = ' + formatNum(bv) + ' m³',
+      hint: '', value: bv, kind: 'geometry'
+    };
+  }
+  // Not a grid → count-based. Name why + how to get volume-weighting when the
+  // model carries a detectable block size but is classified as points.
+  var hint = (geo && geo.x && geo.x.blockSize)
+    ? 'Classified as points — for volume-weighted tonnage set this dataset to “grid” in Import Model, assign DXYZ, set an Override, or pick a tonnage/volume column under Weight.'
+    : '';
+  return { display: 'Count-based (1 per row)', hint: hint, value: '', kind: 'count' };
+}
+
+// A10 4g: refresh just the GT volume-source display + auto-managed override when
+// the model's grid classification changes (4f override). No-op if GT isn't built
+// yet. The override is auto-managed only while it carries data-gt-auto (set on
+// the geometry prefill, cleared once the user types a value).
+function gtRefreshVolumeSource() {
+  var $d = document.getElementById('gtVolDisplay');
+  if (!$d) return;
+  var info = gtVolumeSource();
+  $d.textContent = info.display;
+  var $h = document.getElementById('gtVolHint');
+  if ($h) { $h.innerHTML = info.hint ? esc(info.hint) : ''; $h.style.display = info.hint ? '' : 'none'; }
+  var $ov = document.getElementById('gtVolOverride');
+  if ($ov && ($ov.dataset.gtAuto || $ov.value === '')) {
+    if (info.kind === 'geometry') { $ov.value = info.value; $ov.dataset.gtAuto = '1'; }
+    else { $ov.value = ''; delete $ov.dataset.gtAuto; }
+  }
+  gtMarkStale();
+}
+
 function renderGtConfig(data) {
   var $sidebar = document.getElementById('gtSidebar');
   var $content = document.getElementById('gtContent');
@@ -24898,18 +24951,11 @@ function renderGtConfig(data) {
     return;
   }
 
-  // Auto-detect block volume
-  var volDisplay = 'Count-based (1 per row)';
-  var volValue = '';
-  var hasDXYZ = currentDXYZ.dx >= 0 && currentDXYZ.dy >= 0 && currentDXYZ.dz >= 0;
-  if (hasDXYZ) {
-    volDisplay = 'Per-row DXYZ columns';
-  } else if (geometry && geometry.x && geometry.y && geometry.z &&
-             geometry.x.blockSize && geometry.y.blockSize && geometry.z.blockSize) {
-    var bv = geometry.x.blockSize * geometry.y.blockSize * geometry.z.blockSize;
-    volDisplay = 'Geometry: ' + geometry.x.blockSize + ' \u00d7 ' + geometry.y.blockSize + ' \u00d7 ' + geometry.z.blockSize + ' = ' + formatNum(bv) + ' m\u00b3';
-    volValue = bv;
-  }
+  // Auto-detect block volume \u2014 feature-detected + grid-classification aware (4g)
+  var volInfo = gtVolumeSource();
+  var volDisplay = volInfo.display;
+  var volHint = volInfo.hint;
+  var volValue = volInfo.value;
 
   // Grade variable checkbox list with per-variable unit selects
   var varItems = gtNumCols.map(function(c, i) {
@@ -24982,10 +25028,11 @@ function renderGtConfig(data) {
     '</div>' +
     '<div class="gt-sidebar-section" data-sb="volume">' +
       '<div class="gt-sidebar-title">Block Volume</div>' +
-      '<div class="gt-vol-display" id="gtVolDisplay">' + volDisplay + '</div>' +
+      '<div class="gt-vol-display" id="gtVolDisplay">' + esc(volDisplay) + '</div>' +
+      '<div class="gt-vol-hint" id="gtVolHint"' + (volHint ? '' : ' style="display:none"') + '>' + (volHint ? esc(volHint) : '') + '</div>' +
       '<div style="display:flex;gap:0.3rem;align-items:center;margin-top:0.2rem">' +
         '<span style="font-size:0.62rem;color:var(--fg-dim);white-space:nowrap">Override (m\u00b3)</span>' +
-        '<input type="number" class="gt-input" id="gtVolOverride" value="' + volValue + '" min="0" step="any" placeholder="auto">' +
+        '<input type="number" class="gt-input" id="gtVolOverride" value="' + volValue + '"' + (volValue !== '' ? ' data-gt-auto="1"' : '') + ' min="0" step="any" placeholder="auto">' +
       '</div>' +
     '</div>' +
     '<div class="gt-sidebar-section" data-sb="units">' +
@@ -25076,6 +25123,8 @@ function renderGtConfig(data) {
     if (!gtIsLiveTarget(e.target)) gtMarkStale();
   });
   $sidebar.addEventListener('input', function(e) {
+    // 4g: a user-typed Override is no longer the auto geometry value
+    if (e.target.id === 'gtVolOverride') delete e.target.dataset.gtAuto;
     if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox' && e.target.type !== 'radio') autoSaveProject();
     if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && !gtIsLiveTarget(e.target)) gtMarkStale();
   });
@@ -25360,7 +25409,10 @@ function runGt() {
     blockVolume = volOverride;
   } else if (hasDXYZ) {
     dxyzCols = [currentDXYZ.dx, currentDXYZ.dy, currentDXYZ.dz];
-  } else if (lastCompleteData && lastCompleteData.geometry) {
+  } else if (lastCompleteData && lastCompleteData.geometry &&
+             (typeof dsHasGrid !== 'function' || dsHasGrid(dsById('model')))) {
+    // 4g: only use the geometry block volume when the model COUNTS as a grid —
+    // a points-classified model falls through to count-based tonnage.
     var geo = lastCompleteData.geometry;
     if (geo.x && geo.y && geo.z && geo.x.blockSize && geo.y.blockSize && geo.z.blockSize) {
       blockVolume = geo.x.blockSize * geo.y.blockSize * geo.z.blockSize;
