@@ -165,6 +165,11 @@ function runAuxAnalysis(ds, root) {
         return;
       }
       ds.complete = { header: m.header, colTypes: m.colTypes, stats: m.stats, categories: m.categories, rowCount: m.rowCount,
+        // A10 4f: capture the worker's geometry for ANY dataset (was model-only) —
+        // dsGrid/dsHasGrid decide whether it counts as a grid via the grid-mode
+        // (auto isRegularGrid for comparisons). Lights up GT/Export (4g/4h) for a
+        // gridded comparison dataset; harmless (ignored) for scattered points.
+        geometry: m.geometry || null,
         // A10: carry the A9 data-health counters for the per-dataset summary
         filterErrors: m.filterErrors || null, calcolErrors: m.calcolErrors || null,
         raggedRows: m.raggedRows || 0, coordInvalidCells: m.coordInvalidCells || 0, weightExcluded: m.weightExcluded || 0 };

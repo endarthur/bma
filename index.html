@@ -5889,7 +5889,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 3d4887a — click to check for updates">3d4887a</div>
+<div class="build-badge" id="buildBadge" title="build 83214f8 — click to check for updates">83214f8</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -6083,6 +6083,13 @@ function computeGeometry(xVals, yVals, zVals, decimals, dims) {
     const extent = parentSize ? rnd(nBlocks * parentSize) : rnd(maxR - origin);
     const minBlockSize = spacings.length > 0 ? spacings[spacings.length - 1].size : null;
 
+    // A10 4f: spacing regularity for grid auto-detection. The dominant spacing's
+    // share of all gaps between sorted unique values — ~1 for a regular grid,
+    // ~0 for scattered points (every gap distinct). A single-value axis (a 2D
+    // section) is trivially regular. Used by the geometry-level isRegularGrid.
+    const totalSpacings = spacings.reduce((s, x) => s + x.count, 0);
+    const regularity = totalSpacings > 0 ? spacings[0].count / totalSpacings : 1;
+
     result[axis] = {
       origin,
       max: maxR,
@@ -6093,9 +6100,19 @@ function computeGeometry(xVals, yVals, zVals, decimals, dims) {
       uniqueCount: count,
       gridCount: nBlocks,
       extent,
-      decimals: dp
+      decimals: dp,
+      regularity
     };
   }
+  // A10 4f: auto-detect whether the XYZ form a REGULAR GRID (vs scattered points).
+  // All three axes must carry a block size AND be regularly spaced. The model
+  // (an explicit block-model import) keeps its grid regardless via the main
+  // thread's per-dataset gridMode; this signal drives the AUTO classification of
+  // comparison datasets, which the user can override (no-magic-only-ui).
+  const GRID_REGULARITY_MIN = 0.5;
+  result.isRegularGrid = ['x', 'y', 'z'].every(function(a) {
+    return result[a] && result[a].blockSize && result[a].regularity >= GRID_REGULARITY_MIN;
+  });
   return result;
 }
 
@@ -8658,11 +8675,26 @@ function dsLabel(id) {
   var ds = dsById(id);
   return (ds && ds.prefix) || auxPrefix || 'aux';
 }
-// A dataset's block geometry when it has one (the worker's geometry result on
-// its last analysis), else null. Only the model produces geometry today.
+// A10 4f: the per-dataset grid classification — 'grid' (force gridded), 'point'
+// (force scattered), or 'auto' (use the worker's isRegularGrid auto-detect).
+// Default: the model is an explicit block-model import → 'grid'; every other
+// dataset auto-detects. An explicit override (ds.gridMode, set by the import UI
+// in 4f-2) wins — inferred state stays visible + overridable (no-magic-only-ui).
+function dsGridMode(ds) {
+  if (ds && (ds.gridMode === 'grid' || ds.gridMode === 'point' || ds.gridMode === 'auto')) return ds.gridMode;
+  return (ds && ds.id === 'model') ? 'grid' : 'auto';
+}
+// A dataset's block geometry when it qualifies as a grid, else null. Any dataset
+// with XYZ produces a geometry object now (4f); whether it COUNTS as a grid is
+// the grid-mode decision above, so scattered point data doesn't masquerade as a
+// block model.
 function dsGrid(ds) {
   var g = ds && ds.complete && ds.complete.geometry;
-  return (g && g.x && g.y && g.z && g.x.blockSize && g.y.blockSize && g.z.blockSize) ? g : null;
+  if (!(g && g.x && g.y && g.z && g.x.blockSize && g.y.blockSize && g.z.blockSize)) return null;
+  var mode = dsGridMode(ds);
+  if (mode === 'point') return null;
+  if (mode === 'grid') return g;
+  return g.isRegularGrid ? g : null;   // 'auto' — trust the worker's detection
 }
 function dsHasGrid(ds) { return !!dsGrid(ds); }
 
@@ -15002,6 +15034,11 @@ function runAuxAnalysis(ds, root) {
         return;
       }
       ds.complete = { header: m.header, colTypes: m.colTypes, stats: m.stats, categories: m.categories, rowCount: m.rowCount,
+        // A10 4f: capture the worker's geometry for ANY dataset (was model-only) —
+        // dsGrid/dsHasGrid decide whether it counts as a grid via the grid-mode
+        // (auto isRegularGrid for comparisons). Lights up GT/Export (4g/4h) for a
+        // gridded comparison dataset; harmless (ignored) for scattered points.
+        geometry: m.geometry || null,
         // A10: carry the A9 data-health counters for the per-dataset summary
         filterErrors: m.filterErrors || null, calcolErrors: m.calcolErrors || null,
         raggedRows: m.raggedRows || 0, coordInvalidCells: m.coordInvalidCells || 0, weightExcluded: m.weightExcluded || 0 };

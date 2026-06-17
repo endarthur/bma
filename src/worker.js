@@ -158,6 +158,13 @@ function computeGeometry(xVals, yVals, zVals, decimals, dims) {
     const extent = parentSize ? rnd(nBlocks * parentSize) : rnd(maxR - origin);
     const minBlockSize = spacings.length > 0 ? spacings[spacings.length - 1].size : null;
 
+    // A10 4f: spacing regularity for grid auto-detection. The dominant spacing's
+    // share of all gaps between sorted unique values — ~1 for a regular grid,
+    // ~0 for scattered points (every gap distinct). A single-value axis (a 2D
+    // section) is trivially regular. Used by the geometry-level isRegularGrid.
+    const totalSpacings = spacings.reduce((s, x) => s + x.count, 0);
+    const regularity = totalSpacings > 0 ? spacings[0].count / totalSpacings : 1;
+
     result[axis] = {
       origin,
       max: maxR,
@@ -168,9 +175,19 @@ function computeGeometry(xVals, yVals, zVals, decimals, dims) {
       uniqueCount: count,
       gridCount: nBlocks,
       extent,
-      decimals: dp
+      decimals: dp,
+      regularity
     };
   }
+  // A10 4f: auto-detect whether the XYZ form a REGULAR GRID (vs scattered points).
+  // All three axes must carry a block size AND be regularly spaced. The model
+  // (an explicit block-model import) keeps its grid regardless via the main
+  // thread's per-dataset gridMode; this signal drives the AUTO classification of
+  // comparison datasets, which the user can override (no-magic-only-ui).
+  const GRID_REGULARITY_MIN = 0.5;
+  result.isRegularGrid = ['x', 'y', 'z'].every(function(a) {
+    return result[a] && result[a].blockSize && result[a].regularity >= GRID_REGULARITY_MIN;
+  });
   return result;
 }
 

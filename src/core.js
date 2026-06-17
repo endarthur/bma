@@ -249,11 +249,26 @@ function dsLabel(id) {
   var ds = dsById(id);
   return (ds && ds.prefix) || auxPrefix || 'aux';
 }
-// A dataset's block geometry when it has one (the worker's geometry result on
-// its last analysis), else null. Only the model produces geometry today.
+// A10 4f: the per-dataset grid classification — 'grid' (force gridded), 'point'
+// (force scattered), or 'auto' (use the worker's isRegularGrid auto-detect).
+// Default: the model is an explicit block-model import → 'grid'; every other
+// dataset auto-detects. An explicit override (ds.gridMode, set by the import UI
+// in 4f-2) wins — inferred state stays visible + overridable (no-magic-only-ui).
+function dsGridMode(ds) {
+  if (ds && (ds.gridMode === 'grid' || ds.gridMode === 'point' || ds.gridMode === 'auto')) return ds.gridMode;
+  return (ds && ds.id === 'model') ? 'grid' : 'auto';
+}
+// A dataset's block geometry when it qualifies as a grid, else null. Any dataset
+// with XYZ produces a geometry object now (4f); whether it COUNTS as a grid is
+// the grid-mode decision above, so scattered point data doesn't masquerade as a
+// block model.
 function dsGrid(ds) {
   var g = ds && ds.complete && ds.complete.geometry;
-  return (g && g.x && g.y && g.z && g.x.blockSize && g.y.blockSize && g.z.blockSize) ? g : null;
+  if (!(g && g.x && g.y && g.z && g.x.blockSize && g.y.blockSize && g.z.blockSize)) return null;
+  var mode = dsGridMode(ds);
+  if (mode === 'point') return null;
+  if (mode === 'grid') return g;
+  return g.isRegularGrid ? g : null;   // 'auto' — trust the worker's detection
 }
 function dsHasGrid(ds) { return !!dsGrid(ds); }
 
