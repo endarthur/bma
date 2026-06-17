@@ -5889,7 +5889,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 7da1374 — click to check for updates">7da1374</div>
+<div class="build-badge" id="buildBadge" title="build 983ec3c — click to check for updates">983ec3c</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -20159,6 +20159,46 @@ let _statsCdfParams = null; // coordinate system for CDF tooltip
 // reference, preserving the model-vs-samples acceptance number). Lives on
 // panelState.statistics.refDs (4e-a); serialized in 4e-b.
 
+// ─── A10 Statistics st-2: per-instance panel state ─────────────────────────
+// A Statistics clone owns its full view: which vars/metrics/percentiles, which
+// CDF curves + scale/mode, and the comparison selection/hidden-chips/Δ%-ref.
+// The SINGLETON keeps the existing module globals (statsSelectedVars… read by
+// project.js serialize/restore + ctxmenu) and panelState.statistics, exposed via
+// _statSingleton's accessor proxy so external reads stay bit-identical. A CLONE
+// (st-4) gets a plain statNewInstState() object. Every render/event fn resolves
+// its state with statStateForRoot(root); _statsNumCols/_statsHeader (the shared
+// analysis) stay module-level. Inert until clones exist (st-4).
+var statInstances = {};
+var _statSingleton = {
+  get statsSelectedVars() { return statsSelectedVars; }, set statsSelectedVars(v) { statsSelectedVars = v; },
+  get statsVisibleMetrics() { return statsVisibleMetrics; }, set statsVisibleMetrics(v) { statsVisibleMetrics = v; },
+  get statsPercentiles() { return statsPercentiles; }, set statsPercentiles(v) { statsPercentiles = v; },
+  get statsCdfSelected() { return statsCdfSelected; }, set statsCdfSelected(v) { statsCdfSelected = v; },
+  get statsCdfScale() { return statsCdfScale; }, set statsCdfScale(v) { statsCdfScale = v; },
+  get statsCdfMode() { return statsCdfMode; }, set statsCdfMode(v) { statsCdfMode = v; },
+  get _statsCdfParams() { return _statsCdfParams; }, set _statsCdfParams(v) { _statsCdfParams = v; },
+  get cmpSel() { return panelState.statistics.cmpSel; }, set cmpSel(v) { panelState.statistics.cmpSel = v; },
+  get cdfCmpSel() { return panelState.statistics.cdfCmpSel; }, set cdfCmpSel(v) { panelState.statistics.cdfCmpSel = v; },
+  get dsHidden() { return panelState.statistics.dsHidden; }, set dsHidden(v) { panelState.statistics.dsHidden = v; },
+  get refDs() { return panelState.statistics.refDs; }, set refDs(v) { panelState.statistics.refDs = v; }
+};
+function statNewInstState() {
+  return {
+    statsSelectedVars: null, statsVisibleMetrics: null, statsPercentiles: [25, 50, 75],
+    statsCdfSelected: new Set(), statsCdfScale: 'linear', statsCdfMode: 'cdf', _statsCdfParams: null,
+    cmpSel: {}, cdfCmpSel: {}, dsHidden: new Set(), refDs: null
+  };
+}
+function statIsInst(root) { return !!(root && root.getAttribute && root.getAttribute('data-stat-inst')); }
+function statStateForRoot(root) {
+  if (statIsInst(root)) {
+    var id = root.getAttribute('data-stat-inst');
+    if (!statInstances[id]) statInstances[id] = statNewInstState();
+    return statInstances[id];
+  }
+  return _statSingleton;
+}
+
 function tdQuantileFromCentroids(centroids, totalCount, q) {
   if (!centroids || centroids.length === 0) return null;
   if (centroids.length === 1) return centroids[0][0];
@@ -20196,18 +20236,20 @@ function statsCmpDatasets() {
 
 // The comparison datasets actually shown — the chips (4c, ≥2 comparison
 // datasets) let the user hide any of them; the sidebar/table/CDF iterate this.
-function statsShownCmpDatasets() {
-  return statsCmpDatasets().filter(function(ds) { return !panelState.statistics.dsHidden.has(ds.id); });
+function statsShownCmpDatasets(root) {
+  var hidden = statStateForRoot(root).dsHidden;
+  return statsCmpDatasets().filter(function(ds) { return !hidden.has(ds.id); });
 }
 
 // A10 4d: the resolved Δ% reference dataset id for this panel. Defaults to the
 // first SHOWN comparison dataset (samples) so the headline stays the
 // model-vs-samples acceptance number; falls back to 'model' when no comparison
 // is shown, and self-heals if the chosen reference was hidden/removed.
-function statsReferenceDs() {
-  var shownCmp = statsShownCmpDatasets();
+function statsReferenceDs(root) {
+  var refDs = statStateForRoot(root).refDs;
+  var shownCmp = statsShownCmpDatasets(root);
   var shown = ['model'].concat(shownCmp.map(function(d) { return d.id; }));
-  if (panelState.statistics.refDs && shown.indexOf(panelState.statistics.refDs) >= 0) return panelState.statistics.refDs;
+  if (refDs && shown.indexOf(refDs) >= 0) return refDs;
   return shownCmp.length ? shownCmp[0].id : 'model';
 }
 
@@ -20259,17 +20301,18 @@ function getStatsCmpCols(ds) {
   return out;
 }
 
-function isStatsCmpSelected(ds, col) {
-  var sel = panelState.statistics.cmpSel[ds.id];
+function isStatsCmpSelected(ds, col, root) {
+  var sel = statStateForRoot(root).cmpSel[ds.id];
   if (sel == null) return col.matchCi !== null;   // default: paired only
   return sel.has(col.idx);
 }
 
-function materializeStatsCmpSel(ds) {
-  if (panelState.statistics.cmpSel[ds.id]) return;
+function materializeStatsCmpSel(ds, root) {
+  var S = statStateForRoot(root);
+  if (S.cmpSel[ds.id]) return;
   var s = new Set();
   getStatsCmpCols(ds).forEach(function(c) { if (c.matchCi !== null) s.add(c.idx); });
-  panelState.statistics.cmpSel[ds.id] = s;
+  S.cmpSel[ds.id] = s;
 }
 
 // Convert a project restore (variable names) to aux column indices — callable
@@ -20316,11 +20359,12 @@ function applyStatsCmpRestore(ds) {
   reattach(ps.cdfCmpSel, panelState.statistics.cdfCmpSel);
 }
 
-function getStatsMetricColumns() {
+function getStatsMetricColumns(root) {
+  var pcts = statStateForRoot(root).statsPercentiles;
   var cols = [];
   for (var m of STATS_ALL_METRICS) {
     if (m.key === 'max') {
-      for (var p of statsPercentiles) {
+      for (var p of pcts) {
         cols.push({ key: 'p' + p, label: 'P' + p, pct: p });
       }
     }
@@ -20385,12 +20429,13 @@ function statsMixedTag(ds, idx) {
   return '<span class="empty-tag mixed-tag" title="' + esc(mixedColTitle(n)) + '">✱</span>';
 }
 
-function isMetricVisible(key) {
-  if (statsVisibleMetrics === null) {
+function isMetricVisible(key, root) {
+  var vm = statStateForRoot(root).statsVisibleMetrics;
+  if (vm === null) {
     if (key.startsWith('p') && key.length > 1 && !isNaN(key.slice(1))) return true;
     return STATS_DEFAULT_VISIBLE.has(key);
   }
-  return statsVisibleMetrics.has(key);
+  return vm.has(key);
 }
 
 function renderStatsTab(stats, header, origColCount, isFiltered, rowCount, root) {
@@ -20422,15 +20467,16 @@ function renderStatsTab(stats, header, origColCount, isFiltered, rowCount, root)
 
 function renderStatsSidebar(root) {
   var els = statEls(root);
+  var S = statStateForRoot(root);
   var numCols = _statsNumCols;
   var header = _statsHeader;
   var origColCount = _statsOrigColCount;
 
   // Metric toggles
-  var metrics = getStatsMetricColumns();
+  var metrics = getStatsMetricColumns(root);
   var togglesHtml = '';
   for (var m of metrics) {
-    var checked = isMetricVisible(m.key) ? ' checked' : '';
+    var checked = isMetricVisible(m.key, root) ? ' checked' : '';
     togglesHtml += '<label class="stats-metric-toggle"><input type="checkbox" data-metric="' + m.key + '"' + checked + '> ' + esc(m.label) + '</label>';
   }
   els.metricToggles.innerHTML = togglesHtml;
@@ -20440,7 +20486,7 @@ function renderStatsSidebar(root) {
   var currentPreset = null;
   for (var key in STATS_PRESETS) {
     var pre = STATS_PRESETS[key];
-    if (pre.length === statsPercentiles.length && pre.every(function(v, i) { return v === statsPercentiles[i]; })) {
+    if (pre.length === S.statsPercentiles.length && pre.every(function(v, i) { return v === S.statsPercentiles[i]; })) {
       currentPreset = key;
     }
   }
@@ -20450,7 +20496,7 @@ function renderStatsSidebar(root) {
   var customInput = els.customPct;
   if (currentPreset === null || currentPreset === 'custom') {
     customInput.style.display = '';
-    customInput.value = statsPercentiles.join(',');
+    customInput.value = S.statsPercentiles.join(',');
   } else {
     customInput.style.display = 'none';
   }
@@ -20483,7 +20529,7 @@ function renderStatsSidebar(root) {
     var name = header[ci];
     if (search && !fuzzyMatch(search, name.toLowerCase())) continue;
     var isCalcol = ci >= origColCount;
-    var selected = statsSelectedVars === null || statsSelectedVars.has(ci);
+    var selected = S.statsSelectedVars === null || S.statsSelectedVars.has(ci);
     var checkedAttr = selected ? ' checked' : '';
     var uncheckedCls = !selected ? ' unchecked' : '';
     html += '<div class="stats-var-item' + uncheckedCls + '" data-col="' + ci + '">';
@@ -20503,16 +20549,16 @@ function renderStatsSidebar(root) {
       // A10 4d: per-panel Δ% reference picker (Model + each shown comparison).
       // Only here (≥2 comparisons) where the choice is ambiguous; with a lone
       // comparison the reference is unambiguously it (badged in the table).
-      var refNow = statsReferenceDs();
+      var refNow = statsReferenceDs(root);
       var refSel = '<div class="stats-ref-row"><span class="stats-ref-label" title="Δ% denominator — every other dataset is compared to this one">Δ% reference</span>' +
-        '<select class="stats-select stats-ref-sel" id="statsRefSel"><option value="model"' + (refNow === 'model' ? ' selected' : '') + '>Model</option>';
-      statsShownCmpDatasets().forEach(function(ds) {
+        '<select class="stats-select stats-ref-sel" data-stat="refSel" id="statsRefSel"><option value="model"' + (refNow === 'model' ? ' selected' : '') + '>Model</option>';
+      statsShownCmpDatasets(root).forEach(function(ds) {
         refSel += '<option value="' + esc(ds.id) + '"' + (refNow === ds.id ? ' selected' : '') + '>' + esc(dsLabel(ds.id)) + '</option>';
       });
       refSel += '</select></div>';
       var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the model dataset — toggle comparison chips to hide them">Model</span>';
       allCmp.forEach(function(ds) {
-        var off = panelState.statistics.dsHidden.has(ds.id);
+        var off = S.dsHidden.has(ds.id);
         chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) + '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) + '">' + esc(dsLabel(ds.id)) + '</button>';
       });
       els.datasetChips.innerHTML = refSel + '<div class="stats-ds-chip-row">' + chips + '</div>';
@@ -20523,7 +20569,7 @@ function renderStatsSidebar(root) {
   }
 
   // Comparison-dataset variables (each shown non-model dataset: aux, d2…)
-  statsShownCmpDatasets().forEach(function(ds) {
+  statsShownCmpDatasets(root).forEach(function(ds) {
     var cols = getStatsCmpCols(ds);
     if (cols.length === 0) return;
     var label = dsLabel(ds.id);
@@ -20532,7 +20578,7 @@ function renderStatsSidebar(root) {
       var ac = cols[k];
       var dispName = label + ':' + ac.name;
       if (search && !fuzzyMatch(search, dispName.toLowerCase())) continue;
-      var cmpSel = isStatsCmpSelected(ds, ac);
+      var cmpSel = isStatsCmpSelected(ds, ac, root);
       html += '<div class="stats-var-item stats-var-item--aux' + (cmpSel ? '' : ' unchecked') + '" data-cmp-ds="' + esc(ds.id) + '" data-cmp-col="' + ac.idx + '">';
       html += '<input type="checkbox"' + (cmpSel ? ' checked' : '') + ' data-cmp-ds="' + esc(ds.id) + '" data-cmp-col="' + ac.idx + '">';
       html += '<span class="var-name">' + esc(dispName) + '</span>';
@@ -20545,16 +20591,17 @@ function renderStatsSidebar(root) {
 
 function renderStatsTable(root) {
   var els = statEls(root);
+  var S = statStateForRoot(root);
   var stats = lastDisplayedStats;
   var header = lastDisplayedHeader;
   if (!stats || !header) return;
 
   var numCols = Object.keys(stats).map(Number).sort(function(a, b) { return a - b; });
   var origColCount = currentOrigColCount || header.length;
-  var metrics = getStatsMetricColumns().filter(function(m) { return isMetricVisible(m.key); });
+  var metrics = getStatsMetricColumns(root).filter(function(m) { return isMetricVisible(m.key, root); });
 
   var visCols = numCols.filter(function(ci) {
-    return statsSelectedVars === null || statsSelectedVars.has(ci);
+    return S.statsSelectedVars === null || S.statsSelectedVars.has(ci);
   });
 
   // Selected comparison columns (across aux, d2…), grouped to their same-named
@@ -20562,10 +20609,10 @@ function renderStatsTable(root) {
   // within a group (aux before d2…), cmpUnmatched holds property-less columns.
   var cmpByMatch = {};
   var cmpUnmatched = [];
-  var cmpDatasets = statsShownCmpDatasets();
+  var cmpDatasets = statsShownCmpDatasets(root);
   cmpDatasets.forEach(function(ds) {
     getStatsCmpCols(ds).forEach(function(col) {
-      if (!isStatsCmpSelected(ds, col)) return;
+      if (!isStatsCmpSelected(ds, col, root)) return;
       var member = { ds: ds, col: col };
       if (col.matchCi !== null) (cmpByMatch[col.matchCi] = cmpByMatch[col.matchCi] || []).push(member);
       else cmpUnmatched.push(member);
@@ -20579,7 +20626,7 @@ function renderStatsTable(root) {
   // the first shown comparison (samples), so the common model+aux case still
   // reads (model − samples)/samples — just shown under the model (the subject)
   // with the reference row badged.
-  var refId = statsReferenceDs();
+  var refId = statsReferenceDs(root);
   function statsRefBadge(isRef) {
     return isRef ? ' <span class="stats-ref-badge" title="Δ% reference — every other dataset\'s Δ% is relative to this one">ref</span>' : '';
   }
@@ -20599,7 +20646,7 @@ function renderStatsTable(root) {
   function cmpRowHtml(member) {
     var ds = member.ds, ac = member.col, label = dsLabel(ds.id);
     var as = ds.complete.stats[ac.idx];
-    var cdfSet = panelState.statistics.cdfCmpSel[ds.id];
+    var cdfSet = S.cdfCmpSel[ds.id];
     var aCdfActive = !!(cdfSet && cdfSet.has(ac.idx));
     var aNameClass = aCdfActive ? 'cdf-link cdf-active' : 'cdf-link';
     var rowHtml = '<tr class="stats-aux-row"><td><a class="' + aNameClass + '" data-cmp-ds="' + esc(ds.id) + '" data-cmp-col="' + ac.idx + '" href="#">' + esc(label + ':' + ac.name) + '</a>' + statsRefBadge(ds.id === refId) + statsEmptyTag(ds.id, ac.idx) + statsMixedTag(ds.id, ac.idx) + '</td>';
@@ -20622,7 +20669,7 @@ function renderStatsTable(root) {
   for (var ci of visCols) {
     var s = stats[ci];
     var isCalcol = ci >= origColCount;
-    var cdfActive = statsCdfSelected.has(ci);
+    var cdfActive = S.statsCdfSelected.has(ci);
     var nameClass = cdfActive ? 'cdf-link cdf-active' : 'cdf-link';
     var nameHtml = '<a class="' + nameClass + '" data-col="' + ci + '" href="#">' + esc(header[ci]) + '</a>';
     if (isCalcol) nameHtml += '<span class="calcol-tag">CALC</span>';
@@ -20657,13 +20704,14 @@ function renderStatsTable(root) {
 
 function renderStatsCdfPanel(root) {
   var els = statEls(root);
+  var S = statStateForRoot(root);
   var chart = els.cdfChart;
   if (!chart) return;
 
-  var anyCmpCdf = statsShownCmpDatasets().some(function(ds) {
-    var s = panelState.statistics.cdfCmpSel[ds.id]; return s && s.size > 0;
+  var anyCmpCdf = statsShownCmpDatasets(root).some(function(ds) {
+    var s = S.cdfCmpSel[ds.id]; return s && s.size > 0;
   });
-  if (statsCdfSelected.size === 0 && !anyCmpCdf) {
+  if (S.statsCdfSelected.size === 0 && !anyCmpCdf) {
     chart.innerHTML = '<div class="stats-cdf-hint">Click column names to add CDF curves</div>';
     return;
   }
@@ -20676,15 +20724,15 @@ function renderStatsCdfPanel(root) {
   // filtered) are listed in a note instead of silently vanishing (A8)
   var entries = [];
   var skipped = [];
-  statsCdfSelected.forEach(function(ci) {
+  S.statsCdfSelected.forEach(function(ci) {
     if (stats[ci] && stats[ci].centroids && stats[ci].centroids.length > 0) {
       entries.push([header[ci], stats[ci]]);
     } else {
       skipped.push(header[ci]);
     }
   });
-  statsShownCmpDatasets().forEach(function(ds) {
-    var cdfSet = panelState.statistics.cdfCmpSel[ds.id];
+  statsShownCmpDatasets(root).forEach(function(ds) {
+    var cdfSet = S.cdfCmpSel[ds.id];
     if (!cdfSet || cdfSet.size === 0) return;
     var label = dsLabel(ds.id), cs = ds.complete.stats, ch = ds.complete.header;
     cdfSet.forEach(function(ai) {
@@ -20707,7 +20755,7 @@ function renderStatsCdfPanel(root) {
     return;
   }
 
-  if (statsCdfMode === 'qq') {
+  if (S.statsCdfMode === 'qq') {
     if (entries.length < 2) {
       chart.innerHTML = note + '<div class="stats-cdf-hint">Q–Q needs two curves — click another variable name (the first selected is the reference axis)</div>';
     } else {
@@ -20720,10 +20768,10 @@ function renderStatsCdfPanel(root) {
 
   // Update toolbar buttons
   els.cdfToolbar.querySelectorAll('.stats-scale').forEach(function(btn) {
-    btn.classList.toggle('active', btn.dataset.scale === statsCdfScale);
+    btn.classList.toggle('active', btn.dataset.scale === S.statsCdfScale);
   });
   els.cdfToolbar.querySelectorAll('.stats-cdfmode').forEach(function(btn) {
-    btn.classList.toggle('active', btn.dataset.cdfmode === statsCdfMode);
+    btn.classList.toggle('active', btn.dataset.cdfmode === S.statsCdfMode);
   });
 }
 
@@ -20733,7 +20781,7 @@ function renderStatsCdfPanel(root) {
 // smoothing as slope rotation. The classic model-vs-samples companion to
 // the CDF overlay.
 function renderStatsQqSvg(entries, root) {
-  var isLog = statsCdfScale === 'log';
+  var isLog = statStateForRoot(root).statsCdfScale === 'log';
   var W = chartHostWidth(statEls(root).cdfChart, 700), plotBaseH = 420;
   var pad = { top: 20, right: 30, bottom: 64, left: 70 };
   var plotW = W - pad.left - pad.right;
@@ -20863,8 +20911,9 @@ function normInv(p) {
 var STATS_LOGPROB_TICKS = [0.002, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.998];
 
 function renderStatsCdfSvg(entries, root) {
-  var isLog = statsCdfScale === 'log';
-  var probScale = statsCdfMode === 'logprob';
+  var S = statStateForRoot(root);
+  var isLog = S.statsCdfScale === 'log';
+  var probScale = S.statsCdfMode === 'logprob';
   var W = chartHostWidth(statEls(root).cdfChart, 700), plotBaseH = 380;
   var pad = { top: 20, right: 30, bottom: 50, left: 60 };
   var plotW = W - pad.left - pad.right;
@@ -20980,7 +21029,7 @@ function renderStatsCdfSvg(entries, root) {
   }
 
   // Store params for tooltip interaction
-  _statsCdfParams = {
+  S._statsCdfParams = {
     entries: entries, isLog: isLog,
     probScale: probScale, zLo: zLo, zHi: zHi,
     globalMin: globalMin, globalMax: globalMax,
@@ -21036,9 +21085,10 @@ function wireStatsCdfTooltip(root) {
   var chart = statEls(root).cdfChart;
   var svg = chart ? chart.querySelector('#statsCdfSvg') : null;
   var overlay = chart ? chart.querySelector('#statsCdfOverlay') : null;
-  if (!svg || !overlay || !_statsCdfParams) return;
+  var params = statStateForRoot(root)._statsCdfParams;
+  if (!svg || !overlay || !params) return;
 
-  var p = _statsCdfParams;
+  var p = params;
   var crosshair = chart.querySelector('#statsCdfCrosshair');
   var dots = svg.querySelectorAll('.cdf-dot');
 
