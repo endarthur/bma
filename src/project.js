@@ -593,6 +593,7 @@ function serializeProject() {
         theoEnabled: !!(document.getElementById('gtTheoEnabled') || {}).checked,
         theoEngine: (document.getElementById('gtTheoEngine') || {}).value || 'affine',
         theoF: parseFloat((document.getElementById('gtTheoFNum') || {}).value) || 0.6,
+        theoDsId: (typeof gtTheoDsId !== 'undefined') ? gtTheoDsId : null,   // G2: theoretical-curve source dataset
         selectedGroups: (function() {
           var list = document.getElementById('gtGrpList');
           if (!list) return null;
@@ -2220,6 +2221,7 @@ function displayResults(data) {
     var $gTheoFNum = document.getElementById('gtTheoFNum');
     if ($gTheoCb && gtp.theoEnabled != null) $gTheoCb.checked = !!gtp.theoEnabled;
     if ($gTheoEng && gtp.theoEngine) $gTheoEng.value = gtp.theoEngine;
+    if (gtp.theoDsId !== undefined) gtTheoDsId = gtp.theoDsId;   // G2: restore the source dataset
     if (gtp.theoF != null && isFinite(gtp.theoF)) {
       if ($gTheoF) $gTheoF.value = gtp.theoF;
       if ($gTheoFNum) $gTheoFNum.value = gtp.theoF;

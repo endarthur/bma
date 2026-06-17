@@ -328,6 +328,7 @@ function wsRemoveInstance(ds) {
   if (typeof dsRemove === 'function') dsRemove(ds.id);
   if (typeof refreshCatalogTree === 'function') refreshCatalogTree();
   if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();  // G1: drop it from the picker, bounce the editor if targeted
+  if (typeof refreshGtTheoSource === 'function') refreshGtTheoSource();           // G2: drop it from the GT theo source picker
   if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
     renderStatsSidebar(); renderStatsTable(); renderStatsCdfPanel();
   }

@@ -246,6 +246,7 @@ function renderGtConfig(data) {
         '<option value="affine">Affine correction</option>' +
         '<option value="dgm" disabled>DGM (Hermite) — next</option>' +
       '</select>' +
+      gtTheoSourceSelectHtml() +
       '<div style="display:flex;gap:0.3rem;align-items:center;margin-top:0.3rem">' +
         '<span style="font-size:0.62rem;color:var(--fg-dim);white-space:nowrap" title="variance reduction factor: Var(blocks)/Var(samples). From your estimation work, or explore — never derived from the model (circular)">f</span>' +
         '<input type="range" id="gtTheoF" min="0.05" max="1" step="0.01" value="0.6" style="flex:1">' +
@@ -341,6 +342,8 @@ function renderGtConfig(data) {
     if (isFinite(fv) && fv >= 0.05 && fv <= 1 && $theoF) $theoF.value = fv;
     if (gtTheoActive()) theoRerender();
   });
+  // G2: wire the theoretical-curve source picker (rebuilt + bound here)
+  refreshGtTheoSource();
 
   // Cutoff mode radio
   document.querySelectorAll('input[name="gtCutoffMode"]').forEach(function(r) {
@@ -719,7 +722,7 @@ function renderGtOutput() {
   // the load completion re-renders. Grouped charts skip the overlay.
   var theoOn = gtTheoActive();
   if (theoOn && isGrouped) gtTheoSetStatus('overlay shows on ungrouped charts only');
-  if (theoOn && !isGrouped && !gtTheoLoading && auxFile) {
+  if (theoOn && !isGrouped && !gtTheoLoading && gtTheoSourceDs()) {
     var matchedNow = gtTheoMatchedVars();
     var covered = gtTheo && gtTheo.fingerprint === gtTheoFingerprintNow(Object.keys(gtTheo.byVar)) &&
       matchedNow.length > 0 && matchedNow.every(function(v) { return gtTheo.byVar[v.auxName]; });
@@ -831,41 +834,53 @@ function renderGtOutput() {
 // v0 engine: affine correction Z_v = m + √f·(Z − m). Honest about its
 // crudeness (shape is preserved exactly); the DGM (Hermite) engine slots
 // in here next.
-var gtTheo = null;        // { byVar: {AUXNAME: dist}, fingerprint } — dist = sorted weighted distribution + prefix sums
+var gtTheo = null;        // { byVar: {SRCNAME: dist}, fingerprint } — dist = sorted weighted distribution + prefix sums
 var gtTheoLoading = false;
+var gtTheoDsId = null;     // A10 G2: which comparison dataset supplies the theoretical (samples) distribution; null = the first one with a file
 
-function gtTheoFingerprintNow(auxNames) {
-  if (!auxFile || !auxPreflightData) return null;
+// The comparison dataset the theoretical curve is drawn from (any d2+, not just
+// the singleton aux). Defaults to the first comparison dataset with a file.
+function gtTheoSourceDs() {
+  if (gtTheoDsId) { var d = dsById(gtTheoDsId); if (d && d.id !== 'model' && d.file) return d; }
+  for (var i = 1; i < datasets.length; i++) { if (datasets[i].file) return datasets[i]; }
+  return null;
+}
+
+function gtTheoFingerprintNow(srcNames) {
+  var ds = gtTheoSourceDs();
+  if (!ds || !ds.file || !ds.preflight) return null;
   return JSON.stringify({
-    f: auxFile.name + '|' + auxFile.size,
-    z: auxPreflightData.selectedZipEntry || null,
-    flt: auxFilter ? auxFilter.expression : '',
-    cc: auxCalcolCode || '',
-    w: catRole('aux', 'weight') || '',
-    dw: catRole('aux', 'weight') === AUX_DECLUS_WEIGHT && auxDeclus ? auxDeclus.fingerprint : null,
-    vars: auxNames.slice().sort()
+    ds: ds.id,
+    f: ds.file.name + '|' + ds.file.size,
+    z: ds.preflight.selectedZipEntry || null,
+    flt: ds.filter ? ds.filter.expression : '',
+    cc: ds.calcolCode || '',
+    w: catRole(ds.id, 'weight') || '',
+    dw: catRole(ds.id, 'weight') === AUX_DECLUS_WEIGHT && ds.declus ? ds.declus.fingerprint : null,
+    vars: srcNames.slice().sort()
   });
 }
 
-// Checked GT grade variables matched to aux numeric columns/calcols through
-// the catalog pairing — the same pairing as Statistics/Swath/Categories
+// Checked GT grade variables matched to the source dataset's numeric columns/
+// calcols through the catalog grouping — the same grouping as Statistics/Swath
 function gtTheoMatchedVars() {
-  if (!auxPreflightData) return [];
+  var ds = gtTheoSourceDs();
+  if (!ds || !ds.preflight) return [];
   catEnsureSeeded();
-  var auxNumeric = {};
-  for (var i = 0; i < auxPreflightData.header.length; i++) {
-    if ((auxPreflightData.autoTypes || [])[i] === 'numeric') auxNumeric[auxPreflightData.header[i]] = true;
+  var srcNumeric = {};
+  for (var i = 0; i < ds.preflight.header.length; i++) {
+    if ((ds.preflight.autoTypes || [])[i] === 'numeric') srcNumeric[ds.preflight.header[i]] = true;
   }
-  for (var ci = 0; ci < auxCalcolMeta.length; ci++) {
-    if (auxCalcolMeta[ci].type === 'numeric') auxNumeric[auxCalcolMeta[ci].name] = true;
+  for (var ci = 0; ci < (ds.calcolMeta || []).length; ci++) {
+    if (ds.calcolMeta[ci].type === 'numeric') srcNumeric[ds.calcolMeta[ci].name] = true;
   }
   var out = [];
   document.querySelectorAll('#gtVarList input[type="checkbox"]:checked').forEach(function(cb) {
     var colIdx = parseInt(cb.value);
     var colName = currentHeader[colIdx];
     if (!colName) return;
-    var auxName = catPairsRev(colName).filter(function(n) { return auxNumeric[n]; })[0];
-    if (auxName) out.push({ colIdx: colIdx, colName: colName, auxName: auxName });
+    var srcName = catGroupMembers(colName, ds.id).filter(function(n) { return srcNumeric[n]; })[0];
+    if (srcName) out.push({ colIdx: colIdx, colName: colName, auxName: srcName });
   });
   return out;
 }
@@ -875,23 +890,58 @@ function gtTheoSetStatus(msg, isErr) {
   if (el) { el.textContent = msg || ''; el.style.color = isErr ? 'var(--red)' : ''; }
 }
 
+// A10 G2: a "from <dataset>" picker, shown only when 2+ comparison datasets have
+// files (with one, the source is implicit — old behavior). Lets the theoretical
+// curve be drawn from any comparison dataset, not just the singleton aux. The
+// picker lives in a stable wrapper so it can be refreshed in place as datasets
+// load/clear (the GT sidebar itself is built once, on the model analysis).
+function gtTheoSourceInnerHtml() {
+  var srcs = [];
+  for (var i = 1; i < datasets.length; i++) { if (datasets[i].file) srcs.push(datasets[i]); }
+  if (srcs.length < 2) return '';
+  var cur = (gtTheoSourceDs() || {}).id;
+  return '<div style="display:flex;gap:0.3rem;align-items:center;margin-top:0.3rem">' +
+    '<span style="font-size:0.62rem;color:var(--fg-dim);white-space:nowrap">from</span>' +
+    '<select class="gt-select" id="gtTheoSource" style="flex:1">' +
+    srcs.map(function(d) { return '<option value="' + d.id + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
+    '</select></div>';
+}
+function gtTheoSourceSelectHtml() { return '<div id="gtTheoSourceWrap">' + gtTheoSourceInnerHtml() + '</div>'; }
+
+// Rebuild the source picker in place + (re)wire it — called when comparison
+// datasets change so the picker reflects the current set without a full GT
+// sidebar rebuild (which would drop the user's grade selections).
+function refreshGtTheoSource() {
+  var wrap = document.getElementById('gtTheoSourceWrap');
+  if (!wrap) return;
+  wrap.innerHTML = gtTheoSourceInnerHtml();
+  var sel = document.getElementById('gtTheoSource');
+  if (sel) sel.addEventListener('change', function() {
+    gtTheoDsId = sel.value;
+    gtTheo = null;
+    if (gtTheoActive() && lastGtData) renderGtOutput();
+    if (typeof autoSaveProject === 'function') autoSaveProject();
+  });
+}
+
 // Sequential colvalues passes (one per matched variable) → weighted sorted
 // distributions with prefix sums of w and w·v
 function runGtTheoLoad() {
   if (gtTheoLoading) return;
+  var ds = gtTheoSourceDs();
   var matched = gtTheoMatchedVars();
-  if (!auxFile || matched.length === 0) {
-    gtTheoSetStatus(auxFile ? 'no checked grade variable has an aux match' : 'load an aux dataset first', true);
+  if (!ds || !ds.file || matched.length === 0) {
+    gtTheoSetStatus(ds && ds.file ? 'no checked grade variable has a match in ' + dsLabel(ds.id) : 'load a comparison dataset first', true);
     return;
   }
-  // Weight resolution mirrors the aux analyze pass
+  // Weight resolution mirrors the source dataset's analyze pass
   var weightArray = null, weightCol = null;
-  var theoAuxWeight = catRole('aux', 'weight');
-  if (theoAuxWeight === AUX_DECLUS_WEIGHT) {
-    if (typeof auxDeclusFresh === 'function' && auxDeclusFresh()) weightArray = auxDeclus.weights;
-    else { gtTheoSetStatus('declustered weights missing or stale — re-run Declustering on the Aux tab', true); return; }
-  } else if (theoAuxWeight) {
-    weightCol = theoAuxWeight;
+  var theoWeight = catRole(ds.id, 'weight');
+  if (theoWeight === AUX_DECLUS_WEIGHT) {
+    if (typeof auxDeclusFresh === 'function' && auxDeclusFresh(ds) && ds.declus) weightArray = ds.declus.weights;
+    else { gtTheoSetStatus('declustered weights missing or stale — re-run Declustering on ' + dsLabel(ds.id), true); return; }
+  } else if (theoWeight) {
+    weightCol = theoWeight;
   }
 
   gtTheoLoading = true;
@@ -916,18 +966,18 @@ function runGtTheoLoad() {
     var w = new Worker(workerUrl);
     w.postMessage({
       mode: 'colvalues',
-      file: auxFile,
-      zipEntry: auxPreflightData.selectedZipEntry || null,
-      globalFilter: auxFilter ? { expression: auxFilter.expression } : null,
-      calcolCode: auxCalcolCode || null,
-      calcolMeta: auxCalcolMeta.length > 0 ? auxCalcolMeta : null,
-      resolvedTypes: auxPreflightData.autoTypes,
+      file: ds.file,
+      zipEntry: ds.preflight.selectedZipEntry || null,
+      globalFilter: ds.filter ? { expression: ds.filter.expression } : null,
+      calcolCode: ds.calcolCode || null,
+      calcolMeta: (ds.calcolMeta && ds.calcolMeta.length > 0) ? ds.calcolMeta : null,
+      resolvedTypes: ds.preflight.autoTypes,
       varColName: v.auxName,
       weightColName: weightCol,
       weightArray: weightArray,
-      rowVarOverride: AUX_ROW_VAR,
-      dmEndianness: auxPreflightData.dmEndianness || null,
-      dmFormat: auxPreflightData.dmFormat || null
+      rowVarOverride: ds.rowVar,
+      dmEndianness: ds.preflight.dmEndianness || null,
+      dmFormat: ds.preflight.dmFormat || null
     });
     w.onerror = function(e) { w.terminate(); fail(e.message || 'unknown error'); };
     w.onmessage = function(e) {

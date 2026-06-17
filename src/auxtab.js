@@ -789,6 +789,7 @@ function loadAuxFile(file, handle, zipEntryName, ds, root) {
     if (typeof wsSetDatasetTabTitle === 'function') wsSetDatasetTabTitle(ds);
     if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
     if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
+    if (typeof refreshGtTheoSource === 'function') refreshGtTheoSource();   // G2: GT theo source picker
     if (typeof autoSaveProject === 'function') autoSaveProject();
   }).catch(function(err) {
     ds.file = null;
@@ -842,6 +843,7 @@ function clearAux(ds, root) {
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
   if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();
   if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
+  if (typeof refreshGtTheoSource === 'function') refreshGtTheoSource();   // G2: GT theo source picker
   if (typeof updateCalcolBadge === 'function') updateCalcolBadge();
   if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
     renderStatsSidebar();
