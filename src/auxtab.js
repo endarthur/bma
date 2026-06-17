@@ -303,7 +303,25 @@ function renderAuxSummary(ds, root) {
     ? '<span class="badge" style="background:var(--warn-soft);color:var(--warn)">' + items.length + ' check' + (items.length === 1 ? '' : 's') + '</span>'
     : '<span class="badge" style="background:var(--green-soft);color:var(--green)">clean</span>';
 
+  // A10 4f-3: a gridded comparison dataset gets the same Grid Geometry table as
+  // the model Summary (shared geoContentHtml). Driven by dsHasGrid, so it tracks
+  // the grid/point override; scattered datasets show only the bounding box.
+  var geoHtml = '';
+  if (typeof dsHasGrid === 'function' && dsHasGrid(ds)) {
+    var g = ds.complete.geometry;
+    var anySub = g.x.isSubBlocked || g.y.isSubBlocked || g.z.isSubBlocked;
+    var totGrid = g.x.gridCount * g.y.gridCount * g.z.gridCount;
+    var fillPct = totGrid > 0 ? (d.rowCount / totGrid * 100) : 0;
+    var gBadge = anySub
+      ? '<span class="badge" style="background:var(--blue)">SUB-BLOCKED</span>'
+      : '<span class="badge">' + fillPct.toFixed(1) + '% filled</span>';
+    geoHtml =
+      '<div class="section" style="margin:0.7rem"><div class="section-head">Grid Geometry ' + gBadge + '</div>' +
+        '<div class="section-body">' + geoContentHtml(g, d.rowCount, { coordInvalidCells: d.coordInvalidCells }) + '</div></div>';
+  }
+
   $s.innerHTML =
+    geoHtml +
     '<div class="section" style="margin:0.7rem"><div class="section-head">Bounding Box <span class="badge">' + esc(label) + '</span></div>' +
       '<div class="section-body">' + bboxHtml + '</div></div>' +
     '<div class="section" style="margin:0.7rem"><div class="section-head">Data Health ' + hBadge + '</div>' +
@@ -314,6 +332,21 @@ function renderAuxSummary(ds, root) {
     $obj.addEventListener('click', function() {
       downloadBboxObj({ xMin: sx.min, xMax: sx.max, yMin: sy.min, yMax: sy.max, zMin: sz.min, zMax: sz.max },
         ds.file ? ds.file.name : label);
+    });
+  }
+
+  // A10 4f-3: click-to-copy on the Grid Geometry cells (mirrors the model's
+  // $geoContent handler). Wire once per summary element — innerHTML re-renders
+  // don't detach a listener bound to the container itself.
+  if (!$s._geoCopyWired) {
+    $s._geoCopyWired = true;
+    $s.addEventListener('click', function(e) {
+      var c = e.target.closest ? e.target.closest('.gc[data-value]') : null;
+      if (!c) return;
+      navigator.clipboard.writeText(c.dataset.value).then(function() {
+        c.classList.add('copied');
+        setTimeout(function() { c.classList.remove('copied'); }, 800);
+      });
     });
   }
 }

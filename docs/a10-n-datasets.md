@@ -668,8 +668,17 @@ as grids.
   `experiments/4f-gridmode-smoke.js` (22 asserts — model default+detect, override
   flips dsHasGrid, scattered comparison auto-detects points, force-grid, reload
   round-trip both sides). Worker untouched — b1-differential 29/29 bit-identical.
-- **4f-3** — generalize the Summary "Grid Geometry" table beyond the model-only
-  `lastGeoData` to any `dsHasGrid` dataset.
+- **4f-3 ✅** — generalized the Summary "Grid Geometry" table beyond the
+  model-only `lastGeoData`. The table's inner HTML is now a shared
+  `geoContentHtml(geometry, totalRowCount, opts)` in calcol.js (opts carries the
+  model-only extras — `coordOrder`/`maxDecimals`/`dxyz`/`coordInvalidCells` — so
+  the model Summary output is byte-identical). `renderAuxSummary` (auxtab.js)
+  prepends a **Grid Geometry** section whenever `dsHasGrid(ds)` (so it tracks the
+  4f-2 grid/point override live — toggling re-renders via `renderAuxView`);
+  scattered datasets keep only the Bounding Box. Click-to-copy on the geo cells
+  is wired once on the aux summary container (mirrors the model's `$geoContent`
+  delegated handler). Guard extended in `4f-gridmode-smoke.js` (model table still
+  renders; forced-grid comparison shows the table, point override removes it).
 - **4f-4** — de-special-case the naming/branches so the model's preflight panel
   and the dataset import panels converge ("Import Block Model" stops being the
   only geometry-bearing surface).

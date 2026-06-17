@@ -1034,6 +1034,72 @@ function geoRowT(label, vx, vy, vz) {
   return '<div class="gl">' + label + '</div>' + cell(vx) + cell(vy) + cell(vz);
 }
 
+// A10 4f-3: the Grid Geometry table's inner HTML, shared by the model Summary
+// (project.js displayResults) and any gridded comparison dataset's summary
+// (auxtab.js renderAuxSummary). opts carries the model-only extras so the model
+// output stays byte-identical: { coordOrder, maxDecimals, dxyz, coordInvalidCells }.
+// A comparison dataset passes only coordInvalidCells (no DXYZ/loop-order/rounding).
+function geoContentHtml(geometry, totalRowCount, opts) {
+  opts = opts || {};
+  const gx = geometry.x, gy = geometry.y, gz = geometry.z;
+  const anySubBlocked = gx.isSubBlocked || gy.isSubBlocked || gz.isSubBlocked;
+  const totalGrid = gx.gridCount * gy.gridCount * gz.gridCount;
+  const fillPct = totalGrid > 0 ? (totalRowCount / totalGrid * 100) : 0;
+  const coordOrder = opts.coordOrder, maxDecimals = opts.maxDecimals, dxyz = opts.dxyz;
+  const coordInvalidCells = opts.coordInvalidCells || 0;
+
+  const subRow = anySubBlocked
+    ? geoRowT('Min Block',
+        gx.isSubBlocked ? gx.minBlockSize : '—',
+        gy.isSubBlocked ? gy.minBlockSize : '—',
+        gz.isSubBlocked ? gz.minBlockSize : '—')
+    : '';
+
+  let subDetail = '';
+  if (anySubBlocked) {
+    const parts = [];
+    for (const [label, g] of [['X', gx], ['Y', gy], ['Z', gz]]) {
+      if (g.isSubBlocked) {
+        const ratios = g.subBlockSizes.map(s => `1/${s.ratio}`).join(', ');
+        parts.push(`${label}: ${g.blockSize} → ${ratios}`);
+      }
+    }
+    subDetail = `<div style="margin-top:0.5rem; font-size:0.75rem; color:var(--blue)">
+        Sub-blocks: ${parts.join(' &nbsp;|&nbsp; ')}
+      </div>`;
+  }
+
+  return `
+      <div class="geo-grid geo-grid-t">
+        <div class="gh"></div><div class="gh">X</div><div class="gh">Y</div><div class="gh">Z</div>
+        ${geoRowT('Origin', gx.origin, gy.origin, gz.origin)}
+        ${geoRowT('Block Size', gx.blockSize, gy.blockSize, gz.blockSize)}
+        ${subRow}
+        ${geoRowT('Unique', gx.uniqueCount, gy.uniqueCount, gz.uniqueCount)}
+        ${geoRowT('Grid Count', gx.gridCount, gy.gridCount, gz.gridCount)}
+        ${geoRowT('Extent', gx.extent, gy.extent, gz.extent)}
+      </div>
+      <div style="margin-top:0.8rem; font-size:0.75rem; color:var(--fg-dim)">
+        Parent grid cells: <strong style="color:var(--fg)">${totalGrid.toLocaleString()}</strong> &nbsp;|&nbsp;
+        Total blocks: <strong style="color:var(--fg)">${totalRowCount.toLocaleString()}</strong>
+        ${!anySubBlocked ? `&nbsp;|&nbsp; Fill ratio: <strong style="color:var(--fg-bright)">${fillPct.toFixed(1)}%</strong>` : ''}
+      </div>
+      ${subDetail}
+      ${coordOrder ? `<div style="margin-top:0.5rem; font-size:0.75rem; color:var(--fg-dim)">
+        Loop order: <strong style="color:var(--fg)">${coordOrder.slowest}</strong> <span style="color:var(--fg-dim)">→</span> <strong style="color:var(--fg)">${coordOrder.middle}</strong> <span style="color:var(--fg-dim)">→</span> <strong style="color:var(--fg)">${coordOrder.fastest}</strong>
+        <span style="opacity:0.6">&nbsp;(${coordOrder.slowest} slowest, ${coordOrder.fastest} fastest)</span>
+      </div>` : ''}
+      ${maxDecimals ? `<div style="margin-top:0.5rem; font-size:0.75rem; color:var(--fg-dim)">
+        Rounding: X=${maxDecimals.x}dp, Y=${maxDecimals.y}dp, Z=${maxDecimals.z}dp <span style="opacity:0.5">(detected from data)</span>
+      </div>` : ''}
+      ${anySubBlocked && dxyz && dxyz.dx < 0 && dxyz.dy < 0 && dxyz.dz < 0 ? `<div style="margin-top:0.5rem; padding:0.4rem 0.6rem; border-radius:4px; background:var(--warn-soft); border:1px solid var(--warn); font-size:0.75rem; color:var(--warn);">
+        ⚠ This model appears sub-blocked. Assign DX/DY/DZ columns in Preflight for accurate block sizes.
+      </div>` : ''}
+      ${coordInvalidCells > 0 ? `<div class="warn-note" style="margin-top:0.5rem;">
+        ${coordInvalidCells.toLocaleString()} coordinate value${coordInvalidCells === 1 ? '' : 's'} ignored by grid inference (null sentinel or unparseable).
+      </div>` : ''}`;
+}
+
 function esc(s) {
   var d = document.createElement('div');
   d.textContent = s;

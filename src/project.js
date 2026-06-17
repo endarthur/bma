@@ -1873,58 +1873,10 @@ function displayResults(data) {
     if (anySubBlocked) $geoBadge.style.background = 'var(--blue)';
     else $geoBadge.style.background = '';
 
-    // Build sub-block row if needed
-    const subRow = anySubBlocked
-      ? geoRowT('Min Block',
-          gx.isSubBlocked ? gx.minBlockSize : '—',
-          gy.isSubBlocked ? gy.minBlockSize : '—',
-          gz.isSubBlocked ? gz.minBlockSize : '—')
-      : '';
-
-    // Sub-block detail text
-    let subDetail = '';
-    if (anySubBlocked) {
-      const parts = [];
-      for (const [label, g] of [['X', gx], ['Y', gy], ['Z', gz]]) {
-        if (g.isSubBlocked) {
-          const ratios = g.subBlockSizes.map(s => `1/${s.ratio}`).join(', ');
-          parts.push(`${label}: ${g.blockSize} → ${ratios}`);
-        }
-      }
-      subDetail = `<div style="margin-top:0.5rem; font-size:0.75rem; color:var(--blue)">
-        Sub-blocks: ${parts.join(' &nbsp;|&nbsp; ')}
-      </div>`;
-    }
-
-    $geoContent.innerHTML = `
-      <div class="geo-grid geo-grid-t">
-        <div class="gh"></div><div class="gh">X</div><div class="gh">Y</div><div class="gh">Z</div>
-        ${geoRowT('Origin', gx.origin, gy.origin, gz.origin)}
-        ${geoRowT('Block Size', gx.blockSize, gy.blockSize, gz.blockSize)}
-        ${subRow}
-        ${geoRowT('Unique', gx.uniqueCount, gy.uniqueCount, gz.uniqueCount)}
-        ${geoRowT('Grid Count', gx.gridCount, gy.gridCount, gz.gridCount)}
-        ${geoRowT('Extent', gx.extent, gy.extent, gz.extent)}
-      </div>
-      <div style="margin-top:0.8rem; font-size:0.75rem; color:var(--fg-dim)">
-        Parent grid cells: <strong style="color:var(--fg)">${totalGrid.toLocaleString()}</strong> &nbsp;|&nbsp;
-        Total blocks: <strong style="color:var(--fg)">${totalRowCount.toLocaleString()}</strong>
-        ${!anySubBlocked ? `&nbsp;|&nbsp; Fill ratio: <strong style="color:var(--fg-bright)">${fillPct.toFixed(1)}%</strong>` : ''}
-      </div>
-      ${subDetail}
-      ${coordOrder ? `<div style="margin-top:0.5rem; font-size:0.75rem; color:var(--fg-dim)">
-        Loop order: <strong style="color:var(--fg)">${coordOrder.slowest}</strong> <span style="color:var(--fg-dim)">→</span> <strong style="color:var(--fg)">${coordOrder.middle}</strong> <span style="color:var(--fg-dim)">→</span> <strong style="color:var(--fg)">${coordOrder.fastest}</strong>
-        <span style="opacity:0.6">&nbsp;(${coordOrder.slowest} slowest, ${coordOrder.fastest} fastest)</span>
-      </div>` : ''}
-      ${maxDecimals ? `<div style="margin-top:0.5rem; font-size:0.75rem; color:var(--fg-dim)">
-        Rounding: X=${maxDecimals.x}dp, Y=${maxDecimals.y}dp, Z=${maxDecimals.z}dp <span style="opacity:0.5">(detected from data)</span>
-      </div>` : ''}
-      ${anySubBlocked && currentDXYZ.dx < 0 && currentDXYZ.dy < 0 && currentDXYZ.dz < 0 ? `<div style="margin-top:0.5rem; padding:0.4rem 0.6rem; border-radius:4px; background:var(--warn-soft); border:1px solid var(--warn); font-size:0.75rem; color:var(--warn);">
-        ⚠ This model appears sub-blocked. Assign DX/DY/DZ columns in Preflight for accurate block sizes.
-      </div>` : ''}
-      ${data.coordInvalidCells > 0 ? `<div class="warn-note" style="margin-top:0.5rem;">
-        ${data.coordInvalidCells.toLocaleString()} coordinate value${data.coordInvalidCells === 1 ? '' : 's'} ignored by grid inference (null sentinel or unparseable).
-      </div>` : ''}`;
+    // A10 4f-3: the geometry table is shared with gridded comparison datasets
+    $geoContent.innerHTML = geoContentHtml(geometry, totalRowCount, {
+      coordOrder, maxDecimals, dxyz: currentDXYZ, coordInvalidCells: data.coordInvalidCells
+    });
   } else {
     lastGeoData = null;
     $geoSection.style.display = (xyzGuess.x < 0 || xyzGuess.y < 0 || xyzGuess.z < 0) ? '' : 'none';
