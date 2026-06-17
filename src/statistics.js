@@ -269,33 +269,35 @@ function isMetricVisible(key) {
   return statsVisibleMetrics.has(key);
 }
 
-function renderStatsTab(stats, header, origColCount, isFiltered, rowCount) {
+function renderStatsTab(stats, header, origColCount, isFiltered, rowCount, root) {
   lastDisplayedStats = stats;
   lastDisplayedHeader = header;
   _statsNumCols = Object.keys(stats).map(Number).sort(function(a, b) { return a - b; });
   _statsHeader = header;
   _statsOrigColCount = origColCount;
+  var els = statEls(root);
 
-  $statsBadge.textContent = _statsNumCols.length + ' columns' + (isFiltered ? ' \u00B7 ' + rowCount.toLocaleString() + ' rows' : '');
+  els.badge.textContent = _statsNumCols.length + ' columns' + (isFiltered ? ' \u00B7 ' + rowCount.toLocaleString() + ' rows' : '');
 
   if (_statsNumCols.length === 0) {
-    $statsContent.innerHTML = '<div style="color:var(--fg-dim);">No numeric columns detected.</div>';
-    $statsSidebar.style.display = 'none';
+    els.content.innerHTML = '<div style="color:var(--fg-dim);">No numeric columns detected.</div>';
+    els.sidebar.style.display = 'none';
     return;
   }
-  $statsSidebar.style.display = '';
+  els.sidebar.style.display = '';
 
-  renderStatsSidebar();
-  renderStatsTable();
-  renderStatsCdfPanel();
+  renderStatsSidebar(root);
+  renderStatsTable(root);
+  renderStatsCdfPanel(root);
 
-  if (!_statsEventsWired) {
+  if (!root && !_statsEventsWired) {
     wireStatsEventsOnce();
     _statsEventsWired = true;
   }
 }
 
-function renderStatsSidebar() {
+function renderStatsSidebar(root) {
+  var els = statEls(root);
   var numCols = _statsNumCols;
   var header = _statsHeader;
   var origColCount = _statsOrigColCount;
@@ -307,10 +309,10 @@ function renderStatsSidebar() {
     var checked = isMetricVisible(m.key) ? ' checked' : '';
     togglesHtml += '<label class="stats-metric-toggle"><input type="checkbox" data-metric="' + m.key + '"' + checked + '> ' + esc(m.label) + '</label>';
   }
-  document.getElementById('statsMetricToggles').innerHTML = togglesHtml;
+  els.metricToggles.innerHTML = togglesHtml;
 
   // Preset buttons state
-  var presetBtns = document.querySelectorAll('#statsPresetBtns .stats-preset');
+  var presetBtns = els.presetBtns.querySelectorAll('.stats-preset');
   var currentPreset = null;
   for (var key in STATS_PRESETS) {
     var pre = STATS_PRESETS[key];
@@ -321,7 +323,7 @@ function renderStatsSidebar() {
   presetBtns.forEach(function(btn) {
     btn.classList.toggle('active', btn.dataset.preset === currentPreset || (currentPreset === null && btn.dataset.preset === 'custom'));
   });
-  var customInput = document.getElementById('statsCustomPct');
+  var customInput = els.customPct;
   if (currentPreset === null || currentPreset === 'custom') {
     customInput.style.display = '';
     customInput.value = statsPercentiles.join(',');
@@ -331,7 +333,7 @@ function renderStatsSidebar() {
 
   // Weight select — numeric variables (incl. calcols); one support weight
   // per dataset, shared with the Swath tab (catalog role, D3)
-  var $wSel = document.getElementById('statsWeightSel');
+  var $wSel = els.weightSel;
   if ($wSel) {
     var curWeight = catRole('model', 'weight');
     var wOpts = '<option value="">— none</option>';
@@ -341,7 +343,7 @@ function renderStatsSidebar() {
     }
     $wSel.innerHTML = wOpts;
     if (curWeight && $wSel.value !== curWeight) $wSel.value = '';
-    var $wNote = document.getElementById('statsWeightNote');
+    var $wNote = els.weightNote;
     if ($wNote) {
       var noteParts = [];
       if (curWeight && lastCompleteData && lastCompleteData.weightApplied !== curWeight) noteParts.push('re-run analysis to apply');
@@ -351,7 +353,7 @@ function renderStatsSidebar() {
   }
 
   // Variable list
-  var search = document.getElementById('statsVarSearch').value.toLowerCase();
+  var search = els.varSearch.value.toLowerCase();
   var html = '';
   for (var ci of numCols) {
     var name = header[ci];
@@ -370,7 +372,7 @@ function renderStatsSidebar() {
 
   // Dataset chips (progressive disclosure) — only once a second comparison
   // dataset joins (3+ total), so the common model+aux case stays uncluttered.
-  var dsSection = document.getElementById('statsDatasetsSection');
+  var dsSection = els.datasetsSection;
   if (dsSection) {
     var allCmp = statsCmpDatasets();
     if (allCmp.length >= 2) {
@@ -389,7 +391,7 @@ function renderStatsSidebar() {
         var off = panelState.statistics.dsHidden.has(ds.id);
         chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) + '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) + '">' + esc(dsLabel(ds.id)) + '</button>';
       });
-      document.getElementById('statsDatasetChips').innerHTML = refSel + '<div class="stats-ds-chip-row">' + chips + '</div>';
+      els.datasetChips.innerHTML = refSel + '<div class="stats-ds-chip-row">' + chips + '</div>';
       dsSection.style.display = '';
     } else {
       dsSection.style.display = 'none';
@@ -414,10 +416,11 @@ function renderStatsSidebar() {
       html += '</div>';
     }
   });
-  document.getElementById('statsVarList').innerHTML = html;
+  els.varList.innerHTML = html;
 }
 
-function renderStatsTable() {
+function renderStatsTable(root) {
+  var els = statEls(root);
   var stats = lastDisplayedStats;
   var header = lastDisplayedHeader;
   if (!stats || !header) return;
@@ -481,7 +484,7 @@ function renderStatsTable() {
   }
 
   if (visCols.length === 0 && cmpCount === 0) {
-    $statsContent.innerHTML = '<div style="color:var(--fg-dim);padding:1rem;">No variables selected.</div>';
+    els.content.innerHTML = '<div style="color:var(--fg-dim);padding:1rem;">No variables selected.</div>';
     return;
   }
 
@@ -525,11 +528,12 @@ function renderStatsTable() {
   for (var au = 0; au < cmpUnmatched.length; au++) html += cmpRowHtml(cmpUnmatched[au]);
 
   html += '</tbody></table>';
-  $statsContent.innerHTML = html;
+  els.content.innerHTML = html;
 }
 
-function renderStatsCdfPanel() {
-  var chart = document.getElementById('statsCdfChart');
+function renderStatsCdfPanel(root) {
+  var els = statEls(root);
+  var chart = els.cdfChart;
   if (!chart) return;
 
   var anyCmpCdf = statsShownCmpDatasets().some(function(ds) {
@@ -583,18 +587,18 @@ function renderStatsCdfPanel() {
     if (entries.length < 2) {
       chart.innerHTML = note + '<div class="stats-cdf-hint">Q–Q needs two curves — click another variable name (the first selected is the reference axis)</div>';
     } else {
-      chart.innerHTML = note + renderStatsQqSvg(entries);
+      chart.innerHTML = note + renderStatsQqSvg(entries, root);
     }
   } else {
-    chart.innerHTML = note + renderStatsCdfSvg(entries);
-    wireStatsCdfTooltip();
+    chart.innerHTML = note + renderStatsCdfSvg(entries, root);
+    wireStatsCdfTooltip(root);
   }
 
   // Update toolbar buttons
-  document.querySelectorAll('#statsCdfToolbar .stats-scale').forEach(function(btn) {
+  els.cdfToolbar.querySelectorAll('.stats-scale').forEach(function(btn) {
     btn.classList.toggle('active', btn.dataset.scale === statsCdfScale);
   });
-  document.querySelectorAll('#statsCdfToolbar .stats-cdfmode').forEach(function(btn) {
+  els.cdfToolbar.querySelectorAll('.stats-cdfmode').forEach(function(btn) {
     btn.classList.toggle('active', btn.dataset.cdfmode === statsCdfMode);
   });
 }
@@ -604,9 +608,9 @@ function renderStatsCdfPanel() {
 // percentiles. Bias reads as offset from the 45° identity line; support
 // smoothing as slope rotation. The classic model-vs-samples companion to
 // the CDF overlay.
-function renderStatsQqSvg(entries) {
+function renderStatsQqSvg(entries, root) {
   var isLog = statsCdfScale === 'log';
-  var W = chartHostWidth(document.getElementById('statsCdfChart'), 700), plotBaseH = 420;
+  var W = chartHostWidth(statEls(root).cdfChart, 700), plotBaseH = 420;
   var pad = { top: 20, right: 30, bottom: 64, left: 70 };
   var plotW = W - pad.left - pad.right;
   var plotH = plotBaseH - pad.top - pad.bottom;
@@ -734,10 +738,10 @@ function normInv(p) {
 // validation figures); the axis spans normInv of the extremes
 var STATS_LOGPROB_TICKS = [0.002, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.998];
 
-function renderStatsCdfSvg(entries) {
+function renderStatsCdfSvg(entries, root) {
   var isLog = statsCdfScale === 'log';
   var probScale = statsCdfMode === 'logprob';
-  var W = chartHostWidth(document.getElementById('statsCdfChart'), 700), plotBaseH = 380;
+  var W = chartHostWidth(statEls(root).cdfChart, 700), plotBaseH = 380;
   var pad = { top: 20, right: 30, bottom: 50, left: 60 };
   var plotW = W - pad.left - pad.right;
   var plotH = plotBaseH - pad.top - pad.bottom;
@@ -904,15 +908,15 @@ function getCdfAtValue(centroids, totalCount, value, isLog) {
   return pts[pts.length - 1][1];
 }
 
-function wireStatsCdfTooltip() {
-  var svg = document.getElementById('statsCdfSvg');
-  var overlay = document.getElementById('statsCdfOverlay');
+function wireStatsCdfTooltip(root) {
+  var chart = statEls(root).cdfChart;
+  var svg = chart ? chart.querySelector('#statsCdfSvg') : null;
+  var overlay = chart ? chart.querySelector('#statsCdfOverlay') : null;
   if (!svg || !overlay || !_statsCdfParams) return;
 
   var p = _statsCdfParams;
-  var crosshair = document.getElementById('statsCdfCrosshair');
+  var crosshair = chart.querySelector('#statsCdfCrosshair');
   var dots = svg.querySelectorAll('.cdf-dot');
-  var chart = document.getElementById('statsCdfChart');
 
   // Create or reuse tooltip div
   var tip = chart.querySelector('.stats-cdf-tooltip');

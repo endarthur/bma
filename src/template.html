@@ -340,50 +340,50 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
       </div>
 
       <div class="results-panel" id="panelStatistics" data-tab="statistics">
-        <div class="stats-body" id="statsBody">
-          <div class="stats-sidebar" id="statsSidebar">
+        <div class="stats-body" id="statsBody" data-stat="body">
+          <div class="stats-sidebar" id="statsSidebar" data-stat="sidebar">
             <div class="stats-sidebar-section" data-sb="percentiles">
               <div class="stats-sidebar-title">Percentiles</div>
-              <div class="stats-preset-btns" id="statsPresetBtns">
+              <div class="stats-preset-btns" id="statsPresetBtns" data-stat="presetBtns">
                 <button class="stats-preset active" data-preset="quartiles">Quartiles</button>
                 <button class="stats-preset" data-preset="deciles">Deciles</button>
                 <button class="stats-preset" data-preset="ventiles">Ventiles</button>
                 <button class="stats-preset" data-preset="custom">Custom</button>
               </div>
-              <input type="text" class="stats-custom-input" id="statsCustomPct" placeholder="e.g. 5,10,25,50,75,90,95" style="display:none" autocomplete="off" spellcheck="false">
+              <input type="text" class="stats-custom-input" id="statsCustomPct" data-stat="customPct" placeholder="e.g. 5,10,25,50,75,90,95" style="display:none" autocomplete="off" spellcheck="false">
             </div>
             <div class="stats-sidebar-section" data-sb="weight">
               <div class="stats-sidebar-title">Weight</div>
-              <select class="stats-weight-select" id="statsWeightSel"><option value="">— none</option></select>
-              <div class="stats-weight-note" id="statsWeightNote"></div>
+              <select class="stats-weight-select" id="statsWeightSel" data-stat="weightSel"><option value="">— none</option></select>
+              <div class="stats-weight-note" id="statsWeightNote" data-stat="weightNote"></div>
             </div>
             <div class="stats-sidebar-section" data-sb="metrics">
               <div class="stats-sidebar-title">Metrics</div>
-              <div class="stats-metric-toggles" id="statsMetricToggles"></div>
+              <div class="stats-metric-toggles" id="statsMetricToggles" data-stat="metricToggles"></div>
             </div>
-            <div class="stats-sidebar-section" data-sb="datasets" id="statsDatasetsSection" style="display:none">
+            <div class="stats-sidebar-section" data-sb="datasets" id="statsDatasetsSection" data-stat="datasetsSection" style="display:none">
               <div class="stats-sidebar-title">Datasets</div>
-              <div class="stats-ds-chips" id="statsDatasetChips"></div>
+              <div class="stats-ds-chips" id="statsDatasetChips" data-stat="datasetChips"></div>
             </div>
             <div class="stats-sidebar-section--grow">
-              <div class="stats-sidebar-title">Variables <span class="badge" id="statsBadge"></span></div>
-              <input type="text" class="stats-search" id="statsVarSearch" placeholder="Search variables…" autocomplete="off" spellcheck="false">
+              <div class="stats-sidebar-title">Variables <span class="badge" id="statsBadge" data-stat="badge"></span></div>
+              <input type="text" class="stats-search" id="statsVarSearch" data-stat="varSearch" placeholder="Search variables…" autocomplete="off" spellcheck="false">
               <div class="stats-var-actions">
-                <button id="statsVarAll">All</button>
-                <button id="statsVarNone">None</button>
+                <button id="statsVarAll" data-stat="varAll">All</button>
+                <button id="statsVarNone" data-stat="varNone">None</button>
               </div>
-              <div class="stats-var-list" id="statsVarList"></div>
+              <div class="stats-var-list" id="statsVarList" data-stat="varList"></div>
             </div>
           </div>
-          <div class="stats-main" id="statsMain">
+          <div class="stats-main" id="statsMain" data-stat="main">
             <div class="stats-table-area">
               <div class="stats-table-toolbar">
-                <button class="stats-copy-btn" id="statsCopyBtn">Copy table</button>
+                <button class="stats-copy-btn" id="statsCopyBtn" data-stat="copyBtn">Copy table</button>
               </div>
-              <div class="stats-table-wrap" id="statsContent"></div>
+              <div class="stats-table-wrap" id="statsContent" data-stat="content"></div>
             </div>
-            <div class="stats-cdf-panel" id="statsCdfPanel">
-              <div class="stats-cdf-toolbar" id="statsCdfToolbar">
+            <div class="stats-cdf-panel" id="statsCdfPanel" data-stat="cdfPanel">
+              <div class="stats-cdf-toolbar" id="statsCdfToolbar" data-stat="cdfToolbar">
                 <div class="tb-group">
                   <button class="stats-cdfmode active" data-cdfmode="cdf">CDF</button>
                   <button class="stats-cdfmode" data-cdfmode="logprob" title="cumulative % on a normal probability scale — lognormal data plots straight with log X">Prob</button>
@@ -394,11 +394,11 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
                   <button class="stats-scale" data-scale="log">Log</button>
                 </div>
                 <div class="tb-group" style="margin-left:auto">
-                  <button id="statsDownloadSvg">SVG</button>
-                  <button id="statsDownloadPng">PNG</button>
+                  <button id="statsDownloadSvg" data-stat="downloadSvg">SVG</button>
+                  <button id="statsDownloadPng" data-stat="downloadPng">PNG</button>
                 </div>
               </div>
-              <div class="stats-cdf-chart" id="statsCdfChart">
+              <div class="stats-cdf-chart" id="statsCdfChart" data-stat="cdfChart">
                 <div class="stats-cdf-hint">Click column names to add CDF curves</div>
               </div>
             </div>

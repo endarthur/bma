@@ -215,6 +215,28 @@ function catStateForRoot(root) {
   return panelState.categories;     // singleton (also holds the shared dsHidden)
 }
 
+// A10 Statistics clone arc (st-1): the Statistics panel becomes cloneable the
+// same way Categories did (4e-c) — DOM resolved through a per-instance ROOT
+// instead of singleton ids. st-1 is the inert seam: render fns resolve elements
+// via statEls(root), defaulting to the static #panelStatistics, so behavior is
+// bit-identical (els.X === $statsX) while the code stops depending on unique ids.
+// Clones (st-4) pass their own root; the $stats* consts stay for singleton-only
+// consumers (wireStatsEventsOnce, project.js, workspace.js).
+function statPanelRoot() { return document.getElementById('panelStatistics'); }
+function statQ(sel, root) { var r = root || statPanelRoot(); return r ? r.querySelector(sel) : null; }
+function statEls(root) {
+  root = root || statPanelRoot();
+  function q(k) { return root ? root.querySelector('[data-stat="' + k + '"]') : null; }
+  return {
+    body: q('body'), sidebar: q('sidebar'), main: q('main'), content: q('content'), badge: q('badge'),
+    presetBtns: q('presetBtns'), customPct: q('customPct'), weightSel: q('weightSel'), weightNote: q('weightNote'),
+    metricToggles: q('metricToggles'), datasetsSection: q('datasetsSection'), datasetChips: q('datasetChips'),
+    varSearch: q('varSearch'), varAll: q('varAll'), varNone: q('varNone'), varList: q('varList'),
+    copyBtn: q('copyBtn'), cdfPanel: q('cdfPanel'), cdfToolbar: q('cdfToolbar'), cdfChart: q('cdfChart'),
+    downloadSvg: q('downloadSvg'), downloadPng: q('downloadPng')
+  };
+}
+
 // ─── A10 4b: datasets are peers — capabilities are FACETS, not a kind ──────
 // "model" is no longer a privileged type; it is simply the dataset that (today)
 // carries a block geometry. Grid-dependent features feature-detect via
