@@ -5671,6 +5671,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
       <div class="results-panel" id="panelStatsCat" data-tab="statscat">
         <div class="statscat-body">
           <div class="statscat-sidebar">
+            <div class="statscat-sidebar-section" data-sb="dataset" id="statsCatDatasetWrap"></div>
             <div class="statscat-sidebar-section" data-sb="groupby">
               <div class="statscat-sidebar-title">Group By <span class="badge" id="statsCatBadge"></span></div>
               <select class="statscat-select" id="statsCatGroupBy">
@@ -5915,7 +5916,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 27b0761 — click to check for updates">27b0761</div>
+<div class="build-badge" id="buildBadge" title="build 594349b — click to check for updates">594349b</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -15148,6 +15149,14 @@ function runAuxAnalysis(ds, root) {
     if (ds.declus.fingerprint !== auxDeclusFingerprintNow(ds)) { fail('Aux config changed since declustering — re-run Declustering.'); return; }
     declusWeights = ds.declus.weights;
   }
+  // A10 G4a: compute this dataset's group statistics on demand. StatsCat stores
+  // its group-by column + selected var columns per dataset (ds.statsCat, indices
+  // into this dataset's columns); pass them so the analyze pass emits groupStats/
+  // groupCategories for the comparison dataset (was hard-coded null = model-only).
+  var scState = ds.statsCat || null;
+  var scGroupBy = (scState && scState.groupBy != null) ? scState.groupBy : null;
+  var scCols = (scGroupBy != null && scState.selectedVars && scState.selectedVars.size > 0)
+    ? Array.from(scState.selectedVars) : null;
   ds._worker.postMessage({
     file: ds.file,
     xyzOverride: xyz.x >= 0 && xyz.y >= 0 && xyz.z >= 0 ? xyz : null,
@@ -15158,8 +15167,8 @@ function runAuxAnalysis(ds, root) {
     colFilters: {},
     calcolCode: ds.calcolCode || null,
     calcolMeta: ds.calcolMeta.length > 0 ? ds.calcolMeta : null,
-    groupBy: null,
-    groupStatsCols: null,
+    groupBy: scGroupBy,
+    groupStatsCols: scCols,
     dxyzOverride: null,
     dmEndianness: ds.preflight.dmEndianness || null,
     dmFormat: ds.preflight.dmFormat || null,
@@ -15185,6 +15194,12 @@ function runAuxAnalysis(ds, root) {
         // (auto isRegularGrid for comparisons). Lights up GT/Export (4g/4h) for a
         // gridded comparison dataset; harmless (ignored) for scattered points.
         geometry: m.geometry || null,
+        // A10 G4a: capture group statistics for the StatsCat tab (was model-only).
+        // origColCount lets StatsCat tag this dataset's calcols; null when no
+        // group-by was requested for this pass.
+        groupStats: m.groupStats || null, groupCategories: m.groupCategories || null,
+        groupBy: (m.groupBy != null) ? m.groupBy : null, groupStatsOverflow: m.groupStatsOverflow || false,
+        origColCount: m.origColCount || ((m.header ? m.header.length : 0) - ((ds.calcolMeta || []).length)),
         // A10: carry the A9 data-health counters for the per-dataset summary
         filterErrors: m.filterErrors || null, calcolErrors: m.calcolErrors || null,
         raggedRows: m.raggedRows || 0, coordInvalidCells: m.coordInvalidCells || 0, weightExcluded: m.weightExcluded || 0 };
@@ -15207,6 +15222,9 @@ function runAuxAnalysis(ds, root) {
       if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();
       if (ds.view === 'summary' && typeof renderAuxSummary === 'function') renderAuxSummary(ds, root);  // A10 per-dataset summary
       if (typeof gtRefreshDatasetPicker === 'function') gtRefreshDatasetPicker();  // G3: this dataset is now GT-targetable
+      if (typeof statsCatRefreshDatasetPicker === 'function') statsCatRefreshDatasetPicker();  // G4a: now StatsCat-targetable
+      if (typeof applyStatsCatRestore === 'function') applyStatsCatRestore(ds);  // G4a-3: reattach saved statscat selection by name
+      if (typeof statsCatTargetDsId !== 'undefined' && statsCatTargetDsId === ds.id && typeof renderStatsCat === 'function') renderStatsCat();
       autoSaveProject();
     } else if (m.type === 'error') {
       fail(m.message);
@@ -15820,6 +15838,7 @@ function clearAux(ds, root) {
   ds.prefix = 'aux';
   ds.gridMode = null;   // A10 4f-2: back to default 'auto'
   ds.stale = false;
+  ds.statsCat = null;   // A10 G4a: drop its per-dataset StatsCat selection
   delete panelState.statistics.cmpSel[ds.id];
   delete panelState.statistics.cdfCmpSel[ds.id];
   panelState.statistics.dsHidden.delete(ds.id);
@@ -15847,6 +15866,7 @@ function clearAux(ds, root) {
   if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();
   if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
   if (typeof refreshGtTheoSource === 'function') refreshGtTheoSource();   // G2: GT theo source picker
+  if (typeof statsCatRefreshDatasetPicker === 'function') statsCatRefreshDatasetPicker();  // G4a: bounce StatsCat off the cleared dataset
   if (typeof updateCalcolBadge === 'function') updateCalcolBadge();
   if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
     renderStatsSidebar();
@@ -19744,12 +19764,54 @@ function statsCatMarkTargetStale(C) {
   if (C.ds && typeof markAuxStale === 'function') markAuxStale(C.ds, (typeof dsConfigRoot === 'function') ? dsConfigRoot(C.ds) : null);
 }
 
+// G4a: datasets the StatsCat tab can target — any with a completed analysis.
+function statsCatTargetableDatasets() {
+  var out = [];
+  for (var i = 0; i < datasets.length; i++) { if (datasets[i].complete) out.push(datasets[i]); }
+  return out;
+}
+// The "Dataset" picker at the top of the StatsCat sidebar — shown only when 2+
+// datasets are analyzed (with one, StatsCat is implicitly the model, as before).
+function statsCatRenderDatasetPicker() {
+  var wrap = document.getElementById('statsCatDatasetWrap');
+  if (!wrap) return;
+  var ts = statsCatTargetableDatasets();
+  if (ts.length < 2) { wrap.innerHTML = ''; return; }
+  var cur = (dsById(statsCatTargetDsId) || dsById('model')).id;
+  wrap.innerHTML = '<div class="statscat-sidebar-title">Dataset</div>' +
+    '<select class="statscat-select" id="statsCatDataset">' +
+    ts.map(function(d) { return '<option value="' + d.id + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
+    '</select>';
+  var sel = document.getElementById('statsCatDataset');
+  if (sel) sel.onchange = function() { setStatsCatTarget(sel.value); };
+}
+// Switch the StatsCat target dataset and re-render the panel for it.
+function setStatsCatTarget(id) {
+  if (id === statsCatTargetDsId) return;
+  statsCatTargetDsId = id;
+  $statsCatVarSearch.value = '';
+  $statsCatGroupSearch.value = '';
+  renderStatsCat();
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+// Keep the picker current as datasets analyze/clear; fall back to the model if
+// the target's analysis went away.
+function statsCatRefreshDatasetPicker() {
+  if (statsCatTargetDsId !== 'model' && !(dsById(statsCatTargetDsId) && dsById(statsCatTargetDsId).complete)) {
+    statsCatTargetDsId = 'model';
+    renderStatsCat();
+    return;
+  }
+  statsCatRenderDatasetPicker();
+}
+
 function renderStatsCat(data) {
   // The data arg is always the MODEL's analysis (displayResults/applyProject).
   // Cache it as the model's regardless of the current target, so switching back
   // shows fresh model results; then render whichever dataset is targeted.
   if (data) lastStatsCatData = data;
   const C = statsCatCtx();
+  statsCatRenderDatasetPicker();
   data = C.data;
   if (!data) {
     $statsCatVarList.innerHTML = '';
@@ -32163,6 +32225,7 @@ function wsRemoveInstance(ds) {
   if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();  // G1: drop it from the picker, bounce the editor if targeted
   if (typeof refreshGtTheoSource === 'function') refreshGtTheoSource();           // G2: drop it from the GT theo source picker
   if (typeof gtRefreshDatasetPicker === 'function') gtRefreshDatasetPicker();     // G3: drop it from the GT dataset picker (bounce to model if targeted)
+  if (typeof statsCatRefreshDatasetPicker === 'function') statsCatRefreshDatasetPicker();  // G4a: drop it from the StatsCat dataset picker (bounce to model if targeted)
   if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
     renderStatsSidebar(); renderStatsTable(); renderStatsCdfPanel();
   }

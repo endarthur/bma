@@ -146,6 +146,14 @@ function runAuxAnalysis(ds, root) {
     if (ds.declus.fingerprint !== auxDeclusFingerprintNow(ds)) { fail('Aux config changed since declustering — re-run Declustering.'); return; }
     declusWeights = ds.declus.weights;
   }
+  // A10 G4a: compute this dataset's group statistics on demand. StatsCat stores
+  // its group-by column + selected var columns per dataset (ds.statsCat, indices
+  // into this dataset's columns); pass them so the analyze pass emits groupStats/
+  // groupCategories for the comparison dataset (was hard-coded null = model-only).
+  var scState = ds.statsCat || null;
+  var scGroupBy = (scState && scState.groupBy != null) ? scState.groupBy : null;
+  var scCols = (scGroupBy != null && scState.selectedVars && scState.selectedVars.size > 0)
+    ? Array.from(scState.selectedVars) : null;
   ds._worker.postMessage({
     file: ds.file,
     xyzOverride: xyz.x >= 0 && xyz.y >= 0 && xyz.z >= 0 ? xyz : null,
@@ -156,8 +164,8 @@ function runAuxAnalysis(ds, root) {
     colFilters: {},
     calcolCode: ds.calcolCode || null,
     calcolMeta: ds.calcolMeta.length > 0 ? ds.calcolMeta : null,
-    groupBy: null,
-    groupStatsCols: null,
+    groupBy: scGroupBy,
+    groupStatsCols: scCols,
     dxyzOverride: null,
     dmEndianness: ds.preflight.dmEndianness || null,
     dmFormat: ds.preflight.dmFormat || null,
@@ -183,6 +191,12 @@ function runAuxAnalysis(ds, root) {
         // (auto isRegularGrid for comparisons). Lights up GT/Export (4g/4h) for a
         // gridded comparison dataset; harmless (ignored) for scattered points.
         geometry: m.geometry || null,
+        // A10 G4a: capture group statistics for the StatsCat tab (was model-only).
+        // origColCount lets StatsCat tag this dataset's calcols; null when no
+        // group-by was requested for this pass.
+        groupStats: m.groupStats || null, groupCategories: m.groupCategories || null,
+        groupBy: (m.groupBy != null) ? m.groupBy : null, groupStatsOverflow: m.groupStatsOverflow || false,
+        origColCount: m.origColCount || ((m.header ? m.header.length : 0) - ((ds.calcolMeta || []).length)),
         // A10: carry the A9 data-health counters for the per-dataset summary
         filterErrors: m.filterErrors || null, calcolErrors: m.calcolErrors || null,
         raggedRows: m.raggedRows || 0, coordInvalidCells: m.coordInvalidCells || 0, weightExcluded: m.weightExcluded || 0 };
@@ -205,6 +219,9 @@ function runAuxAnalysis(ds, root) {
       if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();
       if (ds.view === 'summary' && typeof renderAuxSummary === 'function') renderAuxSummary(ds, root);  // A10 per-dataset summary
       if (typeof gtRefreshDatasetPicker === 'function') gtRefreshDatasetPicker();  // G3: this dataset is now GT-targetable
+      if (typeof statsCatRefreshDatasetPicker === 'function') statsCatRefreshDatasetPicker();  // G4a: now StatsCat-targetable
+      if (typeof applyStatsCatRestore === 'function') applyStatsCatRestore(ds);  // G4a-3: reattach saved statscat selection by name
+      if (typeof statsCatTargetDsId !== 'undefined' && statsCatTargetDsId === ds.id && typeof renderStatsCat === 'function') renderStatsCat();
       autoSaveProject();
     } else if (m.type === 'error') {
       fail(m.message);
@@ -818,6 +835,7 @@ function clearAux(ds, root) {
   ds.prefix = 'aux';
   ds.gridMode = null;   // A10 4f-2: back to default 'auto'
   ds.stale = false;
+  ds.statsCat = null;   // A10 G4a: drop its per-dataset StatsCat selection
   delete panelState.statistics.cmpSel[ds.id];
   delete panelState.statistics.cdfCmpSel[ds.id];
   panelState.statistics.dsHidden.delete(ds.id);
@@ -845,6 +863,7 @@ function clearAux(ds, root) {
   if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();
   if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
   if (typeof refreshGtTheoSource === 'function') refreshGtTheoSource();   // G2: GT theo source picker
+  if (typeof statsCatRefreshDatasetPicker === 'function') statsCatRefreshDatasetPicker();  // G4a: bounce StatsCat off the cleared dataset
   if (typeof updateCalcolBadge === 'function') updateCalcolBadge();
   if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
     renderStatsSidebar();

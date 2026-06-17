@@ -2415,12 +2415,54 @@ function statsCatMarkTargetStale(C) {
   if (C.ds && typeof markAuxStale === 'function') markAuxStale(C.ds, (typeof dsConfigRoot === 'function') ? dsConfigRoot(C.ds) : null);
 }
 
+// G4a: datasets the StatsCat tab can target — any with a completed analysis.
+function statsCatTargetableDatasets() {
+  var out = [];
+  for (var i = 0; i < datasets.length; i++) { if (datasets[i].complete) out.push(datasets[i]); }
+  return out;
+}
+// The "Dataset" picker at the top of the StatsCat sidebar — shown only when 2+
+// datasets are analyzed (with one, StatsCat is implicitly the model, as before).
+function statsCatRenderDatasetPicker() {
+  var wrap = document.getElementById('statsCatDatasetWrap');
+  if (!wrap) return;
+  var ts = statsCatTargetableDatasets();
+  if (ts.length < 2) { wrap.innerHTML = ''; return; }
+  var cur = (dsById(statsCatTargetDsId) || dsById('model')).id;
+  wrap.innerHTML = '<div class="statscat-sidebar-title">Dataset</div>' +
+    '<select class="statscat-select" id="statsCatDataset">' +
+    ts.map(function(d) { return '<option value="' + d.id + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
+    '</select>';
+  var sel = document.getElementById('statsCatDataset');
+  if (sel) sel.onchange = function() { setStatsCatTarget(sel.value); };
+}
+// Switch the StatsCat target dataset and re-render the panel for it.
+function setStatsCatTarget(id) {
+  if (id === statsCatTargetDsId) return;
+  statsCatTargetDsId = id;
+  $statsCatVarSearch.value = '';
+  $statsCatGroupSearch.value = '';
+  renderStatsCat();
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+// Keep the picker current as datasets analyze/clear; fall back to the model if
+// the target's analysis went away.
+function statsCatRefreshDatasetPicker() {
+  if (statsCatTargetDsId !== 'model' && !(dsById(statsCatTargetDsId) && dsById(statsCatTargetDsId).complete)) {
+    statsCatTargetDsId = 'model';
+    renderStatsCat();
+    return;
+  }
+  statsCatRenderDatasetPicker();
+}
+
 function renderStatsCat(data) {
   // The data arg is always the MODEL's analysis (displayResults/applyProject).
   // Cache it as the model's regardless of the current target, so switching back
   // shows fresh model results; then render whichever dataset is targeted.
   if (data) lastStatsCatData = data;
   const C = statsCatCtx();
+  statsCatRenderDatasetPicker();
   data = C.data;
   if (!data) {
     $statsCatVarList.innerHTML = '';
