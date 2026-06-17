@@ -5889,7 +5889,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build dd68a4f — click to check for updates">dd68a4f</div>
+<div class="build-badge" id="buildBadge" title="build cf47ad6 — click to check for updates">cf47ad6</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -18972,6 +18972,7 @@ function displayResults(data) {
   const origColCount = data.origColCount || header.length;
   const numCols = Object.keys(stats).map(Number).sort((a, b) => a - b);
   renderStatsTab(stats, header, origColCount, isFiltered, rowCount);
+  if (typeof statRenderAllInstances === 'function') statRenderAllInstances();  // st-4: keep clones in sync
 
   // Categories
   const catCols = Object.keys(categories).map(Number).sort((a, b) => a - b);
@@ -20197,6 +20198,61 @@ function statStateForRoot(root) {
     return statInstances[id];
   }
   return _statSingleton;
+}
+
+// ─── A10 Statistics st-4: cloneable Statistics instances ───────────────────
+// A clone is a copy of #panelStatistics with ids stripped (DOM resolved by
+// data-stat within the root, tagged data-stat-inst). Its view state lives in
+// statInstances[id] (st-2); it renders the SHARED analysis (lastDisplayedStats/
+// Header) through its own state, so a clone is an independent view of the same
+// numbers (different vars/metrics/CDF/comparison selection). rails calls
+// statBuildInstancePanel(id) via renderPanel; wsSpawnStatisticsInstance + the
+// tab "Duplicate" create them.
+var statInstSeq = 1;
+var statInstanceEls = {};   // instId -> the built clone element (one per instance)
+function statNextInstId() { statInstSeq += 1; return 'statistics#' + statInstSeq; }
+
+function statBuildInstancePanel(instId) {
+  var tmpl = document.getElementById('panelStatistics');
+  if (!tmpl) return null;
+  // rails may call renderPanel more than once per tab id — return the SAME clone
+  // (cache it) so a second build never leaves a duplicate in the DOM or re-wires.
+  if (statInstanceEls[instId] && document.contains(statInstanceEls[instId])) return statInstanceEls[instId];
+  if (!statInstances[instId]) statInstances[instId] = statNewInstState();
+  var el = tmpl.cloneNode(true);
+  el.removeAttribute('id');
+  el.querySelectorAll('[id]').forEach(function(n) { n.removeAttribute('id'); });
+  el.setAttribute('data-stat-inst', instId);
+  el.setAttribute('data-tab', instId);
+  el.classList.add('active');
+  var ce = statEls(el);
+  if (ce.varSearch) ce.varSearch.value = '';   // the clone copied the singleton's search text
+  wireStatsEvents(el);                          // delegation on the clone's containers (survives re-render)
+  if (lastDisplayedStats && lastDisplayedHeader) {
+    renderStatsTab(lastDisplayedStats, lastDisplayedHeader, currentOrigColCount || lastDisplayedHeader.length,
+      currentFilter !== null, (lastCompleteData && lastCompleteData.rowCount) || 0, el);
+  }
+  statInstanceEls[instId] = el;
+  return el;
+}
+
+// Re-render every live clone after a (re)analysis — they share lastDisplayedStats
+// but keep their own per-instance view state.
+function statRenderAllInstances() {
+  if (!lastDisplayedStats || !lastDisplayedHeader) return;
+  Object.keys(statInstances).forEach(function(id) {
+    var root = statInstanceEls[id];
+    if (root && document.contains(root)) {
+      renderStatsTab(lastDisplayedStats, lastDisplayedHeader, currentOrigColCount || lastDisplayedHeader.length,
+        currentFilter !== null, (lastCompleteData && lastCompleteData.rowCount) || 0, root);
+    }
+  });
+}
+
+// Drop a clone's state (close / clear project).
+function statDisposeInstance(instId) {
+  delete statInstances[instId];
+  delete statInstanceEls[instId];
 }
 
 function tdQuantileFromCentroids(centroids, totalCount, q) {
@@ -30979,6 +31035,11 @@ function wsRehomePanel(tab, wrapper) {
     swDisposeInstance(tab.id);
     return;
   }
+  // A10 Statistics st-4: a closed Statistics clone is discarded with its state.
+  if (typeof statInstances !== 'undefined' && statInstances[tab.id]) {
+    statDisposeInstance(tab.id);
+    return;
+  }
   // A10 1g-c: instance dataset panels (d2+) are throwaway clones — their state
   // lives in the ds object and renderPanel rebuilds on reopen, so discard them
   // (re-home only the static singletons + the tree).
@@ -31096,6 +31157,16 @@ function wsSpawnSwathInstance() {
   if (typeof swathInstances !== 'undefined' && typeof swNewInstState === 'function') swathInstances[instId] = swNewInstState();
   wsRails.addTab({ id: instId, title: 'Swath', closeable: true }, wsMainTarget());
   wsRails.activateTab(instId);                 // renderPanel → swBuildInstancePanel
+}
+
+// A10 Statistics st-4: spawn a cloned Statistics analysis panel. Renders the
+// shared analysis through fresh per-instance view state.
+function wsSpawnStatisticsInstance() {
+  if (!wsRails || typeof statNextInstId !== 'function') { showPanel('statistics'); return; }
+  var instId = statNextInstId();
+  if (typeof statInstances !== 'undefined' && typeof statNewInstState === 'function') statInstances[instId] = statNewInstState();
+  wsRails.addTab({ id: instId, title: 'Statistics', closeable: true }, wsMainTarget());
+  wsRails.activateTab(instId);                 // renderPanel → statBuildInstancePanel
 }
 
 // Track the prefix in the tab title (loadAuxFile on load, onAuxConfigChange on edit)
@@ -31218,6 +31289,7 @@ function wsNewTabMenuItems() {
   if (items.length) items.push('---');
   items.push({ label: 'New Categories panel', action: 'newCategories' });   // A10 4e-c-4: cloneable analysis panel
   items.push({ label: 'New Swath panel', action: 'newSwath' });             // A10 Swath s-4b
+  items.push({ label: 'New Statistics panel', action: 'newStatistics' });   // A10 Statistics st-4
   items.push('---');
   items.push({ label: 'Add point dataset…', action: 'addPoint' });
   items.push({ label: 'Add drillhole set…', action: 'addDrillhole' });
@@ -31340,6 +31412,7 @@ function wsMenuAction(a) {
     case 'calcols': showPanel('calcols'); break;
     case 'newCategories': if (typeof wsSpawnCategoriesInstance === 'function') wsSpawnCategoriesInstance(); break;
     case 'newSwath': if (typeof wsSpawnSwathInstance === 'function') wsSpawnSwathInstance(); break;
+    case 'newStatistics': if (typeof wsSpawnStatisticsInstance === 'function') wsSpawnStatisticsInstance(); break;
     case 'addPoint': wsAddPointDataset(); break;
     case 'addDrillhole': { showPanel('aux'); var dh = document.getElementById('dhCard'); if (dh && dh.scrollIntoView) dh.scrollIntoView({ block: 'nearest' }); break; }
     case 'help': toggleHelp(); break;
@@ -31370,6 +31443,10 @@ function buildRailsShell(host) {
       // A10 Swath s-4b: a cloned Swath analysis panel (swath#N)
       if (typeof swBuildInstancePanel === 'function' && tab.id.indexOf('swath#') === 0) {
         return swBuildInstancePanel(tab.id);
+      }
+      // A10 Statistics st-4: a cloned Statistics analysis panel (statistics#N)
+      if (typeof statBuildInstancePanel === 'function' && tab.id.indexOf('statistics#') === 0) {
+        return statBuildInstancePanel(tab.id);
       }
       // A10 1g-c: a dataset instance tab (d2+) → build its panel from the ds
       var ds = (typeof dsById === 'function') ? dsById(tab.id) : null;
@@ -31450,11 +31527,12 @@ function buildRailsShell(host) {
     var inFloat = hit && hit.container === 'float';
     var isCat = ev.tab.id === 'categories' || ev.tab.id.indexOf('categories#') === 0;
     var isSwath = ev.tab.id === 'swath' || ev.tab.id.indexOf('swath#') === 0;
+    var isStats = ev.tab.id === 'statistics' || ev.tab.id.indexOf('statistics#') === 0;
     var items = [
       inFloat ? { label: 'Dock', action: 'dock' } : { label: 'Float', action: 'float' },
       { label: 'Move to new rail', action: 'rail' },
     ];
-    if (isCat || isSwath) items.push({ label: 'Duplicate', action: 'duplicate' });   // A10 4e-c-4 / Swath s-4b
+    if (isCat || isSwath || isStats) items.push({ label: 'Duplicate', action: 'duplicate' });   // A10 4e-c-4 / Swath s-4b / Stats st-4
     items.push('---', { label: 'Close', action: 'close' });
     if (ev.stack.tabs.length > 1) items.push({ label: 'Close others in stack', action: 'close-others' });
     Menu.show(items, { x: ev.x, y: ev.y }).then(function(a) {
@@ -31462,6 +31540,8 @@ function buildRailsShell(host) {
       if (a === 'duplicate') {
         if (isSwath) {
           wsSpawnSwathInstance();   // s-4b: fresh-config Swath instance (config-copy is a follow-up)
+        } else if (isStats) {
+          wsSpawnStatisticsInstance();   // st-4: fresh-view Statistics instance
         } else {
           var src = ev.tab.id === 'categories' ? panelState.categories : (typeof catInstances !== 'undefined' ? catInstances[ev.tab.id] : null);
           wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false);
@@ -31595,6 +31675,7 @@ function wsSanitizeLayout(st) {
   // A10 Swath s-4b: live swath clones survive breakpoint crossings (project
   // persistence is s-5; until then they exist only for the session).
   if (typeof swathInstances !== 'undefined') Object.keys(swathInstances).forEach(function(id) { known[id] = true; });
+  if (typeof statInstances !== 'undefined') Object.keys(statInstances).forEach(function(id) { known[id] = true; });
   var seen = {};
   function cleanStack(s) {
     s.tabs = (s.tabs || []).filter(function(t) {

@@ -1972,6 +1972,7 @@ function displayResults(data) {
   const origColCount = data.origColCount || header.length;
   const numCols = Object.keys(stats).map(Number).sort((a, b) => a - b);
   renderStatsTab(stats, header, origColCount, isFiltered, rowCount);
+  if (typeof statRenderAllInstances === 'function') statRenderAllInstances();  // st-4: keep clones in sync
 
   // Categories
   const catCols = Object.keys(categories).map(Number).sort((a, b) => a - b);

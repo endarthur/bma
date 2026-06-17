@@ -75,6 +75,61 @@ function statStateForRoot(root) {
   return _statSingleton;
 }
 
+// ─── A10 Statistics st-4: cloneable Statistics instances ───────────────────
+// A clone is a copy of #panelStatistics with ids stripped (DOM resolved by
+// data-stat within the root, tagged data-stat-inst). Its view state lives in
+// statInstances[id] (st-2); it renders the SHARED analysis (lastDisplayedStats/
+// Header) through its own state, so a clone is an independent view of the same
+// numbers (different vars/metrics/CDF/comparison selection). rails calls
+// statBuildInstancePanel(id) via renderPanel; wsSpawnStatisticsInstance + the
+// tab "Duplicate" create them.
+var statInstSeq = 1;
+var statInstanceEls = {};   // instId -> the built clone element (one per instance)
+function statNextInstId() { statInstSeq += 1; return 'statistics#' + statInstSeq; }
+
+function statBuildInstancePanel(instId) {
+  var tmpl = document.getElementById('panelStatistics');
+  if (!tmpl) return null;
+  // rails may call renderPanel more than once per tab id — return the SAME clone
+  // (cache it) so a second build never leaves a duplicate in the DOM or re-wires.
+  if (statInstanceEls[instId] && document.contains(statInstanceEls[instId])) return statInstanceEls[instId];
+  if (!statInstances[instId]) statInstances[instId] = statNewInstState();
+  var el = tmpl.cloneNode(true);
+  el.removeAttribute('id');
+  el.querySelectorAll('[id]').forEach(function(n) { n.removeAttribute('id'); });
+  el.setAttribute('data-stat-inst', instId);
+  el.setAttribute('data-tab', instId);
+  el.classList.add('active');
+  var ce = statEls(el);
+  if (ce.varSearch) ce.varSearch.value = '';   // the clone copied the singleton's search text
+  wireStatsEvents(el);                          // delegation on the clone's containers (survives re-render)
+  if (lastDisplayedStats && lastDisplayedHeader) {
+    renderStatsTab(lastDisplayedStats, lastDisplayedHeader, currentOrigColCount || lastDisplayedHeader.length,
+      currentFilter !== null, (lastCompleteData && lastCompleteData.rowCount) || 0, el);
+  }
+  statInstanceEls[instId] = el;
+  return el;
+}
+
+// Re-render every live clone after a (re)analysis — they share lastDisplayedStats
+// but keep their own per-instance view state.
+function statRenderAllInstances() {
+  if (!lastDisplayedStats || !lastDisplayedHeader) return;
+  Object.keys(statInstances).forEach(function(id) {
+    var root = statInstanceEls[id];
+    if (root && document.contains(root)) {
+      renderStatsTab(lastDisplayedStats, lastDisplayedHeader, currentOrigColCount || lastDisplayedHeader.length,
+        currentFilter !== null, (lastCompleteData && lastCompleteData.rowCount) || 0, root);
+    }
+  });
+}
+
+// Drop a clone's state (close / clear project).
+function statDisposeInstance(instId) {
+  delete statInstances[instId];
+  delete statInstanceEls[instId];
+}
+
 function tdQuantileFromCentroids(centroids, totalCount, q) {
   if (!centroids || centroids.length === 0) return null;
   if (centroids.length === 1) return centroids[0][0];
