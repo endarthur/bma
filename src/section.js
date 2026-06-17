@@ -26,7 +26,7 @@ function renderSectionConfig(data) {
   const { header, colTypes, geometry } = data;
   const hasXYZ = currentXYZ.x >= 0 && currentXYZ.y >= 0 && currentXYZ.z >= 0;
   if (!hasXYZ || !geometry || !geometry.x) {
-    $bar.innerHTML = '<div style="color:var(--fg-dim);font-size:0.78rem;padding:0.5rem;">Assign X/Y/Z columns in Import Block Model and run analysis to enable Section view.</div>';
+    $bar.innerHTML = '<div style="color:var(--fg-dim);font-size:0.78rem;padding:0.5rem;">Assign X/Y/Z columns in Import Model and run analysis to enable Section view.</div>';
     return;
   }
   const numCols = header.map((h, i) => ({ name: h, idx: i, type: colTypes[i] }))

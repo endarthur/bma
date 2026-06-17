@@ -1705,7 +1705,7 @@ function computeHealthItems(data) {
   if (mixedCols.length) items.push({
     n: mixedTotal,
     label: mixedTotal.toLocaleString() + ' non-numeric value' + (mixedTotal === 1 ? '' : 's') + ' in ' + mixedCols.length + ' column' + (mixedCols.length === 1 ? '' : 's'),
-    detail: mixedCols.join(', ') + ' — treated as nulls; toggle to CAT in Import Block Model if a category',
+    detail: mixedCols.join(', ') + ' — treated as nulls; toggle to CAT in Import Model if a category',
     tab: 'statistics'
   });
 

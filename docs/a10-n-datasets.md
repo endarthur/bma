@@ -679,9 +679,19 @@ as grids.
   is wired once on the aux summary container (mirrors the model's `$geoContent`
   delegated handler). Guard extended in `4f-gridmode-smoke.js` (model table still
   renders; forced-grid comparison shows the table, point override removes it).
-- **4f-4** — de-special-case the naming/branches so the model's preflight panel
-  and the dataset import panels converge ("Import Block Model" stops being the
-  only geometry-bearing surface).
+- **4f-4 ✅** — naming convergence. The model import panel is renamed
+  **"Import Block Model" → "Import Model"** (Arthur: drop "Block" since grid-ness
+  is now detected/overridable, keep "Model" as the primary/hub dataset) across
+  the legacy tab (template.html), the rails panel registry (`WS_PANELS`), the
+  Help panel title, and every cross-reference that pointed users there as THE
+  geometry surface (the Summary "requires XYZ in …" hint, the NoParse/mixed-type
+  CAT hints in core.js + project.js, the Section/Swath "assign X/Y/Z in …" empty
+  states, the example tutorial). The remaining `id === 'model'` branches
+  (filter analysis dispatch, catalog seeding, Statistics Δ% baseline, tree
+  pairing hub) are legitimate **model-as-hub** logic per the converged model —
+  not geometry special-casing (that was already removed in 4f-1/2/3) — so they
+  stay. Example CSV bytes verified byte-identical vs HEAD (only the tutorial
+  prose changed). **Phase 4f COMPLETE.**
 
 ### Phase-1 implementation log + the C9 instance contract (2026-06-13)
 

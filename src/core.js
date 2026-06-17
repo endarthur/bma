@@ -909,7 +909,7 @@ function colParseFails(ds, idx) {
   return s && s.parseFails ? s.parseFails : 0;
 }
 function mixedColTitle(n) {
-  return n.toLocaleString() + ' value' + (n === 1 ? '' : 's') + ' failed to parse as numbers (treated as nulls) — mixed-type column? Toggle it to CAT in Import Block Model if it\'s a category';
+  return n.toLocaleString() + ' value' + (n === 1 ? '' : 's') + ' failed to parse as numbers (treated as nulls) — mixed-type column? Toggle it to CAT in Import Model if it\'s a category';
 }
 
 // A9 F3: one-line warning for per-row filter/calcol errors carried on a
@@ -1060,7 +1060,7 @@ var _helpTabs = {
       '<div class="help-row"><span>Comparison is statistical/spatial — aux is a separate set of rows, not extra columns. No geometry, export, or per-row joins.</span></div></div>'
   },
   preflight: {
-    title: 'Import Block Model',
+    title: 'Import Model',
     html:
       '<div class="help-section"><div class="help-section-title">Overview</div>' +
       '<div class="help-row"><span>Configure your file before analysis. Set column types, assign coordinate columns, and preview the data.</span></div></div>' +
@@ -1082,7 +1082,7 @@ var _helpTabs = {
       '<div class="help-section"><div class="help-section-title">Overview</div>' +
       '<div class="help-row"><span>File metadata, grid geometry, and column overview with type/completeness info.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Grid Geometry</div>' +
-      '<div class="help-row"><span>Auto-detected XYZ extents, block sizes, sub-block ratios. Requires XYZ assignment in Import Block Model.</span></div>' +
+      '<div class="help-row"><span>Auto-detected XYZ extents, block sizes, sub-block ratios. Requires XYZ assignment in Import Model.</span></div>' +
       '<div class="help-row"><span><strong>OBJ Export</strong> \u2014 download bounding box as a 3D mesh file</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Column Overview</div>' +
       '<div class="help-row"><span>Table of all columns with type, count, nulls, zeros, completeness, and range.</span></div>' +

@@ -609,7 +609,7 @@ function renderSwathConfig(data, root) {
   const hasXYZ = currentXYZ.x >= 0 && currentXYZ.y >= 0 && currentXYZ.z >= 0;
   if (!hasXYZ || !geometry || !geometry.x) {
     $sidebar.innerHTML = '';
-    $content.innerHTML = '<div class="swath-hint">Assign X/Y/Z columns in Import Block Model and run analysis to enable Swath plots.</div>';
+    $content.innerHTML = '<div class="swath-hint">Assign X/Y/Z columns in Import Model and run analysis to enable Swath plots.</div>';
     return;
   }
   swathNumCols = header.map((h, i) => ({ name: h, idx: i, type: colTypes[i] }))

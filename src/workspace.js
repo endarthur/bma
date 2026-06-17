@@ -28,7 +28,7 @@ var wsLastLayout = null; // serialized rails layout — survives shell exits, ri
 var wsMenuBar = null;    // C6-2 desktop menubar (rails shell only); null on legacy
 
 var WS_PANELS = [
-  { id: 'preflight',  title: 'Import Block Model',  el: 'panelPreflight' },
+  { id: 'preflight',  title: 'Import Model',  el: 'panelPreflight' },
   { id: 'aux',        title: 'Aux',        el: 'panelAux' },
   { id: 'summary',    title: 'Summary',    el: 'panelSummary' },
   { id: 'calcols',    title: 'Calc',       el: 'panelCalcols' },

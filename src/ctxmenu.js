@@ -102,7 +102,7 @@ function ctxResolveVariable(e) {
 // ── Providers ──
 
 // A10: right-clicking a dataset header in the tree raises its import/config
-// panel (the reopen affordance — model → Import Block Model, aux → Aux). As
+// panel (the reopen affordance — model → Import Model, aux → Aux). As
 // per-dataset instance panels land, this opens the dataset's own instance.
 CTX_PROVIDERS.push(function datasetProvider(e) {
   var sum = e.target.closest && e.target.closest('summary');
