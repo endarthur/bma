@@ -721,6 +721,10 @@ function wsSanitizeLayout(st) {
   if (!st || !Array.isArray(st.rails)) throw new Error('bad layout');
   var known = { data: true };
   WS_PANELS.forEach(function(p) { known[p.id] = true; });
+  // A10 4e-c-5: cloned Categories instance tabs (categories#N) survive sanitize
+  // once their state has been recreated (catRestoreInstances runs before the
+  // layout deserialize). An unknown instance id (no state) is still dropped.
+  if (typeof catInstances !== 'undefined') Object.keys(catInstances).forEach(function(id) { known[id] = true; });
   var seen = {};
   function cleanStack(s) {
     s.tabs = (s.tabs || []).filter(function(t) {

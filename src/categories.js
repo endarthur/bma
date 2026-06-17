@@ -780,6 +780,13 @@ function catBuildInstancePanel(instId) {
 function catRenderInstance(root) {
   if (!_catData) return;
   var st = catStateForRoot(root);
+  // 4e-c-5: a restored instance carries its focused column by NAME (the header
+  // may differ across reloads) — resolve to an index now that _catData exists.
+  if (st._pendingFocusName != null) {
+    var ri = _catData.header ? _catData.header.indexOf(st._pendingFocusName) : -1;
+    if (ri >= 0 && _catData.categories[ri]) st.focusedCol = ri;
+    delete st._pendingFocusName;
+  }
   if (st.focusedCol == null || !_catData.categories[st.focusedCol]) st.focusedCol = panelState.categories.focusedCol;
   renderCatSidebar(root);
   renderCatMain(root);
@@ -805,4 +812,55 @@ function catRenderAllInstances() {
     var root = document.querySelector('[data-cat-inst="' + id + '"]');
     if (root) { catRenderInstance(root); catSyncInstanceTitle(root); }  // safe here — not inside a renderPanel build
   });
+}
+
+// ─── A10 4e-c-5: persist cloned Categories instances ───────────────────────
+// Instances ride in the `panels` project key (serializePanelState) as
+// {id, focusedCol(NAME), chartShowAll}; the tab arrangement rides in `layout`
+// (wsSanitizeLayout keeps an instance id once its state is recreated). focusedCol
+// is stored by NAME (the cmpSel pattern) so a reordered/changed header still
+// resolves; an unresolved restore re-emits its name (loss-safe through autosave).
+function serializeCatInstances() {
+  var hdr = (typeof _catData !== 'undefined' && _catData) ? _catData.header : null;
+  var out = [];
+  Object.keys(catInstances).forEach(function(id) {
+    var st = catInstances[id];
+    var name = null;
+    if (st._pendingFocusName != null) name = st._pendingFocusName;                 // restored, not yet resolved
+    else if (st.focusedCol != null && hdr && hdr[st.focusedCol] != null) name = hdr[st.focusedCol];
+    out.push({ id: id, focusedCol: name, chartShowAll: !!st.chartShowAll });
+  });
+  return out;
+}
+
+// Drop all per-instance state (new file / clear project), closing any live clone
+// tabs first so the rails strip doesn't keep orphaned tabs.
+function catResetInstances() {
+  if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function') {
+    Object.keys(catInstances).forEach(function(id) {
+      if (findTab(wsRails.state, id)) { try { wsRails.closeTab(id); } catch (e) {} }
+    });
+  }
+  catInstances = {};
+  catInstanceEls = {};
+  catInstSeq = 1;
+}
+
+// Recreate instances from a serialized list BEFORE the layout deserialize rebuilds
+// their tabs (renderPanel → catBuildInstancePanel finds the state we seed here).
+// The focused column stays pending until catRenderInstance resolves it post-analysis.
+function catRestoreInstances(list) {
+  catResetInstances();
+  if (!Array.isArray(list)) return;
+  var maxSeq = 1;
+  list.forEach(function(rec) {
+    if (!rec || !rec.id) return;
+    var st = catNewInstState();
+    st.chartShowAll = !!rec.chartShowAll;
+    if (rec.focusedCol != null) st._pendingFocusName = rec.focusedCol;
+    catInstances[rec.id] = st;
+    var m = /^categories#(\d+)$/.exec(rec.id);
+    if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+  });
+  catInstSeq = maxSeq;       // new spawns won't collide with restored ids
 }

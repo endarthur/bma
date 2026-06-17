@@ -5889,7 +5889,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 61c5885 — click to check for updates">61c5885</div>
+<div class="build-badge" id="buildBadge" title="build 14d2550 — click to check for updates">14d2550</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -17380,7 +17380,10 @@ function serializePanelState() {
       refDs: panelState.statistics.refDs            // 4d per-panel reference (no global star), by id
     },
     swath: { dsHidden: Array.from(panelState.swath.dsHidden) },
-    categories: { dsHidden: Array.from(panelState.categories.dsHidden) }
+    categories: {
+      dsHidden: Array.from(panelState.categories.dsHidden),
+      instances: (typeof serializeCatInstances === 'function') ? serializeCatInstances() : []
+    }
   };
 }
 
@@ -17708,6 +17711,15 @@ async function applyProject(project) {
     wsApplySidebarSections(project.sidebars && project.sidebars.sections);
   }
 
+  // A10 4e-c-5: recreate cloned Categories instances (state by NAME) BEFORE the
+  // layout deserialize rebuilds their tabs (renderPanel → catBuildInstancePanel
+  // reads the state seeded here). wsSanitizeLayout keeps an instance tab only once
+  // its state exists, so this must precede wsRestoreProjectLayout. The focused
+  // column resolves to an index when the analysis lands (catRenderInstance).
+  if (typeof catRestoreInstances === 'function') {
+    catRestoreInstances(project.panels && project.panels.categories && project.panels.categories.instances);
+  }
+
   // Restore the rails workspace arrangement (missing/invalid → default)
   wsRestoreProjectLayout(project.layout);
 
@@ -17995,6 +18007,7 @@ function clearProject() {
   panelState.statistics.refDs = null;
   panelState.swath.dsHidden = new Set();
   panelState.categories.dsHidden = new Set();
+  if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -18220,6 +18233,7 @@ async function handleFile(file, handle, skipRecents) {
   panelState.statistics.refDs = null;
   panelState.swath.dsHidden = new Set();
   panelState.categories.dsHidden = new Set();
+  if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -18400,6 +18414,7 @@ $backToPreflight.addEventListener('click', () => {
   panelState.statistics.refDs = null;
   panelState.swath.dsHidden = new Set();
   panelState.categories.dsHidden = new Set();
+  if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -29029,6 +29044,13 @@ function catBuildInstancePanel(instId) {
 function catRenderInstance(root) {
   if (!_catData) return;
   var st = catStateForRoot(root);
+  // 4e-c-5: a restored instance carries its focused column by NAME (the header
+  // may differ across reloads) — resolve to an index now that _catData exists.
+  if (st._pendingFocusName != null) {
+    var ri = _catData.header ? _catData.header.indexOf(st._pendingFocusName) : -1;
+    if (ri >= 0 && _catData.categories[ri]) st.focusedCol = ri;
+    delete st._pendingFocusName;
+  }
   if (st.focusedCol == null || !_catData.categories[st.focusedCol]) st.focusedCol = panelState.categories.focusedCol;
   renderCatSidebar(root);
   renderCatMain(root);
@@ -29054,6 +29076,57 @@ function catRenderAllInstances() {
     var root = document.querySelector('[data-cat-inst="' + id + '"]');
     if (root) { catRenderInstance(root); catSyncInstanceTitle(root); }  // safe here — not inside a renderPanel build
   });
+}
+
+// ─── A10 4e-c-5: persist cloned Categories instances ───────────────────────
+// Instances ride in the `panels` project key (serializePanelState) as
+// {id, focusedCol(NAME), chartShowAll}; the tab arrangement rides in `layout`
+// (wsSanitizeLayout keeps an instance id once its state is recreated). focusedCol
+// is stored by NAME (the cmpSel pattern) so a reordered/changed header still
+// resolves; an unresolved restore re-emits its name (loss-safe through autosave).
+function serializeCatInstances() {
+  var hdr = (typeof _catData !== 'undefined' && _catData) ? _catData.header : null;
+  var out = [];
+  Object.keys(catInstances).forEach(function(id) {
+    var st = catInstances[id];
+    var name = null;
+    if (st._pendingFocusName != null) name = st._pendingFocusName;                 // restored, not yet resolved
+    else if (st.focusedCol != null && hdr && hdr[st.focusedCol] != null) name = hdr[st.focusedCol];
+    out.push({ id: id, focusedCol: name, chartShowAll: !!st.chartShowAll });
+  });
+  return out;
+}
+
+// Drop all per-instance state (new file / clear project), closing any live clone
+// tabs first so the rails strip doesn't keep orphaned tabs.
+function catResetInstances() {
+  if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function') {
+    Object.keys(catInstances).forEach(function(id) {
+      if (findTab(wsRails.state, id)) { try { wsRails.closeTab(id); } catch (e) {} }
+    });
+  }
+  catInstances = {};
+  catInstanceEls = {};
+  catInstSeq = 1;
+}
+
+// Recreate instances from a serialized list BEFORE the layout deserialize rebuilds
+// their tabs (renderPanel → catBuildInstancePanel finds the state we seed here).
+// The focused column stays pending until catRenderInstance resolves it post-analysis.
+function catRestoreInstances(list) {
+  catResetInstances();
+  if (!Array.isArray(list)) return;
+  var maxSeq = 1;
+  list.forEach(function(rec) {
+    if (!rec || !rec.id) return;
+    var st = catNewInstState();
+    st.chartShowAll = !!rec.chartShowAll;
+    if (rec.focusedCol != null) st._pendingFocusName = rec.focusedCol;
+    catInstances[rec.id] = st;
+    var m = /^categories#(\d+)$/.exec(rec.id);
+    if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+  });
+  catInstSeq = maxSeq;       // new spawns won't collide with restored ids
 }
 
 // ─── Catalog tree (C1a step 2: read-only) ─────────────────────────────
@@ -31117,6 +31190,10 @@ function wsSanitizeLayout(st) {
   if (!st || !Array.isArray(st.rails)) throw new Error('bad layout');
   var known = { data: true };
   WS_PANELS.forEach(function(p) { known[p.id] = true; });
+  // A10 4e-c-5: cloned Categories instance tabs (categories#N) survive sanitize
+  // once their state has been recreated (catRestoreInstances runs before the
+  // layout deserialize). An unknown instance id (no state) is still dropped.
+  if (typeof catInstances !== 'undefined') Object.keys(catInstances).forEach(function(id) { known[id] = true; });
   var seen = {};
   function cleanStack(s) {
     s.tabs = (s.tabs || []).filter(function(t) {

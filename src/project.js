@@ -402,7 +402,10 @@ function serializePanelState() {
       refDs: panelState.statistics.refDs            // 4d per-panel reference (no global star), by id
     },
     swath: { dsHidden: Array.from(panelState.swath.dsHidden) },
-    categories: { dsHidden: Array.from(panelState.categories.dsHidden) }
+    categories: {
+      dsHidden: Array.from(panelState.categories.dsHidden),
+      instances: (typeof serializeCatInstances === 'function') ? serializeCatInstances() : []
+    }
   };
 }
 
@@ -730,6 +733,15 @@ async function applyProject(project) {
     wsApplySidebarSections(project.sidebars && project.sidebars.sections);
   }
 
+  // A10 4e-c-5: recreate cloned Categories instances (state by NAME) BEFORE the
+  // layout deserialize rebuilds their tabs (renderPanel → catBuildInstancePanel
+  // reads the state seeded here). wsSanitizeLayout keeps an instance tab only once
+  // its state exists, so this must precede wsRestoreProjectLayout. The focused
+  // column resolves to an index when the analysis lands (catRenderInstance).
+  if (typeof catRestoreInstances === 'function') {
+    catRestoreInstances(project.panels && project.panels.categories && project.panels.categories.instances);
+  }
+
   // Restore the rails workspace arrangement (missing/invalid → default)
   wsRestoreProjectLayout(project.layout);
 
@@ -1017,6 +1029,7 @@ function clearProject() {
   panelState.statistics.refDs = null;
   panelState.swath.dsHidden = new Set();
   panelState.categories.dsHidden = new Set();
+  if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -1242,6 +1255,7 @@ async function handleFile(file, handle, skipRecents) {
   panelState.statistics.refDs = null;
   panelState.swath.dsHidden = new Set();
   panelState.categories.dsHidden = new Set();
+  if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -1422,6 +1436,7 @@ $backToPreflight.addEventListener('click', () => {
   panelState.statistics.refDs = null;
   panelState.swath.dsHidden = new Set();
   panelState.categories.dsHidden = new Set();
+  if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
