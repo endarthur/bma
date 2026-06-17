@@ -358,6 +358,7 @@ function serializeComparisonDatasets() {
       // Declus params only — weights are recomputed, never stored
       declus: (ds.declus && ds.declus.params) ? { params: ds.declus.params } : null,
       topcut: (ds.topcut && ds.topcut.varName) ? { varName: ds.topcut.varName, cap: ds.topcut.cap, xlog: !!ds.topcut.xlog, useDeclus: !!ds.topcut.useDeclus } : null,
+      statsCat: statsCatSerializeFor(ds),   // A10 G4a-3: per-dataset StatsCat selection (by name)
       view: ds.view
     });
   }
@@ -444,6 +445,7 @@ function serializeProject() {
       declus: (auxDeclus && auxDeclus.params) ? { params: auxDeclus.params } : null,
       // Top-cut: variable + cap + scale + weight mode; the distribution is re-loaded on demand
       topcut: (auxTopcut && auxTopcut.varName) ? { varName: auxTopcut.varName, cap: auxTopcut.cap, xlog: !!auxTopcut.xlog, useDeclus: !!auxTopcut.useDeclus } : null,
+      statsCat: statsCatSerializeFor(dsById('aux')),   // A10 G4a-3: per-dataset StatsCat selection (by name)
       view: auxView
     } : null,
     calcolCode: currentCalcolCode,
@@ -458,6 +460,7 @@ function serializeProject() {
     filter: currentFilter,
     filterText: $filterExpr.value,
     statsCat: {
+      targetDsId: statsCatTargetDsId,
       groupBy: currentGroupBy,
       selectedVars: Array.from(statsCatSelectedVars),
       sortMode: statsCatGroupSortMode,
@@ -784,6 +787,8 @@ async function applyProject(project) {
   const sc = project.statsCat || {};
   if (sc.groupBy != null) currentGroupBy = sc.groupBy;
   if (sc.selectedVars) statsCatSelectedVars = new Set(sc.selectedVars);
+  // G4a-3: which dataset the StatsCat tab targets (self-heals if it never reloads)
+  statsCatTargetDsId = sc.targetDsId || 'model';
 
   // Stash aux config; applied when the aux file is (re)loaded on the Aux tab
   pendingAuxRestore = project.aux || null;
@@ -1061,6 +1066,7 @@ function clearProject() {
   statsCatCdfMax = null;
   statsCatCrossMode = 'count';
   statsCatShowSelectedOnly = false;
+  statsCatTargetDsId = 'model';   // A10 G4a-3: StatsCat target back to the model
   panelState.categories.focusedCol = null;
   catalog = newCatalog();
   panelState.categories.chartShowAll = false;
@@ -2445,10 +2451,55 @@ function setStatsCatTarget(id) {
   renderStatsCat();
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
+// G4a-3: serialize a comparison dataset's StatsCat selection BY NAME (loss-safe,
+// survives column reordering / file re-supply). null when nothing is selected.
+// A dataset awaiting reattach (no live analysis yet) re-emits its pending saved
+// selection verbatim so an autosave mid-restore never drops it.
+function statsCatSerializeFor(ds) {
+  if (!ds) return null;
+  var sc = ds.statsCat;
+  var hdr = ds.complete && ds.complete.header;
+  if (!sc || sc.groupBy == null || !hdr) return ds._pendingStatsCat || null;
+  return {
+    groupBy: (hdr[sc.groupBy] != null) ? hdr[sc.groupBy] : null,
+    selectedVars: sc.selectedVars ? Array.from(sc.selectedVars).map(function(i) { return hdr[i]; }).filter(Boolean) : [],
+    displayVar: (sc.displayVar != null && hdr[sc.displayVar] != null) ? hdr[sc.displayVar] : null,
+    checkedGroups: sc.checkedGroups ? Array.from(sc.checkedGroups) : null,
+    sortMode: (sc.sortMode != null) ? sc.sortMode : null,
+    showSelectedOnly: !!sc.showSelectedOnly
+  };
+}
+// Resolve a comparison dataset's pending (by-name) StatsCat selection into its
+// live ds.statsCat (indices) once a header is known. Called before runAuxAnalysis
+// (preflight header → group stats compute in the restore pass) and again from the
+// complete handler (covers a calcol group-by, known only post-analysis).
+function applyStatsCatRestore(ds, hdr) {
+  if (!ds || !ds._pendingStatsCat) return;
+  hdr = hdr || (ds.complete && ds.complete.header) || (ds.preflight && ds.preflight.header);
+  if (!hdr) return;
+  var pend = ds._pendingStatsCat;
+  var nameToIdx = {};
+  for (var i = 0; i < hdr.length; i++) nameToIdx[hdr[i]] = i;
+  if (pend.groupBy != null && nameToIdx[pend.groupBy] == null) return;  // group-by col not present yet (e.g. calcol pre-analysis) — wait
+  var sc = statsCatNewState();
+  sc.groupBy = (pend.groupBy != null) ? nameToIdx[pend.groupBy] : null;
+  sc.selectedVars = new Set((pend.selectedVars || []).map(function(n) { return nameToIdx[n]; }).filter(function(x) { return x != null; }));
+  sc.displayVar = (pend.displayVar != null && nameToIdx[pend.displayVar] != null) ? nameToIdx[pend.displayVar] : null;
+  sc.checkedGroups = pend.checkedGroups ? new Set(pend.checkedGroups) : null;
+  sc.sortMode = (pend.sortMode != null) ? pend.sortMode : null;
+  sc.showSelectedOnly = !!pend.showSelectedOnly;
+  ds.statsCat = sc;
+  ds._pendingStatsCat = null;
+  if (statsCatTargetDsId === ds.id && typeof renderStatsCat === 'function') renderStatsCat();
+}
+
 // Keep the picker current as datasets analyze/clear; fall back to the model if
 // the target's analysis went away.
 function statsCatRefreshDatasetPicker() {
-  if (statsCatTargetDsId !== 'model' && !(dsById(statsCatTargetDsId) && dsById(statsCatTargetDsId).complete)) {
+  // Bounce to the model only if the target dataset is GONE from the registry
+  // (removed/cleared) — NOT merely unanalyzed, so a restored dataset awaiting its
+  // re-analysis keeps the target until its group stats land.
+  if (statsCatTargetDsId !== 'model' && !dsById(statsCatTargetDsId)) {
     statsCatTargetDsId = 'model';
     renderStatsCat();
     return;

@@ -150,6 +150,9 @@ function runAuxAnalysis(ds, root) {
   // its group-by column + selected var columns per dataset (ds.statsCat, indices
   // into this dataset's columns); pass them so the analyze pass emits groupStats/
   // groupCategories for the comparison dataset (was hard-coded null = model-only).
+  // Resolve any pending (restored, by-name) selection first so a reloaded project
+  // recomputes its group stats in this pass.
+  if (ds._pendingStatsCat && typeof applyStatsCatRestore === 'function') applyStatsCatRestore(ds, ds.preflight && ds.preflight.header);
   var scState = ds.statsCat || null;
   var scGroupBy = (scState && scState.groupBy != null) ? scState.groupBy : null;
   var scCols = (scGroupBy != null && scState.selectedVars && scState.selectedVars.size > 0)
@@ -730,6 +733,11 @@ function applyAuxRestore(saved, ds) {
     $calcolCodeArea.value = ds.calcolCode;
     syncCodeHighlight();
   }
+  // A10 G4a-3: stash this dataset's StatsCat selection (by name) and resolve it
+  // against the preflight header NOW, so runAuxAnalysis computes its group stats
+  // in the restore pass (a calcol group-by resolves later from the complete header).
+  ds._pendingStatsCat = saved.statsCat || null;
+  if (ds._pendingStatsCat && typeof applyStatsCatRestore === 'function') applyStatsCatRestore(ds, ds.preflight && ds.preflight.header);
 }
 
 // When the primary file is a multi-entry archive, offer its other entries
