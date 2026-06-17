@@ -708,7 +708,7 @@ function applyAuxRestore(saved, ds) {
   if (saved.xyz && ds.preflight) ds.preflight.xyz = saved.xyz;
   ds.calcolCode = saved.calcolCode || '';
   ds.calcolMeta = saved.calcolMeta || [];
-  if (calcolMode === 'aux' && $calcolCodeArea) {
+  if (calcolMode === ds.id && $calcolCodeArea) {   // A10 G1: editor targets this dataset
     $calcolCodeArea.value = ds.calcolCode;
     syncCodeHighlight();
   }

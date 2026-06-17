@@ -150,44 +150,50 @@ function highlightCode(code) {
 // ── Code Editor Controller ────────────────────────────────────────────
 let calcolSimTimer = null;
 
-// ── Primary/Aux editing context ───────────────────────────────────────
-// The editor edits one dataset at a time; these helpers route state and
-// metadata to the right side. Aux code always references the fixed
-// AUX_ROW_VAR handle ('aux'), independent of the display prefix.
-function calcolIsAux() { return calcolMode === 'aux'; }
-function calcolGetCode() { return calcolIsAux() ? auxCalcolCode : currentCalcolCode; }
-function calcolStoreCode(v) { if (calcolIsAux()) auxCalcolCode = v; else currentCalcolCode = v; }
-function calcolGetMeta() { return calcolIsAux() ? auxCalcolMeta : currentCalcolMeta; }
-function calcolStoreMeta(m) { if (calcolIsAux()) auxCalcolMeta = m; else currentCalcolMeta = m; }
-function calcolRowVarName() { return calcolIsAux() ? AUX_ROW_VAR : (currentRowVar || 'r'); }
+// ── Per-dataset editing context (A10 G1) ──────────────────────────────
+// The editor edits one DATASET at a time; `calcolMode` holds its id ('model',
+// 'aux', 'd2'…). These helpers route state/metadata to that dataset through the
+// registry views (ds.calcolCode/calcolMeta/rowVar/preflight/complete), so a
+// comparison instance's calcols are first-class. Reads fall back to the model if
+// the target vanished; writes target dsById(calcolMode) and no-op if it's gone
+// (so removing a dataset mid-edit can't corrupt the model's code). A dataset's
+// code always references its fixed handle (ds.rowVar — 'r'/'aux'/'d2'…),
+// independent of the display prefix.
+function calcolTargetDs() { return dsById(calcolMode) || dsById('model'); }
+function calcolIsAux() { return calcolMode !== 'model'; }   // "not the model" (kept for callers)
+function calcolGetCode() { return calcolTargetDs().calcolCode || ''; }
+function calcolStoreCode(v) { var ds = dsById(calcolMode); if (ds) ds.calcolCode = v; }
+function calcolGetMeta() { return calcolTargetDs().calcolMeta || []; }
+function calcolStoreMeta(m) { var ds = dsById(calcolMode); if (ds) ds.calcolMeta = m; }
+function calcolRowVarName() { return calcolTargetDs().rowVar || 'r'; }
 function calcolHdrCtx() {
-  if (calcolIsAux()) {
-    return auxPreflightData
-      ? { header: auxPreflightData.header, types: auxPreflightData.autoTypes || [], typeOv: {} }
-      : { header: null, types: [], typeOv: {} };
+  var ds = calcolTargetDs();
+  if (ds.id === 'model') {
+    return preflightData
+      ? { header: preflightData.header, types: preflightData.autoTypes || [], typeOv: preflightData.typeOverrides || {} }
+      : { header: currentHeader, types: currentColTypes, typeOv: {} };
   }
-  return preflightData
-    ? { header: preflightData.header, types: preflightData.autoTypes || [], typeOv: preflightData.typeOverrides || {} }
-    : { header: currentHeader, types: currentColTypes, typeOv: {} };
+  return ds.preflight
+    ? { header: ds.preflight.header, types: ds.preflight.autoTypes || [], typeOv: {} }
+    : { header: null, types: [], typeOv: {} };
 }
-function calcolStatsCtx() { return calcolIsAux() ? auxCompleteData : lastCompleteData; }
+function calcolStatsCtx() { return calcolTargetDs().complete; }
 function calcolMarkStale() {
-  if (calcolIsAux()) {
-    if (typeof markAuxStale === 'function') markAuxStale();
-  } else {
-    markAnalysisStale();
-  }
+  var ds = calcolTargetDs();
+  if (ds.id === 'model') markAnalysisStale();
+  else if (typeof markAuxStale === 'function') markAuxStale(ds, (typeof dsConfigRoot === 'function') ? dsConfigRoot(ds) : null);
 }
 
 function setCalcolMode(mode) {
   if (mode === calcolMode) return;
-  // Stash the editor text into the outgoing context before swapping
+  // Stash the editor text into the outgoing dataset before swapping
   calcolStoreCode($calcolCodeArea.value);
   calcolMode = mode;
   $calcolCodeArea.value = calcolGetCode();
-  $calcolCodeArea.placeholder = calcolIsAux()
-    ? '// Mutate aux to create columns on the aux dataset\naux.au_capped = min(aux.AU, 5);\naux.declust_w = aux.W;'
-    : '// Mutate r to create new columns\nr.grade_cut = min(r.AU, 5);\nr.is_ore = r.AU > 0.5 ? \'ore\' : \'waste\';';
+  var rv = calcolRowVarName();
+  $calcolCodeArea.placeholder = (calcolMode === 'model')
+    ? '// Mutate r to create new columns\nr.grade_cut = min(r.AU, 5);\nr.is_ore = r.AU > 0.5 ? \'ore\' : \'waste\';'
+    : '// Mutate ' + rv + ' to create columns on this dataset\n' + rv + '.au_capped = min(' + rv + '.AU, 5);';
   syncCodeHighlight();
   document.querySelectorAll('#calcolModeToggle .calcol-mode-btn').forEach(function(b) {
     b.classList.toggle('active', b.dataset.mode === mode);
@@ -196,13 +202,23 @@ function setCalcolMode(mode) {
   simulateCalcol();
 }
 
-// Show the toggle only when an aux dataset is loaded; bounce the editor back
-// to primary if aux goes away while being edited
+// A10 G1: the toggle is a DATASET picker — the model plus every comparison
+// dataset that has a loaded preflight. Hidden when only the model is targetable.
+// Bounces the editor back to the model if its target dataset went away.
 function refreshCalcolModeToggle() {
   var $t = document.getElementById('calcolModeToggle');
   if (!$t) return;
-  $t.style.display = auxFile ? '' : 'none';
-  if (!auxFile && calcolMode === 'aux') setCalcolMode('primary');
+  var targets = [];
+  for (var i = 0; i < datasets.length; i++) {
+    var ds = datasets[i];
+    if (ds.id === 'model' || ds.preflight) targets.push(ds.id);
+  }
+  if (targets.indexOf(calcolMode) < 0) setCalcolMode('model');
+  $t.style.display = (targets.length > 1) ? '' : 'none';
+  $t.innerHTML = targets.map(function(id) {
+    return '<button class="calcol-mode-btn' + (id === calcolMode ? ' active' : '') +
+      '" data-mode="' + id + '">' + esc(dsLabel(id)) + '</button>';
+  }).join('');
 }
 
 function syncCodeHighlight() {
@@ -514,11 +530,13 @@ if ($calcolModeToggleEl) {
 // ── Simulate / Preview ────────────────────────────────────────────────
 function getSampleRows() {
   if (calcolIsAux()) {
-    // Aux preview always uses the aux preflight sample
-    if (!auxPreflightData || !auxPreflightData.sampleRows) return [];
-    var aHdr = auxPreflightData.header;
-    var aTypes = auxPreflightData.autoTypes || [];
-    return auxPreflightData.sampleRows.slice(0, 10).map(function(fields) {
+    // A comparison dataset's preview uses that dataset's preflight sample
+    var cds = calcolTargetDs();
+    var cpf = cds && cds.preflight;
+    if (!cpf || !cpf.sampleRows) return [];
+    var aHdr = cpf.header;
+    var aTypes = cpf.autoTypes || [];
+    return cpf.sampleRows.slice(0, 10).map(function(fields) {
       var obj = {};
       for (var i = 0; i < aHdr.length; i++) {
         var raw = (fields[i] || '').trim().replace(/^["']|["']$/g, '');

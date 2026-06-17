@@ -38,7 +38,7 @@ const AUX_ROW_VAR = 'aux';     // fixed code handle for aux filter/calc expressi
 let auxStale = false;              // aux config changed since last aux analysis
 let auxCalcolCode = '';            // calculated-columns code block for the aux dataset (uses aux.)
 let auxCalcolMeta = [];            // [{name, type}] detected from aux calcol simulation
-let calcolMode = 'primary';        // which dataset the Calc editor is editing: 'primary' | 'aux'
+let calcolMode = 'model';          // A10: which DATASET id the Calc editor targets ('model' | 'aux' | 'd2' …)
 let projectTitle = null;           // optional project title (pack dialog) — display + archive naming
 let statsCdfMode = 'cdf';          // CDF panel mode: 'cdf' | 'logprob' | 'qq'
 // Support weights live in the catalog: catRole('model'|'aux', 'weight')

@@ -320,12 +320,14 @@ function wsSetDatasetTabTitle(ds) {
 // dataset-listing views. (The singleton aux uses clearAux instead — reset, not remove.)
 function wsRemoveInstance(ds) {
   if (!ds || ds.id === 'aux' || ds.id === 'model') return;
-  ['_worker', '_declusWorker', '_topcutWorker'].forEach(function(k) {
+  ['_worker', '_declusWorker', '_topcutWorker', '_exportWorker'].forEach(function(k) {
     if (ds[k]) { try { ds[k].terminate(); } catch (e) {} ds[k] = null; }
   });
+  if (typeof dhStates !== 'undefined' && dhStates) delete dhStates[ds.id];  // phase 5: drop its drillhole set
   if (wsRails && findTab(wsRails.state, ds.id)) wsRails.closeTab(ds.id);
   if (typeof dsRemove === 'function') dsRemove(ds.id);
   if (typeof refreshCatalogTree === 'function') refreshCatalogTree();
+  if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();  // G1: drop it from the picker, bounce the editor if targeted
   if (typeof lastDisplayedStats !== 'undefined' && lastDisplayedStats) {
     renderStatsSidebar(); renderStatsTable(); renderStatsCdfPanel();
   }
