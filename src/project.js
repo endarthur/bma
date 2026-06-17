@@ -412,6 +412,9 @@ function serializePanelState() {
     categories: {
       dsHidden: Array.from(panelState.categories.dsHidden),
       instances: (typeof serializeCatInstances === 'function') ? serializeCatInstances() : []
+    },
+    gt: {
+      instances: (typeof gtSerializeInstances === 'function') ? gtSerializeInstances() : []   // A10 G3b: cloned GT panels
     }
   };
 }
@@ -768,6 +771,11 @@ async function applyProject(project) {
   if (typeof statRestoreInstances === 'function') {
     statRestoreInstances(project.panels && project.panels.statistics && project.panels.statistics.instances);
   }
+  // A10 G3b: same — recreate cloned GT instances (config pending) before the
+  // layout deserialize; resolved post-analysis by gtApplyAllInstances.
+  if (typeof gtRestoreInstances === 'function') {
+    gtRestoreInstances(project.panels && project.panels.gt && project.panels.gt.instances);
+  }
   // Phase 6: register comparison-dataset instances (d2+) in the registry NOW —
   // before the layout deserialize — so wsSanitizeLayout keeps their tabs at the
   // SAVED dock position instead of dropping them (displayResults would re-add at
@@ -1090,6 +1098,7 @@ function clearProject() {
   if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
   if (typeof swResetInstances === 'function') swResetInstances();    // Swath s-5: drop cloned Swath panels
   if (typeof statResetInstances === 'function') statResetInstances();  // Statistics st-5: drop cloned Statistics panels
+  if (typeof gtResetInstances === 'function') gtResetInstances();      // G3b-4: drop cloned GT panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -1345,6 +1354,7 @@ async function handleFile(file, handle, skipRecents) {
   if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
   if (typeof swResetInstances === 'function') swResetInstances();    // Swath s-5: drop cloned Swath panels
   if (typeof statResetInstances === 'function') statResetInstances();  // Statistics st-5: drop cloned Statistics panels
+  if (typeof gtResetInstances === 'function') gtResetInstances();      // G3b-4: drop cloned GT panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -1529,6 +1539,7 @@ $backToPreflight.addEventListener('click', () => {
   if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
   if (typeof swResetInstances === 'function') swResetInstances();    // Swath s-5: drop cloned Swath panels
   if (typeof statResetInstances === 'function') statResetInstances();  // Statistics st-5: drop cloned Statistics panels
+  if (typeof gtResetInstances === 'function') gtResetInstances();      // G3b-4: drop cloned GT panels
   pendingDatasetsRestore = {};
   pendingPanelState = null;
   statsCdfScale = 'linear';
@@ -2151,6 +2162,7 @@ function displayResults(data) {
   renderGtConfig(data);
   renderSwathConfig(data);
   if (typeof swApplyAllInstances === 'function') swApplyAllInstances();      // s-5: re-apply restored clone configs
+  if (typeof gtApplyAllInstances === 'function') gtApplyAllInstances();      // G3b-4: re-apply restored GT clone configs
   if (typeof swRefreshAllInstances === 'function') swRefreshAllInstances();  // follow-up: refresh live clone sidebars on re-analysis
   renderSectionConfig(data);
 

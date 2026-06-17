@@ -134,6 +134,159 @@ function gtDisposeInstance(instId) {
   delete gtInstanceEls[instId];
 }
 
+// ─── G3b-4: per-clone config persistence (config, not results) ──────────────
+// Read one panel's GT config by NAME (mirrors the singleton project.js gt block,
+// root-scoped). Used by Duplicate-carry + panels.gt.instances serialization.
+function gtSerializeConfig(root) {
+  var varList = gtQ('gtVarList', root);
+  if (!varList) return null;
+  var gradeCols = [];
+  varList.querySelectorAll('input[type="checkbox"]:checked').forEach(function(cb) { gradeCols.push(cb.parentElement.querySelector('span').textContent); });
+  var sb = gtSidebarEl(root);
+  var modeRadio = sb ? sb.querySelector('input[name^="gtCutoffMode"]:checked') : null;
+  function val(id) { var e = gtQ(id, root); return e ? e.value : ''; }
+  function optText(id) { var e = gtQ(id, root); return (e && e.value !== '-1' && e.options[e.selectedIndex]) ? e.options[e.selectedIndex].textContent : null; }
+  var dCol = gtQ('gtDensityCol', root);
+  return {
+    targetDsId: gtStateForRoot(root).gtTargetDsId,
+    gradeCols: gradeCols,
+    groupByCol: optText('gtGroupBy'),
+    densityCol: (dCol && dCol.value !== '-1' && dCol.value !== 'const' && dCol.options[dCol.selectedIndex]) ? dCol.options[dCol.selectedIndex].textContent : null,
+    densityConst: (dCol && dCol.value === 'const') ? (parseFloat(val('gtDensityConst')) || null) : null,
+    weightCol: optText('gtWeightCol'),
+    localFilter: val('gtLocalFilter') || '',
+    cutoffMode: modeRadio ? modeRadio.value : 'range',
+    cutoffMin: parseFloat(val('gtCutoffMin')) || 0,
+    cutoffMax: parseFloat(val('gtCutoffMax')) || 1,
+    cutoffStep: parseFloat(val('gtCutoffStep')) || 0.05,
+    cutoffCustom: val('gtCutoffCustomText') || '',
+    volumeOverride: parseFloat(val('gtVolOverride')) || null,
+    tonnageUnit: parseInt(val('gtTonnageUnit')) || 0,
+    customTonnageSym: val('gtCustomTonnageSym') || '',
+    customTonnageDiv: parseFloat(val('gtCustomTonnageDiv')) || null,
+    metalUnit: parseInt(val('gtMetalUnit')) || 0,
+    customMetalSym: val('gtCustomMetalSym') || '',
+    customMetalDiv: parseFloat(val('gtCustomMetalDiv')) || null,
+    tonnageDp: val('gtTonnageDp') || '',
+    gradeDp: val('gtGradeDp') || '',
+    metalDp: val('gtMetalDp') || '',
+    theoEnabled: !!(gtQ('gtTheoEnabled', root) || {}).checked,
+    theoEngine: val('gtTheoEngine') || 'affine',
+    theoF: parseFloat(val('gtTheoFNum')) || 0.6,
+    theoDsId: gtStateForRoot(root).gtTheoDsId,
+    selectedGroups: (function() {
+      var list = gtQ('gtGrpList', root); if (!list) return null;
+      var ck = [], ht = false;
+      list.querySelectorAll('input:checked').forEach(function(cb) { if (cb.value === '__total__') ht = true; else ck.push(cb.value); });
+      return { values: ck, showTotal: ht };
+    })()
+  };
+}
+// Apply a saved config to one panel (root-scoped, by NAME). Switches the target
+// dataset first (rebuilds the sidebar for it), then re-points every control.
+function gtApplyConfig(root, cfg) {
+  if (!cfg) return;
+  var S = gtStateForRoot(root);
+  if (cfg.targetDsId && cfg.targetDsId !== S.gtTargetDsId) setGtTarget(cfg.targetDsId, root);   // rebuilds the sidebar
+  if (cfg.theoDsId !== undefined) S.gtTheoDsId = cfg.theoDsId;
+  function el(id) { return gtQ(id, root); }
+  var varList = el('gtVarList');
+  if (varList && cfg.gradeCols) {
+    var nameSet = {}; cfg.gradeCols.forEach(function(n) { nameSet[n] = true; });
+    varList.querySelectorAll('input[type="checkbox"]').forEach(function(cb) { cb.checked = !!nameSet[cb.parentElement.querySelector('span').textContent]; });
+  }
+  function setByText(id, text) { var e = el(id); if (e && text) { for (var i = 0; i < e.options.length; i++) if (e.options[i].textContent === text) { e.value = e.options[i].value; return; } } }
+  setByText('gtGroupBy', cfg.groupByCol);
+  setByText('gtDensityCol', cfg.densityCol);
+  if (cfg.densityConst != null) { var dc = el('gtDensityCol'); if (dc) dc.value = 'const'; var dcv = el('gtDensityConst'); if (dcv) dcv.value = cfg.densityConst; var dcw = el('gtDensityConstWrap'); if (dcw) dcw.style.display = 'flex'; }
+  setByText('gtWeightCol', cfg.weightCol);
+  if (el('gtLocalFilter') && cfg.localFilter) el('gtLocalFilter').value = cfg.localFilter;
+  if (el('gtCutoffMin') && cfg.cutoffMin != null) el('gtCutoffMin').value = cfg.cutoffMin;
+  if (el('gtCutoffMax') && cfg.cutoffMax != null) el('gtCutoffMax').value = cfg.cutoffMax;
+  if (el('gtCutoffStep') && cfg.cutoffStep != null) el('gtCutoffStep').value = cfg.cutoffStep;
+  if (cfg.cutoffMode === 'custom') {
+    var sb = gtSidebarEl(root);
+    var r = sb ? sb.querySelector('input[name^="gtCutoffMode"][value="custom"]') : null;
+    if (r) { r.checked = true; r.dispatchEvent(new Event('change')); }
+    if (el('gtCutoffCustomText') && cfg.cutoffCustom) el('gtCutoffCustomText').value = cfg.cutoffCustom;
+  }
+  if (el('gtVolOverride') && cfg.volumeOverride) el('gtVolOverride').value = cfg.volumeOverride;
+  if (el('gtTonnageUnit') && cfg.tonnageUnit != null) { el('gtTonnageUnit').value = cfg.tonnageUnit; el('gtTonnageUnit').dispatchEvent(new Event('change')); }
+  if (el('gtCustomTonnageSym') && cfg.customTonnageSym) el('gtCustomTonnageSym').value = cfg.customTonnageSym;
+  if (el('gtCustomTonnageDiv') && cfg.customTonnageDiv) el('gtCustomTonnageDiv').value = cfg.customTonnageDiv;
+  if (el('gtMetalUnit') && cfg.metalUnit != null) { el('gtMetalUnit').value = cfg.metalUnit; el('gtMetalUnit').dispatchEvent(new Event('change')); }
+  if (el('gtCustomMetalSym') && cfg.customMetalSym) el('gtCustomMetalSym').value = cfg.customMetalSym;
+  if (el('gtCustomMetalDiv') && cfg.customMetalDiv) el('gtCustomMetalDiv').value = cfg.customMetalDiv;
+  if (el('gtTonnageDp') && cfg.tonnageDp) el('gtTonnageDp').value = cfg.tonnageDp;
+  if (el('gtGradeDp') && cfg.gradeDp) el('gtGradeDp').value = cfg.gradeDp;
+  if (el('gtMetalDp') && cfg.metalDp) el('gtMetalDp').value = cfg.metalDp;
+  if (el('gtTheoEnabled') && cfg.theoEnabled != null) el('gtTheoEnabled').checked = !!cfg.theoEnabled;
+  if (el('gtTheoEngine') && cfg.theoEngine) el('gtTheoEngine').value = cfg.theoEngine;
+  if (cfg.theoF != null && isFinite(cfg.theoF)) { if (el('gtTheoF')) el('gtTheoF').value = cfg.theoF; if (el('gtTheoFNum')) el('gtTheoFNum').value = cfg.theoF; }
+  if (cfg.groupByCol && el('gtGroupBy') && el('gtGroupBy').value !== '-1') {
+    updateGroupByValues(root);
+    if (cfg.selectedGroups) {
+      var valSet = new Set(cfg.selectedGroups.values || []);
+      gtQA('gtGrpList', 'input[type="checkbox"]', root).forEach(function(cb) {
+        cb.checked = cb.value === '__total__' ? !!cfg.selectedGroups.showTotal : valSet.has(cb.value);
+      });
+    }
+  }
+}
+
+// Serialize every live GT clone's config → [{id, config}] (re-emits a clone whose
+// panel isn't built yet via its pending config = loss-safe).
+function gtSerializeInstances() {
+  var out = [];
+  Object.keys(gtInstances).forEach(function(id) {
+    var root = document.querySelector('[data-gt-inst="' + id + '"]');
+    var cfg = root ? gtSerializeConfig(root) : null;
+    // Not built yet, or built but its sidebar is empty (target not analyzed) →
+    // re-emit the pending saved config so a mid-restore autosave never drops it.
+    if (!cfg && gtInstances[id]._pendingConfig) cfg = gtInstances[id]._pendingConfig;
+    out.push({ id: id, config: cfg });
+  });
+  return out;
+}
+// Recreate clone state + pending config BEFORE the layout deserialize (so tabs
+// restore to their saved dock positions); the config applies once _gtData lands.
+function gtRestoreInstances(list) {
+  if (!Array.isArray(list)) return;
+  list.forEach(function(rec) {
+    if (!rec || !rec.id) return;
+    gtInstances[rec.id] = gtNewInstState();
+    gtInstances[rec.id]._pendingConfig = rec.config || null;
+    var n = parseInt(String(rec.id).replace(/^gt#/, ''), 10);
+    if (isFinite(n) && n > gtInstSeq) gtInstSeq = n;
+  });
+}
+// Apply each freshly-restored clone's pending config once the model analysis is
+// available (displayResults). Only touches _pendingConfig instances.
+function gtApplyAllInstances() {
+  if (!_gtData) return;
+  Object.keys(gtInstances).forEach(function(id) {
+    var st = gtInstances[id];
+    if (!st || !st._pendingConfig) return;
+    // A clone targeting a comparison dataset can't apply until that dataset is
+    // analyzed — defer (keep the pending config); the aux-complete handler re-runs
+    // this so it resolves once the target lands. Loss-safe: serialize re-emits it.
+    var tgt = st._pendingConfig.targetDsId || 'model';
+    if (tgt !== 'model' && !(dsById(tgt) && dsById(tgt).complete)) return;
+    var root = document.querySelector('[data-gt-inst="' + id + '"]');
+    if (!root) return;
+    renderGtConfig(_gtData, root);
+    gtApplyConfig(root, st._pendingConfig);
+    st._pendingConfig = null;
+  });
+}
+function gtResetInstances() {
+  Object.keys(gtInstances).forEach(function(id) {
+    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) { try { wsRails.closeTab(id); } catch (e) {} }
+    gtDisposeInstance(id);
+  });
+  gtInstances = {}; gtInstanceEls = {};
+}
+
 // The dataset the GT tab targets, and its analysis context. GT generalizes
 // beyond the model: a gridded comparison dataset gets its own grade-tonnage
 // curves. The model resolves through its current* globals (bit-identical); a
