@@ -175,8 +175,9 @@ function wsBuildDatasetPanel(ds) {
   el.dataset.tab = ds.id;
   el.classList.add('active');   // wrapper controls visibility; class keeps display rules
   el.querySelectorAll('[id]').forEach(function(n) { n.removeAttribute('id'); });
-  var dh = el.querySelector('.dh-card');
-  if (dh) dh.remove();
+  // A10 phase 5: the drillhole card stays on every dataset panel (was aux-only)
+  // — each instance can host its own drillhole set. wireDhCard (via
+  // wireDatasetPanel below) renders this instance's empty card + wires it.
   var emptyEl = el.querySelector('[data-aux="empty"]');
   var configEl = el.querySelector('[data-aux="config"]');
   if (ds.preflight) {
@@ -213,6 +214,25 @@ function wsAddPointDataset() {
   dsAdd(ds);
   wsRails.addTab({ id: ds.id, title: 'Import: ' + ds.prefix, closeable: true }, wsMainTarget());
   wsRails.activateTab(ds.id);   // renderPanel → wsBuildDatasetPanel (empty import surface)
+}
+
+// Data ▸ Add drillhole set… — A10 phase 5. Spawn a fresh dataset instance and
+// reveal its drillhole card (each instance hosts its own set). On the legacy
+// shell (no instance tabs) fall back to the singleton aux's card.
+function wsAddDrillholeDataset() {
+  if (!wsRails) {
+    showPanel('aux');
+    var dha = document.querySelector('#panelAux [data-dh="card"]');
+    if (dha && dha.scrollIntoView) dha.scrollIntoView({ block: 'nearest' });
+    return;
+  }
+  if (typeof dsCreate !== 'function') return;
+  var ds = dsCreate({ prefix: 'data' });
+  dsAdd(ds);
+  wsRails.addTab({ id: ds.id, title: 'Import: ' + ds.prefix, closeable: true }, wsMainTarget());
+  wsRails.activateTab(ds.id);   // renderPanel → wsBuildDatasetPanel builds + wires the card
+  var dh = document.querySelector('.ds-panel[data-ds="' + ds.id + '"] [data-dh="card"]');
+  if (dh && dh.scrollIntoView) dh.scrollIntoView({ block: 'nearest' });
 }
 
 // A10 4e-b: recreate a comparison-dataset instance from its saved config on
@@ -534,7 +554,7 @@ function wsMenuAction(a) {
     case 'newSwath': if (typeof wsSpawnSwathInstance === 'function') wsSpawnSwathInstance(); break;
     case 'newStatistics': if (typeof wsSpawnStatisticsInstance === 'function') wsSpawnStatisticsInstance(); break;
     case 'addPoint': wsAddPointDataset(); break;
-    case 'addDrillhole': { showPanel('aux'); var dh = document.querySelector('#panelAux [data-dh="card"]'); if (dh && dh.scrollIntoView) dh.scrollIntoView({ block: 'nearest' }); break; }
+    case 'addDrillhole': wsAddDrillholeDataset(); break;
     case 'help': toggleHelp(); break;
     case 'example': { var ex = document.getElementById('exampleDownload'); if (ex) ex.click(); break; }
     case 'about': wsShowAbout(); break;
