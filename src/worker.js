@@ -1955,7 +1955,10 @@ async function gtAnalysis(data) {
   try {
     src = await makeRowSource(file, {
       zipEntry, dmEndianness: data.dmEndianness, dmFormat: data.dmFormat,
-      resolvedTypes: resolvedTypes, calcolCode: calcolCode, calcolMeta: calcolMeta
+      resolvedTypes: resolvedTypes, calcolCode: calcolCode, calcolMeta: calcolMeta,
+      // A10 G3: GT on a comparison dataset honors its row handle (aux./d2.…);
+      // undefined for the model → default 'r', so the model GT is unchanged.
+      rowVarOverride: data.rowVarOverride
     });
   } catch(e) {
     self.postMessage({ type: 'error', message: e.message });

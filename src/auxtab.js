@@ -204,6 +204,7 @@ function runAuxAnalysis(ds, root) {
       }
       if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();
       if (ds.view === 'summary' && typeof renderAuxSummary === 'function') renderAuxSummary(ds, root);  // A10 per-dataset summary
+      if (typeof gtRefreshDatasetPicker === 'function') gtRefreshDatasetPicker();  // G3: this dataset is now GT-targetable
       autoSaveProject();
     } else if (m.type === 'error') {
       fail(m.message);

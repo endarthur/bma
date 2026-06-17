@@ -28,6 +28,72 @@ let gtNumCols = [];
 let gtCatCols = [];
 let gtTableCollapsed = new Set(); // collapsed table sections by column name (C6-0)
 let gtStale = false;              // result no longer matches the sidebar (C6-5)
+let gtTargetDsId = 'model';       // A10 G3: which DATASET the GT tab analyzes ('model' | 'aux' | 'd2' …)
+
+// The dataset the GT tab targets, and its analysis context. GT generalizes
+// beyond the model: a gridded comparison dataset gets its own grade-tonnage
+// curves. The model resolves through its current* globals (bit-identical); a
+// comparison dataset reads its registry view (ds.complete/file/filter/calcols/
+// preflight/rowVar). Only datasets with a completed analysis are targetable.
+function gtTargetDs() { return dsById(gtTargetDsId) || dsById('model'); }
+function gtCtx() {
+  var ds = gtTargetDs();
+  var isModel = ds.id === 'model';
+  var c = ds.complete || {};
+  return {
+    ds: ds, isModel: isModel, complete: ds.complete,
+    header: c.header || [], colTypes: c.colTypes || [], geometry: c.geometry || null,
+    stats: c.stats || null, categories: c.categories || null,
+    totalRowCount: (c.totalRowCount != null) ? c.totalRowCount : (c.rowCount || 0),
+    xyz: isModel ? currentXYZ : ((ds.preflight && ds.preflight.xyz) || { x: -1, y: -1, z: -1 }),
+    dxyz: isModel ? currentDXYZ : { dx: -1, dy: -1, dz: -1 },
+    file: ds.file, filter: ds.filter, calcolCode: ds.calcolCode, calcolMeta: ds.calcolMeta || [],
+    preflight: isModel ? preflightData : ds.preflight, rowVar: ds.rowVar,
+    resolvedTypes: isModel
+      ? (currentColTypes ? currentColTypes.slice(0, currentOrigColCount) : (c.colTypes || []))
+      : ((ds.preflight && ds.preflight.autoTypes) || c.colTypes || [])
+  };
+}
+
+// A10 G3: datasets the GT tab can target — any with a completed analysis.
+function gtTargetableDatasets() {
+  var out = [];
+  for (var i = 0; i < datasets.length; i++) { if (datasets[i].complete) out.push(datasets[i]); }
+  return out;
+}
+// The "Dataset" picker at the top of the GT sidebar — shown only when 2+ datasets
+// are analyzed (with one, GT is implicitly the model, as before).
+function gtDatasetPickerHtml() {
+  var ts = gtTargetableDatasets();
+  if (ts.length < 2) return '';
+  var cur = gtTargetDs().id;
+  return '<div class="gt-sidebar-section" data-sb="dataset">' +
+    '<div class="gt-sidebar-title">Dataset</div>' +
+    '<select class="gt-select" id="gtDataset">' +
+    ts.map(function(d) { return '<option value="' + d.id + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
+    '</select></div>';
+}
+// Switch the GT target dataset and rebuild the sidebar for it.
+function setGtTarget(id) {
+  if (id === gtTargetDsId) return;
+  gtTargetDsId = id;
+  lastGtData = null; gtStale = false;
+  renderGtConfig();
+  var $c = document.getElementById('gtContent');
+  if ($c) $c.innerHTML = '<div class="gt-hint">Pick grade variables and Generate for ' + esc(dsLabel(gtTargetDs().id)) + '.</div>';
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+// Keep the picker current as datasets analyze/clear (the model GT sidebar is
+// built once); falls back to the model if the target's analysis went away.
+function gtRefreshDatasetPicker() {
+  if (gtTargetDsId !== 'model' && !(dsById(gtTargetDsId) && dsById(gtTargetDsId).complete)) {
+    setGtTarget('model'); return;
+  }
+  var sel = document.getElementById('gtDataset');
+  if (!sel) { if (gtTargetableDatasets().length >= 2 && lastDisplayedStats) renderGtConfig(); return; }
+  var ts = gtTargetableDatasets(), cur = gtTargetDs().id;
+  sel.innerHTML = ts.map(function(d) { return '<option value="' + d.id + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('');
+}
 
 // Mark the GT result stale (config changed since the last Generate). Live
 // re-render controls (units/dp/group-values) are excluded by the callers.
@@ -45,10 +111,11 @@ function gtMarkStale() {
 // classified as points no longer silently uses its geometry volume) → else
 // count-based. Returns { display, hint, value, kind }.
 function gtVolumeSource() {
-  var hasDXYZ = currentDXYZ.dx >= 0 && currentDXYZ.dy >= 0 && currentDXYZ.dz >= 0;
+  var ctx = gtCtx();
+  var hasDXYZ = ctx.dxyz.dx >= 0 && ctx.dxyz.dy >= 0 && ctx.dxyz.dz >= 0;
   if (hasDXYZ) return { display: 'Per-row DXYZ columns', hint: '', value: '', kind: 'dxyz' };
-  var geo = lastCompleteData && lastCompleteData.geometry;
-  var isGrid = (typeof dsHasGrid === 'function') && dsHasGrid(dsById('model'));
+  var geo = ctx.geometry;
+  var isGrid = (typeof dsHasGrid === 'function') && dsHasGrid(ctx.ds);
   if (isGrid && geo && geo.x && geo.y && geo.z && geo.x.blockSize && geo.y.blockSize && geo.z.blockSize) {
     var bv = geo.x.blockSize * geo.y.blockSize * geo.z.blockSize;
     return {
@@ -59,7 +126,7 @@ function gtVolumeSource() {
   // Not a grid → count-based. Name why + how to get volume-weighting when the
   // model carries a detectable block size but is classified as points.
   var hint = (geo && geo.x && geo.x.blockSize)
-    ? 'Classified as points — for volume-weighted tonnage set this dataset to “grid” in Import Model, assign DXYZ, set an Override, or pick a tonnage/volume column under Weight.'
+    ? 'Classified as points — for volume-weighted tonnage set this dataset to “grid” in its import panel, assign DXYZ, set an Override, or pick a tonnage/volume column under Weight.'
     : '';
   return { display: 'Count-based (1 per row)', hint: hint, value: '', kind: 'count' };
 }
@@ -87,19 +154,23 @@ function renderGtConfig(data) {
   var $sidebar = document.getElementById('gtSidebar');
   var $content = document.getElementById('gtContent');
   if (!$sidebar) return;
-  var header = data.header, colTypes = data.colTypes, geometry = data.geometry;
+  // A10 G3: the GT tab analyzes gtTargetDs() (the model by default). data (the
+  // model's analysis, passed from displayResults) is ignored — the context is
+  // resolved per target so a comparison dataset gets its own GT.
+  var ctx = gtCtx();
+  var header = ctx.header, colTypes = ctx.colTypes, geometry = ctx.geometry;
 
   // Reset cached results
   lastGtData = null;
 
   // Gather numeric columns (excluding XYZ/DXYZ)
   var excludeSet = new Set();
-  if (currentXYZ.x >= 0) excludeSet.add(currentXYZ.x);
-  if (currentXYZ.y >= 0) excludeSet.add(currentXYZ.y);
-  if (currentXYZ.z >= 0) excludeSet.add(currentXYZ.z);
-  if (currentDXYZ.dx >= 0) excludeSet.add(currentDXYZ.dx);
-  if (currentDXYZ.dy >= 0) excludeSet.add(currentDXYZ.dy);
-  if (currentDXYZ.dz >= 0) excludeSet.add(currentDXYZ.dz);
+  if (ctx.xyz.x >= 0) excludeSet.add(ctx.xyz.x);
+  if (ctx.xyz.y >= 0) excludeSet.add(ctx.xyz.y);
+  if (ctx.xyz.z >= 0) excludeSet.add(ctx.xyz.z);
+  if (ctx.dxyz.dx >= 0) excludeSet.add(ctx.dxyz.dx);
+  if (ctx.dxyz.dy >= 0) excludeSet.add(ctx.dxyz.dy);
+  if (ctx.dxyz.dz >= 0) excludeSet.add(ctx.dxyz.dz);
 
   gtNumCols = header.map(function(h, i) { return { name: h, idx: i, type: colTypes[i] }; })
     .filter(function(c) { return c.type === 'numeric' && !excludeSet.has(c.idx); });
@@ -121,11 +192,11 @@ function renderGtConfig(data) {
 
   // Grade variable checkbox list with per-variable unit selects
   var varItems = gtNumCols.map(function(c, i) {
-    var defUnit = catPropUnit('model', c.name);
+    var defUnit = catPropUnit(ctx.ds.id, c.name);
     var opts = GT_GRADE_UNITS.slice(0, -1).map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
-    var emptyTag = colIsEmpty('model', c.idx) ? '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>' : '';
+    var emptyTag = colIsEmpty(ctx.ds.id, c.idx) ? '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>' : '';
     return '<label class="gt-var-item"><input type="checkbox" value="' + c.idx + '"' + (i === 0 ? ' checked' : '') + '><span>' + esc(c.name) + '</span>' + emptyTag +
       '<select class="gt-var-unit" data-col="' + c.idx + '">' + opts + '</select></label>';
   }).join('');
@@ -154,14 +225,15 @@ function renderGtConfig(data) {
   // Default cutoff range from first grade column stats
   var defMin = 0, defMax = 1, defStep = 0.05;
   var firstGrade = gtNumCols[0];
-  if (lastCompleteData && lastCompleteData.stats && lastCompleteData.stats[firstGrade.idx]) {
-    var gs = lastCompleteData.stats[firstGrade.idx];
+  if (ctx.stats && ctx.stats[firstGrade.idx]) {
+    var gs = ctx.stats[firstGrade.idx];
     defMin = gs.min != null ? Math.floor(gs.min * 100) / 100 : 0;
     defMax = gs.max != null ? Math.ceil(gs.max * 100) / 100 : 1;
     defStep = +((defMax - defMin) / 20).toPrecision(2) || 0.05;
   }
 
   $sidebar.innerHTML =
+    gtDatasetPickerHtml() +
     '<div class="gt-sidebar-section--grow" data-sb="vars">' +
       '<div class="gt-sidebar-title">Grade Variables</div>' +
       '<input type="text" class="gt-input gt-var-search" id="gtVarSearch" placeholder="search\u2026" spellcheck="false">' +
@@ -239,6 +311,7 @@ function renderGtConfig(data) {
       '<div class="gt-sidebar-title">Local Filter</div>' +
       '<input type="text" class="gt-input" id="gtLocalFilter" placeholder="e.g. r.zone == 1" autocomplete="off" spellcheck="false">' +
     '</div>' +
+    (ctx.isModel ?   // A10 G3: theoretical overlay is model-vs-samples — model GT only
     '<div class="gt-sidebar-section" data-sb="theo">' +
       '<div class="gt-sidebar-title">Theoretical (samples)</div>' +
       '<label class="gt-radio-label" style="display:block"><input type="checkbox" id="gtTheoEnabled"> Overlay theoretical GT</label>' +
@@ -253,7 +326,7 @@ function renderGtConfig(data) {
         '<input type="number" class="gt-input" id="gtTheoFNum" value="0.6" min="0.05" max="1" step="0.01" style="width:52px">' +
       '</div>' +
       '<div class="gt-theo-status" id="gtTheoStatus"></div>' +
-    '</div>' +
+    '</div>' : '') +
     '<div class="sb-footer">' +
       '<button class="gt-generate" id="gtGenerate">Generate</button>' +
       '<div class="gen-stale-note">↻ config changed — re-run</div>' +
@@ -282,6 +355,7 @@ function renderGtConfig(data) {
     return !t || GT_LIVE_IDS.indexOf(t.id) >= 0 || t.classList.contains('gt-var-unit') || (t.closest && t.closest('#gtGrpList'));
   }
   $sidebar.addEventListener('change', function(e) {
+    if (e.target.id === 'gtDataset') { setGtTarget(e.target.value); return; }   // G3: switch target dataset
     autoSaveProject();
     if (!gtIsLiveTarget(e.target)) gtMarkStale();
   });
@@ -376,8 +450,9 @@ function renderGtConfig(data) {
   document.getElementById('gtRangeFrom').addEventListener('change', function() {
     var idx = parseInt(this.value);
     this.value = '';
-    if (!(idx >= 0) || !lastCompleteData || !lastCompleteData.stats || !lastCompleteData.stats[idx]) return;
-    var st = lastCompleteData.stats[idx];
+    var gctx = gtCtx();
+    if (!(idx >= 0) || !gctx.stats || !gctx.stats[idx]) return;
+    var st = gctx.stats[idx];
     if (st.min == null || st.max == null) return;
     var mn = Math.floor(st.min * 100) / 100;
     var mx = Math.ceil(st.max * 100) / 100;
@@ -394,8 +469,9 @@ function renderGtConfig(data) {
   // per variable, D2), mirror the other unit selects, re-render if results
   document.getElementById('gtVarList').addEventListener('change', function(e) {
     if (e.target.classList.contains('gt-var-unit')) {
-      var un = currentHeader[parseInt(e.target.dataset.col)];
-      if (un) catSetUnit('model', un, parseInt(e.target.value));
+      var uctx = gtCtx();
+      var un = uctx.header[parseInt(e.target.dataset.col)];
+      if (un) catSetUnit(uctx.ds.id, un, parseInt(e.target.value));
       catRefreshUnitSelects();
       if (lastGtData) renderGtOutput();
       autoSaveProject();
@@ -434,15 +510,16 @@ function updateGroupByValues() {
   var $wrap = document.getElementById('gtGroupValues');
   var $list = document.getElementById('gtGrpList');
   var colIdx = parseInt(document.getElementById('gtGroupBy').value);
-  if (colIdx < 0 || !lastCompleteData || !lastCompleteData.categories) {
+  var gbctx = gtCtx();
+  if (colIdx < 0 || !gbctx.categories) {
     $wrap.style.display = 'none';
     $list.innerHTML = '';
     return;
   }
-  var catEntry = lastCompleteData.categories[colIdx];
+  var catEntry = gbctx.categories[colIdx];
   if (!catEntry || !catEntry.counts) { $wrap.style.display = 'none'; return; }
   var cats = catEntry.counts;
-  var colName = currentHeader[colIdx] || '';
+  var colName = gbctx.header[colIdx] || '';
   var values = Object.keys(cats);
   // Use custom order if available
   var gtGrpOrder = (catVarPeek('model', colName) || {}).valueOrder;
@@ -497,7 +574,8 @@ function gtFmt(v, dp) {
 }
 
 function getGtGradeUnit(colIdx) {
-  var idx = currentHeader[colIdx] ? catPropUnit('model', currentHeader[colIdx]) : 0;
+  var guctx = gtCtx();
+  var idx = guctx.header[colIdx] ? catPropUnit(guctx.ds.id, guctx.header[colIdx]) : 0;
   var gu = GT_GRADE_UNITS[idx] || GT_GRADE_UNITS[0];
   return { gradeFactor: gu.factor, gradeSymbol: gu.symbol };
 }
@@ -548,14 +626,15 @@ function runGt() {
   var groupByCol = parseInt(document.getElementById('gtGroupBy').value);
   var localFilter = document.getElementById('gtLocalFilter').value.trim();
   var volOverride = parseFloat(document.getElementById('gtVolOverride').value);
+  var ctx = gtCtx();   // G3: the dataset GT is analyzing (model by default)
 
-  // Compute per-variable grade ranges from stats
+  // Compute per-variable grade ranges from the target dataset's stats
   var gradeRanges = [];
   for (var i = 0; i < gradeCols.length; i++) {
     var gc = gradeCols[i];
     var gradeMin = 0, gradeMax = 1;
-    if (lastCompleteData && lastCompleteData.stats && lastCompleteData.stats[gc]) {
-      var gs = lastCompleteData.stats[gc];
+    if (ctx.stats && ctx.stats[gc]) {
+      var gs = ctx.stats[gc];
       gradeMin = gs.min != null ? gs.min : 0;
       gradeMax = gs.max != null ? gs.max : 1;
     }
@@ -566,19 +645,18 @@ function runGt() {
     gradeRanges.push({ min: gradeMin, max: gradeMax });
   }
 
-  // Determine block volume
+  // Determine block volume (4g feature-detect, on the target dataset)
   var blockVolume = 0;
   var dxyzCols = null;
-  var hasDXYZ = currentDXYZ.dx >= 0 && currentDXYZ.dy >= 0 && currentDXYZ.dz >= 0;
+  var hasDXYZ = ctx.dxyz.dx >= 0 && ctx.dxyz.dy >= 0 && ctx.dxyz.dz >= 0;
   if (isFinite(volOverride) && volOverride > 0) {
     blockVolume = volOverride;
   } else if (hasDXYZ) {
-    dxyzCols = [currentDXYZ.dx, currentDXYZ.dy, currentDXYZ.dz];
-  } else if (lastCompleteData && lastCompleteData.geometry &&
-             (typeof dsHasGrid !== 'function' || dsHasGrid(dsById('model')))) {
-    // 4g: only use the geometry block volume when the model COUNTS as a grid —
-    // a points-classified model falls through to count-based tonnage.
-    var geo = lastCompleteData.geometry;
+    dxyzCols = [ctx.dxyz.dx, ctx.dxyz.dy, ctx.dxyz.dz];
+  } else if (ctx.geometry && (typeof dsHasGrid !== 'function' || dsHasGrid(ctx.ds))) {
+    // only use the geometry block volume when the dataset COUNTS as a grid —
+    // a points-classified dataset falls through to count-based tonnage.
+    var geo = ctx.geometry;
     if (geo.x && geo.y && geo.z && geo.x.blockSize && geo.y.blockSize && geo.z.blockSize) {
       blockVolume = geo.x.blockSize * geo.y.blockSize * geo.z.blockSize;
     }
@@ -599,19 +677,20 @@ function runGt() {
   var $btn = document.getElementById('gtGenerate');
   if ($btn) $btn.disabled = true;
 
-  var resolvedTypes = currentColTypes.slice(0, currentOrigColCount);
-  var filterPayload = currentFilter ? { expression: currentFilter.expression } : null;
-  var zipEntry = preflightData ? (preflightData.selectedZipEntry || null) : null;
+  var resolvedTypes = ctx.resolvedTypes;
+  var filterPayload = ctx.filter ? { expression: ctx.filter.expression } : null;
+  var zipEntry = ctx.preflight ? (ctx.preflight.selectedZipEntry || null) : null;
 
   gtWorker.postMessage({
     mode: 'gt',
-    file: currentFile,
+    file: ctx.file,
     zipEntry: zipEntry,
     globalFilter: filterPayload,
     localFilter: localFilter || null,
-    calcolCode: currentCalcolCode || null,
-    calcolMeta: currentCalcolMeta.length > 0 ? currentCalcolMeta : null,
+    calcolCode: ctx.calcolCode || null,
+    calcolMeta: (ctx.calcolMeta && ctx.calcolMeta.length > 0) ? ctx.calcolMeta : null,
     resolvedTypes: resolvedTypes,
+    rowVarOverride: ctx.rowVar,   // G3: comparison datasets compile filter/calcols with their handle
     gradeCols: gradeCols,
     gradeRanges: gradeRanges,
     densityCol: densityCol >= 0 ? densityCol : null,
@@ -620,8 +699,8 @@ function runGt() {
     dxyzCols: dxyzCols,
     blockVolume: blockVolume,
     groupByCol: groupByCol >= 0 ? groupByCol : null,
-    dmEndianness: preflightData && preflightData.dmEndianness || null,
-    dmFormat: preflightData && preflightData.dmFormat || null
+    dmEndianness: (ctx.preflight && ctx.preflight.dmEndianness) || null,
+    dmFormat: (ctx.preflight && ctx.preflight.dmFormat) || null
   });
 
   gtWorker.onerror = function(e) {
