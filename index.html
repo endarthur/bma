@@ -5610,34 +5610,34 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
       </div>
 
       <div class="results-panel" id="panelCategories" data-tab="categories">
-        <div class="cat-body" id="catBody">
-          <div class="cat-sidebar" id="catSidebar">
+        <div class="cat-body" id="catBody" data-cat="body">
+          <div class="cat-sidebar" id="catSidebar" data-cat="sidebar">
             <div class="cat-sidebar-section">
-              <div class="cat-sidebar-title">Columns <span class="badge" id="catBadge"></span></div>
-              <input type="text" class="cat-col-search" id="catColSearch" placeholder="Search columns..." autocomplete="off" spellcheck="false">
+              <div class="cat-sidebar-title">Columns <span class="badge" id="catBadge" data-cat="badge"></span></div>
+              <input type="text" class="cat-col-search" id="catColSearch" data-cat="colSearch" placeholder="Search columns..." autocomplete="off" spellcheck="false">
             </div>
-            <div class="cat-sidebar-section" id="catDatasetsSection" style="display:none">
+            <div class="cat-sidebar-section" id="catDatasetsSection" data-cat="datasetsSection" style="display:none">
               <div class="cat-sidebar-title">Datasets</div>
-              <div class="stats-ds-chips" id="catDatasetChips"></div>
+              <div class="stats-ds-chips" id="catDatasetChips" data-cat="datasetChips"></div>
             </div>
             <div class="cat-sidebar-section--grow">
-              <div class="cat-col-list" id="catColList"></div>
+              <div class="cat-col-list" id="catColList" data-cat="colList"></div>
             </div>
           </div>
-          <div class="cat-main" id="catMain">
-            <div class="cat-toolbar" id="catToolbar"></div>
-            <div class="cat-main-content" id="catMainContent">
-              <div class="cat-chart" id="catChart"></div>
-              <div class="cat-value-table-wrap" id="catValueTableWrap">
+          <div class="cat-main" id="catMain" data-cat="main">
+            <div class="cat-toolbar" id="catToolbar" data-cat="toolbar"></div>
+            <div class="cat-main-content" id="catMainContent" data-cat="mainContent">
+              <div class="cat-chart" id="catChart" data-cat="chart"></div>
+              <div class="cat-value-table-wrap" id="catValueTableWrap" data-cat="valueTableWrap">
                 <div class="cat-table-bar">
-                  <input type="text" class="cat-value-search" id="catValueSearch" placeholder="Search values..." autocomplete="off" spellcheck="false">
-                  <div class="cat-sort-group" id="catSortGroup"></div>
+                  <input type="text" class="cat-value-search" id="catValueSearch" data-cat="valueSearch" placeholder="Search values..." autocomplete="off" spellcheck="false">
+                  <div class="cat-sort-group" id="catSortGroup" data-cat="sortGroup"></div>
                 </div>
                 <div class="cat-filter-hint">Tick values to filter the model to them — the header box selects all / none.</div>
-                <table class="cat-values" id="catValueTable"><tbody></tbody></table>
+                <table class="cat-values" id="catValueTable" data-cat="valueTable"><tbody></tbody></table>
               </div>
             </div>
-            <div class="cat-color-picker" id="catColorPicker"></div>
+            <div class="cat-color-picker" id="catColorPicker" data-cat="colorPicker"></div>
           </div>
         </div>
       </div>
@@ -5889,7 +5889,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 1817e80 — click to check for updates">1817e80</div>
+<div class="build-badge" id="buildBadge" title="build 4920f42 — click to check for updates">4920f42</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8582,6 +8582,32 @@ function dsConfigRoot(ds) {
 }
 function auxPanelRoot() { return document.getElementById('panelAux'); }
 function auxQ(sel, root) { var r = root || auxPanelRoot(); return r ? r.querySelector(sel) : null; }
+
+// A10 4e-c: the Categories analysis panel becomes cloneable the same way the
+// dataset config panels did (1e/1f/1g) — DOM resolved through a per-instance
+// ROOT instead of singleton ids. 4e-c-2 (this slice) is the inert seam: the
+// render path resolves its elements via catEls(root), defaulting to the static
+// #panelCategories, so behavior is bit-identical while the code stops depending
+// on unique ids. Clones (4e-c-4) pass their own root; the singleton $cat* consts
+// stay for the singleton-only consumers (project.js reset, wireCatEventsOnce).
+function catPanelRoot(inst) {
+  if (inst && inst.root) return inst.root;     // future: an instance carries its panel root
+  return document.getElementById('panelCategories');
+}
+function catQ(sel, root) { var r = root || catPanelRoot(); return r ? r.querySelector(sel) : null; }
+// The bundle of a Categories panel's elements, resolved by data-cat within its
+// root — one call per render fn, then $catX → els.X.
+function catEls(root) {
+  root = root || catPanelRoot();
+  function q(k) { return root ? root.querySelector('[data-cat="' + k + '"]') : null; }
+  return {
+    body: q('body'), sidebar: q('sidebar'), badge: q('badge'), colSearch: q('colSearch'),
+    datasetsSection: q('datasetsSection'), datasetChips: q('datasetChips'), colList: q('colList'),
+    main: q('main'), toolbar: q('toolbar'), mainContent: q('mainContent'), chart: q('chart'),
+    valueTableWrap: q('valueTableWrap'), valueSearch: q('valueSearch'), sortGroup: q('sortGroup'),
+    valueTable: q('valueTable'), colorPicker: q('colorPicker')
+  };
+}
 
 // ─── A10 4b: datasets are peers — capabilities are FACETS, not a kind ──────
 // "model" is no longer a privileged type; it is simply the dataset that (today)
@@ -28245,8 +28271,9 @@ function renderCategoriesTab(categories, header, origColCount, rowCount) {
   wireCatEventsOnce();
 }
 
-function renderCatSidebar() {
+function renderCatSidebar(root) {
   if (!_catData) return;
+  var els = catEls(root);
   var categories = _catData.categories;
   var header = _catData.header;
   var origColCount = _catData.origColCount;
@@ -28267,23 +28294,24 @@ function renderCatSidebar() {
     html += '<span class="col-count">' + uniqueCount + '</span>';
     html += '</div>';
   }
-  $catColList.innerHTML = html;
+  els.colList.innerHTML = html;
 }
 
-function renderCatMain() {
+function renderCatMain(root) {
   if (!_catData || panelState.categories.focusedCol === null) return;
-  renderCatDatasetChips();
-  renderCatToolbar();
-  renderCatSortGroup();
-  renderCatBarChart();
-  renderCatValueTable();
+  renderCatDatasetChips(root);
+  renderCatToolbar(root);
+  renderCatSortGroup(root);
+  renderCatBarChart(root);
+  renderCatValueTable(root);
 }
 
 // A10 4c-iv: dataset show/hide chips. Progressive disclosure — the section
 // appears only once a second comparison dataset joins (3+ total), so the
 // common model+aux case stays uncluttered. Model = a static baseline chip.
-function renderCatDatasetChips() {
-  var section = document.getElementById('catDatasetsSection');
+function renderCatDatasetChips(root) {
+  var els = catEls(root);
+  var section = els.datasetsSection;
   if (!section) return;
   var allCmp = catCmpDatasets();
   if (allCmp.length < 2) { section.style.display = 'none'; return; }
@@ -28294,7 +28322,7 @@ function renderCatDatasetChips() {
       '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) +
       '">' + esc(dsLabel(ds.id)) + '</button>';
   });
-  document.getElementById('catDatasetChips').innerHTML = chips;
+  els.datasetChips.innerHTML = chips;
   section.style.display = '';
 }
 
@@ -28392,8 +28420,8 @@ function getCatSortedEntries(colIdx) {
 
 // Sort controls \u2014 rendered next to the value table they reorder (C6-4c; they
 // used to sit in the toolbar above the chart, far from the table).
-function renderCatSortGroup() {
-  var grp = document.getElementById('catSortGroup');
+function renderCatSortGroup(root) {
+  var grp = catEls(root).sortGroup;
   if (!grp || !_catData || panelState.categories.focusedCol === null) return;
   var colName = _catData.header[panelState.categories.focusedCol];
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
@@ -28406,8 +28434,9 @@ function renderCatSortGroup() {
     '<button class="cat-sort-btn' + (mode === 'custom' ? ' active' : '') + '" data-sort="custom" title="Custom drag order">Custom</button>';
 }
 
-function renderCatToolbar() {
+function renderCatToolbar(root) {
   if (!_catData || panelState.categories.focusedCol === null) return;
+  var els = catEls(root);
   var header = _catData.header;
   var origColCount = _catData.origColCount;
   var colName = header[panelState.categories.focusedCol];
@@ -28467,14 +28496,15 @@ function renderCatToolbar() {
   });
   html += '</div>';
 
-  $catToolbar.innerHTML = html;
+  els.toolbar.innerHTML = html;
 }
 
-function renderCatBarChart() {
+function renderCatBarChart(root) {
   if (!_catData || panelState.categories.focusedCol === null) return;
+  var els = catEls(root);
   var colName = _catData.header[panelState.categories.focusedCol];
   var entries = getCatSortedEntries(panelState.categories.focusedCol);
-  if (entries.length === 0) { $catChart.innerHTML = ''; return; }
+  if (entries.length === 0) { els.chart.innerHTML = ''; return; }
 
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
   var maxCount = 0;
@@ -28491,7 +28521,7 @@ function renderCatBarChart() {
   var maxShare = total > 0 ? maxCount / total : 0;
   var auxLegendH = cmps.length * 16;
   var chartH = showEntries.length * (barH + gap) + 30 + auxLegendH; // +30 for Pareto line clearance
-  var chartW = chartHostWidth(document.getElementById('catChart'), 600);
+  var chartW = chartHostWidth(els.chart, 600);
   var barAreaW = chartW - labelW - rightPad;
 
   var svg = '<svg viewBox="0 0 ' + chartW + ' ' + chartH + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)">';
@@ -28574,11 +28604,12 @@ function renderCatBarChart() {
     toggleHtml = '<div class="cat-chart-toggle" id="catChartToggle">Show top 20 \u25B4</div>';
   }
 
-  $catChart.innerHTML = svg + toggleHtml;
+  els.chart.innerHTML = svg + toggleHtml;
 }
 
-function renderCatValueTable() {
+function renderCatValueTable(root) {
   if (!_catData || panelState.categories.focusedCol === null) return;
+  var els = catEls(root);
   var colName = _catData.header[panelState.categories.focusedCol];
   var entries = getCatSortedEntries(panelState.categories.focusedCol);
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
@@ -28587,7 +28618,7 @@ function renderCatValueTable() {
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
   var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
   var isCustom = mode === 'custom';
-  var search = ($catValueSearch.value || '').toLowerCase();
+  var search = ((els.valueSearch && els.valueSearch.value) || '').toLowerCase();
 
   // Limit to 500 values
   var show = entries.slice(0, 500);
@@ -28671,7 +28702,7 @@ function renderCatValueTable() {
   }
 
   html += '</tbody>';
-  $catValueTable.innerHTML = html;
+  els.valueTable.innerHTML = html;
 }
 
 function showCatColorPicker(colName, value, anchorEl) {

@@ -36,8 +36,9 @@ function renderCategoriesTab(categories, header, origColCount, rowCount) {
   wireCatEventsOnce();
 }
 
-function renderCatSidebar() {
+function renderCatSidebar(root) {
   if (!_catData) return;
+  var els = catEls(root);
   var categories = _catData.categories;
   var header = _catData.header;
   var origColCount = _catData.origColCount;
@@ -58,23 +59,24 @@ function renderCatSidebar() {
     html += '<span class="col-count">' + uniqueCount + '</span>';
     html += '</div>';
   }
-  $catColList.innerHTML = html;
+  els.colList.innerHTML = html;
 }
 
-function renderCatMain() {
+function renderCatMain(root) {
   if (!_catData || panelState.categories.focusedCol === null) return;
-  renderCatDatasetChips();
-  renderCatToolbar();
-  renderCatSortGroup();
-  renderCatBarChart();
-  renderCatValueTable();
+  renderCatDatasetChips(root);
+  renderCatToolbar(root);
+  renderCatSortGroup(root);
+  renderCatBarChart(root);
+  renderCatValueTable(root);
 }
 
 // A10 4c-iv: dataset show/hide chips. Progressive disclosure — the section
 // appears only once a second comparison dataset joins (3+ total), so the
 // common model+aux case stays uncluttered. Model = a static baseline chip.
-function renderCatDatasetChips() {
-  var section = document.getElementById('catDatasetsSection');
+function renderCatDatasetChips(root) {
+  var els = catEls(root);
+  var section = els.datasetsSection;
   if (!section) return;
   var allCmp = catCmpDatasets();
   if (allCmp.length < 2) { section.style.display = 'none'; return; }
@@ -85,7 +87,7 @@ function renderCatDatasetChips() {
       '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) +
       '">' + esc(dsLabel(ds.id)) + '</button>';
   });
-  document.getElementById('catDatasetChips').innerHTML = chips;
+  els.datasetChips.innerHTML = chips;
   section.style.display = '';
 }
 
@@ -183,8 +185,8 @@ function getCatSortedEntries(colIdx) {
 
 // Sort controls \u2014 rendered next to the value table they reorder (C6-4c; they
 // used to sit in the toolbar above the chart, far from the table).
-function renderCatSortGroup() {
-  var grp = document.getElementById('catSortGroup');
+function renderCatSortGroup(root) {
+  var grp = catEls(root).sortGroup;
   if (!grp || !_catData || panelState.categories.focusedCol === null) return;
   var colName = _catData.header[panelState.categories.focusedCol];
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
@@ -197,8 +199,9 @@ function renderCatSortGroup() {
     '<button class="cat-sort-btn' + (mode === 'custom' ? ' active' : '') + '" data-sort="custom" title="Custom drag order">Custom</button>';
 }
 
-function renderCatToolbar() {
+function renderCatToolbar(root) {
   if (!_catData || panelState.categories.focusedCol === null) return;
+  var els = catEls(root);
   var header = _catData.header;
   var origColCount = _catData.origColCount;
   var colName = header[panelState.categories.focusedCol];
@@ -258,14 +261,15 @@ function renderCatToolbar() {
   });
   html += '</div>';
 
-  $catToolbar.innerHTML = html;
+  els.toolbar.innerHTML = html;
 }
 
-function renderCatBarChart() {
+function renderCatBarChart(root) {
   if (!_catData || panelState.categories.focusedCol === null) return;
+  var els = catEls(root);
   var colName = _catData.header[panelState.categories.focusedCol];
   var entries = getCatSortedEntries(panelState.categories.focusedCol);
-  if (entries.length === 0) { $catChart.innerHTML = ''; return; }
+  if (entries.length === 0) { els.chart.innerHTML = ''; return; }
 
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
   var maxCount = 0;
@@ -282,7 +286,7 @@ function renderCatBarChart() {
   var maxShare = total > 0 ? maxCount / total : 0;
   var auxLegendH = cmps.length * 16;
   var chartH = showEntries.length * (barH + gap) + 30 + auxLegendH; // +30 for Pareto line clearance
-  var chartW = chartHostWidth(document.getElementById('catChart'), 600);
+  var chartW = chartHostWidth(els.chart, 600);
   var barAreaW = chartW - labelW - rightPad;
 
   var svg = '<svg viewBox="0 0 ' + chartW + ' ' + chartH + '" xmlns="http://www.w3.org/2000/svg" style="font-family:var(--mono)">';
@@ -365,11 +369,12 @@ function renderCatBarChart() {
     toggleHtml = '<div class="cat-chart-toggle" id="catChartToggle">Show top 20 \u25B4</div>';
   }
 
-  $catChart.innerHTML = svg + toggleHtml;
+  els.chart.innerHTML = svg + toggleHtml;
 }
 
-function renderCatValueTable() {
+function renderCatValueTable(root) {
   if (!_catData || panelState.categories.focusedCol === null) return;
+  var els = catEls(root);
   var colName = _catData.header[panelState.categories.focusedCol];
   var entries = getCatSortedEntries(panelState.categories.focusedCol);
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
@@ -378,7 +383,7 @@ function renderCatValueTable() {
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
   var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
   var isCustom = mode === 'custom';
-  var search = ($catValueSearch.value || '').toLowerCase();
+  var search = ((els.valueSearch && els.valueSearch.value) || '').toLowerCase();
 
   // Limit to 500 values
   var show = entries.slice(0, 500);
@@ -462,7 +467,7 @@ function renderCatValueTable() {
   }
 
   html += '</tbody>';
-  $catValueTable.innerHTML = html;
+  els.valueTable.innerHTML = html;
 }
 
 function showCatColorPicker(colName, value, anchorEl) {

@@ -174,6 +174,32 @@ function dsConfigRoot(ds) {
 function auxPanelRoot() { return document.getElementById('panelAux'); }
 function auxQ(sel, root) { var r = root || auxPanelRoot(); return r ? r.querySelector(sel) : null; }
 
+// A10 4e-c: the Categories analysis panel becomes cloneable the same way the
+// dataset config panels did (1e/1f/1g) — DOM resolved through a per-instance
+// ROOT instead of singleton ids. 4e-c-2 (this slice) is the inert seam: the
+// render path resolves its elements via catEls(root), defaulting to the static
+// #panelCategories, so behavior is bit-identical while the code stops depending
+// on unique ids. Clones (4e-c-4) pass their own root; the singleton $cat* consts
+// stay for the singleton-only consumers (project.js reset, wireCatEventsOnce).
+function catPanelRoot(inst) {
+  if (inst && inst.root) return inst.root;     // future: an instance carries its panel root
+  return document.getElementById('panelCategories');
+}
+function catQ(sel, root) { var r = root || catPanelRoot(); return r ? r.querySelector(sel) : null; }
+// The bundle of a Categories panel's elements, resolved by data-cat within its
+// root — one call per render fn, then $catX → els.X.
+function catEls(root) {
+  root = root || catPanelRoot();
+  function q(k) { return root ? root.querySelector('[data-cat="' + k + '"]') : null; }
+  return {
+    body: q('body'), sidebar: q('sidebar'), badge: q('badge'), colSearch: q('colSearch'),
+    datasetsSection: q('datasetsSection'), datasetChips: q('datasetChips'), colList: q('colList'),
+    main: q('main'), toolbar: q('toolbar'), mainContent: q('mainContent'), chart: q('chart'),
+    valueTableWrap: q('valueTableWrap'), valueSearch: q('valueSearch'), sortGroup: q('sortGroup'),
+    valueTable: q('valueTable'), colorPicker: q('colorPicker')
+  };
+}
+
 // ─── A10 4b: datasets are peers — capabilities are FACETS, not a kind ──────
 // "model" is no longer a privileged type; it is simply the dataset that (today)
 // carries a block geometry. Grid-dependent features feature-detect via
