@@ -5917,7 +5917,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 428660f — click to check for updates">428660f</div>
+<div class="build-badge" id="buildBadge" title="build e627d41 — click to check for updates">e627d41</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -25489,6 +25489,68 @@ let gtCatCols = [];
 let gtTableCollapsed = new Set(); // collapsed table sections by column name (C6-0)
 let gtStale = false;              // result no longer matches the sidebar (C6-5)
 let gtTargetDsId = 'model';       // A10 G3: which DATASET the GT tab analyzes ('model' | 'aux' | 'd2' …)
+let gtTheo = null;                // { byVar: {SRCNAME: dist}, fingerprint } — theoretical-overlay cache (singleton)
+let gtTheoLoading = false;        // theo load in flight (singleton)
+let gtTheoDsId = null;            // A10 G2: which dataset supplies theoretical samples (singleton); null = first with a file
+
+// ─── A10 G3b: clone arc — DOM scoping + per-instance state ──────────────────
+// GT clones into independent dockable instances (each its own target dataset,
+// grade vars, cutoffs, results — like the Swath arc, own worker per clone). The
+// SINGLETON resolves DOM by id (#gtX) + state through the existing module/core
+// globals via _gtSingleton (so project.js serialize/restore + external readers
+// stay bit-identical); a CLONE carries data-gt-inst on its root, resolves its
+// generated controls by [data-gt="gtX"], and gets a plain gtNewInstState() object
+// in gtInstances. Render/run/helper fns take an optional `root` (null → singleton).
+function gtPanelRoot() { return document.getElementById('panelGt'); }
+function gtIsInst(root) { return !!(root && root.getAttribute && root.getAttribute('data-gt-inst')); }
+function gtRoot(root) { return root || gtPanelRoot(); }
+// Resolve one generated control: clone → [data-gt="id"] within root; singleton → #id.
+function gtQ(id, root) {
+  if (gtIsInst(root)) return root.querySelector('[data-gt="' + id + '"]');
+  return document.getElementById(id);
+}
+// Scoped querySelectorAll under a generated container (id) — clone-safe.
+function gtQA(id, sel, root) {
+  var base = gtQ(id, root);
+  return base ? base.querySelectorAll(sel) : [];
+}
+// The two static structural elements (sidebar/content): clone tags them data-gt.
+function gtSidebarEl(root) { return gtIsInst(root) ? root.querySelector('[data-gt="gtSidebar"]') : document.getElementById('gtSidebar'); }
+function gtContentEl(root) { return gtIsInst(root) ? root.querySelector('[data-gt="gtContent"]') : document.getElementById('gtContent'); }
+
+var gtInstances = {};   // instId -> per-instance state
+var gtInstanceEls = {}; // instId -> cloned DOM element (rails double-render guard)
+var _gtData = null;     // last model analysis data, seeded for clone sidebar builds
+var gtInstSeq = 0;
+function gtNextInstId() { return 'gt#' + (++gtInstSeq); }
+function gtNewInstState() {
+  return { lastGtData: null, gtWorker: null, gtStale: false, gtTargetDsId: 'model',
+    gtTheo: null, gtTheoLoading: false, gtTheoDsId: null, gtTableCollapsed: new Set(),
+    gtNumCols: [], gtCatCols: [], gtExprController: null };
+}
+// Accessor proxy: the singleton reads/writes the live module/core globals so
+// project.js + external consumers (settings.js, tree.js, core.js) stay bit-identical.
+var _gtSingleton = {
+  get lastGtData() { return lastGtData; }, set lastGtData(v) { lastGtData = v; },
+  get gtWorker() { return gtWorker; }, set gtWorker(v) { gtWorker = v; },
+  get gtStale() { return gtStale; }, set gtStale(v) { gtStale = v; },
+  get gtTargetDsId() { return gtTargetDsId; }, set gtTargetDsId(v) { gtTargetDsId = v; },
+  get gtTheo() { return gtTheo; }, set gtTheo(v) { gtTheo = v; },
+  get gtTheoLoading() { return gtTheoLoading; }, set gtTheoLoading(v) { gtTheoLoading = v; },
+  get gtTheoDsId() { return gtTheoDsId; }, set gtTheoDsId(v) { gtTheoDsId = v; },
+  get gtTableCollapsed() { return gtTableCollapsed; }, set gtTableCollapsed(v) { gtTableCollapsed = v; },
+  get gtNumCols() { return gtNumCols; }, set gtNumCols(v) { gtNumCols = v; },
+  get gtCatCols() { return gtCatCols; }, set gtCatCols(v) { gtCatCols = v; },
+  get gtExprController() { return gtExprController; }, set gtExprController(v) { gtExprController = v; }
+};
+function gtStateForRoot(root) {
+  if (gtIsInst(root)) {
+    var id = root.getAttribute('data-gt-inst');
+    if (!gtInstances[id]) gtInstances[id] = gtNewInstState();
+    return gtInstances[id];
+  }
+  return _gtSingleton;
+}
 
 // The dataset the GT tab targets, and its analysis context. GT generalizes
 // beyond the model: a gridded comparison dataset gets its own grade-tonnage
@@ -26373,9 +26435,7 @@ function renderGtOutput() {
 // v0 engine: affine correction Z_v = m + √f·(Z − m). Honest about its
 // crudeness (shape is preserved exactly); the DGM (Hermite) engine slots
 // in here next.
-var gtTheo = null;        // { byVar: {SRCNAME: dist}, fingerprint } — dist = sorted weighted distribution + prefix sums
-var gtTheoLoading = false;
-var gtTheoDsId = null;     // A10 G2: which comparison dataset supplies the theoretical (samples) distribution; null = the first one with a file
+// (gtTheo / gtTheoLoading / gtTheoDsId declared at the top of the file — G3b)
 
 // The comparison dataset the theoretical curve is drawn from (any d2+, not just
 // the singleton aux). Defaults to the first comparison dataset with a file.
