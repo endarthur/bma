@@ -476,30 +476,30 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
       <div class="results-panel" id="panelExport" data-tab="export">
         <div class="export-body" id="exportBody">
           <div class="export-sidebar">
-            <div class="export-sidebar-section" id="exportDatasetWrap"></div>
+            <div class="export-sidebar-section" id="exportDatasetWrap" data-export="exportDatasetWrap"></div>
             <div class="export-sidebar-section">
-              <div class="export-sidebar-title">Columns <span class="badge" id="exportBadge">0</span></div>
-              <input type="text" class="export-col-search" id="exportColSearch" placeholder="Search columns…" autocomplete="off" spellcheck="false">
+              <div class="export-sidebar-title">Columns <span class="badge" id="exportBadge" data-export="exportBadge">0</span></div>
+              <input type="text" class="export-col-search" id="exportColSearch" data-export="exportColSearch" placeholder="Search columns…" autocomplete="off" spellcheck="false">
               <div class="export-sel-btns">
-                <button id="exportSelAll">All</button>
-                <button id="exportSelNone">None</button>
-                <button id="exportSelOrig">Original</button>
-                <button id="exportSelCalc">Calcols</button>
+                <button id="exportSelAll" data-export="exportSelAll">All</button>
+                <button id="exportSelNone" data-export="exportSelNone">None</button>
+                <button id="exportSelOrig" data-export="exportSelOrig">Original</button>
+                <button id="exportSelCalc" data-export="exportSelCalc">Calcols</button>
               </div>
             </div>
             <div class="export-sidebar-section--grow">
-              <div class="export-col-list" id="exportColList"></div>
+              <div class="export-col-list" id="exportColList" data-export="exportColList"></div>
             </div>
           </div>
           <div class="export-main">
             <div class="export-toolbar" id="exportToolbar">
               <div class="tb-group" style="margin-left:auto">
-                <span class="export-row-preview" id="exportRowPreview"></span>
-                <button class="export-btn" id="exportDownload">Download CSV</button>
+                <span class="export-row-preview" id="exportRowPreview" data-export="exportRowPreview"></span>
+                <button class="export-btn" id="exportDownload" data-export="exportDownload">Download CSV</button>
               </div>
             </div>
             <div class="export-main-content" id="exportMainContent">
-              <div class="export-format" id="exportFormatSection">
+              <div class="export-format" id="exportFormatSection" data-export="exportFormatSection">
                 <div class="export-format-row">
                   <span class="export-label">Delimiter</span>
                   <button class="export-delim active" data-delim=",">,</button>
@@ -552,7 +552,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
                 </div>
                 <div class="export-format-warn" id="exportPrecisionWarn" style="display:none"></div>
               </div>
-              <div class="export-comment-section" id="exportCommentSection" style="display:none">
+              <div class="export-comment-section" id="exportCommentSection" data-export="exportCommentSection" style="display:none">
                 <div class="export-comment-toolbar">
                   <span class="export-label">Comment Header</span>
                   <button id="exportCommentGenerate" title="Generate from detected geometry">Generate from geometry</button>
@@ -562,15 +562,15 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
               <div class="export-preview" id="exportPreview">
                 <div class="export-preview-head">
                   <span class="export-label">Preview</span>
-                  <span class="export-preview-info" id="exportPreviewInfo"></span>
+                  <span class="export-preview-info" id="exportPreviewInfo" data-export="exportPreviewInfo"></span>
                 </div>
-                <pre class="export-preview-pre" id="exportPreviewPre"></pre>
+                <pre class="export-preview-pre" id="exportPreviewPre" data-export="exportPreviewPre"></pre>
               </div>
-              <div class="export-progress" id="exportProgress">
-                <div class="export-progress-label" id="exportProgressLabel"></div>
-                <div class="export-progress-bar"><div class="export-progress-fill" id="exportProgressFill"></div></div>
+              <div class="export-progress" id="exportProgress" data-export="exportProgress">
+                <div class="export-progress-label" id="exportProgressLabel" data-export="exportProgressLabel"></div>
+                <div class="export-progress-bar"><div class="export-progress-fill" id="exportProgressFill" data-export="exportProgressFill"></div></div>
               </div>
-              <div class="export-info" id="exportInfo"></div>
+              <div class="export-info" id="exportInfo" data-export="exportInfo"></div>
             </div>
           </div>
         </div>

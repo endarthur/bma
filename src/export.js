@@ -22,14 +22,51 @@ function exportStateFor(id) {
   if (!ds.export) ds.export = exportNewState();
   return ds.export;
 }
-function exportTargetDs() { return dsById(exportTargetDsId) || dsById('model'); }
-function exportCtx() {
-  var ds = exportTargetDs();
+// A10 G5b: clone arc. Export clones into independent dockable panels — like
+// StatsCat, the independence is the TARGET DATASET (per-instance) + its column
+// selection (which lives on ds.export, so two clones on one dataset mirror). The
+// FORMAT settings (delimiter/precision/…) are SHARED globals; clones hide the
+// format section. Singleton resolves DOM via $export* refs + target via
+// exportTargetDsId; a clone carries data-export-inst on its root.
+var exportInstances = {};   // instId -> { targetDsId }
+var exportInstanceEls = {}; // instId -> cloned DOM element
+var exportInstSeq = 0;
+function exportNextInstId() { return 'export#' + (++exportInstSeq); }
+function exportNewInstState() { return { targetDsId: 'model' }; }
+function exportIsInst(root) { return !!(root && root.getAttribute && root.getAttribute('data-export-inst')); }
+function exportInstTarget(root) {
+  if (!exportIsInst(root)) return exportTargetDsId;
+  var id = root.getAttribute('data-export-inst');
+  if (!exportInstances[id]) exportInstances[id] = exportNewInstState();
+  return exportInstances[id].targetDsId;
+}
+// DOM bundle: singleton → $export* refs; clone → [data-export] within root.
+function exportEls(root) {
+  if (!exportIsInst(root)) {
+    return { colList: $exportColList, colSearch: $exportColSearch, badge: $exportBadge, rowPreview: $exportRowPreview,
+      previewPre: $exportPreviewPre, previewInfo: $exportPreviewInfo, precisionWarn: $exportPrecisionWarn,
+      download: $exportDownload, progress: $exportProgress, progressLabel: $exportProgressLabel,
+      progressFill: $exportProgressFill, info: $exportInfo,
+      selAll: document.getElementById('exportSelAll'), selNone: document.getElementById('exportSelNone'),
+      selOrig: document.getElementById('exportSelOrig'), selCalc: document.getElementById('exportSelCalc'),
+      datasetWrap: document.getElementById('exportDatasetWrap') };
+  }
+  function q(n) { return root.querySelector('[data-export="' + n + '"]'); }
+  return { colList: q('exportColList'), colSearch: q('exportColSearch'), badge: q('exportBadge'), rowPreview: q('exportRowPreview'),
+    previewPre: q('exportPreviewPre'), previewInfo: q('exportPreviewInfo'), precisionWarn: q('exportPrecisionWarn'),
+    download: q('exportDownload'), progress: q('exportProgress'), progressLabel: q('exportProgressLabel'),
+    progressFill: q('exportProgressFill'), info: q('exportInfo'),
+    selAll: q('exportSelAll'), selNone: q('exportSelNone'), selOrig: q('exportSelOrig'), selCalc: q('exportSelCalc'),
+    datasetWrap: q('exportDatasetWrap') };
+}
+function exportTargetDs(root) { return dsById(exportInstTarget(root)) || dsById('model'); }
+function exportCtx(root) {
+  var ds = exportTargetDs(root);
   var isModel = ds.id === 'model';
   var S = exportStateFor(ds.id);
   var c = ds.complete || {};
   return {
-    ds: ds, isModel: isModel, S: S,
+    ds: ds, isModel: isModel, S: S, els: exportEls(root), root: root || null,
     header: isModel ? currentHeader : (c.header || []),
     colTypes: isModel ? currentColTypes : (c.colTypes || []),
     origColCount: isModel ? currentOrigColCount : ((c.origColCount != null) ? c.origColCount : ((c.header ? c.header.length : 0) - ((ds.calcolMeta || []).length))),
@@ -55,51 +92,137 @@ function exportTargetableDatasets() {
 }
 // The "Dataset" picker at the top of the Export sidebar — shown only when 2+
 // datasets are analyzed (with one, Export is implicitly the model, as before).
-function exportRenderDatasetPicker() {
-  var wrap = document.getElementById('exportDatasetWrap');
+function exportRenderDatasetPicker(root) {
+  var wrap = exportEls(root).datasetWrap;
   if (!wrap) return;
   var ts = exportTargetableDatasets();
   if (ts.length < 2) { wrap.innerHTML = ''; return; }
-  var cur = exportTargetDs().id;
+  var cur = exportTargetDs(root).id;
   wrap.innerHTML = '<div class="export-sidebar-title">Dataset</div>' +
-    '<select class="export-select" id="exportDataset">' +
+    '<select class="export-select" data-export-ds="1">' +
     ts.map(function(d) { return '<option value="' + d.id + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
     '</select>';
-  var sel = document.getElementById('exportDataset');
-  if (sel) sel.onchange = function() { setExportTarget(sel.value); };
+  var sel = wrap.querySelector('[data-export-ds]');
+  if (sel) sel.onchange = function() { setExportTarget(sel.value, root); };
 }
-// Switch the Export target dataset: build its column list on first visit (else
-// keep the dataset's existing selection), then re-render the tab for it.
-function setExportTarget(id) {
-  if (id === exportTargetDsId) return;
-  exportTargetDsId = id;
-  $exportColSearch.value = '';
-  var tds = exportTargetDs();
-  if (tds && tds._pendingExport) applyExportDsRestore(tds);   // restored selection awaiting this switch
-  var C = exportCtx();
-  if (!C.S.columns || C.S.columns.length === 0) {
-    initExportColumns();   // first visit — seed from this dataset's header
+// Switch the Export target dataset (per-panel): build its column list on first
+// visit (else keep the dataset's existing selection), then re-render the panel.
+function setExportTarget(id, root) {
+  if (id === exportInstTarget(root)) return;
+  if (exportIsInst(root)) {
+    var iid = root.getAttribute('data-export-inst');
+    if (!exportInstances[iid]) exportInstances[iid] = exportNewInstState();
+    exportInstances[iid].targetDsId = id;
   } else {
-    detectSourcePrecision();
-    renderExportColumns();
-    updateExportRowPreview();
-    updateExportPreview();
+    exportTargetDsId = id;
   }
-  exportRenderDatasetPicker();
-  updateExportWarnings();
+  var els = exportEls(root);
+  if (els.colSearch) els.colSearch.value = '';
+  var tds = exportTargetDs(root);
+  if (tds && tds._pendingExport) applyExportDsRestore(tds);   // restored selection awaiting this switch
+  var C = exportCtx(root);
+  if (!C.S.columns || C.S.columns.length === 0) {
+    initExportColumns(root);   // first visit — seed from this dataset's header
+  } else {
+    detectSourcePrecision(root);
+    renderExportColumns(root);
+    updateExportRowPreview(root);
+    updateExportPreview(root);
+  }
+  exportRenderDatasetPicker(root);
+  updateExportWarnings(root);
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
-// Keep the picker current as datasets analyze/clear; bounce to the model if the
-// target is GONE from the registry (not merely unanalyzed, so a restored target
-// awaiting re-analysis survives).
+// Run fn(root) for every Export panel (singleton + clones) targeting dsId.
+function exportForEachPanelTargeting(dsId, fn) {
+  if (exportTargetDsId === dsId) fn(undefined);
+  Object.keys(exportInstances).forEach(function(iid) {
+    if (exportInstances[iid].targetDsId === dsId) {
+      var root = document.querySelector('[data-export-inst="' + iid + '"]');
+      if (root) fn(root);
+    }
+  });
+}
+// Keep every panel's picker current as datasets analyze/clear; bounce a panel to
+// the model only if its target is GONE from the registry.
 function exportRefreshDatasetPicker() {
   if (exportTargetDsId !== 'model' && !dsById(exportTargetDsId)) {
     exportTargetDsId = 'model';
-    initExportColumns();
-    exportRenderDatasetPicker();
-    return;
+    initExportColumns(undefined);
   }
-  exportRenderDatasetPicker();
+  exportRenderDatasetPicker(undefined);
+  Object.keys(exportInstances).forEach(function(iid) {
+    var root = document.querySelector('[data-export-inst="' + iid + '"]');
+    if (!root) return;
+    if (exportInstances[iid].targetDsId !== 'model' && !dsById(exportInstances[iid].targetDsId)) {
+      exportInstances[iid].targetDsId = 'model';
+      initExportColumns(root);
+    }
+    exportRenderDatasetPicker(root);
+  });
+}
+
+// A10 G5b: build a cloned Export panel — an independent target-dataset window with
+// its own column selection. Clones #panelExport, strips ids (DOM resolves by
+// [data-export] within root), hides the shared FORMAT section, wires its controls,
+// and builds the column list for its target. Cached for rails' double renderPanel.
+function exportBuildInstancePanel(instId) {
+  var tmpl = document.getElementById('panelExport');
+  if (!tmpl) return null;
+  if (exportInstanceEls[instId] && document.contains(exportInstanceEls[instId])) return exportInstanceEls[instId];
+  if (!exportInstances[instId]) exportInstances[instId] = exportNewInstState();
+  var el = tmpl.cloneNode(true);
+  el.removeAttribute('id');
+  el.querySelectorAll('[id]').forEach(function(n) { n.removeAttribute('id'); });
+  el.setAttribute('data-export-inst', instId);
+  el.setAttribute('data-tab', instId);
+  el.classList.add('active');
+  // Format settings are SHARED (the singleton owns them) — hide on clones.
+  var fmt = el.querySelector('[data-export="exportFormatSection"]'); if (fmt) fmt.style.display = 'none';
+  var cmt = el.querySelector('[data-export="exportCommentSection"]'); if (cmt) cmt.style.display = 'none';
+  wireExportControls(el);
+  var tds = exportTargetDs(el);
+  if (tds && tds._pendingExport) applyExportDsRestore(tds);
+  var C = exportCtx(el);
+  if (!C.S.columns || C.S.columns.length === 0) initExportColumns(el);
+  else { detectSourcePrecision(el); renderExportColumns(el); updateExportRowPreview(el); updateExportPreview(el); }
+  exportInstanceEls[instId] = el;
+  return el;
+}
+function exportDisposeInstance(instId) {
+  var st = exportInstances[instId];
+  if (st && st._worker) { try { st._worker.terminate(); } catch (e) {} }
+  delete exportInstances[instId];
+  delete exportInstanceEls[instId];
+}
+// Re-render every clone (a dataset's analysis changed).
+function exportRenderAllInstances() {
+  Object.keys(exportInstances).forEach(function(id) {
+    var root = document.querySelector('[data-export-inst="' + id + '"]');
+    if (!root) return;
+    var C = exportCtx(root);
+    if (!C.S.columns || C.S.columns.length === 0) initExportColumns(root);
+    else { renderExportColumns(root); updateExportRowPreview(root); updateExportPreview(root); }
+  });
+}
+function exportSerializeInstances() {
+  return Object.keys(exportInstances).map(function(id) { return { id: id, targetDsId: exportInstances[id].targetDsId }; });
+}
+function exportRestoreInstances(list) {
+  if (!Array.isArray(list)) return;
+  list.forEach(function(rec) {
+    if (!rec || !rec.id) return;
+    exportInstances[rec.id] = { targetDsId: rec.targetDsId || 'model' };
+    var n = parseInt(String(rec.id).replace(/^export#/, ''), 10);
+    if (isFinite(n) && n > exportInstSeq) exportInstSeq = n;
+  });
+}
+function exportResetInstances() {
+  Object.keys(exportInstances).forEach(function(id) {
+    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) { try { wsRails.closeTab(id); } catch (e) {} }
+    exportDisposeInstance(id);
+  });
+  exportInstances = {}; exportInstanceEls = {};
 }
 
 // G5a-3: serialize a comparison dataset's Export column selection — name +
@@ -138,11 +261,12 @@ function applyExportDsRestore(ds) {
   if (!ds.export) ds.export = exportNewState();
   ds.export.columns = ordered;
   ds._pendingExport = null;
-  if (exportTargetDsId === ds.id) { detectSourcePrecision(); renderExportColumns(); updateExportRowPreview(); updateExportPreview(); updateExportWarnings(); }
+  // Repaint any panel (singleton or clone) currently targeting this dataset.
+  exportForEachPanelTargeting(ds.id, function(root) { detectSourcePrecision(root); renderExportColumns(root); updateExportRowPreview(root); updateExportPreview(root); updateExportWarnings(root); });
 }
 
-function initExportColumns() {
-  const C = exportCtx();
+function initExportColumns(root) {
+  const C = exportCtx(root);
   const cols = [];
   const header = C.header || [], colTypes = C.colTypes || [], origColCount = C.origColCount;
   for (let i = 0; i < header.length; i++) {
@@ -156,14 +280,14 @@ function initExportColumns() {
     });
   }
   C.S.columns = cols;
-  detectSourcePrecision();
-  renderExportColumns();
-  updateExportRowPreview();
-  updateExportPreview();
+  detectSourcePrecision(root);
+  renderExportColumns(root);
+  updateExportRowPreview(root);
+  updateExportPreview(root);
 }
 
-function detectSourcePrecision() {
-  const C = exportCtx();
+function detectSourcePrecision(root) {
+  const C = exportCtx(root);
   C.S.sourcePrecision = {};
   const pf = C.preflight;
   if (!pf || !pf.sampleRows || !pf.header) return;
@@ -182,10 +306,11 @@ function detectSourcePrecision() {
   }
 }
 
-function renderExportColumns() {
-  exportRenderDatasetPicker();
-  const cols = exportCtx().S.columns;
-  const search = $exportColSearch.value.toLowerCase();
+function renderExportColumns(root) {
+  exportRenderDatasetPicker(root);
+  const els = exportEls(root);
+  const cols = exportCtx(root).S.columns;
+  const search = els.colSearch.value.toLowerCase();
   let html = '';
   for (let i = 0; i < cols.length; i++) {
     const col = cols[i];
@@ -201,46 +326,49 @@ function renderExportColumns() {
     html += '<span class="ecol-type ' + typeClass + '">' + typeLabel + '</span>';
     html += '</div>';
   }
-  $exportColList.innerHTML = html;
-  updateExportBadge();
-  wireExportColumnEvents();
+  els.colList.innerHTML = html;
+  updateExportBadge(root);
+  wireExportColumnEvents(root);
 }
 
-function updateExportBadge() {
-  const cols = exportCtx().S.columns;
+function updateExportBadge(root) {
+  const els = exportEls(root);
+  const cols = exportCtx(root).S.columns;
   const sel = cols.filter(c => c.selected).length;
-  $exportBadge.textContent = sel + ' / ' + cols.length;
+  els.badge.textContent = sel + ' / ' + cols.length;
 }
 
-function updateExportRowPreview() {
-  const C = exportCtx();
-  if (!C.ds.complete) { $exportRowPreview.textContent = ''; return; }
+function updateExportRowPreview(root) {
+  const C = exportCtx(root);
+  const rowPreview = C.els.rowPreview;
+  if (!C.ds.complete) { rowPreview.textContent = ''; return; }
   const rc = C.rowCount;
   const trc = C.totalRowCount;
   if (C.filter) {
-    $exportRowPreview.textContent = rc.toLocaleString() + ' / ' + trc.toLocaleString() + ' rows';
+    rowPreview.textContent = rc.toLocaleString() + ' / ' + trc.toLocaleString() + ' rows';
   } else {
-    $exportRowPreview.textContent = trc.toLocaleString() + ' rows';
+    rowPreview.textContent = trc.toLocaleString() + ' rows';
   }
 }
 
 let exportDragIdx = null;
 
-function wireExportColumnEvents() {
-  const cols = exportCtx().S.columns;
-  $exportColList.querySelectorAll('.export-col-item').forEach(el => {
+function wireExportColumnEvents(root) {
+  const els = exportEls(root);
+  const cols = exportCtx(root).S.columns;
+  els.colList.querySelectorAll('.export-col-item').forEach(el => {
     const idx = parseInt(el.dataset.idx);
     const cb = el.querySelector('input[type="checkbox"]');
     cb.addEventListener('change', () => {
       cols[idx].selected = cb.checked;
-      updateExportBadge();
-      updateExportPreview();
+      updateExportBadge(root);
+      updateExportPreview(root);
       autoSaveProject();
     });
     const renameInput = el.querySelector('.ecol-rename');
     renameInput.addEventListener('input', () => {
       cols[idx].outputName = renameInput.value || cols[idx].name;
-      updateExportPreview();
+      updateExportPreview(root);
       autoSaveProject();
     });
 
@@ -251,7 +379,7 @@ function wireExportColumnEvents() {
     });
     el.addEventListener('dragend', () => {
       el.classList.remove('dragging');
-      $exportColList.querySelectorAll('.drag-over-top,.drag-over-bottom').forEach(x => {
+      els.colList.querySelectorAll('.drag-over-top,.drag-over-bottom').forEach(x => {
         x.classList.remove('drag-over-top', 'drag-over-bottom');
       });
       exportDragIdx = null;
@@ -279,51 +407,36 @@ function wireExportColumnEvents() {
       const insertAt = dropAfter ? targetIdx + 1 : targetIdx;
       cols.splice(insertAt, 0, item);
       exportDragIdx = null;
-      renderExportColumns();
-      updateExportPreview();
+      renderExportColumns(root);
+      updateExportPreview(root);
       autoSaveProject();
     });
   });
 }
 
-// Column search
-$exportColSearch.addEventListener('input', () => {
-  const cols = exportCtx().S.columns;
-  const search = $exportColSearch.value.toLowerCase();
-  $exportColList.querySelectorAll('.export-col-item').forEach(el => {
-    const idx = parseInt(el.dataset.idx);
-    const col = cols[idx];
-    const hidden = search && !fuzzyMatch(search, col.name.toLowerCase()) && !fuzzyMatch(search, col.outputName.toLowerCase());
-    el.classList.toggle('export-col-hidden', hidden);
+// A10 G5b: per-panel column-search + selection-buttons + download wiring (extracted
+// so clones wire their own; the singleton calls it once below). Format controls stay
+// singleton-only (shared globals); clones hide the format section.
+function wireExportControls(root) {
+  const els = exportEls(root);
+  els.colSearch.addEventListener('input', () => {
+    const cols = exportCtx(root).S.columns;
+    const search = els.colSearch.value.toLowerCase();
+    els.colList.querySelectorAll('.export-col-item').forEach(el => {
+      const idx = parseInt(el.dataset.idx);
+      const col = cols[idx];
+      const hidden = search && !fuzzyMatch(search, col.name.toLowerCase()) && !fuzzyMatch(search, col.outputName.toLowerCase());
+      el.classList.toggle('export-col-hidden', hidden);
+    });
   });
-});
-wireSearchShortcuts($exportColSearch, document.getElementById('exportSelAll'), document.getElementById('exportSelNone'));
-
-// Selection buttons
-document.getElementById('exportSelAll').addEventListener('click', () => {
-  exportCtx().S.columns.forEach(c => c.selected = true);
-  renderExportColumns();
-  updateExportPreview();
-  autoSaveProject();
-});
-document.getElementById('exportSelNone').addEventListener('click', () => {
-  exportCtx().S.columns.forEach(c => c.selected = false);
-  renderExportColumns();
-  updateExportPreview();
-  autoSaveProject();
-});
-document.getElementById('exportSelOrig').addEventListener('click', () => {
-  exportCtx().S.columns.forEach(c => c.selected = !c.isCalcol);
-  renderExportColumns();
-  updateExportPreview();
-  autoSaveProject();
-});
-document.getElementById('exportSelCalc').addEventListener('click', () => {
-  exportCtx().S.columns.forEach(c => c.selected = c.isCalcol);
-  renderExportColumns();
-  updateExportPreview();
-  autoSaveProject();
-});
+  wireSearchShortcuts(els.colSearch, els.selAll, els.selNone);
+  els.selAll.addEventListener('click', () => { exportCtx(root).S.columns.forEach(c => c.selected = true); renderExportColumns(root); updateExportPreview(root); autoSaveProject(); });
+  els.selNone.addEventListener('click', () => { exportCtx(root).S.columns.forEach(c => c.selected = false); renderExportColumns(root); updateExportPreview(root); autoSaveProject(); });
+  els.selOrig.addEventListener('click', () => { exportCtx(root).S.columns.forEach(c => c.selected = !c.isCalcol); renderExportColumns(root); updateExportPreview(root); autoSaveProject(); });
+  els.selCalc.addEventListener('click', () => { exportCtx(root).S.columns.forEach(c => c.selected = c.isCalcol); renderExportColumns(root); updateExportPreview(root); autoSaveProject(); });
+  els.download.addEventListener('click', () => startExport(root));
+}
+wireExportControls();   // singleton
 
 // ─── Format controls ──────────────────────────────────────────────────
 
@@ -483,7 +596,9 @@ $exportPrecisionInput.addEventListener('input', () => {
 
 // ─── Warnings ─────────────────────────────────────────────────────────
 
-function updateExportWarnings() {
+function updateExportWarnings(root) {
+  const els = exportEls(root);
+  if (!els.precisionWarn) return;   // clones hide the format section (precision is shared/singleton)
   const warnings = [];
 
   // Delimiter-decsep conflict
@@ -493,7 +608,7 @@ function updateExportWarnings() {
 
   // Precision warning
   if (exportPrecision !== null) {
-    const C = exportCtx();
+    const C = exportCtx(root);
     const cols = C.S.columns, srcPrec = C.S.sourcePrecision;
     const affected = [];
     for (const col of cols) {
@@ -513,29 +628,30 @@ function updateExportWarnings() {
   }
 
   if (warnings.length > 0) {
-    $exportPrecisionWarn.style.display = '';
-    $exportPrecisionWarn.textContent = warnings.join(' | ');
+    els.precisionWarn.style.display = '';
+    els.precisionWarn.textContent = warnings.join(' | ');
   } else {
-    $exportPrecisionWarn.style.display = 'none';
-    $exportPrecisionWarn.textContent = '';
+    els.precisionWarn.style.display = 'none';
+    els.precisionWarn.textContent = '';
   }
 }
 
 // ─── Live Preview ─────────────────────────────────────────────────────
 
-function updateExportPreview() {
-  const C = exportCtx();
+function updateExportPreview(root) {
+  const C = exportCtx(root);
+  const els = C.els;
   const pf = C.preflight;
   if (!pf || !pf.sampleRows || !pf.header) {
-    $exportPreviewPre.textContent = '';
-    $exportPreviewInfo.textContent = '';
+    els.previewPre.textContent = '';
+    els.previewInfo.textContent = '';
     return;
   }
 
   const selected = C.S.columns.filter(c => c.selected);
   if (selected.length === 0) {
-    $exportPreviewPre.textContent = '(No columns selected)';
-    $exportPreviewInfo.textContent = '';
+    els.previewPre.textContent = '(No columns selected)';
+    els.previewInfo.textContent = '';
     return;
   }
 
@@ -607,27 +723,28 @@ function updateExportPreview() {
     lines.push(cells.join(delim));
   }
 
-  $exportPreviewPre.textContent = lines.join(le);
+  els.previewPre.textContent = lines.join(le);
 
   // Info text
   const totalRows = C.ds.complete ? (C.filter ? C.rowCount : C.totalRowCount) : rows.length;
   if (totalRows > maxRows) {
-    $exportPreviewInfo.textContent = 'Showing ' + maxRows + ' of ' + totalRows.toLocaleString() + ' rows';
+    els.previewInfo.textContent = 'Showing ' + maxRows + ' of ' + totalRows.toLocaleString() + ' rows';
   } else {
-    $exportPreviewInfo.textContent = maxRows + ' rows';
+    els.previewInfo.textContent = maxRows + ' rows';
   }
 }
 
 // ─── Export ───────────────────────────────────────────────────────────
 
-function startExport() {
-  const C = exportCtx();
+function startExport(root) {
+  const C = exportCtx(root);
+  const els = C.els;
   const selected = C.S.columns.filter(c => c.selected);
   if (selected.length === 0) {
-    $exportInfo.textContent = 'No columns selected.';
+    els.info.textContent = 'No columns selected.';
     return;
   }
-  if (!C.file) { $exportInfo.textContent = 'Dataset not loaded.'; return; }
+  if (!C.file) { els.info.textContent = 'Dataset not loaded.'; return; }
 
   const exportCols = selected.map(c => ({ name: c.name, outputName: c.outputName }));
   const baseName = C.file.name.replace(/\.[^.]+$/, '');
@@ -666,38 +783,41 @@ function startExport() {
     dmFormat: C.preflight && C.preflight.dmFormat || null
   };
 
-  if (exportWorker) exportWorker.terminate();
+  // Per-panel worker handle: the singleton uses the exportWorker global; a clone
+  // keeps its own on its instance state so concurrent exports don't collide.
+  var inst = exportIsInst(root) ? exportInstances[root.getAttribute('data-export-inst')] : null;
+  var prior = inst ? inst._worker : exportWorker;
+  if (prior) prior.terminate();
 
-  // A10 4h: the model export now runs through the shared, dataset-generic
-  // exportRunWorker; this UI object drives the Export-tab elements exactly as
-  // before (byte-identical strings + reset behavior).
+  // A10 4h: the model export runs through the shared, dataset-generic
+  // exportRunWorker; this UI object drives the panel's elements (els-scoped).
   exportRunWorker(msg, suggestedName, {
     start: function() {
-      $exportDownload.disabled = true;
-      $exportProgress.classList.add('active');
-      $exportProgressFill.style.width = '0%';
-      $exportProgressLabel.textContent = 'Exporting...';
-      $exportInfo.textContent = '';
+      els.download.disabled = true;
+      els.progress.classList.add('active');
+      els.progressFill.style.width = '0%';
+      els.progressLabel.textContent = 'Exporting...';
+      els.info.textContent = '';
     },
     progress: function(pct, rowCount) {
-      $exportProgressFill.style.width = pct.toFixed(1) + '%';
-      $exportProgressLabel.textContent = 'Exporting... ' + pct.toFixed(0) + '% (' + rowCount.toLocaleString() + ' rows)';
+      els.progressFill.style.width = pct.toFixed(1) + '%';
+      els.progressLabel.textContent = 'Exporting... ' + pct.toFixed(0) + '% (' + rowCount.toLocaleString() + ' rows)';
     },
     complete: function(rowCount, elapsed) {
-      $exportProgressFill.style.width = '100%';
-      $exportProgressLabel.textContent = 'Done \u2014 ' + rowCount.toLocaleString() + ' rows in ' + (elapsed / 1000).toFixed(1) + 's';
-      $exportDownload.disabled = false;
+      els.progressFill.style.width = '100%';
+      els.progressLabel.textContent = 'Done \u2014 ' + rowCount.toLocaleString() + ' rows in ' + (elapsed / 1000).toFixed(1) + 's';
+      els.download.disabled = false;
     },
     error: function(text) {
-      $exportInfo.textContent = text;
-      $exportProgress.classList.remove('active');
-      $exportDownload.disabled = false;
+      els.info.textContent = text;
+      els.progress.classList.remove('active');
+      els.download.disabled = false;
     },
     cancelled: function() {
-      $exportProgress.classList.remove('active');
-      $exportDownload.disabled = false;
+      els.progress.classList.remove('active');
+      els.download.disabled = false;
     },
-    setWorker: function(w) { exportWorker = w; }
+    setWorker: function(w) { if (inst) inst._worker = w; else exportWorker = w; }
   });
 }
 
@@ -820,7 +940,7 @@ function dsExportRows(ds, root) {
   });
 }
 
-$exportDownload.addEventListener('click', startExport);
+// (singleton download wired in wireExportControls; G5b)
 
 function resetExportSettings() {
   exportDelimiter = ',';

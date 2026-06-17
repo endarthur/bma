@@ -228,6 +228,7 @@ function runAuxAnalysis(ds, root) {
       if (typeof statsCatRenderAllInstances === 'function') statsCatRenderAllInstances();  // G4b: repaint cloned StatsCat panels targeting this ds
       if (typeof exportRefreshDatasetPicker === 'function') exportRefreshDatasetPicker();  // G5a: now Export-targetable
       if (typeof applyExportDsRestore === 'function') applyExportDsRestore(ds);  // G5a-3: reattach saved export columns by name
+      if (typeof exportRenderAllInstances === 'function') exportRenderAllInstances();  // G5b: repaint cloned Export panels targeting this ds
       if (typeof statsCatTargetDsId !== 'undefined' && statsCatTargetDsId === ds.id && typeof renderStatsCat === 'function') renderStatsCat();
       autoSaveProject();
     } else if (m.type === 'error') {
