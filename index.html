@@ -5427,16 +5427,16 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
                 </div>
                 <div class="aux-from-main" id="auxFromMain" data-aux="fromMain"></div>
               </div>
-              <div class="ds-card dh-card" id="dhCard">
+              <div class="ds-card dh-card" data-dh="card">
                 <div class="ds-card-head">
                   <span class="ds-card-title">Drillhole set</span>
                   <span class="ds-card-sub">collar + survey + intervals → desurveyed, composited samples</span>
-                  <button class="dh-clear-btn" id="dhClearBtn" title="Clear the drillhole set" style="display:none">✕ Clear</button>
+                  <button class="dh-clear-btn" data-dh="clearBtn" title="Clear the drillhole set" style="display:none">✕ Clear</button>
                 </div>
-                <div class="dh-slots" id="dhSlots"></div>
-                <div class="dh-mapping" id="dhMapping"></div>
-                <div class="dh-report" id="dhReportInline"></div>
-                <input type="file" id="dhFileInput" multiple accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP" style="display:none">
+                <div class="dh-slots" data-dh="slots"></div>
+                <div class="dh-mapping" data-dh="mapping"></div>
+                <div class="dh-report" data-dh="reportInline"></div>
+                <input type="file" data-dh="fileInput" multiple accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP" style="display:none">
               </div>
             </div>
           </div>
@@ -5915,7 +5915,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 3ad054c — click to check for updates">3ad054c</div>
+<div class="build-badge" id="buildBadge" title="build 7cea543 — click to check for updates">7cea543</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -15096,10 +15096,9 @@ function renderAuxConfig(ds, root) {
 
   renderAuxPreview(ds, root);
   if (typeof renderAuxView === 'function') renderAuxView(ds, root);
-  // drillhole-derived aux: provenance banner + report/re-composite links (A7).
-  // Drillhole sets are aux-scoped until phase 5, so only the singleton aux's
-  // panel carries the banner (renderDhProvenance resolves the singleton head).
-  if (ds.id === 'aux' && typeof renderDhProvenance === 'function') renderDhProvenance();
+  // drillhole-derived dataset: provenance banner + report/re-composite links
+  // (A7; A10 phase 5 made it per-dataset — resolves this ds's head + state).
+  if (typeof renderDhProvenance === 'function') renderDhProvenance(ds);
 }
 
 // A10 4f-2: repaint just the grid section (detected badge known post-analysis)
@@ -15981,28 +15980,26 @@ function wireDatasetPanel(root, ds) {
 
   // Top-cut + view-toggle listeners live in topcut.js (loaded later)
   if (typeof wireDatasetTopcut === 'function') wireDatasetTopcut(root, ds);
+
+  // A10 phase 5: wire this panel's drillhole card (no-op if the panel has none)
+  if (typeof wireDhCard === 'function') wireDhCard(root, ds);
 }
 
-// ─── Drillhole set ingestion (A7 Phase 1) ───────────────────────────────
+// ─── Drillhole set ingestion (A7 Phase 1 · A10 Phase 5 multi-instance) ───
 // UI + parsing glue over the @gcu/drillhole lib (vendor-drillhole.js):
-// three file slots on the Aux empty state (role-detected by header
-// signature, filename as tiebreaker), an always-visible mapping panel
-// (column selects, the PROMINENT dip-convention toggle (D1), desurvey
-// method select, composite length / domain / min-coverage), the
-// consistency report, and Composite & load — which emits a CSV string,
-// wraps it in a File, and hands it to loadAuxFile() so the aux pipeline
-// stays untouched. SUPPORT auto-assigns as the aux weight.
-// Design: docs/a7-drillhole-ingestion.md. Persistence/pack = Phase 2.
-
-var dhFiles = { collar: null, survey: null, intervals: null };   // File per role
-var dhParsed = { collar: null, survey: null, intervals: null };  // {header, rows}
-var dhMap = { collar: {}, survey: {}, intervals: {} };           // field → col idx
-var dhDipConvention = null;   // 'pos-down' | 'neg-down' (null = not detected yet)
-var dhOpts = { method: 'minimumCurvature', length: '', domainCol: '', minCov: '' }; // serializable (Phase 2)
-var dhLastReport = null;      // last Drillhole.process report (for the modal)
-var dhDerivedName = null;     // file name of the loaded composite CSV
-var dhProvFiles = null;       // [names] for the provenance banner
-var dhPendingRestore = null;  // project.drillholes awaiting its files (Phase 2)
+// three file slots on a dataset's import (empty-state) card, an always-
+// visible mapping panel (column selects, the PROMINENT dip-convention toggle
+// (D1), desurvey method select, composite length / domain / min-coverage),
+// the consistency report, and Composite & load — which emits a CSV string,
+// wraps it in a File, and hands it to loadAuxFile() FOR THE OWNING DATASET so
+// the (now dataset-generic) aux pipeline stays untouched. SUPPORT auto-assigns
+// as that dataset's weight.
+//
+// A10 Phase 5: state is PER-DATASET (dhStateFor(ds), keyed by ds.id; the legacy
+// singleton aux is just the 'aux' entry) and the card DOM resolves through the
+// owning dataset's config-panel root (data-dh attrs, scoped via dhQ) — so each
+// dataset instance (aux/d2/d3…) can host its own independent drillhole set.
+// Design: docs/a7-drillhole-ingestion.md + docs/a10-n-datasets.md.
 
 var DH_ROLES = ['collar', 'survey', 'intervals'];
 var DH_SYN = {
@@ -16017,6 +16014,28 @@ var DH_SYN = {
   from: ['from', 'depfrom', 'from_m', 'depth_from', 'de'],
   to: ['to', 'depto', 'to_m', 'depth_to', 'ate'],
 };
+
+// ── per-dataset state ────────────────────────────────────────────────────
+// One bundle per ds.id. Fields mirror the old module globals 1:1.
+var dhStates = {};
+function dhStateFor(ds) {
+  var id = (ds && ds.id) || 'aux';
+  if (!dhStates[id]) dhStates[id] = {
+    files: { collar: null, survey: null, intervals: null },   // File per role
+    parsed: { collar: null, survey: null, intervals: null },  // {header, rows}
+    map: { collar: {}, survey: {}, intervals: {} },           // field → col idx
+    dipConvention: null,            // 'pos-down' | 'neg-down' (null = undetected)
+    opts: { method: 'minimumCurvature', length: '', domainCol: '', minCov: '' }, // serializable
+    lastReport: null,               // last Drillhole.process report (for the modal)
+    derivedName: null,              // file name of the loaded composite CSV
+    provFiles: null,                // [names] for the provenance banner
+    pendingRestore: null            // project recipe awaiting its files
+  };
+  return dhStates[id];
+}
+// The dataset config-panel element that hosts this set's card.
+function dhCardRoot(ds) { return (typeof dsConfigRoot === 'function') ? dsConfigRoot(ds || dsById('aux')) : null; }
+function dhQ(sel, root) { return root ? root.querySelector(sel) : null; }
 
 function dhNorm(name) { return String(name).toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
@@ -16104,7 +16123,8 @@ async function dhParseFile(file) {
 
 // ── slot assignment ─────────────────────────────────────────────────────
 
-async function dhAssignFiles(files) {
+async function dhAssignFiles(ds, files) {
+  var D = dhStateFor(ds);
   var sizeSum = 0;
   for (var fi = 0; fi < files.length; fi++) sizeSum += files[fi].size;
   if (sizeSum > 150 * 1024 * 1024) {
@@ -16115,7 +16135,7 @@ async function dhAssignFiles(files) {
     });
     if (!go) return;
   }
-  dhSetStatus('Reading…');
+  dhSetStatus(ds, 'Reading…');
   try {
     for (var i = 0; i < files.length; i++) {
       var f = files[i];
@@ -16124,41 +16144,43 @@ async function dhAssignFiles(files) {
         for (var e = 0; e < entries.length; e++) {
           if (!/\.(csv|txt|dat)$/i.test(entries[e].name)) continue;
           var ef = await zipEntryToFile(f, entries[e]);
-          await dhAssignOne(ef);
+          await dhAssignOne(ds, ef);
         }
       } else {
-        await dhAssignOne(f);
+        await dhAssignOne(ds, f);
       }
     }
-    dhSetStatus('');
+    dhSetStatus(ds, '');
   } catch (err) {
-    dhSetStatus('Read failed: ' + err.message, true);
+    dhSetStatus(ds, 'Read failed: ' + err.message, true);
   }
-  renderDhCard();
-  dhTryApplyPendingRestore(); // saved recipe applies when its files land
+  renderDhCard(ds);
+  dhTryApplyPendingRestore(ds); // saved recipe applies when its files land
   dhAutoSave();
 }
 
-async function dhAssignOne(file) {
+async function dhAssignOne(ds, file) {
+  var D = dhStateFor(ds);
   var parsed = await dhParseFile(file);
   var role = dhDetectRole(parsed.header, file.name);
   if (!role) {
     // fall back to the first empty slot, in role order
     for (var r = 0; r < DH_ROLES.length; r++) {
-      if (!dhFiles[DH_ROLES[r]]) { role = DH_ROLES[r]; break; }
+      if (!D.files[DH_ROLES[r]]) { role = DH_ROLES[r]; break; }
     }
     if (!role) role = 'intervals';
   }
-  dhFiles[role] = file;
-  dhParsed[role] = parsed;
-  dhMap[role] = dhAutoMap(role, parsed.header);
-  if (role === 'survey') dhDipConvention = dhDetectConventionFromParsed();
+  D.files[role] = file;
+  D.parsed[role] = parsed;
+  D.map[role] = dhAutoMap(role, parsed.header);
+  if (role === 'survey') D.dipConvention = dhDetectConventionFromParsed(ds);
 }
 
-function dhDetectConventionFromParsed() {
-  var p = dhParsed.survey;
+function dhDetectConventionFromParsed(ds) {
+  var D = dhStateFor(ds);
+  var p = D.parsed.survey;
   if (!p) return null;
-  var m = dhMap.survey;
+  var m = D.map.survey;
   if (m.dip == null || m.dip < 0) return null;
   var surveys = [];
   for (var i = 0; i < p.rows.length; i++) {
@@ -16167,57 +16189,60 @@ function dhDetectConventionFromParsed() {
   return Drillhole.detectDipConvention(surveys);
 }
 
-function dhClearAll() {
-  dhFiles = { collar: null, survey: null, intervals: null };
-  dhParsed = { collar: null, survey: null, intervals: null };
-  dhMap = { collar: {}, survey: {}, intervals: {} };
-  dhDipConvention = null;
-  dhLastReport = null;
-  var $r = document.getElementById('dhReportInline');
+function dhClearAll(ds) {
+  var D = dhStateFor(ds);
+  D.files = { collar: null, survey: null, intervals: null };
+  D.parsed = { collar: null, survey: null, intervals: null };
+  D.map = { collar: {}, survey: {}, intervals: {} };
+  D.dipConvention = null;
+  D.lastReport = null;
+  var $r = dhQ('[data-dh="reportInline"]', dhCardRoot(ds));
   if ($r) $r.innerHTML = '';
-  renderDhCard(); // re-writes the pending-restore hint when one is staged
+  renderDhCard(ds); // re-writes the pending-restore hint when one is staged
 }
 
 // ── rendering ───────────────────────────────────────────────────────────
 
-function dhSetStatus(msg, isErr) {
-  var $s = document.getElementById('dhStatus');
+function dhSetStatus(ds, msg, isErr) {
+  var $s = dhQ('[data-dh="status"]', dhCardRoot(ds));
   if ($s) { $s.textContent = msg || ''; $s.classList.toggle('err', !!isErr); }
 }
 
-function renderDhCard() {
-  var $slots = document.getElementById('dhSlots');
+function renderDhCard(ds) {
+  var D = dhStateFor(ds);
+  var root = dhCardRoot(ds);
+  var $slots = dhQ('[data-dh="slots"]', root);
   if (!$slots) return;
   var html = '';
   for (var r = 0; r < DH_ROLES.length; r++) {
     var role = DH_ROLES[r];
-    var f = dhFiles[role];
+    var f = D.files[role];
     html += '<div class="dh-slot' + (f ? ' filled' : '') + '" data-dhrole="' + role + '">' +
       '<div class="dh-slot-role">' + role + '</div>' +
       (f
         ? '<div class="dh-slot-file" title="' + esc(f.name) + '">' + esc(f.name) + '</div>' +
-          '<div class="dh-slot-meta">' + dhParsed[role].rows.length.toLocaleString() + ' rows · ' +
-          dhParsed[role].header.length + ' cols</div>'
+          '<div class="dh-slot-meta">' + D.parsed[role].rows.length.toLocaleString() + ' rows · ' +
+          D.parsed[role].header.length + ' cols</div>'
         : '<div class="dh-slot-empty">drop a file or click to browse</div>') +
       '</div>';
   }
   $slots.innerHTML = html;
-  var $clear = document.getElementById('dhClearBtn');
-  if ($clear) $clear.style.display = (dhFiles.collar || dhFiles.survey || dhFiles.intervals) ? '' : 'none';
+  var $clear = dhQ('[data-dh="clearBtn"]', root);
+  if ($clear) $clear.style.display = (D.files.collar || D.files.survey || D.files.intervals) ? '' : 'none';
 
   // pending project recipe: tell the user which files it expects
-  var $rep = document.getElementById('dhReportInline');
-  if (dhPendingRestore && !(dhFiles.collar && dhFiles.survey && dhFiles.intervals)) {
-    var pf = dhPendingRestore.files;
+  var $rep = dhQ('[data-dh="reportInline"]', root);
+  if (D.pendingRestore && !(D.files.collar && D.files.survey && D.files.intervals)) {
+    var pf = D.pendingRestore.files;
     if ($rep) $rep.innerHTML = '<div class="dh-status">This project used a drillhole set — drop ' +
       '<b>' + esc(pf.collar.name) + '</b> + <b>' + esc(pf.survey.name) + '</b> + <b>' + esc(pf.intervals.name) +
       '</b> (or the packed zip) to re-composite with the saved mapping.</div>';
   }
-  renderDhMapping();
+  renderDhMapping(ds);
 }
 
-function dhColSelect(role, field, sel, optionalLabel) {
-  var p = dhParsed[role];
+function dhColSelect(ds, role, field, sel, optionalLabel) {
+  var p = dhStateFor(ds).parsed[role];
   var opts = optionalLabel ? '<option value="-1">— ' + optionalLabel + '</option>' : '<option value="-1">— pick —</option>';
   for (var i = 0; i < p.header.length; i++) {
     opts += '<option value="' + i + '"' + (i === sel ? ' selected' : '') + '>' + esc(p.header[i]) + '</option>';
@@ -16225,11 +16250,12 @@ function dhColSelect(role, field, sel, optionalLabel) {
   return '<select data-dhmap="' + role + ':' + field + '">' + opts + '</select>';
 }
 
-function dhIntervalDataCols() {
+function dhIntervalDataCols(ds) {
   // interval columns other than the mapped BHID/FROM/TO, with a sampled type
-  var p = dhParsed.intervals;
+  var D = dhStateFor(ds);
+  var p = D.parsed.intervals;
   if (!p) return [];
-  var m = dhMap.intervals;
+  var m = D.map.intervals;
   var used = [m.bhid, m.from, m.to];
   var out = [];
   for (var c = 0; c < p.header.length; c++) {
@@ -16247,45 +16273,47 @@ function dhIntervalDataCols() {
   return out;
 }
 
-function dhMappingComplete() {
-  var m = dhMap;
-  return dhParsed.collar && dhParsed.survey && dhParsed.intervals &&
+function dhMappingComplete(ds) {
+  var m = dhStateFor(ds).map;
+  var p = dhStateFor(ds).parsed;
+  return p.collar && p.survey && p.intervals &&
     m.collar.bhid >= 0 && m.collar.x >= 0 && m.collar.y >= 0 && m.collar.z >= 0 &&
     m.survey.bhid >= 0 && m.survey.at >= 0 && m.survey.az >= 0 && m.survey.dip >= 0 &&
     m.intervals.bhid >= 0 && m.intervals.from >= 0 && m.intervals.to >= 0;
 }
 
-function renderDhMapping() {
-  var $m = document.getElementById('dhMapping');
+function renderDhMapping(ds) {
+  var D = dhStateFor(ds);
+  var root = dhCardRoot(ds);
+  var $m = dhQ('[data-dh="mapping"]', root);
   if (!$m) return;
-  if (!dhParsed.collar || !dhParsed.survey || !dhParsed.intervals) {
-    $m.innerHTML = (dhFiles.collar || dhFiles.survey || dhFiles.intervals)
+  if (!D.parsed.collar || !D.parsed.survey || !D.parsed.intervals) {
+    $m.innerHTML = (D.files.collar || D.files.survey || D.files.intervals)
       ? '<div class="dh-status">Waiting for the remaining table(s)…</div>' : '';
     return;
   }
 
-
   var html = '<div class="dh-map-tables">';
-  html += '<div class="dh-map-table"><div class="dh-map-title">Collar — ' + esc(dhFiles.collar.name) + '</div>' +
-    '<div class="dh-map-row"><label>BHID</label>' + dhColSelect('collar', 'bhid', dhMap.collar.bhid) + '</div>' +
-    '<div class="dh-map-row"><label>X</label>' + dhColSelect('collar', 'x', dhMap.collar.x) + '</div>' +
-    '<div class="dh-map-row"><label>Y</label>' + dhColSelect('collar', 'y', dhMap.collar.y) + '</div>' +
-    '<div class="dh-map-row"><label>Z</label>' + dhColSelect('collar', 'z', dhMap.collar.z) + '</div>' +
-    '<div class="dh-map-row"><label>EOH</label>' + dhColSelect('collar', 'eoh', dhMap.collar.eoh, 'none (advisory)') + '</div></div>';
-  html += '<div class="dh-map-table"><div class="dh-map-title">Survey — ' + esc(dhFiles.survey.name) + '</div>' +
-    '<div class="dh-map-row"><label>BHID</label>' + dhColSelect('survey', 'bhid', dhMap.survey.bhid) + '</div>' +
-    '<div class="dh-map-row"><label>Depth</label>' + dhColSelect('survey', 'at', dhMap.survey.at) + '</div>' +
-    '<div class="dh-map-row"><label>Azimuth</label>' + dhColSelect('survey', 'az', dhMap.survey.az) + '</div>' +
-    '<div class="dh-map-row"><label>Dip</label>' + dhColSelect('survey', 'dip', dhMap.survey.dip) + '</div></div>';
-  html += '<div class="dh-map-table"><div class="dh-map-title">Intervals — ' + esc(dhFiles.intervals.name) + '</div>' +
-    '<div class="dh-map-row"><label>BHID</label>' + dhColSelect('intervals', 'bhid', dhMap.intervals.bhid) + '</div>' +
-    '<div class="dh-map-row"><label>From</label>' + dhColSelect('intervals', 'from', dhMap.intervals.from) + '</div>' +
-    '<div class="dh-map-row"><label>To</label>' + dhColSelect('intervals', 'to', dhMap.intervals.to) + '</div>' +
+  html += '<div class="dh-map-table"><div class="dh-map-title">Collar — ' + esc(D.files.collar.name) + '</div>' +
+    '<div class="dh-map-row"><label>BHID</label>' + dhColSelect(ds, 'collar', 'bhid', D.map.collar.bhid) + '</div>' +
+    '<div class="dh-map-row"><label>X</label>' + dhColSelect(ds, 'collar', 'x', D.map.collar.x) + '</div>' +
+    '<div class="dh-map-row"><label>Y</label>' + dhColSelect(ds, 'collar', 'y', D.map.collar.y) + '</div>' +
+    '<div class="dh-map-row"><label>Z</label>' + dhColSelect(ds, 'collar', 'z', D.map.collar.z) + '</div>' +
+    '<div class="dh-map-row"><label>EOH</label>' + dhColSelect(ds, 'collar', 'eoh', D.map.collar.eoh, 'none (advisory)') + '</div></div>';
+  html += '<div class="dh-map-table"><div class="dh-map-title">Survey — ' + esc(D.files.survey.name) + '</div>' +
+    '<div class="dh-map-row"><label>BHID</label>' + dhColSelect(ds, 'survey', 'bhid', D.map.survey.bhid) + '</div>' +
+    '<div class="dh-map-row"><label>Depth</label>' + dhColSelect(ds, 'survey', 'at', D.map.survey.at) + '</div>' +
+    '<div class="dh-map-row"><label>Azimuth</label>' + dhColSelect(ds, 'survey', 'az', D.map.survey.az) + '</div>' +
+    '<div class="dh-map-row"><label>Dip</label>' + dhColSelect(ds, 'survey', 'dip', D.map.survey.dip) + '</div></div>';
+  html += '<div class="dh-map-table"><div class="dh-map-title">Intervals — ' + esc(D.files.intervals.name) + '</div>' +
+    '<div class="dh-map-row"><label>BHID</label>' + dhColSelect(ds, 'intervals', 'bhid', D.map.intervals.bhid) + '</div>' +
+    '<div class="dh-map-row"><label>From</label>' + dhColSelect(ds, 'intervals', 'from', D.map.intervals.from) + '</div>' +
+    '<div class="dh-map-row"><label>To</label>' + dhColSelect(ds, 'intervals', 'to', D.map.intervals.to) + '</div>' +
     '<div class="dh-map-row" style="color:var(--fg-dim);font-size:0.65rem">every other column rides along (composited)</div></div>';
   html += '</div>';
 
   // dip convention — the deliberately loud row (D1)
-  var conv = dhDipConvention || 'pos-down';
+  var conv = D.dipConvention || 'pos-down';
   html += '<div class="dh-conv-row">' +
     '<span class="dh-conv-label">Dip convention</span>' +
     '<span class="dh-conv-detected">detected from the survey: <b>' +
@@ -16296,37 +16324,38 @@ function renderDhMapping() {
     '</span></div>';
 
   // options row
-  var dataCols = dhIntervalDataCols();
+  var dataCols = dhIntervalDataCols(ds);
   var catOpts = '<option value="">— none</option>';
   for (var dc = 0; dc < dataCols.length; dc++) {
     if (dataCols[dc].type === 'cat') catOpts += '<option value="' + esc(dataCols[dc].name) + '">' + esc(dataCols[dc].name) + '</option>';
   }
-  var autoLen = dhAutoLength();
+  var autoLen = dhAutoLength(ds);
   function mOpt(v, label) {
-    return '<option value="' + v + '"' + (dhOpts.method === v ? ' selected' : '') + '>' + label + '</option>';
+    return '<option value="' + v + '"' + (D.opts.method === v ? ' selected' : '') + '>' + label + '</option>';
   }
   html += '<div class="dh-opts">' +
-    '<div class="dh-opt"><label>Desurvey method</label><select id="dhMethod">' +
+    '<div class="dh-opt"><label>Desurvey method</label><select data-dh="method">' +
       mOpt('minimumCurvature', 'Minimum curvature') +
       mOpt('balancedTangential', 'Balanced tangential') +
       mOpt('tangential', 'Tangential') + '</select></div>' +
-    '<div class="dh-opt"><label>Composite length</label><input type="number" id="dhLength" class="dh-narrow" min="0" step="any" value="' + esc(dhOpts.length) + '" placeholder="' + (autoLen != null ? autoLen : 'auto') + '"></div>' +
-    '<div class="dh-opt"><label>Break on (domain)</label><select id="dhDomain">' + catOpts + '</select></div>' +
-    '<div class="dh-opt"><label>Min coverage %</label><input type="number" id="dhMinCov" class="dh-narrow" min="0" max="100" step="any" value="' + esc(dhOpts.minCov) + '" placeholder="off"></div>' +
+    '<div class="dh-opt"><label>Composite length</label><input type="number" data-dh="length" class="dh-narrow" min="0" step="any" value="' + esc(D.opts.length) + '" placeholder="' + (autoLen != null ? autoLen : 'auto') + '"></div>' +
+    '<div class="dh-opt"><label>Break on (domain)</label><select data-dh="domain">' + catOpts + '</select></div>' +
+    '<div class="dh-opt"><label>Min coverage %</label><input type="number" data-dh="minCov" class="dh-narrow" min="0" max="100" step="any" value="' + esc(D.opts.minCov) + '" placeholder="off"></div>' +
     '</div>';
 
   html += '<div class="dh-actions">' +
-    '<button class="dh-go" id="dhGoBtn"' + (dhMappingComplete() ? '' : ' disabled') + '>Composite &amp; load ▶</button>' +
-    '<span class="dh-status" id="dhStatus"></span></div>';
+    '<button class="dh-go" data-dh="go"' + (dhMappingComplete(ds) ? '' : ' disabled') + '>Composite &amp; load ▶</button>' +
+    '<span class="dh-status" data-dh="status"></span></div>';
 
   $m.innerHTML = html;
   // domain select value applied after render (option list is data-driven)
-  var $dom = document.getElementById('dhDomain');
-  if ($dom && dhOpts.domainCol) $dom.value = dhOpts.domainCol;
+  var $dom = dhQ('[data-dh="domain"]', root);
+  if ($dom && D.opts.domainCol) $dom.value = D.opts.domainCol;
 }
 
-function dhAutoLength() {
-  var p = dhParsed.intervals, m = dhMap.intervals;
+function dhAutoLength(ds) {
+  var D = dhStateFor(ds);
+  var p = D.parsed.intervals, m = D.map.intervals;
   if (!p || m.from == null || m.from < 0 || m.to == null || m.to < 0) return null;
   var from = [], to = [];
   for (var i = 0; i < p.rows.length; i++) {
@@ -16338,8 +16367,9 @@ function dhAutoLength() {
 
 // ── composite & load ────────────────────────────────────────────────────
 
-function dhBuildTables() {
-  var pc = dhParsed.collar, mc = dhMap.collar;
+function dhBuildTables(ds) {
+  var D = dhStateFor(ds);
+  var pc = D.parsed.collar, mc = D.map.collar;
   var collars = [];
   for (var i = 0; i < pc.rows.length; i++) {
     var r = pc.rows[i];
@@ -16349,7 +16379,7 @@ function dhBuildTables() {
       eoh: mc.eoh >= 0 ? parseFloat(r[mc.eoh]) : NaN,
     });
   }
-  var ps = dhParsed.survey, ms = dhMap.survey;
+  var ps = D.parsed.survey, ms = D.map.survey;
   var surveys = [];
   for (var s = 0; s < ps.rows.length; s++) {
     var rs = ps.rows[s];
@@ -16358,8 +16388,8 @@ function dhBuildTables() {
       depth: parseFloat(rs[ms.at]), az: parseFloat(rs[ms.az]), dip: parseFloat(rs[ms.dip]),
     });
   }
-  var pi = dhParsed.intervals, mi = dhMap.intervals;
-  var dataCols = dhIntervalDataCols();
+  var pi = D.parsed.intervals, mi = D.map.intervals;
+  var dataCols = dhIntervalDataCols(ds);
   var iv = { bhid: [], from: [], to: [], cols: [] };
   for (var c = 0; c < dataCols.length; c++) {
     iv.cols.push({ name: dataCols[c].name, type: dataCols[c].type, values: [] });
@@ -16388,29 +16418,31 @@ function dhCsvCell(v) {
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
-function dhCompositeAndLoad() {
-  if (!dhMappingComplete()) return;
-  dhSetStatus('Compositing…');
-  var lenInput = parseFloat(dhOpts.length);
-  var covInput = parseFloat(dhOpts.minCov);
+function dhCompositeAndLoad(ds) {
+  var D = dhStateFor(ds);
+  var root = dhCardRoot(ds);
+  if (!dhMappingComplete(ds)) return;
+  dhSetStatus(ds, 'Compositing…');
+  var lenInput = parseFloat(D.opts.length);
+  var covInput = parseFloat(D.opts.minCov);
   var opts = {
-    method: dhOpts.method || 'minimumCurvature',
-    dipConvention: dhDipConvention || 'pos-down',
+    method: D.opts.method || 'minimumCurvature',
+    dipConvention: D.dipConvention || 'pos-down',
     compositeLength: isFinite(lenInput) && lenInput > 0 ? lenInput : null,
-    domainCol: dhOpts.domainCol || null,
+    domainCol: D.opts.domainCol || null,
     minCoverage: isFinite(covInput) && covInput > 0 ? covInput / 100 : null,
   };
   var result;
   try {
-    result = Drillhole.process(dhBuildTables(), opts);
+    result = Drillhole.process(dhBuildTables(ds), opts);
   } catch (err) {
-    dhSetStatus('Compositing failed: ' + err.message, true);
+    dhSetStatus(ds, 'Compositing failed: ' + err.message, true);
     return;
   }
-  dhLastReport = result.report;
-  renderDhReport(document.getElementById('dhReportInline'));
+  D.lastReport = result.report;
+  renderDhReport(ds, dhQ('[data-dh="reportInline"]', root));
   if (result.rows.length === 0) {
-    dhSetStatus('No composites produced — check the report above.', true);
+    dhSetStatus(ds, 'No composites produced — check the report above.', true);
     return;
   }
 
@@ -16418,25 +16450,25 @@ function dhCompositeAndLoad() {
   for (var i = 0; i < result.rows.length; i++) {
     lines.push(result.rows[i].map(dhCsvCell).join(','));
   }
-  var stem = (dhFiles.intervals.name.replace(/\.(csv|txt|dat)$/i, '') || 'drillholes');
-  dhDerivedName = stem + '-composites.csv';
-  dhProvFiles = [dhFiles.collar.name, dhFiles.survey.name, dhFiles.intervals.name];
-  var file = new File([lines.join('\n') + '\n'], dhDerivedName, { type: 'text/csv' });
+  var stem = (D.files.intervals.name.replace(/\.(csv|txt|dat)$/i, '') || 'drillholes');
+  D.derivedName = stem + '-composites.csv';
+  D.provFiles = [D.files.collar.name, D.files.survey.name, D.files.intervals.name];
+  var file = new File([lines.join('\n') + '\n'], D.derivedName, { type: 'text/csv' });
 
   // SUPPORT is the support weight by construction — assign the role before
-  // the load so the aux sidebar renders with it selected (visible, not magic)
-  catSetRole('aux', 'weight', 'SUPPORT');
-  auxPrefix = 'dh';
-  dhSetStatus(result.report.nComposites.toLocaleString() + ' composites from ' +
+  // the load so the dataset sidebar renders with it selected (visible, not magic)
+  catSetRole(ds.id, 'weight', 'SUPPORT');
+  ds.prefix = 'dh';
+  dhSetStatus(ds, result.report.nComposites.toLocaleString() + ' composites from ' +
     result.report.nHoles + ' holes — loading…');
-  loadAuxFile(file, null);
+  loadAuxFile(file, null, undefined, ds, root);
 }
 
 // ── consistency report ──────────────────────────────────────────────────
 
-function renderDhReport(container) {
+function renderDhReport(ds, container) {
   if (!container) return;
-  var rep = dhLastReport;
+  var rep = dhStateFor(ds).lastReport;
   if (!rep) { container.innerHTML = ''; return; }
   var html = '<div class="dh-report-summary"><b>' + rep.nComposites.toLocaleString() + '</b> composites from <b>' +
     rep.nHoles + '</b> holes · length <b>' + rep.compositeLength + '</b> · dip <b>' +
@@ -16455,34 +16487,36 @@ function renderDhReport(container) {
   container.innerHTML = html;
 }
 
-function dhOpenReportModal() {
-  renderDhReport(document.getElementById('dhReportBody'));
+function dhOpenReportModal(ds) {
+  renderDhReport(ds, document.getElementById('dhReportBody'));
   document.getElementById('dhReportModal').classList.add('active');
 }
 
-// Provenance banner in the aux config header — called from renderAuxConfig
-function renderDhProvenance() {
-  var $head = auxQ('#auxHead');
+// Provenance banner in the dataset config header — called from renderAuxConfig
+function renderDhProvenance(ds) {
+  ds = ds || dsById('aux');
+  var D = dhStateFor(ds);
+  var root = dhCardRoot(ds);
+  var $head = dhQ('[data-aux="head"]', root);
   if (!$head) return;
-  var old = document.getElementById('dhProvenance');
+  var old = $head.querySelector('.dh-provenance');
   if (old) old.remove();
-  if (!auxFile || !dhDerivedName || auxFile.name !== dhDerivedName || !dhLastReport) return;
+  if (!ds.file || !D.derivedName || ds.file.name !== D.derivedName || !D.lastReport) return;
   var div = document.createElement('div');
   div.className = 'dh-provenance';
-  div.id = 'dhProvenance';
-  div.innerHTML = '<span>' + dhLastReport.nComposites.toLocaleString() + ' composites from ' +
-    dhLastReport.nHoles + ' holes · ' + dhProvFiles.map(esc).join(' + ') + '</span>' +
-    '<button id="dhProvReport">Report</button>' +
-    '<button id="dhProvEdit">Edit &amp; re-composite</button>';
+  div.innerHTML = '<span>' + D.lastReport.nComposites.toLocaleString() + ' composites from ' +
+    D.lastReport.nHoles + ' holes · ' + D.provFiles.map(esc).join(' + ') + '</span>' +
+    '<button data-dh="provReport">Report</button>' +
+    '<button data-dh="provEdit">Edit &amp; re-composite</button>';
   $head.appendChild(div);
-  document.getElementById('dhProvReport').addEventListener('click', dhOpenReportModal);
-  document.getElementById('dhProvEdit').addEventListener('click', async function() {
+  div.querySelector('[data-dh="provReport"]').addEventListener('click', function() { dhOpenReportModal(ds); });
+  div.querySelector('[data-dh="provEdit"]').addEventListener('click', async function() {
     var go = await bmaConfirm({
       title: 'Re-composite drillholes',
       html: 'Unload the current composites and return to the drillhole mapping panel? The three source files and your mapping stay in place.',
       okLabel: 'Edit set',
     });
-    if (go) clearAux(); // dh slots/mapping survive — the card is right there
+    if (go) clearAux(ds, root); // dh slots/mapping survive — the card is right there
   });
 }
 
@@ -16496,18 +16530,19 @@ function dhAutoSave() {
 
 // Mapping stored by column NAME (robust to reordered exports), index kept
 // as the tiebreaker for duplicate headers
-function dhMapToNames(role) {
-  var p = dhParsed[role];
+function dhMapToNames(ds, role) {
+  var D = dhStateFor(ds);
+  var p = D.parsed[role];
   var out = {};
-  for (var f in dhMap[role]) {
-    var idx = dhMap[role][f];
+  for (var f in D.map[role]) {
+    var idx = D.map[role][f];
     out[f] = (idx != null && idx >= 0) ? { name: p.header[idx], idx: idx } : null;
   }
   return out;
 }
 
-function dhMapFromNames(role, saved) {
-  var p = dhParsed[role];
+function dhMapFromNames(ds, role, saved) {
+  var p = dhStateFor(ds).parsed[role];
   var out = {};
   for (var f in saved) {
     var s = saved[f];
@@ -16519,95 +16554,107 @@ function dhMapFromNames(role, saved) {
   return out;
 }
 
-// The `drillholes` project key — null when no complete trio is staged
-function dhSerialize() {
-  if (!dhParsed.collar || !dhParsed.survey || !dhParsed.intervals) return null;
+// The drillhole recipe for one dataset — null when no complete trio is staged
+function dhSerialize(ds) {
+  var D = dhStateFor(ds);
+  if (!D.parsed.collar || !D.parsed.survey || !D.parsed.intervals) return null;
   return {
     files: {
-      collar: { name: dhFiles.collar.name, size: dhFiles.collar.size },
-      survey: { name: dhFiles.survey.name, size: dhFiles.survey.size },
-      intervals: { name: dhFiles.intervals.name, size: dhFiles.intervals.size },
+      collar: { name: D.files.collar.name, size: D.files.collar.size },
+      survey: { name: D.files.survey.name, size: D.files.survey.size },
+      intervals: { name: D.files.intervals.name, size: D.files.intervals.size },
     },
-    map: { collar: dhMapToNames('collar'), survey: dhMapToNames('survey'), intervals: dhMapToNames('intervals') },
-    dipConvention: dhDipConvention,
-    opts: { method: dhOpts.method, length: dhOpts.length, domainCol: dhOpts.domainCol, minCov: dhOpts.minCov },
-    loaded: !!(auxFile && dhDerivedName && auxFile.name === dhDerivedName),
+    map: { collar: dhMapToNames(ds, 'collar'), survey: dhMapToNames(ds, 'survey'), intervals: dhMapToNames(ds, 'intervals') },
+    dipConvention: D.dipConvention,
+    opts: { method: D.opts.method, length: D.opts.length, domainCol: D.opts.domainCol, minCov: D.opts.minCov },
+    loaded: !!(ds.file && D.derivedName && ds.file.name === D.derivedName),
   };
 }
 
 // applyProject hands the saved recipe here; it applies when the files land
-function dhRestoreFromProject(saved) {
-  dhPendingRestore = (saved && saved.files) ? saved : null;
-  renderDhCard();
+function dhRestoreFromProject(ds, saved) {
+  dhStateFor(ds).pendingRestore = (saved && saved.files) ? saved : null;
+  renderDhCard(ds);
 }
 
 // Files just landed in slots — if a pending recipe matches by name, apply
 // its mapping/options; when the whole trio matches a loaded:true recipe,
 // re-composite automatically (the user's saved intent — and the report
 // still renders, so nothing happens invisibly)
-function dhTryApplyPendingRestore() {
-  var pr = dhPendingRestore;
+function dhTryApplyPendingRestore(ds) {
+  var D = dhStateFor(ds);
+  var pr = D.pendingRestore;
   if (!pr) return;
   var allMatch = true;
   for (var r = 0; r < DH_ROLES.length; r++) {
     var role = DH_ROLES[r];
-    if (!dhFiles[role] || dhFiles[role].name !== pr.files[role].name) { allMatch = false; continue; }
-    dhMap[role] = dhMapFromNames(role, pr.map[role]);
+    if (!D.files[role] || D.files[role].name !== pr.files[role].name) { allMatch = false; continue; }
+    D.map[role] = dhMapFromNames(ds, role, pr.map[role]);
   }
-  if (pr.dipConvention) dhDipConvention = pr.dipConvention;
+  if (pr.dipConvention) D.dipConvention = pr.dipConvention;
   if (pr.opts) {
-    dhOpts.method = pr.opts.method || 'minimumCurvature';
-    dhOpts.length = pr.opts.length || '';
-    dhOpts.domainCol = pr.opts.domainCol || '';
-    dhOpts.minCov = pr.opts.minCov || '';
+    D.opts.method = pr.opts.method || 'minimumCurvature';
+    D.opts.length = pr.opts.length || '';
+    D.opts.domainCol = pr.opts.domainCol || '';
+    D.opts.minCov = pr.opts.minCov || '';
   }
   if (allMatch) {
     var wasLoaded = pr.loaded;
-    dhPendingRestore = null;
-    renderDhCard();
-    if (wasLoaded && dhMappingComplete()) dhCompositeAndLoad();
+    D.pendingRestore = null;
+    renderDhCard(ds);
+    if (wasLoaded && dhMappingComplete(ds)) dhCompositeAndLoad(ds);
   }
 }
 
 // Packed-project path: the raw trio extracted from the archive
-async function dhLoadTrio(trio) {
+async function dhLoadTrio(ds, trio) {
+  var D = dhStateFor(ds);
   for (var r = 0; r < DH_ROLES.length; r++) {
     var f = trio[DH_ROLES[r]];
     if (f) {
-      dhFiles[DH_ROLES[r]] = f;
-      dhParsed[DH_ROLES[r]] = await dhParseFile(f);
-      dhMap[DH_ROLES[r]] = dhAutoMap(DH_ROLES[r], dhParsed[DH_ROLES[r]].header);
+      D.files[DH_ROLES[r]] = f;
+      D.parsed[DH_ROLES[r]] = await dhParseFile(f);
+      D.map[DH_ROLES[r]] = dhAutoMap(DH_ROLES[r], D.parsed[DH_ROLES[r]].header);
     }
   }
-  dhDipConvention = dhDetectConventionFromParsed();
-  renderDhCard();
-  dhTryApplyPendingRestore();
+  D.dipConvention = dhDetectConventionFromParsed(ds);
+  renderDhCard(ds);
+  dhTryApplyPendingRestore(ds);
 }
 
-// Pack integration (D8): when the aux is drillhole-derived, the archive
+// Pack integration (D8): when a dataset is drillhole-derived, the archive
 // carries the RAW trio — the recipe in the project json re-derives on load
-function dhIsDerivedAux() {
-  return !!(auxFile && dhDerivedName && auxFile.name === dhDerivedName &&
-    dhFiles.collar && dhFiles.survey && dhFiles.intervals);
+function dhIsDerivedAux(ds) {
+  var D = dhStateFor(ds);
+  return !!(ds.file && D.derivedName && ds.file.name === D.derivedName &&
+    D.files.collar && D.files.survey && D.files.intervals);
 }
-function dhPackFiles() {
-  return [dhFiles.collar, dhFiles.survey, dhFiles.intervals];
+function dhPackFiles(ds) {
+  var D = dhStateFor(ds);
+  return [D.files.collar, D.files.survey, D.files.intervals];
 }
 
 // New file / Clear project: drillhole state starts fresh
-function dhReset() {
-  dhPendingRestore = null;
-  dhDerivedName = null;
-  dhProvFiles = null;
-  dhOpts = { method: 'minimumCurvature', length: '', domainCol: '', minCov: '' };
-  dhClearAll();
+function dhReset(ds) {
+  var D = dhStateFor(ds);
+  D.pendingRestore = null;
+  D.derivedName = null;
+  D.provFiles = null;
+  D.opts = { method: 'minimumCurvature', length: '', domainCol: '', minCov: '' };
+  dhClearAll(ds);
 }
 
-// ── wiring (DOM is parsed; runs at load) ────────────────────────────────
-(function() {
-  var $card = document.getElementById('dhCard');
-  var $input = document.getElementById('dhFileInput');
+// ── wiring — per dataset panel (called from wireDatasetPanel) ────────────
+// Attaches the drillhole card's listeners scoped to one dataset's panel root,
+// resolving the owning ds via closure. No-op when the panel has no card (the
+// rails clone keeps the card only when it can host a set). The shared report
+// modal's close button is wired once, globally, below.
+function wireDhCard(root, ds) {
+  var $card = dhQ('[data-dh="card"]', root);
+  var $input = dhQ('[data-dh="fileInput"]', root);
   if (!$card || !$input) return;
+  if ($card._dhWired) { renderDhCard(ds); return; }
+  $card._dhWired = true;
 
   $card.addEventListener('click', function(e) {
     if (e.target.closest('.dh-slot')) { $input.click(); return; }
@@ -16625,46 +16672,53 @@ function dhReset() {
     e.preventDefault(); e.stopPropagation();
     $card.querySelectorAll('.dh-slot').forEach(function(s) { s.classList.remove('drag-over'); });
     var files = Array.from(e.dataTransfer.files || []);
-    if (files.length) dhAssignFiles(files);
+    if (files.length) dhAssignFiles(ds, files);
   });
   $input.addEventListener('change', function() {
     var files = Array.from($input.files || []);
     $input.value = '';
-    if (files.length) dhAssignFiles(files);
+    if (files.length) dhAssignFiles(ds, files);
   });
 
   // delegated: mapping selects, option inputs, convention toggle, composite, clear
   $card.addEventListener('change', function(e) {
+    var D = dhStateFor(ds);
     var map = e.target.dataset && e.target.dataset.dhmap;
     if (map) {
       var parts = map.split(':');
-      dhMap[parts[0]][parts[1]] = parseInt(e.target.value);
-      if (parts[0] === 'survey' && parts[1] === 'dip') dhDipConvention = dhDetectConventionFromParsed();
-      renderDhMapping();
+      D.map[parts[0]][parts[1]] = parseInt(e.target.value);
+      if (parts[0] === 'survey' && parts[1] === 'dip') D.dipConvention = dhDetectConventionFromParsed(ds);
+      renderDhMapping(ds);
       dhAutoSave();
       return;
     }
-    if (e.target.id === 'dhMethod') { dhOpts.method = e.target.value; dhAutoSave(); }
-    else if (e.target.id === 'dhLength') { dhOpts.length = e.target.value; dhAutoSave(); }
-    else if (e.target.id === 'dhDomain') { dhOpts.domainCol = e.target.value; dhAutoSave(); }
-    else if (e.target.id === 'dhMinCov') { dhOpts.minCov = e.target.value; dhAutoSave(); }
+    var k = e.target.dataset && e.target.dataset.dh;
+    if (k === 'method') { D.opts.method = e.target.value; dhAutoSave(); }
+    else if (k === 'length') { D.opts.length = e.target.value; dhAutoSave(); }
+    else if (k === 'domain') { D.opts.domainCol = e.target.value; dhAutoSave(); }
+    else if (k === 'minCov') { D.opts.minCov = e.target.value; dhAutoSave(); }
   });
   $card.addEventListener('click', function(e) {
-    if (e.target.id === 'dhGoBtn') { dhCompositeAndLoad(); return; }
+    if (e.target.dataset && e.target.dataset.dh === 'go') { dhCompositeAndLoad(ds); return; }
+    if (e.target.dataset && e.target.dataset.dh === 'clearBtn') { dhClearAll(ds); return; }
     var conv = e.target.dataset && e.target.dataset.dhconv;
     if (conv) {
-      dhDipConvention = conv;
-      renderDhMapping();
+      dhStateFor(ds).dipConvention = conv;
+      renderDhMapping(ds);
       dhAutoSave();
       return;
     }
   });
-  document.getElementById('dhClearBtn').addEventListener('click', dhClearAll);
-  document.getElementById('dhReportClose').addEventListener('click', function() {
+
+  renderDhCard(ds);
+}
+
+// Shared report modal close (one global modal for every dataset's set)
+(function() {
+  var $close = document.getElementById('dhReportClose');
+  if ($close) $close.addEventListener('click', function() {
     document.getElementById('dhReportModal').classList.remove('active');
   });
-
-  renderDhCard();
 })();
 
 // ─── Top-cut analysis — Aux tab main-area view ─────────────────────────
@@ -17745,7 +17799,7 @@ function serializeProject() {
     layout: wsSerializeLayout(),
     // Drillhole-set recipe (A7 Phase 2, D8) — file identities + mapping +
     // options; the derived composite CSV is never persisted (re-derived)
-    drillholes: dhSerialize(),
+    drillholes: dhSerialize(dsById('aux')),
     exportCols: exportColumns.map(c => ({
       name: c.name, outputName: c.outputName, selected: c.selected
     })),
@@ -18036,7 +18090,7 @@ async function applyProject(project) {
 
   // Drillhole-set recipe — applies when its three files land on the card
   // (a re-derived composite CSV then matches pendingAuxRestore by name)
-  dhRestoreFromProject(project.drillholes || null);
+  dhRestoreFromProject(dsById('aux'), project.drillholes || null);
 
   // Stash remaining post-analysis config for when displayResults runs
   pendingProjectRestore = project;
@@ -18126,9 +18180,9 @@ function openPackModal() {
   var cmpNames = {};
   cmpNames[currentFile.name] = true;
   if (auxFile && auxFile.name !== currentFile.name) {
-    if (dhIsDerivedAux()) {
+    if (dhIsDerivedAux(dsById('aux'))) {
       // D8: the raw trio rides the pack; the recipe re-derives the composites
-      var trio = dhPackFiles();
+      var trio = dhPackFiles(dsById('aux'));
       auxPackSize += trio[0].size + trio[1].size + trio[2].size;
       trio.forEach(function(f) { cmpNames[f.name] = true; });
       cmpLabels.push('drillhole set: ' + trio.map(function(f) { return f.name; }).join(' + ') +
@@ -18202,9 +18256,9 @@ async function runPack() {
     function wantsDeflate(name) { return compress && !/\.zip$/i.test(name); }
     var files = [{ name: currentFile.name, blob: currentFile, deflate: wantsDeflate(currentFile.name) }];
     var packed = {}; packed[currentFile.name] = true;   // dedup: one archive entry per name
-    if (includeAux && dhIsDerivedAux()) {
+    if (includeAux && dhIsDerivedAux(dsById('aux'))) {
       // D8: pack the raw trio, never the derived composite CSV
-      dhPackFiles().forEach(function(f) {
+      dhPackFiles(dsById('aux')).forEach(function(f) {
         if (packed[f.name]) return;
         packed[f.name] = true;
         files.push({ name: f.name, blob: f, deflate: wantsDeflate(f.name) });
@@ -18317,7 +18371,7 @@ function clearProject() {
   pendingProjectRestore = null;
   resetExportSettings();
   wsResetLayout(true); // skipSave — clearProject just removed the stored key
-  dhReset();
+  dhReset(dsById('aux'));
 
   runPreflight(currentFile).then(data => {
     renderPreflight(data);
@@ -18545,7 +18599,7 @@ async function handleFile(file, handle, skipRecents) {
   pendingProjectRestore = null;
   resetExportSettings();
   wsResetLayout(true); // fresh file starts from the default workspace layout
-  dhReset();           // fresh file starts with empty drillhole slots
+  dhReset(dsById('aux'));   // fresh file starts with empty drillhole slots
   currentTypeOverrides = null;
   currentZipEntry = null;
   currentSkipCols = null;
@@ -18646,7 +18700,7 @@ async function handleFile(file, handle, skipRecents) {
       try {
         await applyProject(project);
         if (auxToLoad) loadAuxFile(auxToLoad, null);
-        else if (dhTrioToLoad) await dhLoadTrio(dhTrioToLoad); // re-derives + loads via the saved recipe
+        else if (dhTrioToLoad) await dhLoadTrio(dsById('aux'), dhTrioToLoad); // re-derives + loads via the saved recipe
         executeAnalysis();
       } catch (e) { /* corrupt — ignore */ }
     }
@@ -31976,7 +32030,7 @@ function wsMenuAction(a) {
     case 'newSwath': if (typeof wsSpawnSwathInstance === 'function') wsSpawnSwathInstance(); break;
     case 'newStatistics': if (typeof wsSpawnStatisticsInstance === 'function') wsSpawnStatisticsInstance(); break;
     case 'addPoint': wsAddPointDataset(); break;
-    case 'addDrillhole': { showPanel('aux'); var dh = document.getElementById('dhCard'); if (dh && dh.scrollIntoView) dh.scrollIntoView({ block: 'nearest' }); break; }
+    case 'addDrillhole': { showPanel('aux'); var dh = document.querySelector('#panelAux [data-dh="card"]'); if (dh && dh.scrollIntoView) dh.scrollIntoView({ block: 'nearest' }); break; }
     case 'help': toggleHelp(); break;
     case 'example': { var ex = document.getElementById('exampleDownload'); if (ex) ex.click(); break; }
     case 'about': wsShowAbout(); break;

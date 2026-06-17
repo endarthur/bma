@@ -198,16 +198,16 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
                 </div>
                 <div class="aux-from-main" id="auxFromMain" data-aux="fromMain"></div>
               </div>
-              <div class="ds-card dh-card" id="dhCard">
+              <div class="ds-card dh-card" data-dh="card">
                 <div class="ds-card-head">
                   <span class="ds-card-title">Drillhole set</span>
                   <span class="ds-card-sub">collar + survey + intervals → desurveyed, composited samples</span>
-                  <button class="dh-clear-btn" id="dhClearBtn" title="Clear the drillhole set" style="display:none">✕ Clear</button>
+                  <button class="dh-clear-btn" data-dh="clearBtn" title="Clear the drillhole set" style="display:none">✕ Clear</button>
                 </div>
-                <div class="dh-slots" id="dhSlots"></div>
-                <div class="dh-mapping" id="dhMapping"></div>
-                <div class="dh-report" id="dhReportInline"></div>
-                <input type="file" id="dhFileInput" multiple accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP" style="display:none">
+                <div class="dh-slots" data-dh="slots"></div>
+                <div class="dh-mapping" data-dh="mapping"></div>
+                <div class="dh-report" data-dh="reportInline"></div>
+                <input type="file" data-dh="fileInput" multiple accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP" style="display:none">
               </div>
             </div>
           </div>

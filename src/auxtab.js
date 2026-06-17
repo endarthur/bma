@@ -97,10 +97,9 @@ function renderAuxConfig(ds, root) {
 
   renderAuxPreview(ds, root);
   if (typeof renderAuxView === 'function') renderAuxView(ds, root);
-  // drillhole-derived aux: provenance banner + report/re-composite links (A7).
-  // Drillhole sets are aux-scoped until phase 5, so only the singleton aux's
-  // panel carries the banner (renderDhProvenance resolves the singleton head).
-  if (ds.id === 'aux' && typeof renderDhProvenance === 'function') renderDhProvenance();
+  // drillhole-derived dataset: provenance banner + report/re-composite links
+  // (A7; A10 phase 5 made it per-dataset — resolves this ds's head + state).
+  if (typeof renderDhProvenance === 'function') renderDhProvenance(ds);
 }
 
 // A10 4f-2: repaint just the grid section (detected badge known post-analysis)
@@ -982,4 +981,7 @@ function wireDatasetPanel(root, ds) {
 
   // Top-cut + view-toggle listeners live in topcut.js (loaded later)
   if (typeof wireDatasetTopcut === 'function') wireDatasetTopcut(root, ds);
+
+  // A10 phase 5: wire this panel's drillhole card (no-op if the panel has none)
+  if (typeof wireDhCard === 'function') wireDhCard(root, ds);
 }

@@ -497,7 +497,7 @@ function serializeProject() {
     layout: wsSerializeLayout(),
     // Drillhole-set recipe (A7 Phase 2, D8) — file identities + mapping +
     // options; the derived composite CSV is never persisted (re-derived)
-    drillholes: dhSerialize(),
+    drillholes: dhSerialize(dsById('aux')),
     exportCols: exportColumns.map(c => ({
       name: c.name, outputName: c.outputName, selected: c.selected
     })),
@@ -788,7 +788,7 @@ async function applyProject(project) {
 
   // Drillhole-set recipe — applies when its three files land on the card
   // (a re-derived composite CSV then matches pendingAuxRestore by name)
-  dhRestoreFromProject(project.drillholes || null);
+  dhRestoreFromProject(dsById('aux'), project.drillholes || null);
 
   // Stash remaining post-analysis config for when displayResults runs
   pendingProjectRestore = project;
@@ -878,9 +878,9 @@ function openPackModal() {
   var cmpNames = {};
   cmpNames[currentFile.name] = true;
   if (auxFile && auxFile.name !== currentFile.name) {
-    if (dhIsDerivedAux()) {
+    if (dhIsDerivedAux(dsById('aux'))) {
       // D8: the raw trio rides the pack; the recipe re-derives the composites
-      var trio = dhPackFiles();
+      var trio = dhPackFiles(dsById('aux'));
       auxPackSize += trio[0].size + trio[1].size + trio[2].size;
       trio.forEach(function(f) { cmpNames[f.name] = true; });
       cmpLabels.push('drillhole set: ' + trio.map(function(f) { return f.name; }).join(' + ') +
@@ -954,9 +954,9 @@ async function runPack() {
     function wantsDeflate(name) { return compress && !/\.zip$/i.test(name); }
     var files = [{ name: currentFile.name, blob: currentFile, deflate: wantsDeflate(currentFile.name) }];
     var packed = {}; packed[currentFile.name] = true;   // dedup: one archive entry per name
-    if (includeAux && dhIsDerivedAux()) {
+    if (includeAux && dhIsDerivedAux(dsById('aux'))) {
       // D8: pack the raw trio, never the derived composite CSV
-      dhPackFiles().forEach(function(f) {
+      dhPackFiles(dsById('aux')).forEach(function(f) {
         if (packed[f.name]) return;
         packed[f.name] = true;
         files.push({ name: f.name, blob: f, deflate: wantsDeflate(f.name) });
@@ -1069,7 +1069,7 @@ function clearProject() {
   pendingProjectRestore = null;
   resetExportSettings();
   wsResetLayout(true); // skipSave — clearProject just removed the stored key
-  dhReset();
+  dhReset(dsById('aux'));
 
   runPreflight(currentFile).then(data => {
     renderPreflight(data);
@@ -1297,7 +1297,7 @@ async function handleFile(file, handle, skipRecents) {
   pendingProjectRestore = null;
   resetExportSettings();
   wsResetLayout(true); // fresh file starts from the default workspace layout
-  dhReset();           // fresh file starts with empty drillhole slots
+  dhReset(dsById('aux'));   // fresh file starts with empty drillhole slots
   currentTypeOverrides = null;
   currentZipEntry = null;
   currentSkipCols = null;
@@ -1398,7 +1398,7 @@ async function handleFile(file, handle, skipRecents) {
       try {
         await applyProject(project);
         if (auxToLoad) loadAuxFile(auxToLoad, null);
-        else if (dhTrioToLoad) await dhLoadTrio(dhTrioToLoad); // re-derives + loads via the saved recipe
+        else if (dhTrioToLoad) await dhLoadTrio(dsById('aux'), dhTrioToLoad); // re-derives + loads via the saved recipe
         executeAnalysis();
       } catch (e) { /* corrupt — ignore */ }
     }
