@@ -4101,6 +4101,9 @@ table.cat-values tr.cat-aux-only td { background: color-mix(in srgb, var(--brand
   transition: border-color 0.12s, color 0.12s;
 }
 .preflight-empty-btn:hover { border-color: var(--action); color: var(--fg-bright); }
+.preflight-empty-btn--primary { border-style: solid; border-color: var(--action); color: var(--action); }
+.preflight-empty-btn--primary:hover { background: var(--action); color: var(--bg); }
+.preflight-empty-hint { margin-top: 0.9rem; font-size: 0.72rem; color: var(--fg-dim); opacity: 0.7; }
 
 .stats-weight-select {
   width: 100%; box-sizing: border-box;
@@ -5988,7 +5991,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 4840667 — click to check for updates">4840667</div>
+<div class="build-badge" id="buildBadge" title="build fa4798d — click to check for updates">fa4798d</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -14528,15 +14531,19 @@ function renderPreflightEmpty() {
   $preflightPreview.innerHTML =
     '<div class="preflight-empty-state">' +
       '<div class="preflight-empty-title">No model loaded</div>' +
-      '<div class="preflight-empty-sub">This project has no block model yet. Drop a model CSV onto the window to set one, ' +
+      '<div class="preflight-empty-sub">This project has no block model yet. Load one to anchor the analysis, ' +
         'or add a point cloud / drillhole dataset to work without a model.</div>' +
       '<div class="preflight-empty-actions">' +
+        '<button type="button" class="preflight-empty-btn preflight-empty-btn--primary" id="pfEmptyLoadModel">Load model file…</button>' +
         '<button type="button" class="preflight-empty-btn" id="pfEmptyAddPoint">+ Add point dataset</button>' +
         '<button type="button" class="preflight-empty-btn" id="pfEmptyAddDh">+ Add drillhole set</button>' +
       '</div>' +
+      '<div class="preflight-empty-hint">…or drop a model CSV anywhere on the window.</div>' +
     '</div>';
+  var bm = document.getElementById('pfEmptyLoadModel');
   var bp = document.getElementById('pfEmptyAddPoint');
   var bd = document.getElementById('pfEmptyAddDh');
+  if (bm) bm.onclick = function() { if (typeof pickModelFile === 'function') pickModelFile(); };
   if (bp) bp.onclick = function() { if (typeof wsAddPointDataset === 'function') wsAddPointDataset(); };
   if (bd) bd.onclick = function() { if (typeof wsAddDrillholeDataset === 'function') wsAddDrillholeDataset(); };
 }
@@ -19088,6 +19095,70 @@ async function openPackedModelless(packed) {
   refreshCatalogTree();
 }
 
+// Load a model into a model-less project IN PLACE — unlike handleFile (which
+// resets everything for a fresh model), this preserves the comparison datasets,
+// catalog, layout and title already in the project. The project becomes model-
+// backed: re-key from its 'bma:proj:<id>' identity to the model file key (dual-
+// key). Only valid when there is no model yet (currentFile null).
+async function setProjectModel(file, handle) {
+  if (!file || currentFile) return;
+  var oldId = currentProjectId;
+  currentFile = file;
+  currentProjectId = null;                                  // now model-backed (file key)
+  if (oldId) { try { localStorage.removeItem('bma:proj:' + oldId); } catch (e) { /* ignore */ } }
+  if (typeof saveToRecents === 'function') saveToRecents(file, handle);
+  if (worker) { worker.terminate(); worker = null; }        // a fresh model gets a fresh analysis
+  lastCompleteData = null;
+  currentDXYZ = { dx: -1, dy: -1, dz: -1 };
+  currentGridMode = null;
+  $resultsFilename.textContent = file.name;
+  $filterSection.classList.add('active');
+  $appFooter.classList.add('active');
+  if (typeof wsSetDatasetTabTitle === 'function' && typeof dsById === 'function') wsSetDatasetTabTitle(dsById('model'));
+  try {
+    var data = await runPreflight(file);
+    renderPreflight(data);                                  // sets preflightData, shows column config + model filter
+    if (typeof catEnsureSeeded === 'function') catEnsureSeeded();   // seeds model props, pairs to existing comparison columns by name
+    if (typeof refreshModelGridSection === 'function') refreshModelGridSection();
+    markAnalysisStale();
+    showPanel('preflight');
+    refreshCatalogTree();
+    if (typeof autoSaveProject === 'function') autoSaveProject();
+  } catch (err) {
+    $errorMsg.textContent = err.message;
+    $errorMsg.classList.add('active');
+  }
+}
+
+// Open a file picker for a model and load it into the current model-less project
+// (the empty Import-Model tab's "Load model file" action).
+async function pickModelFile() {
+  if (typeof HAS_FSAA !== 'undefined' && HAS_FSAA && window.showOpenFilePicker) {
+    try {
+      var handles = await window.showOpenFilePicker({
+        types: [
+          { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
+          { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } },
+          { description: 'Datamine files', accept: { 'application/octet-stream': ['.dm'] } }
+        ],
+        multiple: false
+      });
+      var h = handles[0];
+      var f = await h.getFile();
+      setProjectModel(f, h);
+    } catch (ex) { /* user cancelled */ }
+    return;
+  }
+  // Fallback: a transient file input
+  var inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.csv,.txt,.dat,.zip,.dm,.CSV,.TXT,.DAT,.ZIP,.DM';
+  inp.style.display = 'none';
+  inp.addEventListener('change', function() { if (inp.files && inp.files[0]) setProjectModel(inp.files[0], null); inp.remove(); });
+  document.body.appendChild(inp);
+  inp.click();
+}
+
 async function handleFile(file, handle, skipRecents) {
   if (!file) return;
 
@@ -19319,18 +19390,15 @@ $results.addEventListener('drop', async (e) => {
   // a model-backed project (and, per the Standing Rule, warns that the current
   // datasets won't carry over — preserving them across a model-add is future work).
   if (currentProjectId && !currentFile && !isProject && !isArchive) {
-    var withData = datasets.filter(function(d) { return d.id !== 'model' && d.file; }).length;
     var ch = await bmaConfirm({
       title: 'Add “' + esc(file.name) + '”',
-      html: '<p>This project has no model. Add this file as a <strong>comparison dataset</strong>, or <strong>set it as the model</strong>' +
-        (withData ? ' (starts a model-backed project — the ' + withData + ' current dataset' + (withData > 1 ? 's' : '') + ' won’t carry over)' : '') +
-        '?</p>',
+      html: '<p>This project has no model. Add this file as a <strong>comparison dataset</strong>, or <strong>set it as the model</strong> (the datasets you already added stay)?</p>',
       okLabel: 'Add as comparison',
       extraLabel: 'Set as model',
       cancelLabel: 'Cancel'
     });
     if (ch === true) wsLoadComparisonFile(file, handle);
-    else if (ch === 'extra') handleFile(file, handle);
+    else if (ch === 'extra') setProjectModel(file, handle);   // loads the model in place, preserving the datasets
     return;
   }
   handleFile(file, handle);

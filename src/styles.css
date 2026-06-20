@@ -4086,6 +4086,9 @@ table.cat-values tr.cat-aux-only td { background: color-mix(in srgb, var(--brand
   transition: border-color 0.12s, color 0.12s;
 }
 .preflight-empty-btn:hover { border-color: var(--action); color: var(--fg-bright); }
+.preflight-empty-btn--primary { border-style: solid; border-color: var(--action); color: var(--action); }
+.preflight-empty-btn--primary:hover { background: var(--action); color: var(--bg); }
+.preflight-empty-hint { margin-top: 0.9rem; font-size: 0.72rem; color: var(--fg-dim); opacity: 0.7; }
 
 .stats-weight-select {
   width: 100%; box-sizing: border-box;

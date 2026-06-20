@@ -1609,6 +1609,70 @@ async function openPackedModelless(packed) {
   refreshCatalogTree();
 }
 
+// Load a model into a model-less project IN PLACE — unlike handleFile (which
+// resets everything for a fresh model), this preserves the comparison datasets,
+// catalog, layout and title already in the project. The project becomes model-
+// backed: re-key from its 'bma:proj:<id>' identity to the model file key (dual-
+// key). Only valid when there is no model yet (currentFile null).
+async function setProjectModel(file, handle) {
+  if (!file || currentFile) return;
+  var oldId = currentProjectId;
+  currentFile = file;
+  currentProjectId = null;                                  // now model-backed (file key)
+  if (oldId) { try { localStorage.removeItem('bma:proj:' + oldId); } catch (e) { /* ignore */ } }
+  if (typeof saveToRecents === 'function') saveToRecents(file, handle);
+  if (worker) { worker.terminate(); worker = null; }        // a fresh model gets a fresh analysis
+  lastCompleteData = null;
+  currentDXYZ = { dx: -1, dy: -1, dz: -1 };
+  currentGridMode = null;
+  $resultsFilename.textContent = file.name;
+  $filterSection.classList.add('active');
+  $appFooter.classList.add('active');
+  if (typeof wsSetDatasetTabTitle === 'function' && typeof dsById === 'function') wsSetDatasetTabTitle(dsById('model'));
+  try {
+    var data = await runPreflight(file);
+    renderPreflight(data);                                  // sets preflightData, shows column config + model filter
+    if (typeof catEnsureSeeded === 'function') catEnsureSeeded();   // seeds model props, pairs to existing comparison columns by name
+    if (typeof refreshModelGridSection === 'function') refreshModelGridSection();
+    markAnalysisStale();
+    showPanel('preflight');
+    refreshCatalogTree();
+    if (typeof autoSaveProject === 'function') autoSaveProject();
+  } catch (err) {
+    $errorMsg.textContent = err.message;
+    $errorMsg.classList.add('active');
+  }
+}
+
+// Open a file picker for a model and load it into the current model-less project
+// (the empty Import-Model tab's "Load model file" action).
+async function pickModelFile() {
+  if (typeof HAS_FSAA !== 'undefined' && HAS_FSAA && window.showOpenFilePicker) {
+    try {
+      var handles = await window.showOpenFilePicker({
+        types: [
+          { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
+          { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } },
+          { description: 'Datamine files', accept: { 'application/octet-stream': ['.dm'] } }
+        ],
+        multiple: false
+      });
+      var h = handles[0];
+      var f = await h.getFile();
+      setProjectModel(f, h);
+    } catch (ex) { /* user cancelled */ }
+    return;
+  }
+  // Fallback: a transient file input
+  var inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.csv,.txt,.dat,.zip,.dm,.CSV,.TXT,.DAT,.ZIP,.DM';
+  inp.style.display = 'none';
+  inp.addEventListener('change', function() { if (inp.files && inp.files[0]) setProjectModel(inp.files[0], null); inp.remove(); });
+  document.body.appendChild(inp);
+  inp.click();
+}
+
 async function handleFile(file, handle, skipRecents) {
   if (!file) return;
 
@@ -1840,18 +1904,15 @@ $results.addEventListener('drop', async (e) => {
   // a model-backed project (and, per the Standing Rule, warns that the current
   // datasets won't carry over — preserving them across a model-add is future work).
   if (currentProjectId && !currentFile && !isProject && !isArchive) {
-    var withData = datasets.filter(function(d) { return d.id !== 'model' && d.file; }).length;
     var ch = await bmaConfirm({
       title: 'Add “' + esc(file.name) + '”',
-      html: '<p>This project has no model. Add this file as a <strong>comparison dataset</strong>, or <strong>set it as the model</strong>' +
-        (withData ? ' (starts a model-backed project — the ' + withData + ' current dataset' + (withData > 1 ? 's' : '') + ' won’t carry over)' : '') +
-        '?</p>',
+      html: '<p>This project has no model. Add this file as a <strong>comparison dataset</strong>, or <strong>set it as the model</strong> (the datasets you already added stay)?</p>',
       okLabel: 'Add as comparison',
       extraLabel: 'Set as model',
       cancelLabel: 'Cancel'
     });
     if (ch === true) wsLoadComparisonFile(file, handle);
-    else if (ch === 'extra') handleFile(file, handle);
+    else if (ch === 'extra') setProjectModel(file, handle);   // loads the model in place, preserving the datasets
     return;
   }
   handleFile(file, handle);

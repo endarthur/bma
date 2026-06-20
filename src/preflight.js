@@ -632,15 +632,19 @@ function renderPreflightEmpty() {
   $preflightPreview.innerHTML =
     '<div class="preflight-empty-state">' +
       '<div class="preflight-empty-title">No model loaded</div>' +
-      '<div class="preflight-empty-sub">This project has no block model yet. Drop a model CSV onto the window to set one, ' +
+      '<div class="preflight-empty-sub">This project has no block model yet. Load one to anchor the analysis, ' +
         'or add a point cloud / drillhole dataset to work without a model.</div>' +
       '<div class="preflight-empty-actions">' +
+        '<button type="button" class="preflight-empty-btn preflight-empty-btn--primary" id="pfEmptyLoadModel">Load model file…</button>' +
         '<button type="button" class="preflight-empty-btn" id="pfEmptyAddPoint">+ Add point dataset</button>' +
         '<button type="button" class="preflight-empty-btn" id="pfEmptyAddDh">+ Add drillhole set</button>' +
       '</div>' +
+      '<div class="preflight-empty-hint">…or drop a model CSV anywhere on the window.</div>' +
     '</div>';
+  var bm = document.getElementById('pfEmptyLoadModel');
   var bp = document.getElementById('pfEmptyAddPoint');
   var bd = document.getElementById('pfEmptyAddDh');
+  if (bm) bm.onclick = function() { if (typeof pickModelFile === 'function') pickModelFile(); };
   if (bp) bp.onclick = function() { if (typeof wsAddPointDataset === 'function') wsAddPointDataset(); };
   if (bd) bd.onclick = function() { if (typeof wsAddDrillholeDataset === 'function') wsAddDrillholeDataset(); };
 }
