@@ -134,6 +134,57 @@ function renderRecentFiles() {
   });
 }
 
+// Model-optional projects: list the model-less projects saved in localStorage
+// (bma:proj:<id>) on the landing screen. These have no model file to drop, so
+// this is their reopen path (openProjectById); each then awaits its dataset files.
+function renderProjectList() {
+  var $pl = document.getElementById('projectList');
+  if (!$pl) return;
+  var projs = [];
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (!k || k.indexOf('bma:proj:') !== 0) continue;
+      try {
+        var p = JSON.parse(localStorage.getItem(k));
+        if (p && p._bma) projs.push({
+          id: p.id || k.slice(9),
+          title: p.title,
+          ts: p._ts || 0,
+          count: (p.datasets ? p.datasets.length : 0) + (p.aux && p.aux.fileName ? 1 : 0)
+        });
+      } catch (e) { /* corrupt entry — skip */ }
+    }
+  } catch (e) { $pl.innerHTML = ''; return; }
+  if (!projs.length) { $pl.innerHTML = ''; return; }
+  projs.sort(function(a, b) { return b.ts - a.ts; });
+  var html = '<div class="recent-files-title">Projects</div>';
+  for (var j = 0; j < projs.length; j++) {
+    var pr = projs[j];
+    html += '<div class="recent-item project-item" data-proj="' + esc(pr.id) + '">';
+    html += '<span class="recent-item-name">' + esc(pr.title || 'Untitled project') + '</span>';
+    html += '<span class="recent-item-size">' + pr.count + ' dataset' + (pr.count === 1 ? '' : 's') + '</span>';
+    html += '<span class="recent-item-project">project</span>';
+    html += '<span class="recent-item-time">' + timeAgo(pr.ts) + '</span>';
+    html += '<button class="recent-item-remove" data-proj="' + esc(pr.id) + '" title="Remove">✕</button>';
+    html += '</div>';
+  }
+  $pl.innerHTML = html;
+  $pl.querySelectorAll('.project-item').forEach(function(el) {
+    el.addEventListener('click', function(e) {
+      if (e.target.closest('.recent-item-remove')) return;
+      openProjectById(el.getAttribute('data-proj'));
+    });
+  });
+  $pl.querySelectorAll('.recent-item-remove').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      try { localStorage.removeItem('bma:proj:' + btn.getAttribute('data-proj')); } catch (ex) { /* ignore */ }
+      renderProjectList();
+    });
+  });
+}
+
 function reopenRecent(key) {
   openCacheDB().then(function(db) {
     return new Promise(function(resolve, reject) {
@@ -332,6 +383,14 @@ function formatBytes(b) {
 }
 
 function projectKey(f) { return 'bma:' + f.name + ':' + f.size; }
+// Dual-key identity: model-backed projects key on the model file (unchanged);
+// model-less projects key on their generated id ('bma:proj:<uuid>'). Returns null
+// before a project exists (nothing to save).
+function currentProjectKey() {
+  if (currentFile) return projectKey(currentFile);
+  if (currentProjectId) return 'bma:proj:' + currentProjectId;
+  return null;
+}
 
 // A10 phase 4e-b: serialize the comparison-dataset instances (d2, d3…) — same
 // config shape as the legacy `aux` block plus the stable id, which re-keys the
@@ -429,9 +488,10 @@ function serializeProject() {
   return {
     _bma: 1,
     _ts: Date.now(),
+    id: currentProjectId,   // model-optional: set for model-less projects, null when model-backed
     title: projectTitle,
     activeTab: document.querySelector('.results-tab.active')?.dataset.tab || null,
-    file: { name: currentFile.name, size: currentFile.size },
+    file: currentFile ? { name: currentFile.name, size: currentFile.size } : null,
     preflight: {
       typeOverrides: preflightData?.typeOverrides || {},
       skipCols: preflightData ? Array.from(preflightData.skipCols) : [],
@@ -639,9 +699,12 @@ function autoSaveProject() {
   refreshCatalogTree();
   clearTimeout(autoSaveTimer);
   autoSaveTimer = setTimeout(() => {
-    if (!currentFile || !preflightData) return;
+    // Model-backed needs a preflight before there's anything to save; model-less
+    // projects save from creation. Key resolves via the dual-key currentProjectKey().
+    var key = currentProjectKey();
+    if (!key || (currentFile && !preflightData)) return;
     try {
-      localStorage.setItem(projectKey(currentFile), JSON.stringify(serializeProject()));
+      localStorage.setItem(key, JSON.stringify(serializeProject()));
     } catch (e) { /* quota — silent fail */ }
   }, 2000);
 }
@@ -649,11 +712,12 @@ function autoSaveProject() {
 // C6-2: File → Save (Ctrl+S) — flush the continuous autosave immediately and
 // flash a peace-of-mind "Saved ✓" beat. Same write the debounced timer does.
 function flushProjectSave() {
-  if (!currentFile || !preflightData) return;
+  var key = currentProjectKey();
+  if (!key || (currentFile && !preflightData)) return;
   clearTimeout(autoSaveTimer);
   var ok = false;
   try {
-    localStorage.setItem(projectKey(currentFile), JSON.stringify(serializeProject()));
+    localStorage.setItem(key, JSON.stringify(serializeProject()));
     ok = true;
   } catch (e) { /* quota — silent fail */ }
   var beat = document.getElementById('saveBeat');
@@ -669,6 +733,7 @@ function flushProjectSave() {
 async function applyProject(project) {
   if (!project || !project._bma) return;
 
+  currentProjectId = project.id || null;   // model-optional: restore the dual-key id (null for model-backed)
   projectTitle = project.title || null;
   updateProjectTitleDisplay();
 
@@ -1437,18 +1502,9 @@ function clearTabPlaceholders() {
 // Start a fresh, model-less project (A10 model-optional): no model file, a
 // generated project id (dual-key persistence), an empty workspace the user fills
 // with point/drillhole datasets. The model slot stays available but empty.
-function newEmptyProject() {
-  resetProjectState();
-  currentFile = null;
-  preflightData = null;
-  currentColTypes = null;
-  currentHeader = null;
-  currentXYZ = null;
-  currentProjectId = (typeof crypto !== 'undefined' && crypto.randomUUID)
-    ? crypto.randomUUID()
-    : ('p' + Date.now() + '-' + Math.random().toString(36).slice(2));
-
-  // Workspace UI transition (mirrors handleFile, sans a model file)
+// Reveal the rails workspace for a model-less project (mirrors handleFile's UI
+// transition, sans a model file). Shared by newEmptyProject + openProjectById.
+function enterModellessWorkspaceUI() {
   $dropzone.classList.add('collapsed');
   $dropzone.querySelector('.label').innerHTML = 'Drop a model file, or add datasets below:';
   var loadedSpan = $dropzone.querySelector('.loaded-name');
@@ -1461,9 +1517,46 @@ function newEmptyProject() {
   $resultsMemInfo.textContent = '';
   clearTabPlaceholders();
   renderPreflightEmpty();              // model-import tab shows a "no model yet" prompt
+}
+
+function newEmptyProject() {
+  resetProjectState();
+  currentFile = null;
+  preflightData = null;
+  currentColTypes = null;
+  currentHeader = null;
+  currentXYZ = null;
+  currentProjectId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : ('p' + Date.now() + '-' + Math.random().toString(36).slice(2));
+  enterModellessWorkspaceUI();
   showPanel('preflight');
   refreshCatalogTree();
   if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+
+// Reopen a saved model-less project from localStorage (bma:proj:<id>). The
+// workspace comes up empty and applyProject restores its config + comparison-
+// dataset instances; each dataset awaits re-supply of its file (the same pending-
+// restore path model-backed comparisons use on reload), or comes via a packed zip.
+async function openProjectById(id) {
+  var raw = null;
+  try { raw = localStorage.getItem('bma:proj:' + id); } catch (e) { /* unavailable */ }
+  if (!raw) return;
+  var project = null;
+  try { project = JSON.parse(raw); } catch (e) { return; }
+  if (!project || !project._bma) return;
+  resetProjectState();
+  currentFile = null;
+  preflightData = null;
+  currentColTypes = null;
+  currentHeader = null;
+  currentXYZ = null;
+  currentProjectId = id;
+  enterModellessWorkspaceUI();
+  showPanel('preflight');
+  try { await applyProject(project); } catch (e) { /* corrupt — ignore */ }
+  refreshCatalogTree();
 }
 
 async function handleFile(file, handle, skipRecents) {
@@ -1605,7 +1698,9 @@ $backToPreflight.addEventListener('click', () => {
   if (loadedSpan) loadedSpan.remove();
   $dropzone.querySelector('.label').innerHTML = 'Drop a CSV file here, or <strong>click to browse</strong>';
   renderRecentFiles();
+  if (typeof renderProjectList === 'function') renderProjectList();
   currentFile = null;
+  currentProjectId = null;   // closing returns to the landing; a model-less project is reopened from its list
   preflightData = null;
   hasResults = false;
   currentCalcolCode = '';

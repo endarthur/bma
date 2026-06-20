@@ -12,5 +12,6 @@ function showCDF(colIdx) {
 
 // (service worker registration lives in pwa.js)
 
-// Load recent files on page load
+// Load recent files + saved (model-less) projects on page load
 renderRecentFiles();
+if (typeof renderProjectList === 'function') renderProjectList();
