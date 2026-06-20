@@ -5931,7 +5931,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 8c24c1c — click to check for updates">8c24c1c</div>
+<div class="build-badge" id="buildBadge" title="build 9db46fb — click to check for updates">9db46fb</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -32833,6 +32833,15 @@ function showPanel(tabId) {
 function wsActivateInRails(tabId) {
   if (!wsRails) return;
   if (findTab(wsRails.state, tabId)) { wsRails.activateTab(tabId); return; }
+  // aux is a de-privileged comparison-dataset tab (A10): closeable + named after
+  // its file, like d2+ — not a permanent singleton. Re-add it that way.
+  if (tabId === 'aux') {
+    var auxDs = (typeof dsById === 'function') ? dsById('aux') : null;
+    wsRails.addTab({ id: 'aux', title: auxDs ? wsDatasetTabName(auxDs) : 'Aux', closeable: true }, wsMainTarget());
+    wsSyncBadgesFromLegacy();
+    wsSyncLegacyTabbar(tabId);
+    return;
+  }
   // Closed singleton panel: re-add it to the main workspace. Singletons are
   // re-homed at close, so renderPanel re-fetches the same element.
   var p = wsPanelById(tabId);
@@ -32884,7 +32893,7 @@ function wsPanelById(id) {
 
 // Default layout = familiar (C1b D3): tree rail + single main stack
 function wsDefaultLayout(activeId) {
-  if (!wsPanelById(activeId)) activeId = 'preflight';
+  if (!wsPanelById(activeId) || activeId === 'aux') activeId = 'preflight';   // aux isn't in the default layout
   return {
     rails: [
       { id: WS_TREE_RAIL, flex: 0, width: 250, collapsible: true,
@@ -32893,7 +32902,10 @@ function wsDefaultLayout(activeId) {
           tabs: [{ id: 'data', title: 'Data', closeable: false, draggable: false }] }] },
       { id: WS_MAIN_RAIL, flex: 1,
         stacks: [{ id: WS_MAIN_STACK, flex: 1, active: activeId,
-          tabs: WS_PANELS.map(function(p) {
+          // 'aux' (the first comparison) is no longer always-present — it opens on
+          // demand via Add comparison dataset, like d2+. So it's omitted from the
+          // default layout (an empty "Aux" tab was clutter + a privileged holdover).
+          tabs: WS_PANELS.filter(function(p) { return p.id !== 'aux'; }).map(function(p) {
             return { id: p.id, title: p.title };
           }) }] }
     ],
@@ -32994,14 +33006,22 @@ function wsBuildDatasetPanel(ds) {
   return el;
 }
 
-// Data ▸ Add point dataset… — spawn a new instance and activate its (empty)
-// import panel; the panel's own dropzone/picker loads the file into the ds.
-function wsAddPointDataset() {
+// Add a comparison dataset (point or drillhole) as a fresh d2+ instance and open
+// its empty import surface; the panel's own dropzone/picker loads the file. The
+// legacy singleton 'aux' is retired from this flow (it's no longer an always-
+// present tab — see wsDefaultLayout); every new comparison is a peer instance.
+// On the legacy/mobile shell (no instance tabs) we fall back to the aux panel.
+// kind: 'point' | 'drillhole'.
+function wsAddComparisonDataset(kind) {
   if (!wsRails) {
-    // Legacy/mobile shell has no instance tabs — fall back to the singleton aux
     showPanel('aux');
-    var afi = document.getElementById('auxFileInput');
-    if (afi) afi.click();
+    if (kind === 'drillhole') {
+      var dhl = document.querySelector('#panelAux [data-dh="card"]');
+      if (dhl && dhl.scrollIntoView) dhl.scrollIntoView({ block: 'nearest' });
+    } else {
+      var afi = document.getElementById('auxFileInput');
+      if (afi) afi.click();
+    }
     return;
   }
   if (typeof dsCreate !== 'function') return;
@@ -33009,26 +33029,13 @@ function wsAddPointDataset() {
   dsAdd(ds);
   wsRails.addTab({ id: ds.id, title: 'Import: ' + ds.prefix, closeable: true }, wsMainTarget());
   wsRails.activateTab(ds.id);   // renderPanel → wsBuildDatasetPanel (empty import surface)
-}
-
-// Data ▸ Add drillhole set… — A10 phase 5. Spawn a fresh dataset instance and
-// reveal its drillhole card (each instance hosts its own set). On the legacy
-// shell (no instance tabs) fall back to the singleton aux's card.
-function wsAddDrillholeDataset() {
-  if (!wsRails) {
-    showPanel('aux');
-    var dha = document.querySelector('#panelAux [data-dh="card"]');
-    if (dha && dha.scrollIntoView) dha.scrollIntoView({ block: 'nearest' });
-    return;
+  if (kind === 'drillhole') {
+    var dh = document.querySelector('.ds-panel[data-ds="' + ds.id + '"] [data-dh="card"]');
+    if (dh && dh.scrollIntoView) dh.scrollIntoView({ block: 'nearest' });
   }
-  if (typeof dsCreate !== 'function') return;
-  var ds = dsCreate({ prefix: 'data' });
-  dsAdd(ds);
-  wsRails.addTab({ id: ds.id, title: 'Import: ' + ds.prefix, closeable: true }, wsMainTarget());
-  wsRails.activateTab(ds.id);   // renderPanel → wsBuildDatasetPanel builds + wires the card
-  var dh = document.querySelector('.ds-panel[data-ds="' + ds.id + '"] [data-dh="card"]');
-  if (dh && dh.scrollIntoView) dh.scrollIntoView({ block: 'nearest' });
 }
+function wsAddPointDataset() { wsAddComparisonDataset('point'); }
+function wsAddDrillholeDataset() { wsAddComparisonDataset('drillhole'); }
 
 // A10 4e-b: recreate a comparison-dataset instance from its saved config on
 // project load. The registry entry + rails tab come back immediately with the
@@ -33265,13 +33272,19 @@ function wsEnterRails() {
 // selecting routes through showPanel (activate-or-add). Used by the
 // toolbar ⋮ dropdown and the strip context menu.
 function wsPanelsMenuItems() {
-  return WS_PANELS.map(function(p) {
-    return {
-      label: p.title,
-      checked: !!(wsRails && findTab(wsRails.state, p.id)),
-      action: { panel: p.id }
-    };
+  var out = [];
+  WS_PANELS.forEach(function(p) {
+    // 'aux' is added via "Add comparison dataset" when empty; only list it for
+    // reopening once it holds data (and use its file-following label).
+    if (p.id === 'aux') {
+      var aux = (typeof dsById === 'function') ? dsById('aux') : null;
+      if (!aux || !aux.file) return;
+      out.push({ label: wsDatasetTabName(aux), checked: !!(wsRails && findTab(wsRails.state, 'aux')), action: { panel: 'aux' } });
+      return;
+    }
+    out.push({ label: p.title, checked: !!(wsRails && findTab(wsRails.state, p.id)), action: { panel: p.id } });
   });
+  return out;
 }
 
 // "+" launcher (A10 4e-c) — the new-tab button at the end of each strip spawns
@@ -33281,6 +33294,12 @@ function wsNewTabMenuItems() {
   var items = [];
   WS_PANELS.forEach(function(p) {
     if (wsRails && findTab(wsRails.state, p.id)) return;   // already open — skip
+    if (p.id === 'aux') {   // reopenable only once it holds data (else use Add comparison)
+      var aux = (typeof dsById === 'function') ? dsById('aux') : null;
+      if (!aux || !aux.file) return;
+      items.push({ label: wsDatasetTabName(aux), action: { panel: 'aux' } });
+      return;
+    }
     items.push({ label: p.title, action: { panel: p.id } });
   });
   if (items.length) items.push('---');
