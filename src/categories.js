@@ -1,5 +1,82 @@
 // ─── Categories Tab ────────────────────────────────────────────────────
-let _catData = null;       // cached { categories, header, origColCount, rowCount }
+let _catData = null;       // cached { categories, header, origColCount, rowCount } — the MODEL snapshot
+
+// ─── ws-v2 phase 1: per-panel target dataset ───────────────────────────────
+// Categories no longer hardwires the model. catTargetDs(root) is the panel's
+// PRIMARY dataset (its categorical columns are the sidebar list + focused
+// chart/table); every OTHER analyzed dataset becomes a comparison overlay. With
+// target 'model' (default) catCtx returns the _catData model snapshot verbatim →
+// bit-identical. _catData stays the model snapshot for external readers
+// (project.js focusedCol persistence, clone restore-by-name). Mirrors statsCtx.
+function catTargetableDatasets() {
+  var out = [];
+  for (var i = 0; i < datasets.length; i++) {
+    var d = datasets[i];
+    if (d.complete && d.complete.categories && Object.keys(d.complete.categories).length) out.push(d);
+  }
+  return out;
+}
+function catTargetDs(root) {
+  var id = (catStateForRoot(root) || {}).catTargetDsId || 'model';
+  var ds = dsById(id);
+  if (ds && ds.complete && ds.complete.categories) return ds;
+  var ts = catTargetableDatasets();
+  return ts.length ? ts[0] : (dsById('model') || datasets[0]);
+}
+function catCtx(root) {
+  var ds = catTargetDs(root);
+  var isModel = ds.id === 'model';
+  if (isModel) {
+    return {
+      ds: ds, id: 'model', isModel: true,
+      categories: _catData ? _catData.categories : {},
+      header: _catData ? _catData.header : [],
+      origColCount: _catData ? _catData.origColCount : 0,
+      rowCount: _catData ? _catData.rowCount : 0
+    };
+  }
+  var c = ds.complete || {};
+  return {
+    ds: ds, id: ds.id, isModel: false,
+    categories: c.categories || {}, header: c.header || [],
+    origColCount: c.origColCount || (c.header ? c.header.length : 0),
+    rowCount: c.rowCount || 0
+  };
+}
+// The "Dataset" picker host at the top of the sidebar — shown at 2+ analyzed
+// (categorical) datasets. onchange re-wired each render (mirrors statsCat).
+function renderCatDatasetPicker(root) {
+  var wrap = catEls(root).datasetWrap;
+  if (!wrap) return;
+  var ts = catTargetableDatasets();
+  if (ts.length < 2) { wrap.innerHTML = ''; return; }
+  var cur = catTargetDs(root).id;
+  wrap.innerHTML = '<div class="cat-sidebar-title">Dataset</div>' +
+    '<select class="stats-select" data-cat="datasetSel">' +
+    ts.map(function(d) { return '<option value="' + esc(d.id) + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
+    '</select>';
+  var sel = wrap.querySelector('[data-cat="datasetSel"]');
+  if (sel) sel.onchange = function() { setCatTarget(sel.value, root); };
+}
+// Switch the panel's primary dataset and re-render it. focusedCol is an index
+// into the OLD target → reset so the new target auto-focuses its first column.
+function setCatTarget(id, root) {
+  var st = catStateForRoot(root);
+  if (id === st.catTargetDsId) return;
+  st.catTargetDsId = id;
+  st.focusedCol = null;
+  st.chartShowAll = false;
+  var ctx = catCtx(root);
+  var cols = Object.keys(ctx.categories).map(Number).sort(function(a, b) { return a - b; });
+  if (cols.length) st.focusedCol = cols[0];
+  var els = catEls(root);
+  if (els.colSearch) els.colSearch.value = '';
+  if (els.valueSearch) els.valueSearch.value = '';
+  renderCatSidebar(root);
+  renderCatMain(root);
+  if (typeof catSyncInstanceTitle === 'function') catSyncInstanceTitle(root);
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
 
 function renderCategoriesTab(categories, header, origColCount, rowCount) {
   _catData = { categories, header, origColCount, rowCount };
@@ -37,13 +114,16 @@ function renderCategoriesTab(categories, header, origColCount, rowCount) {
 }
 
 function renderCatSidebar(root) {
-  if (!_catData) return;
   var els = catEls(root);
   var st = catStateForRoot(root);
-  var categories = _catData.categories;
-  var header = _catData.header;
-  var origColCount = _catData.origColCount;
+  renderCatDatasetPicker(root);
+  var ctx = catCtx(root);
+  var categories = ctx.categories;
+  var header = ctx.header;
+  var origColCount = ctx.origColCount;
+  if (!categories) return;
   var catCols = Object.keys(categories).map(Number).sort(function(a,b){return a-b;});
+  if (els.badge) els.badge.textContent = catCols.length;
   var search = ((els.colSearch && els.colSearch.value) || '').toLowerCase();
   var html = '';
   for (var ci = 0; ci < catCols.length; ci++) {
@@ -64,7 +144,9 @@ function renderCatSidebar(root) {
 }
 
 function renderCatMain(root) {
-  if (!_catData || panelState.categories.focusedCol === null) return;
+  var st = catStateForRoot(root);
+  var ctx = catCtx(root);
+  if (st.focusedCol === null || !ctx.categories || !ctx.categories[st.focusedCol]) return;
   renderCatDatasetChips(root);
   renderCatToolbar(root);
   renderCatSortGroup(root);
@@ -80,9 +162,10 @@ function renderCatDatasetChips(root) {
   var els = catEls(root);
   var section = els.datasetsSection;
   if (!section) return;
-  var allCmp = catCmpDatasets();
+  var allCmp = catCmpDatasets(root);
   if (allCmp.length < 2) { section.style.display = 'none'; return; }
-  var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the model (reference) categories">Model</span>';
+  var primaryId = catTargetDs(root).id;
+  var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the primary dataset categories">' + esc(dsLabel(primaryId)) + '</span>';
   allCmp.forEach(function(ds) {
     var off = panelState.categories.dsHidden.has(ds.id);
     chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) +
@@ -98,28 +181,34 @@ function renderCatDatasetChips(root) {
 
 // Comparison datasets that can mirror a categorical column — every non-model
 // dataset whose last analysis produced categories. Registry order (aux, d2…).
-function catCmpDatasets() {
+function catCmpDatasets(root) {
+  var tid = catTargetDs(root).id;
   var out = [];
-  for (var i = 1; i < datasets.length; i++) {
+  for (var i = 0; i < datasets.length; i++) {
     var d = datasets[i];
+    if (d.id === tid) continue;
     if (d && d.complete && d.complete.categories) out.push(d);
   }
   return out;
 }
 // The comparison datasets actually shown — the chips (≥2 comparison datasets)
 // let the user hide any of them.
-function catShownCmpDatasets() {
-  return catCmpDatasets().filter(function(d) { return !panelState.categories.dsHidden.has(d.id); });
+function catShownCmpDatasets(root) {
+  return catCmpDatasets(root).filter(function(d) { return !panelState.categories.dsHidden.has(d.id); });
 }
 
 // Category counts of a comparison dataset's column grouped (by catalog
 // property) with a model categorical column: { counts, total, overflow } or
 // null. Generalizes the aux-only getCatAuxCounts so the chart/table can
 // compare category proportions model-vs-any-dataset — e.g. lithology shares.
-function getCatCmpCounts(ds, colName) {
+function getCatCmpCounts(ds, colName, targetId) {
   if (!ds || !ds.complete || !ds.complete.categories || !colName) return null;
   catEnsureSeeded();
-  var memberSet = new Set(catGroupMembers(colName, ds.id));
+  // Members of the PRIMARY (target) column's property that live in ds. With
+  // targetId 'model' this equals catGroupMembers(colName, ds.id) (bit-identical).
+  targetId = targetId || 'model';
+  var rec = catVarPeek(targetId, colName);
+  var memberSet = new Set(rec ? rec.members.filter(function(m) { return m.ds === ds.id; }).map(function(m) { return m.col; }) : []);
   if (memberSet.size === 0) return null;
   var cats = ds.complete.categories, hdr = ds.complete.header;
   var idxs = Object.keys(cats);
@@ -139,10 +228,11 @@ function getCatCmpCounts(ds, colName) {
 
 // Shown comparison datasets that actually have a counterpart for colName, as
 // [{ds, label, counts}] in registry order. The render functions iterate this.
-function catCmpForCol(colName) {
+function catCmpForCol(colName, root) {
+  var tid = catTargetDs(root).id;
   var out = [];
-  catShownCmpDatasets().forEach(function(ds) {
-    var c = getCatCmpCounts(ds, colName);
+  catShownCmpDatasets(root).forEach(function(ds) {
+    var c = getCatCmpCounts(ds, colName, tid);
     if (c) out.push({ ds: ds, label: dsLabel(ds.id), counts: c });
   });
   return out;
@@ -155,14 +245,17 @@ function catCmpMarkerColor(idx) {
   return idx === 0 ? 'var(--fg-bright)' : STATSCAT_PALETTE[(idx - 1) % STATSCAT_PALETTE.length];
 }
 
-function getCatSortedEntries(colIdx) {
-  if (!_catData) return [];
-  var cat = _catData.categories[colIdx];
+function getCatSortedEntries(colIdx, ctx) {
+  ctx = ctx || catCtx();
+  var cats = ctx.categories;
+  if (!cats) return [];
+  var cat = cats[colIdx];
   if (!cat) return [];
   var entries = Object.entries(cat.counts);
-  var colName = _catData.header[colIdx];
+  var colName = ctx.header[colIdx];
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
-  var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
+  var rec = catVarPeek(ctx.id, colName) || {};
+  var mode = rec.sortMode || defaultSort;
 
   if (mode === 'count-desc') {
     entries.sort(function(a,b){ return b[1] - a[1]; });
@@ -171,7 +264,7 @@ function getCatSortedEntries(colIdx) {
   } else if (mode === 'alpha') {
     entries.sort(function(a,b){ return a[0].localeCompare(b[0]); });
   } else if (mode === 'custom') {
-    var order = (catVarPeek('model', colName) || {}).valueOrder;
+    var order = rec.valueOrder;
     if (order) {
       var posMap = {};
       for (var oi = 0; oi < order.length; oi++) posMap[order[oi]] = oi;
@@ -190,10 +283,11 @@ function getCatSortedEntries(colIdx) {
 function renderCatSortGroup(root) {
   var grp = catEls(root).sortGroup;
   var st = catStateForRoot(root);
-  if (!grp || !_catData || st.focusedCol === null) return;
-  var colName = _catData.header[st.focusedCol];
+  var ctx = catCtx(root);
+  if (!grp || st.focusedCol === null || !ctx.header) return;
+  var colName = ctx.header[st.focusedCol];
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
-  var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
+  var mode = (catVarPeek(ctx.id, colName) || {}).sortMode || defaultSort;
   grp.innerHTML =
     '<span class="cat-sort-label">Sort</span>' +
     '<button class="cat-sort-btn' + (mode === 'count-desc' ? ' active' : '') + '" data-sort="count-desc" title="Sort by count descending">Count\u2193</button>' +
@@ -204,19 +298,20 @@ function renderCatSortGroup(root) {
 
 function renderCatToolbar(root) {
   var st = catStateForRoot(root);
-  if (!_catData || st.focusedCol === null) return;
+  var ctx = catCtx(root);
+  if (st.focusedCol === null || !ctx.categories || !ctx.categories[st.focusedCol]) return;
   var els = catEls(root);
-  var header = _catData.header;
-  var origColCount = _catData.origColCount;
+  var header = ctx.header;
+  var origColCount = ctx.origColCount;
   var colName = header[st.focusedCol];
   var isCalcol = st.focusedCol >= origColCount;
 
-  var cat = _catData.categories[st.focusedCol];
+  var cat = ctx.categories[st.focusedCol];
   var entries = Object.entries(cat.counts);
   var uniqueCount = entries.length + (cat.overflow ? '+' : '');
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
-  var nullCount = _catData.rowCount - total;
-  var nullPct = _catData.rowCount > 0 ? (nullCount / _catData.rowCount * 100) : 0;
+  var nullCount = ctx.rowCount - total;
+  var nullPct = ctx.rowCount > 0 ? (nullCount / ctx.rowCount * 100) : 0;
 
   // Shannon entropy \u2192 diversity (0% = one value dominates, 100% = even spread)
   var entropy = 0;
@@ -239,7 +334,7 @@ function renderCatToolbar(root) {
   if (total > 0) {
     for (var ki = 0; ki < byCount.length; ki++) { cum += byCount[ki][1]; cov80++; if (cum / total >= 0.8) break; }
   }
-  var cmps = catCmpForCol(colName);
+  var cmps = catCmpForCol(colName, root);
 
   function stat(label, value, title) {
     return '<div class="cat-stat"' + (title ? ' title="' + esc(title) + '"' : '') + '>' +
@@ -270,10 +365,11 @@ function renderCatToolbar(root) {
 
 function renderCatBarChart(root) {
   var st = catStateForRoot(root);
-  if (!_catData || st.focusedCol === null) return;
+  var ctx = catCtx(root);
+  if (st.focusedCol === null || !ctx.header) return;
   var els = catEls(root);
-  var colName = _catData.header[st.focusedCol];
-  var entries = getCatSortedEntries(st.focusedCol);
+  var colName = ctx.header[st.focusedCol];
+  var entries = getCatSortedEntries(st.focusedCol, ctx);
   if (entries.length === 0) { els.chart.innerHTML = ''; return; }
 
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
@@ -287,7 +383,7 @@ function renderCatBarChart(root) {
   var barH = 18, gap = 2, labelW = 120, rightPad = 60;
   // Comparison overlay: scale each comparison dataset's shares onto the same
   // axis as the bars (bars are count/maxCount, i.e. share/maxShare).
-  var cmps = catCmpForCol(colName);
+  var cmps = catCmpForCol(colName, root);
   var maxShare = total > 0 ? maxCount / total : 0;
   var auxLegendH = cmps.length * 16;
   var chartH = showEntries.length * (barH + gap) + 30 + auxLegendH; // +30 for Pareto line clearance
@@ -304,7 +400,7 @@ function renderCatBarChart(root) {
     var count = showEntries[bi][1];
     var barW = maxCount > 0 ? (count / maxCount) * barAreaW : 0;
     var y = bi * (barH + gap);
-    var color = getCategoryColor(colName, val, bi);
+    var color = getCategoryColor(colName, val, bi, ctx.id);
 
     // Bar
     svg += '<rect x="' + labelW + '" y="' + y + '" width="' + barW.toFixed(1) + '" height="' + barH + '" fill="' + color + '" opacity="0.75" rx="2"/>';
@@ -379,15 +475,21 @@ function renderCatBarChart(root) {
 
 function renderCatValueTable(root) {
   var st = catStateForRoot(root);
-  if (!_catData || st.focusedCol === null) return;
+  var ctx = catCtx(root);
+  if (st.focusedCol === null || !ctx.header) return;
   var els = catEls(root);
-  var colName = _catData.header[st.focusedCol];
-  var entries = getCatSortedEntries(st.focusedCol);
+  // The categorical value checkboxes drive the GLOBAL (model) filter
+  // (rebuildFilterExpression reads the model column indices). They are only
+  // meaningful when this panel targets the model — for a comparison target the
+  // table is inspection/comparison only, so the checkboxes are disabled.
+  var canFilter = ctx.isModel;
+  var colName = ctx.header[st.focusedCol];
+  var entries = getCatSortedEntries(st.focusedCol, ctx);
   var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
   var maxCount = 0;
   for (var i = 0; i < entries.length; i++) { if (entries[i][1] > maxCount) maxCount = entries[i][1]; }
   var defaultSort = (typeof bmaSettings !== 'undefined' && bmaSettings && bmaSettings.defaultCatSort) ? bmaSettings.defaultCatSort : 'count-desc';
-  var mode = (catVarPeek('model', colName) || {}).sortMode || defaultSort;
+  var mode = (catVarPeek(ctx.id, colName) || {}).sortMode || defaultSort;
   var isCustom = mode === 'custom';
   var search = ((els.valueSearch && els.valueSearch.value) || '').toLowerCase();
 
@@ -395,12 +497,12 @@ function renderCatValueTable(root) {
   var show = entries.slice(0, 500);
 
   // A10 4c-iv: one n/% column-pair per shown comparison dataset (aux, d2…).
-  var cmps = catCmpForCol(colName);
+  var cmps = catCmpForCol(colName, root);
 
   var html = '<thead><tr>';
   html += '<th></th>'; // drag handle column — always present (C6: dragging sets Custom order)
   html += '<th title="Category colour">·</th>';
-  html += '<th class="cat-cb-head"><input type="checkbox" data-cat-selectall title="Select all / none — ticked values filter the model"></th>';
+  html += '<th class="cat-cb-head"><input type="checkbox" data-cat-selectall' + (canFilter ? '' : ' disabled') + ' title="' + (canFilter ? 'Select all / none — ticked values filter the model' : 'filtering applies to the model only') + '"></th>';
   html += '<th>Value</th><th>Count</th><th>%</th>';
   cmps.forEach(function(cm) {
     var lbl = esc(cm.label + ':' + colName);
@@ -425,12 +527,12 @@ function renderCatValueTable(root) {
     if (search && !fuzzyMatch(search, val.toLowerCase())) continue;
     var pct = total > 0 ? (count / total * 100).toFixed(1) : '0.0';
     var barPct = maxCount > 0 ? (count / maxCount * 100).toFixed(1) : '0';
-    var color = getCategoryColor(colName, val, ri);
+    var color = getCategoryColor(colName, val, ri, ctx.id);
 
     html += '<tr style="--bar:' + barPct + '%" data-val="' + esc(val) + '">';
     html += '<td class="cat-drag-cell' + (isCustom ? '' : ' cat-drag-cell--dormant') + '" draggable="true" title="Drag to reorder \u2014 sets Custom order">\u2261</td>';
     html += '<td class="cat-swatch-cell"><span class="cat-swatch" style="background:' + color + '" data-col="' + st.focusedCol + '" data-val="' + esc(val) + '"></span></td>';
-    html += '<td class="cat-cb-cell"><input type="checkbox" data-col="' + st.focusedCol + '" data-val="' + esc(val) + '"></td>';
+    html += '<td class="cat-cb-cell"><input type="checkbox" data-col="' + st.focusedCol + '" data-val="' + esc(val) + '"' + (canFilter ? '' : ' disabled') + '></td>';
     html += '<td class="cat-val-cell">' + esc(val) + '</td>';
     html += '<td class="cat-count-cell">' + count.toLocaleString() + '</td>';
     html += '<td class="cat-pct-cell">' + pct + '%</td>';
@@ -480,7 +582,7 @@ function showCatColorPicker(colName, value, anchorEl, root) {
   var els = catEls(root);
   var picker = els.colorPicker;
   if (!picker) return;
-  var currentColor = getCategoryColor(colName, value, 0);
+  var currentColor = getCategoryColor(colName, value, 0, catCtx(root).id);
 
   var html = '<div class="cat-color-grid">';
   for (var i = 0; i < STATSCAT_PALETTE.length; i++) {
@@ -509,7 +611,7 @@ function hideCatColorPicker(root) {
 }
 
 function applyCatColor(colName, value, color, root) {
-  var rec = catVar('model', colName);
+  var rec = catVar(catCtx(root).id, colName);   // colour lives on the shared property; anchor via the panel's target member
   if (!rec.valueColors) rec.valueColors = {};
   rec.valueColors[value] = color;
   renderCatBarChart(root);
@@ -517,10 +619,11 @@ function applyCatColor(colName, value, color, root) {
   autoSaveProject();
 }
 
-function initCustomOrder(colName, colIdx) {
-  var rec = catVar('model', colName);
+function initCustomOrder(colName, colIdx, ctx) {
+  ctx = ctx || catCtx();
+  var rec = catVar(ctx.id, colName);
   if (!rec.valueOrder) {
-    var entries = getCatSortedEntries(colIdx);
+    var entries = getCatSortedEntries(colIdx, ctx);
     rec.valueOrder = entries.map(function(e){ return e[0]; });
   }
 }
@@ -574,10 +677,11 @@ function wireCatEvents(root) {
   if (els.sortGroup) els.sortGroup.addEventListener('click', function(e) {
     var sortBtn = e.target.closest('.cat-sort-btn');
     if (!sortBtn) return;
-    var colName = _catData.header[st.focusedCol];
+    var sctx = catCtx(root);
+    var colName = sctx.header[st.focusedCol];
     var newMode = sortBtn.dataset.sort;
-    catVar('model', colName).sortMode = newMode;
-    if (newMode === 'custom') initCustomOrder(colName, st.focusedCol);
+    catVar(sctx.id, colName).sortMode = newMode;
+    if (newMode === 'custom') initCustomOrder(colName, st.focusedCol, sctx);
     renderCatSortGroup(root);
     renderCatBarChart(root);
     renderCatValueTable(root);
@@ -588,7 +692,7 @@ function wireCatEvents(root) {
   if (els.toolbar) els.toolbar.addEventListener('click', function(e) {
     var copyBtn = e.target.closest('.cat-copy-btn');
     if (!copyBtn) return;
-    var entries = getCatSortedEntries(st.focusedCol);
+    var entries = getCatSortedEntries(st.focusedCol, catCtx(root));
     var total = entries.reduce(function(s,e){ return s + e[1]; }, 0);
     var lines = ['Value\tCount\t%'];
     for (var i = 0; i < entries.length; i++) {
@@ -619,7 +723,7 @@ function wireCatEvents(root) {
     // Swatch click → color picker
     var swatch = e.target.closest('.cat-swatch');
     if (swatch) {
-      var colName = _catData.header[parseInt(swatch.dataset.col)];
+      var colName = catCtx(root).header[parseInt(swatch.dataset.col)];
       showCatColorPicker(colName, swatch.dataset.val, swatch, root);
       return;
     }
@@ -694,14 +798,15 @@ function wireCatEvents(root) {
       els.valueTable.querySelectorAll('.drag-over').forEach(function(el){ el.classList.remove('drag-over'); });
       dragSrcRow.classList.remove('dragging');
 
-      var colName = _catData.header[st.focusedCol];
-      var rec = catVar('model', colName);
+      var dctx = catCtx(root);
+      var colName = dctx.header[st.focusedCol];
+      var rec = catVar(dctx.id, colName);
       if (rec.sortMode !== 'custom') {
-        rec.valueOrder = getCatSortedEntries(st.focusedCol).map(function(e) { return e[0]; });
+        rec.valueOrder = getCatSortedEntries(st.focusedCol, dctx).map(function(e) { return e[0]; });
         rec.sortMode = 'custom';
         renderCatSortGroup(root);
       } else {
-        initCustomOrder(colName, st.focusedCol);
+        initCustomOrder(colName, st.focusedCol, dctx);
       }
       var order = rec.valueOrder;
       var fromVal = dragSrcRow.dataset.val;
@@ -800,16 +905,25 @@ function catBuildInstancePanel(instId) {
 }
 
 function catRenderInstance(root) {
-  if (!_catData) return;
   var st = catStateForRoot(root);
+  var ctx = catCtx(root);
+  // No analysis for the target yet → keep _pendingFocusName intact for a later
+  // pass (don't consume it against an empty header).
+  if (!ctx.categories || Object.keys(ctx.categories).length === 0) return;
   // 4e-c-5: a restored instance carries its focused column by NAME (the header
-  // may differ across reloads) — resolve to an index now that _catData exists.
+  // may differ across reloads) — resolve to an index against the TARGET header.
   if (st._pendingFocusName != null) {
-    var ri = _catData.header ? _catData.header.indexOf(st._pendingFocusName) : -1;
-    if (ri >= 0 && _catData.categories[ri]) st.focusedCol = ri;
+    var ri = ctx.header ? ctx.header.indexOf(st._pendingFocusName) : -1;
+    if (ri >= 0 && ctx.categories[ri]) st.focusedCol = ri;
     delete st._pendingFocusName;
   }
-  if (st.focusedCol == null || !_catData.categories[st.focusedCol]) st.focusedCol = panelState.categories.focusedCol;
+  if (st.focusedCol == null || !ctx.categories[st.focusedCol]) {
+    if (ctx.isModel) st.focusedCol = panelState.categories.focusedCol;
+    if (st.focusedCol == null || !ctx.categories[st.focusedCol]) {
+      var cols = Object.keys(ctx.categories).map(Number).sort(function(a, b) { return a - b; });
+      st.focusedCol = cols.length ? cols[0] : null;
+    }
+  }
   renderCatSidebar(root);
   renderCatMain(root);
   // NB: the tab title is synced by the spawn flow + the column-click handler,
@@ -824,7 +938,9 @@ function catSyncInstanceTitle(root) {
   var instId = root.getAttribute && root.getAttribute('data-cat-inst');
   if (!instId) return;
   var st = catInstances[instId];
-  var name = (st && st.focusedCol != null && _catData && _catData.header) ? _catData.header[st.focusedCol] : null;
+  var root = document.querySelector('[data-cat-inst="' + instId + '"]');
+  var ctx = catCtx(root);
+  var name = (st && st.focusedCol != null && ctx.header) ? ctx.header[st.focusedCol] : null;
   if (findTab(wsRails.state, instId)) wsRails.updateTab(instId, { title: name ? 'Categories: ' + name : 'Categories' });
 }
 
@@ -843,14 +959,19 @@ function catRenderAllInstances() {
 // is stored by NAME (the cmpSel pattern) so a reordered/changed header still
 // resolves; an unresolved restore re-emits its name (loss-safe through autosave).
 function serializeCatInstances() {
-  var hdr = (typeof _catData !== 'undefined' && _catData) ? _catData.header : null;
   var out = [];
   Object.keys(catInstances).forEach(function(id) {
     var st = catInstances[id];
+    var tid = st.catTargetDsId || 'model';
+    // focusedCol is an index into the TARGET → resolve its name against the
+    // target's header (model = _catData snapshot). ws-v2 phase 1.
+    var hdr = (tid === 'model')
+      ? ((typeof _catData !== 'undefined' && _catData) ? _catData.header : null)
+      : (((dsById(tid) || {}).complete || {}).header || null);
     var name = null;
     if (st._pendingFocusName != null) name = st._pendingFocusName;                 // restored, not yet resolved
     else if (st.focusedCol != null && hdr && hdr[st.focusedCol] != null) name = hdr[st.focusedCol];
-    out.push({ id: id, focusedCol: name, chartShowAll: !!st.chartShowAll });
+    out.push({ id: id, targetDsId: tid, focusedCol: name, chartShowAll: !!st.chartShowAll });
   });
   return out;
 }
@@ -879,6 +1000,7 @@ function catRestoreInstances(list) {
     if (!rec || !rec.id) return;
     var st = catNewInstState();
     st.chartShowAll = !!rec.chartShowAll;
+    st.catTargetDsId = rec.targetDsId || 'model';   // ws-v2 phase 1
     if (rec.focusedCol != null) st._pendingFocusName = rec.focusedCol;
     catInstances[rec.id] = st;
     var m = /^categories#(\d+)$/.exec(rec.id);

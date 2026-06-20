@@ -301,10 +301,11 @@ function wsRestoreInstance(cfg, skipTab) {
 
 // A10 4e-c-4: spawn a cloned Categories analysis panel. seedFocusedCol lets
 // Duplicate carry the source panel's column; default = the singleton's column.
-function wsSpawnCategoriesInstance(seedFocusedCol, seedChartShowAll) {
+function wsSpawnCategoriesInstance(seedFocusedCol, seedChartShowAll, seedTargetDsId) {
   if (!wsRails || typeof catNextInstId !== 'function') { showPanel('categories'); return; }
   var instId = catNextInstId();
   catInstances[instId] = catNewInstState();
+  catInstances[instId].catTargetDsId = seedTargetDsId || 'model';   // ws-v2 phase 1: carry the source panel's target
   catInstances[instId].focusedCol = (seedFocusedCol != null) ? seedFocusedCol : panelState.categories.focusedCol;
   catInstances[instId].chartShowAll = !!seedChartShowAll;
   wsRails.addTab({ id: instId, title: 'Categories', closeable: true }, wsMainTarget());
@@ -839,7 +840,7 @@ function buildRailsShell(host) {
           wsSpawnExportInstance(exTarget);   // carry the source panel's target dataset (G5b)
         } else {
           var src = ev.tab.id === 'categories' ? panelState.categories : (typeof catInstances !== 'undefined' ? catInstances[ev.tab.id] : null);
-          wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false);
+          wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false, src ? src.catTargetDsId : 'model');
         }
       } else if (a === 'float') {
         var hostRect = document.getElementById('resultsMain').getBoundingClientRect();

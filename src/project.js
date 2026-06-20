@@ -559,9 +559,17 @@ function serializeProject() {
       cdfAuxSelected: (auxCompleteData && panelState.statistics.cdfCmpSel.aux && panelState.statistics.cdfCmpSel.aux.size > 0)
         ? Array.from(panelState.statistics.cdfCmpSel.aux).map(function(i) { return auxCompleteData.header[i]; }).filter(Boolean) : null
     },
-    categories: {
-      focusedCol: panelState.categories.focusedCol !== null && currentHeader[panelState.categories.focusedCol] ? currentHeader[panelState.categories.focusedCol] : null
-    },
+    categories: (function() {
+      // ws-v2 phase 1: persist the per-panel target + focusedCol BY NAME against
+      // the target's header (model = currentHeader → unchanged for the model case).
+      var tid = (panelState.categories.catTargetDsId) || 'model';
+      var hdr = (tid === 'model') ? currentHeader : (((dsById(tid) || {}).complete || {}).header || null);
+      var fc = panelState.categories.focusedCol;
+      return {
+        targetDsId: tid,
+        focusedCol: (fc !== null && hdr && hdr[fc]) ? hdr[fc] : null
+      };
+    })(),
     tree: { open: catalogTreeOpen },
     // C6-4a collapsed control sidebars (per-panel) + C6-4b collapsed sections
     sidebars: {
@@ -2489,11 +2497,18 @@ function displayResults(data) {
       renderStatsTab(lastDisplayedStats, lastDisplayedHeader, currentOrigColCount || lastDisplayedHeader.length, currentFilter !== null, data.rowCount);
     }
 
-    // Restore categories focused column by name
+    // Restore categories target + focused column by name (ws-v2 phase 1). The
+    // target always restores; focusedCol resolves against the target header when
+    // it's available (model now; a comparison target auto-focuses its first
+    // column on render until that dataset is analyzed).
     const catP = restoredProject.categories || {};
+    panelState.categories.catTargetDsId = catP.targetDsId || 'model';
     if (catP.focusedCol) {
-      const idx = header.indexOf(catP.focusedCol);
-      if (idx >= 0 && categories[idx]) {
+      const ctid = panelState.categories.catTargetDsId;
+      const chdr = (ctid === 'model') ? header : (((dsById(ctid) || {}).complete || {}).header || null);
+      const ccats = (ctid === 'model') ? categories : (((dsById(ctid) || {}).complete || {}).categories || null);
+      const idx = chdr ? chdr.indexOf(catP.focusedCol) : -1;
+      if (idx >= 0 && ccats && ccats[idx]) {
         panelState.categories.focusedCol = idx;
         renderCatSidebar();
         renderCatMain();

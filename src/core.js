@@ -72,7 +72,8 @@ let panelState = {
   categories: {
     dsHidden: new Set(), // comparison dataset ids hidden via the 4c dataset chips (shared across instances for now — chips only show at 3+ datasets)
     focusedCol: null,    // column index focused in main area (per-instance, 4e-c-3)
-    chartShowAll: false  // show all bars vs top 20 (per-instance, 4e-c-3 — was catChartShowAll)
+    chartShowAll: false, // show all bars vs top 20 (per-instance, 4e-c-3 — was catChartShowAll)
+    catTargetDsId: 'model' // ws-v2 phase 1: which dataset's columns this panel shows (model default → bit-identical)
   }
 };
 let pendingStatsAuxRestore = null;   // { selected: [names], cdf: [names] } applied when aux analysis completes (aux-only; d2+ ephemeral until phase 6)
@@ -200,6 +201,7 @@ function catEls(root) {
   function q(k) { return root ? root.querySelector('[data-cat="' + k + '"]') : null; }
   return {
     body: q('body'), sidebar: q('sidebar'), badge: q('badge'), colSearch: q('colSearch'),
+    datasetWrap: q('datasetWrap'),
     datasetsSection: q('datasetsSection'), datasetChips: q('datasetChips'), colList: q('colList'),
     main: q('main'), toolbar: q('toolbar'), mainContent: q('mainContent'), chart: q('chart'),
     valueTableWrap: q('valueTableWrap'), valueSearch: q('valueSearch'), sortGroup: q('sortGroup'),
@@ -213,7 +215,7 @@ function catEls(root) {
 // for now (its chips only surface at 3+ datasets; per-instance chips are a
 // follow-up). catStateForRoot resolves the state object for a render root.
 var catInstances = {};
-function catNewInstState() { return { focusedCol: null, chartShowAll: false }; }
+function catNewInstState() { return { focusedCol: null, chartShowAll: false, catTargetDsId: 'model' }; }
 function catStateForRoot(root) {
   root = root || catPanelRoot();
   var id = root && root.getAttribute ? root.getAttribute('data-cat-inst') : null;
@@ -703,8 +705,11 @@ function catPropColor(ds, name, fallbackIdx) { return catVarColor(ds, name, fall
 function catPropUnit(ds, name) { return catUnit(ds, name); }
 
 // Categorical value color: property override → palette by value position
-function getCategoryColor(colName, value, fallbackIdx) {
-  const rec = catVarPeek('model', colName);
+function getCategoryColor(colName, value, fallbackIdx, dsId) {
+  // Colours live on the shared property; resolve it via the given dataset's
+  // member (ws-v2 phase 1: a comparison-targeted Categories panel anchors on its
+  // own column). Default 'model' → bit-identical to the model-anchored original.
+  const rec = catVarPeek(dsId || 'model', colName);
   if (rec && rec.valueColors && rec.valueColors[value]) return rec.valueColors[value];
   return STATSCAT_PALETTE[(fallbackIdx || 0) % STATSCAT_PALETTE.length];
 }

@@ -221,7 +221,11 @@ function runAuxAnalysis(ds, root) {
         renderStatsCdfPanel();
         if (typeof statRenderAllInstances === 'function') statRenderAllInstances();  // st-4/5: repaint clones
       }
+      // ws-v2 phase 1: this dataset is now Categories-targetable → refresh the
+      // singleton sidebar (shows the Dataset picker) + repaint any clones.
+      if (typeof renderCatSidebar === 'function' && (typeof _catData !== 'undefined' && _catData)) renderCatSidebar();
       if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();
+      if (typeof catRenderAllInstances === 'function') catRenderAllInstances();
       if (ds.view === 'summary' && typeof renderAuxSummary === 'function') renderAuxSummary(ds, root);  // A10 per-dataset summary
       if (typeof gtRefreshDatasetPicker === 'function') gtRefreshDatasetPicker();  // G3: this dataset is now GT-targetable
       if (typeof gtApplyAllInstances === 'function') gtApplyAllInstances();  // G3b-4: resolve a restored GT clone that targets this dataset
