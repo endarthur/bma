@@ -4343,6 +4343,25 @@ table.stats tr.stats-delta-row td:first-child {
   font-size: 0.66rem;
   line-height: 1.45;
 }
+.tree-add-ds {
+  display: block;
+  width: 100%;
+  margin-top: 0.6rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.tree-add-ds:hover {
+  border-color: var(--action);
+  color: var(--fg-bright);
+}
 @media (max-width: 700px) {
   /* proto-sheet until C1c: overlays the panels instead of squeezing them */
   #results.tree-open .catalog-tree {

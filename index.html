@@ -4358,6 +4358,25 @@ table.stats tr.stats-delta-row td:first-child {
   font-size: 0.66rem;
   line-height: 1.45;
 }
+.tree-add-ds {
+  display: block;
+  width: 100%;
+  margin-top: 0.6rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.tree-add-ds:hover {
+  border-color: var(--action);
+  color: var(--fg-bright);
+}
 @media (max-width: 700px) {
   /* proto-sheet until C1c: overlays the panels instead of squeezing them */
   #results.tree-open .catalog-tree {
@@ -5931,7 +5950,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 9db46fb — click to check for updates">9db46fb</div>
+<div class="build-badge" id="buildBadge" title="build b1a711a — click to check for updates">b1a711a</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -31504,6 +31523,11 @@ function renderCatalogTree(container) {
     if (datasets[di].id === 'model') continue;
     if (datasets[di].preflight) html += treeDatasetHtml(datasets[di].id, openState);
   }
+  // A10 #18: add comparison datasets straight from the Data rail (mirrors the
+  // [+] launcher / Data menu) — the most discoverable spot once a model exists.
+  if (typeof currentFile !== 'undefined' && currentFile) {
+    html += '<button type="button" class="tree-add-ds" data-tree-add>+ Add dataset</button>';
+  }
   // C6-5 discoverability footer: the variable context menu (C4) and tab
   // splitting are both undiscoverable affordances — name them once results exist.
   if (typeof lastCompleteData !== 'undefined' && lastCompleteData) {
@@ -31900,6 +31924,20 @@ function treeToggleRole(t, role) {
   var $tree = document.getElementById('catalogTree');
   if ($tree) {
     $tree.addEventListener('click', function(e) {
+      var add = e.target.closest('[data-tree-add]');
+      if (add) {
+        // A10 #18: a small menu of add paths, anchored under the button.
+        var r = add.getBoundingClientRect();
+        if (typeof Menu !== 'undefined' && typeof wsMenuAction === 'function') {
+          Menu.show([
+            { label: 'Add point dataset…', action: 'addPoint' },
+            { label: 'Add drillhole set…', action: 'addDrillhole' },
+          ], { x: r.left, y: r.bottom }).then(function(a) { if (a) wsMenuAction(a); });
+        } else if (typeof wsAddPointDataset === 'function') {
+          wsAddPointDataset();   // legacy/<700px fallback (no Menu mounted)
+        }
+        return;
+      }
       var row = e.target.closest('.tree-row--edit');
       if (!row) return;
       showTreePopover(row);
@@ -33288,30 +33326,33 @@ function wsPanelsMenuItems() {
 }
 
 // "+" launcher (A10 4e-c) — the new-tab button at the end of each strip spawns
-// new workspace content: reopen any CLOSED panel (open ones are already
-// visible) or add a comparison dataset. Routes through wsMenuAction.
+// new workspace content. Ordering (most-reached first): add a comparison
+// dataset, then reopen any CLOSED panel, then clone an analysis panel. Routes
+// through wsMenuAction.
 function wsNewTabMenuItems() {
   var items = [];
+  // Adding a dataset is the primary discoverable action — lead with it.
+  items.push({ label: 'Add point dataset…', action: 'addPoint' });
+  items.push({ label: 'Add drillhole set…', action: 'addDrillhole' });
+  var reopen = [];
   WS_PANELS.forEach(function(p) {
     if (wsRails && findTab(wsRails.state, p.id)) return;   // already open — skip
-    if (p.id === 'aux') {   // reopenable only once it holds data (else use Add comparison)
+    if (p.id === 'aux') {   // reopenable only once it holds data (else use Add dataset)
       var aux = (typeof dsById === 'function') ? dsById('aux') : null;
       if (!aux || !aux.file) return;
-      items.push({ label: wsDatasetTabName(aux), action: { panel: 'aux' } });
+      reopen.push({ label: wsDatasetTabName(aux), action: { panel: 'aux' } });
       return;
     }
-    items.push({ label: p.title, action: { panel: p.id } });
+    reopen.push({ label: p.title, action: { panel: p.id } });
   });
-  if (items.length) items.push('---');
+  if (reopen.length) { items.push('---'); items.push.apply(items, reopen); }
+  items.push('---');
   items.push({ label: 'New Categories panel', action: 'newCategories' });   // A10 4e-c-4: cloneable analysis panel
   items.push({ label: 'New Swath panel', action: 'newSwath' });             // A10 Swath s-4b
   items.push({ label: 'New Statistics panel', action: 'newStatistics' });   // A10 Statistics st-4
   items.push({ label: 'New GT panel', action: 'newGt' });                   // A10 G3b
   items.push({ label: 'New StatsCat panel', action: 'newStatsCat' });       // A10 G4b
   items.push({ label: 'New Export panel', action: 'newExport' });           // A10 G5b
-  items.push('---');
-  items.push({ label: 'Add point dataset…', action: 'addPoint' });
-  items.push({ label: 'Add drillhole set…', action: 'addDrillhole' });
   return items;
 }
 

@@ -62,6 +62,11 @@ function renderCatalogTree(container) {
     if (datasets[di].id === 'model') continue;
     if (datasets[di].preflight) html += treeDatasetHtml(datasets[di].id, openState);
   }
+  // A10 #18: add comparison datasets straight from the Data rail (mirrors the
+  // [+] launcher / Data menu) — the most discoverable spot once a model exists.
+  if (typeof currentFile !== 'undefined' && currentFile) {
+    html += '<button type="button" class="tree-add-ds" data-tree-add>+ Add dataset</button>';
+  }
   // C6-5 discoverability footer: the variable context menu (C4) and tab
   // splitting are both undiscoverable affordances — name them once results exist.
   if (typeof lastCompleteData !== 'undefined' && lastCompleteData) {
@@ -458,6 +463,20 @@ function treeToggleRole(t, role) {
   var $tree = document.getElementById('catalogTree');
   if ($tree) {
     $tree.addEventListener('click', function(e) {
+      var add = e.target.closest('[data-tree-add]');
+      if (add) {
+        // A10 #18: a small menu of add paths, anchored under the button.
+        var r = add.getBoundingClientRect();
+        if (typeof Menu !== 'undefined' && typeof wsMenuAction === 'function') {
+          Menu.show([
+            { label: 'Add point dataset…', action: 'addPoint' },
+            { label: 'Add drillhole set…', action: 'addDrillhole' },
+          ], { x: r.left, y: r.bottom }).then(function(a) { if (a) wsMenuAction(a); });
+        } else if (typeof wsAddPointDataset === 'function') {
+          wsAddPointDataset();   // legacy/<700px fallback (no Menu mounted)
+        }
+        return;
+      }
       var row = e.target.closest('.tree-row--edit');
       if (!row) return;
       showTreePopover(row);

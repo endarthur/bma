@@ -508,30 +508,33 @@ function wsPanelsMenuItems() {
 }
 
 // "+" launcher (A10 4e-c) — the new-tab button at the end of each strip spawns
-// new workspace content: reopen any CLOSED panel (open ones are already
-// visible) or add a comparison dataset. Routes through wsMenuAction.
+// new workspace content. Ordering (most-reached first): add a comparison
+// dataset, then reopen any CLOSED panel, then clone an analysis panel. Routes
+// through wsMenuAction.
 function wsNewTabMenuItems() {
   var items = [];
+  // Adding a dataset is the primary discoverable action — lead with it.
+  items.push({ label: 'Add point dataset…', action: 'addPoint' });
+  items.push({ label: 'Add drillhole set…', action: 'addDrillhole' });
+  var reopen = [];
   WS_PANELS.forEach(function(p) {
     if (wsRails && findTab(wsRails.state, p.id)) return;   // already open — skip
-    if (p.id === 'aux') {   // reopenable only once it holds data (else use Add comparison)
+    if (p.id === 'aux') {   // reopenable only once it holds data (else use Add dataset)
       var aux = (typeof dsById === 'function') ? dsById('aux') : null;
       if (!aux || !aux.file) return;
-      items.push({ label: wsDatasetTabName(aux), action: { panel: 'aux' } });
+      reopen.push({ label: wsDatasetTabName(aux), action: { panel: 'aux' } });
       return;
     }
-    items.push({ label: p.title, action: { panel: p.id } });
+    reopen.push({ label: p.title, action: { panel: p.id } });
   });
-  if (items.length) items.push('---');
+  if (reopen.length) { items.push('---'); items.push.apply(items, reopen); }
+  items.push('---');
   items.push({ label: 'New Categories panel', action: 'newCategories' });   // A10 4e-c-4: cloneable analysis panel
   items.push({ label: 'New Swath panel', action: 'newSwath' });             // A10 Swath s-4b
   items.push({ label: 'New Statistics panel', action: 'newStatistics' });   // A10 Statistics st-4
   items.push({ label: 'New GT panel', action: 'newGt' });                   // A10 G3b
   items.push({ label: 'New StatsCat panel', action: 'newStatsCat' });       // A10 G4b
   items.push({ label: 'New Export panel', action: 'newExport' });           // A10 G5b
-  items.push('---');
-  items.push({ label: 'Add point dataset…', action: 'addPoint' });
-  items.push({ label: 'Add drillhole set…', action: 'addDrillhole' });
   return items;
 }
 
