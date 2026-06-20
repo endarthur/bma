@@ -104,12 +104,8 @@ function ctxResolveVariable(e) {
 // A10: right-clicking a dataset header in the tree raises its import/config
 // panel (the reopen affordance — model → Import Model, aux → Aux). As
 // per-dataset instance panels land, this opens the dataset's own instance.
-CTX_PROVIDERS.push(function datasetProvider(e) {
-  var sum = e.target.closest && e.target.closest('summary');
-  if (!sum || !sum.parentElement || !sum.parentElement.classList.contains('tree-ds')) return null;
-  var key = sum.parentElement.dataset.key || '';
-  if (key.indexOf('ds:') !== 0) return null;
-  var ds = key.slice(3);
+// The dataset menu, reusable for any non-row part of a dataset node.
+function datasetMenuFor(ds) {
   var dsObj = (typeof dsById === 'function') ? dsById(ds) : null;
   var items = [
     { head: true, label: dsLabel(ds) },
@@ -129,6 +125,34 @@ CTX_PROVIDERS.push(function datasetProvider(e) {
     items.push({ label: 'Remove dataset', danger: true, action: function() { wsRemoveInstance(dsObj); } });
   }
   return items;
+}
+CTX_PROVIDERS.push(function datasetProvider(e) {
+  // Fire on ANY part of a dataset node that isn't a variable/coord row (the
+  // summary, a group header, the body) — variableProvider handles the rows. This
+  // is what makes group headers + dataset body give the dataset menu instead of
+  // leaking the native browser menu.
+  if (e.target.closest && e.target.closest('.tree-row--edit, .tree-row--coord')) return null;
+  var dsNode = e.target.closest && e.target.closest('.tree-ds');
+  if (!dsNode) return null;
+  var key = dsNode.dataset.key || '';
+  if (key.indexOf('ds:') !== 0) return null;
+  return datasetMenuFor(key.slice(3));
+});
+
+// Tree background (the +Add footer, empty space below the datasets): an
+// Add-dataset menu, so right-clicking anywhere in the data panel is meaningful
+// and never leaks the native menu.
+CTX_PROVIDERS.push(function treeBackgroundProvider(e) {
+  if (!e.target.closest || !e.target.closest('#catalogTree')) return null;
+  if (e.target.closest('.tree-ds') || e.target.closest('.tree-row--edit, .tree-row--coord')) return null;
+  var have = (typeof currentFile !== 'undefined' && currentFile) ||
+             (typeof currentProjectId !== 'undefined' && currentProjectId);
+  if (!have) return null;
+  return [
+    { head: true, label: 'Data' },
+    { label: 'Add point dataset…', action: function() { if (typeof wsAddPointDataset === 'function') wsAddPointDataset(); } },
+    { label: 'Add drillhole set…', action: function() { if (typeof wsAddDrillholeDataset === 'function') wsAddDrillholeDataset(); } }
+  ];
 });
 
 CTX_PROVIDERS.push(function variableProvider(e) {
@@ -257,7 +281,12 @@ CTX_PROVIDERS.push(function cdfExportProvider(e) {
         items = items.concat(got);
       }
     }
-    if (items.length === 0) return;
+    if (items.length === 0) {
+      // Never leak the native browser menu on the data panel, even if every
+      // provider missed — the tree is app chrome, not document content.
+      if (e.target.closest && e.target.closest('#catalogTree')) e.preventDefault();
+      return;
+    }
     e.preventDefault();
     showCtxMenu(items, e.clientX, e.clientY);
   });

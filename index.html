@@ -4398,6 +4398,16 @@ table.stats tr.stats-delta-row td:first-child {
   font-size: 0.66rem;
   line-height: 1.45;
 }
+.tree-search { padding: 0.3rem 0.2rem 0.5rem; }
+.tree-search-input {
+  width: 100%; box-sizing: border-box;
+  padding: 0.32rem 0.5rem;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg); color: var(--fg);
+  font: 0.72rem var(--sans);
+}
+.tree-search-input:focus { outline: none; border-color: var(--action); }
+.tree-search-input::placeholder { color: var(--fg-dim); opacity: 0.7; }
 .tree-add-ds {
   display: block;
   width: 100%;
@@ -5998,7 +6008,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 415e450 — click to check for updates">415e450</div>
+<div class="build-badge" id="buildBadge" title="build f9d4691 — click to check for updates">f9d4691</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -31901,6 +31911,7 @@ function catRestoreInstances(list) {
 
 var catalogTreeOpen = null;   // null = default by viewport (open ≥ 701px)
 var _treeRefreshQueued = false;
+var treeSearchQuery = '';     // tree filter (by variable name); filtered in place, not re-rendered
 
 function catalogTreeIsOpen() {
   if (catalogTreeOpen === null) return window.matchMedia('(min-width: 701px)').matches;
@@ -31949,9 +31960,16 @@ function renderCatalogTree(container) {
     openState[d.dataset.key] = d.open;
   });
 
+  // Search box (filters variable rows by name, in place) — only once there's a
+  // project to search.
+  var hasProject = (typeof currentFile !== 'undefined' && currentFile) ||
+                   (typeof currentProjectId !== 'undefined' && currentProjectId);
+  var html = hasProject
+    ? '<div class="tree-search"><input type="text" id="treeSearch" class="tree-search-input" placeholder="Filter variables…" spellcheck="false" value="' + esc(treeSearchQuery) + '"></div>'
+    : '';
   // Model node always; then every comparison dataset that has been loaded
   // (preflight present). Iterating the registry makes this N-ready.
-  var html = treeDatasetHtml('model', openState);
+  html += treeDatasetHtml('model', openState);
   for (var di = 0; di < datasets.length; di++) {
     if (datasets[di].id === 'model') continue;
     if (datasets[di].preflight) html += treeDatasetHtml(datasets[di].id, openState);
@@ -31970,6 +31988,33 @@ function renderCatalogTree(container) {
     html += '<div class="tree-foot-hint">' + hint + '</div>';
   }
   $tree.innerHTML = html;
+  applyTreeFilter();   // re-apply the active filter to the freshly built rows
+}
+
+// Filter the tree's variable rows by treeSearchQuery, IN PLACE (no innerHTML
+// rebuild — keeps the search input focused while typing). Hides non-matching
+// rows + any group/dataset left with no visible rows; opens details so matches show.
+function applyTreeFilter() {
+  var $tree = document.getElementById('catalogTree');
+  if (!$tree) return;
+  var q = (treeSearchQuery || '').trim().toLowerCase();
+  var rows = $tree.querySelectorAll('.tree-row--edit, .tree-row--coord');
+  rows.forEach(function(row) {
+    var name = (row.getAttribute('data-name') || '').toLowerCase();
+    row.style.display = (!q || (typeof fuzzyMatch === 'function' ? fuzzyMatch(q, name) : name.indexOf(q) >= 0)) ? '' : 'none';
+  });
+  var containers = $tree.querySelectorAll('details.tree-group, details.tree-ds');
+  if (q) {
+    $tree.querySelectorAll('details').forEach(function(d) { d.open = true; });
+    containers.forEach(function(d) {
+      var anyVisible = Array.prototype.some.call(
+        d.querySelectorAll('.tree-row--edit, .tree-row--coord'),
+        function(r) { return r.style.display !== 'none'; });
+      d.style.display = anyVisible ? '' : 'none';
+    });
+  } else {
+    containers.forEach(function(d) { d.style.display = ''; });
+  }
 }
 
 // Variable description for one dataset, derived from the live headers —
@@ -32357,6 +32402,13 @@ function treeToggleRole(t, role) {
 
   var $tree = document.getElementById('catalogTree');
   if ($tree) {
+    // Tree search — filter in place (no re-render → input keeps focus)
+    $tree.addEventListener('input', function(e) {
+      if (e.target && e.target.id === 'treeSearch') {
+        treeSearchQuery = e.target.value;
+        applyTreeFilter();
+      }
+    });
     $tree.addEventListener('click', function(e) {
       var add = e.target.closest('[data-tree-add]');
       if (add) {
@@ -32549,12 +32601,8 @@ function ctxResolveVariable(e) {
 // A10: right-clicking a dataset header in the tree raises its import/config
 // panel (the reopen affordance — model → Import Model, aux → Aux). As
 // per-dataset instance panels land, this opens the dataset's own instance.
-CTX_PROVIDERS.push(function datasetProvider(e) {
-  var sum = e.target.closest && e.target.closest('summary');
-  if (!sum || !sum.parentElement || !sum.parentElement.classList.contains('tree-ds')) return null;
-  var key = sum.parentElement.dataset.key || '';
-  if (key.indexOf('ds:') !== 0) return null;
-  var ds = key.slice(3);
+// The dataset menu, reusable for any non-row part of a dataset node.
+function datasetMenuFor(ds) {
   var dsObj = (typeof dsById === 'function') ? dsById(ds) : null;
   var items = [
     { head: true, label: dsLabel(ds) },
@@ -32574,6 +32622,34 @@ CTX_PROVIDERS.push(function datasetProvider(e) {
     items.push({ label: 'Remove dataset', danger: true, action: function() { wsRemoveInstance(dsObj); } });
   }
   return items;
+}
+CTX_PROVIDERS.push(function datasetProvider(e) {
+  // Fire on ANY part of a dataset node that isn't a variable/coord row (the
+  // summary, a group header, the body) — variableProvider handles the rows. This
+  // is what makes group headers + dataset body give the dataset menu instead of
+  // leaking the native browser menu.
+  if (e.target.closest && e.target.closest('.tree-row--edit, .tree-row--coord')) return null;
+  var dsNode = e.target.closest && e.target.closest('.tree-ds');
+  if (!dsNode) return null;
+  var key = dsNode.dataset.key || '';
+  if (key.indexOf('ds:') !== 0) return null;
+  return datasetMenuFor(key.slice(3));
+});
+
+// Tree background (the +Add footer, empty space below the datasets): an
+// Add-dataset menu, so right-clicking anywhere in the data panel is meaningful
+// and never leaks the native menu.
+CTX_PROVIDERS.push(function treeBackgroundProvider(e) {
+  if (!e.target.closest || !e.target.closest('#catalogTree')) return null;
+  if (e.target.closest('.tree-ds') || e.target.closest('.tree-row--edit, .tree-row--coord')) return null;
+  var have = (typeof currentFile !== 'undefined' && currentFile) ||
+             (typeof currentProjectId !== 'undefined' && currentProjectId);
+  if (!have) return null;
+  return [
+    { head: true, label: 'Data' },
+    { label: 'Add point dataset…', action: function() { if (typeof wsAddPointDataset === 'function') wsAddPointDataset(); } },
+    { label: 'Add drillhole set…', action: function() { if (typeof wsAddDrillholeDataset === 'function') wsAddDrillholeDataset(); } }
+  ];
 });
 
 CTX_PROVIDERS.push(function variableProvider(e) {
@@ -32702,7 +32778,12 @@ CTX_PROVIDERS.push(function cdfExportProvider(e) {
         items = items.concat(got);
       }
     }
-    if (items.length === 0) return;
+    if (items.length === 0) {
+      // Never leak the native browser menu on the data panel, even if every
+      // provider missed — the tree is app chrome, not document content.
+      if (e.target.closest && e.target.closest('#catalogTree')) e.preventDefault();
+      return;
+    }
     e.preventDefault();
     showCtxMenu(items, e.clientX, e.clientY);
   });

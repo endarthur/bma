@@ -7,6 +7,7 @@
 
 var catalogTreeOpen = null;   // null = default by viewport (open ≥ 701px)
 var _treeRefreshQueued = false;
+var treeSearchQuery = '';     // tree filter (by variable name); filtered in place, not re-rendered
 
 function catalogTreeIsOpen() {
   if (catalogTreeOpen === null) return window.matchMedia('(min-width: 701px)').matches;
@@ -55,9 +56,16 @@ function renderCatalogTree(container) {
     openState[d.dataset.key] = d.open;
   });
 
+  // Search box (filters variable rows by name, in place) — only once there's a
+  // project to search.
+  var hasProject = (typeof currentFile !== 'undefined' && currentFile) ||
+                   (typeof currentProjectId !== 'undefined' && currentProjectId);
+  var html = hasProject
+    ? '<div class="tree-search"><input type="text" id="treeSearch" class="tree-search-input" placeholder="Filter variables…" spellcheck="false" value="' + esc(treeSearchQuery) + '"></div>'
+    : '';
   // Model node always; then every comparison dataset that has been loaded
   // (preflight present). Iterating the registry makes this N-ready.
-  var html = treeDatasetHtml('model', openState);
+  html += treeDatasetHtml('model', openState);
   for (var di = 0; di < datasets.length; di++) {
     if (datasets[di].id === 'model') continue;
     if (datasets[di].preflight) html += treeDatasetHtml(datasets[di].id, openState);
@@ -76,6 +84,33 @@ function renderCatalogTree(container) {
     html += '<div class="tree-foot-hint">' + hint + '</div>';
   }
   $tree.innerHTML = html;
+  applyTreeFilter();   // re-apply the active filter to the freshly built rows
+}
+
+// Filter the tree's variable rows by treeSearchQuery, IN PLACE (no innerHTML
+// rebuild — keeps the search input focused while typing). Hides non-matching
+// rows + any group/dataset left with no visible rows; opens details so matches show.
+function applyTreeFilter() {
+  var $tree = document.getElementById('catalogTree');
+  if (!$tree) return;
+  var q = (treeSearchQuery || '').trim().toLowerCase();
+  var rows = $tree.querySelectorAll('.tree-row--edit, .tree-row--coord');
+  rows.forEach(function(row) {
+    var name = (row.getAttribute('data-name') || '').toLowerCase();
+    row.style.display = (!q || (typeof fuzzyMatch === 'function' ? fuzzyMatch(q, name) : name.indexOf(q) >= 0)) ? '' : 'none';
+  });
+  var containers = $tree.querySelectorAll('details.tree-group, details.tree-ds');
+  if (q) {
+    $tree.querySelectorAll('details').forEach(function(d) { d.open = true; });
+    containers.forEach(function(d) {
+      var anyVisible = Array.prototype.some.call(
+        d.querySelectorAll('.tree-row--edit, .tree-row--coord'),
+        function(r) { return r.style.display !== 'none'; });
+      d.style.display = anyVisible ? '' : 'none';
+    });
+  } else {
+    containers.forEach(function(d) { d.style.display = ''; });
+  }
 }
 
 // Variable description for one dataset, derived from the live headers —
@@ -463,6 +498,13 @@ function treeToggleRole(t, role) {
 
   var $tree = document.getElementById('catalogTree');
   if ($tree) {
+    // Tree search — filter in place (no re-render → input keeps focus)
+    $tree.addEventListener('input', function(e) {
+      if (e.target && e.target.id === 'treeSearch') {
+        treeSearchQuery = e.target.value;
+        applyTreeFilter();
+      }
+    });
     $tree.addEventListener('click', function(e) {
       var add = e.target.closest('[data-tree-add]');
       if (add) {

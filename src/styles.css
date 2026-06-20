@@ -4383,6 +4383,16 @@ table.stats tr.stats-delta-row td:first-child {
   font-size: 0.66rem;
   line-height: 1.45;
 }
+.tree-search { padding: 0.3rem 0.2rem 0.5rem; }
+.tree-search-input {
+  width: 100%; box-sizing: border-box;
+  padding: 0.32rem 0.5rem;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg); color: var(--fg);
+  font: 0.72rem var(--sans);
+}
+.tree-search-input:focus { outline: none; border-color: var(--action); }
+.tree-search-input::placeholder { color: var(--fg-dim); opacity: 0.7; }
 .tree-add-ds {
   display: block;
   width: 100%;
