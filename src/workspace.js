@@ -257,6 +257,21 @@ function wsAddComparisonDataset(kind) {
 function wsAddPointDataset() { wsAddComparisonDataset('point'); }
 function wsAddDrillholeDataset() { wsAddComparisonDataset('drillhole'); }
 
+// A10 #19: drop-to-add. Given an already-resolved File (+ optional FS handle),
+// spawn a fresh comparison dataset, open its panel, and load the file straight
+// in — the additive answer to "a file was dropped while a model is loaded".
+// renderPanel runs synchronously inside activateTab, so dsConfigRoot is ready.
+function wsLoadComparisonFile(file, handle) {
+  if (!file) return;
+  if (!wsRails || typeof dsCreate !== 'function') { loadAuxFile(file, handle); return; }  // legacy/<700px → aux slot
+  var ds = dsCreate({ prefix: 'data' });
+  dsAdd(ds);
+  wsRails.addTab({ id: ds.id, title: 'Import: ' + ds.prefix, closeable: true }, wsMainTarget());
+  wsRails.activateTab(ds.id);   // builds the panel synchronously
+  var root = (typeof dsConfigRoot === 'function') ? dsConfigRoot(ds) : null;
+  loadAuxFile(file, handle, undefined, ds, root);
+}
+
 // A10 4e-b: recreate a comparison-dataset instance from its saved config on
 // project load. The registry entry + rails tab come back immediately with the
 // saved id/prefix; the panel is the empty import surface awaiting its named

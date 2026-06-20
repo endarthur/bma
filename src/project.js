@@ -1620,8 +1620,24 @@ $results.addEventListener('drop', async (e) => {
   var file = handle ? await handle.getFile() : (e.dataTransfer.files[0] || null);
   if (!file) return;
   // Drops anywhere on the Aux panel load the aux dataset, not the main model
-  if (e.target && e.target.closest && e.target.closest('#panelAux')) loadAuxFile(file, handle);
-  else handleFile(file, handle);
+  if (e.target && e.target.closest && e.target.closest('#panelAux')) { loadAuxFile(file, handle); return; }
+  // A10 #19: a model is already loaded — never silently replace it. Offer the
+  // additive path (a new comparison dataset) as the default, replace as the
+  // explicit alternative. JSON projects always load (they're not a dataset).
+  var isProject = /\.json$/i.test(file.name);
+  if (currentFile && !isProject) {
+    var choice = await bmaConfirm({
+      title: 'Add “' + esc(file.name) + '”',
+      html: '<p>A model is already loaded. Add this file as a <strong>comparison dataset</strong>, or <strong>replace</strong> the current model?</p>',
+      okLabel: 'Add as comparison',
+      extraLabel: 'Replace model',
+      cancelLabel: 'Cancel'
+    });
+    if (choice === true) wsLoadComparisonFile(file, handle);
+    else if (choice === 'extra') handleFile(file, handle);
+    return;
+  }
+  handleFile(file, handle);
 });
 
 // Keyboard shortcuts

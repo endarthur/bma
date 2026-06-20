@@ -5907,6 +5907,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
     </div>
     <div class="pack-modal-foot">
       <button class="toolbar-btn" id="confirmCancel">Cancel</button>
+      <button class="toolbar-btn" id="confirmExtra" style="display:none"></button>
       <button class="swath-generate" id="confirmOk">OK</button>
     </div>
   </div>
@@ -5950,7 +5951,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build b1a711a — click to check for updates">b1a711a</div>
+<div class="build-badge" id="buildBadge" title="build 4cc514e — click to check for updates">4cc514e</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -9753,18 +9754,28 @@ function bmaConfirm(opts) {
     var $ok = document.getElementById('confirmOk');
     var $cancel = document.getElementById('confirmCancel');
     var $close = document.getElementById('confirmClose');
+    var $extra = document.getElementById('confirmExtra');
     $ok.textContent = opts.okLabel || 'OK';
     $cancel.textContent = opts.cancelLabel || 'Cancel';
+    // Optional third choice (resolves opts.extraValue, default 'extra') — e.g.
+    // a drop-to-add "Replace model" alongside "Add as comparison"/"Cancel".
+    var extraValue = opts.extraValue || 'extra';
+    if ($extra) {
+      if (opts.extraLabel) { $extra.textContent = opts.extraLabel; $extra.style.display = ''; }
+      else { $extra.style.display = 'none'; }
+    }
     function done(v) {
       $m.classList.remove('active');
       $ok.removeEventListener('click', onOk);
       $cancel.removeEventListener('click', onCancel);
       $close.removeEventListener('click', onCancel);
+      if ($extra) $extra.removeEventListener('click', onExtra);
       document.removeEventListener('keydown', onKey, true);
       resolve(v);
     }
     function onOk() { done(true); }
     function onCancel() { done(false); }
+    function onExtra() { done(extraValue); }
     function onKey(e) {
       if (e.key === 'Escape') { e.stopPropagation(); done(false); }
       else if (e.key === 'Enter') { e.stopPropagation(); done(true); }
@@ -9772,6 +9783,7 @@ function bmaConfirm(opts) {
     $ok.addEventListener('click', onOk);
     $cancel.addEventListener('click', onCancel);
     $close.addEventListener('click', onCancel);
+    if ($extra && opts.extraLabel) $extra.addEventListener('click', onExtra);
     document.addEventListener('keydown', onKey, true);
     $m.classList.add('active');
     $ok.focus();
@@ -19027,8 +19039,24 @@ $results.addEventListener('drop', async (e) => {
   var file = handle ? await handle.getFile() : (e.dataTransfer.files[0] || null);
   if (!file) return;
   // Drops anywhere on the Aux panel load the aux dataset, not the main model
-  if (e.target && e.target.closest && e.target.closest('#panelAux')) loadAuxFile(file, handle);
-  else handleFile(file, handle);
+  if (e.target && e.target.closest && e.target.closest('#panelAux')) { loadAuxFile(file, handle); return; }
+  // A10 #19: a model is already loaded — never silently replace it. Offer the
+  // additive path (a new comparison dataset) as the default, replace as the
+  // explicit alternative. JSON projects always load (they're not a dataset).
+  var isProject = /\.json$/i.test(file.name);
+  if (currentFile && !isProject) {
+    var choice = await bmaConfirm({
+      title: 'Add “' + esc(file.name) + '”',
+      html: '<p>A model is already loaded. Add this file as a <strong>comparison dataset</strong>, or <strong>replace</strong> the current model?</p>',
+      okLabel: 'Add as comparison',
+      extraLabel: 'Replace model',
+      cancelLabel: 'Cancel'
+    });
+    if (choice === true) wsLoadComparisonFile(file, handle);
+    else if (choice === 'extra') handleFile(file, handle);
+    return;
+  }
+  handleFile(file, handle);
 });
 
 // Keyboard shortcuts
@@ -33074,6 +33102,21 @@ function wsAddComparisonDataset(kind) {
 }
 function wsAddPointDataset() { wsAddComparisonDataset('point'); }
 function wsAddDrillholeDataset() { wsAddComparisonDataset('drillhole'); }
+
+// A10 #19: drop-to-add. Given an already-resolved File (+ optional FS handle),
+// spawn a fresh comparison dataset, open its panel, and load the file straight
+// in — the additive answer to "a file was dropped while a model is loaded".
+// renderPanel runs synchronously inside activateTab, so dsConfigRoot is ready.
+function wsLoadComparisonFile(file, handle) {
+  if (!file) return;
+  if (!wsRails || typeof dsCreate !== 'function') { loadAuxFile(file, handle); return; }  // legacy/<700px → aux slot
+  var ds = dsCreate({ prefix: 'data' });
+  dsAdd(ds);
+  wsRails.addTab({ id: ds.id, title: 'Import: ' + ds.prefix, closeable: true }, wsMainTarget());
+  wsRails.activateTab(ds.id);   // builds the panel synchronously
+  var root = (typeof dsConfigRoot === 'function') ? dsConfigRoot(ds) : null;
+  loadAuxFile(file, handle, undefined, ds, root);
+}
 
 // A10 4e-b: recreate a comparison-dataset instance from its saved config on
 // project load. The registry entry + rails tab come back immediately with the

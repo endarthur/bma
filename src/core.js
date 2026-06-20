@@ -1260,18 +1260,28 @@ function bmaConfirm(opts) {
     var $ok = document.getElementById('confirmOk');
     var $cancel = document.getElementById('confirmCancel');
     var $close = document.getElementById('confirmClose');
+    var $extra = document.getElementById('confirmExtra');
     $ok.textContent = opts.okLabel || 'OK';
     $cancel.textContent = opts.cancelLabel || 'Cancel';
+    // Optional third choice (resolves opts.extraValue, default 'extra') — e.g.
+    // a drop-to-add "Replace model" alongside "Add as comparison"/"Cancel".
+    var extraValue = opts.extraValue || 'extra';
+    if ($extra) {
+      if (opts.extraLabel) { $extra.textContent = opts.extraLabel; $extra.style.display = ''; }
+      else { $extra.style.display = 'none'; }
+    }
     function done(v) {
       $m.classList.remove('active');
       $ok.removeEventListener('click', onOk);
       $cancel.removeEventListener('click', onCancel);
       $close.removeEventListener('click', onCancel);
+      if ($extra) $extra.removeEventListener('click', onExtra);
       document.removeEventListener('keydown', onKey, true);
       resolve(v);
     }
     function onOk() { done(true); }
     function onCancel() { done(false); }
+    function onExtra() { done(extraValue); }
     function onKey(e) {
       if (e.key === 'Escape') { e.stopPropagation(); done(false); }
       else if (e.key === 'Enter') { e.stopPropagation(); done(true); }
@@ -1279,6 +1289,7 @@ function bmaConfirm(opts) {
     $ok.addEventListener('click', onOk);
     $cancel.addEventListener('click', onCancel);
     $close.addEventListener('click', onCancel);
+    if ($extra && opts.extraLabel) $extra.addEventListener('click', onExtra);
     document.addEventListener('keydown', onKey, true);
     $m.classList.add('active');
     $ok.focus();
