@@ -211,9 +211,11 @@ function refreshCalcolModeToggle() {
   var targets = [];
   for (var i = 0; i < datasets.length; i++) {
     var ds = datasets[i];
-    if (ds.id === 'model' || ds.preflight) targets.push(ds.id);
+    if (ds.preflight) targets.push(ds.id);   // any dataset with a loaded preflight (model included once loaded)
   }
-  if (targets.indexOf(calcolMode) < 0) setCalcolMode('model');
+  // Bounce to the first available target if the current one vanished. Model-present:
+  // 'model' has preflight so it's targets[0] → identical to the old bounce-to-'model'.
+  if (targets.indexOf(calcolMode) < 0) setCalcolMode(targets.length ? targets[0] : 'model');
   $t.style.display = (targets.length > 1) ? '' : 'none';
   $t.innerHTML = targets.map(function(id) {
     return '<button class="calcol-mode-btn' + (id === calcolMode ? ' active' : '') +

@@ -59,7 +59,18 @@ function exportEls(root) {
     selAll: q('exportSelAll'), selNone: q('exportSelNone'), selOrig: q('exportSelOrig'), selCalc: q('exportSelCalc'),
     datasetWrap: q('exportDatasetWrap') };
 }
-function exportTargetDs(root) { return dsById(exportInstTarget(root)) || dsById('model'); }
+function exportTargetDs(root) {
+  var id = exportInstTarget(root);
+  var ds = dsById(id);
+  if (ds && ds.complete) return ds;
+  // Model-optional: if the default model target has no analysis but a comparison
+  // does, target that. Model-present (target 'model' analyzed) is bit-identical.
+  if (id === 'model') {
+    var ts = exportTargetableDatasets();
+    if (ts.length) return ts[0];
+  }
+  return ds || dsById('model');
+}
 function exportCtx(root) {
   var ds = exportTargetDs(root);
   var isModel = ds.id === 'model';

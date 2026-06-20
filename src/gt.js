@@ -292,7 +292,19 @@ function gtResetInstances() {
 // curves. The model resolves through its current* globals (bit-identical); a
 // comparison dataset reads its registry view (ds.complete/file/filter/calcols/
 // preflight/rowVar). Only datasets with a completed analysis are targetable.
-function gtTargetDs(root) { return dsById(gtStateForRoot(root).gtTargetDsId) || dsById('model'); }
+function gtTargetDs(root) {
+  var id = gtStateForRoot(root).gtTargetDsId;
+  var ds = dsById(id);
+  if (ds && ds.complete) return ds;
+  // Model-optional projects: if the (default) model target has no analysis but a
+  // comparison does, target that so GT stays usable with no model. When a model
+  // IS analyzed, target 'model' resolves above → bit-identical to before.
+  if (id === 'model') {
+    var ts = gtTargetableDatasets();
+    if (ts.length) return ts[0];
+  }
+  return ds || dsById('model');
+}
 function gtCtx(root) {
   var ds = gtTargetDs(root);
   var isModel = ds.id === 'model';

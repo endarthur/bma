@@ -310,9 +310,12 @@ function statsShownCmpDatasets(root) {
 function statsReferenceDs(root) {
   var refDs = statStateForRoot(root).refDs;
   var shownCmp = statsShownCmpDatasets(root);
-  var shown = ['model'].concat(shownCmp.map(function(d) { return d.id; }));
+  // Model-optional projects: only offer 'model' as a reference when it's analyzed.
+  // When a model IS present this is identical to the original (model always first).
+  var hasModel = !!(datasets[0] && datasets[0].complete);
+  var shown = (hasModel ? ['model'] : []).concat(shownCmp.map(function(d) { return d.id; }));
   if (refDs && shown.indexOf(refDs) >= 0) return refDs;
-  return shownCmp.length ? shownCmp[0].id : 'model';
+  return shownCmp.length ? shownCmp[0].id : (hasModel ? 'model' : null);
 }
 
 // The reference dataset's stats object for the property a model column (ci)
@@ -612,13 +615,15 @@ function renderStatsSidebar(root) {
       // Only here (≥2 comparisons) where the choice is ambiguous; with a lone
       // comparison the reference is unambiguously it (badged in the table).
       var refNow = statsReferenceDs(root);
+      var hasModel = !!(datasets[0] && datasets[0].complete);
       var refSel = '<div class="stats-ref-row"><span class="stats-ref-label" title="Δ% denominator — every other dataset is compared to this one">Δ% reference</span>' +
-        '<select class="stats-select stats-ref-sel" data-stat="refSel"><option value="model"' + (refNow === 'model' ? ' selected' : '') + '>Model</option>';
+        '<select class="stats-select stats-ref-sel" data-stat="refSel">' +
+        (hasModel ? '<option value="model"' + (refNow === 'model' ? ' selected' : '') + '>Model</option>' : '');
       statsShownCmpDatasets(root).forEach(function(ds) {
         refSel += '<option value="' + esc(ds.id) + '"' + (refNow === ds.id ? ' selected' : '') + '>' + esc(dsLabel(ds.id)) + '</option>';
       });
       refSel += '</select></div>';
-      var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the model dataset — toggle comparison chips to hide them">Model</span>';
+      var chips = hasModel ? '<span class="stats-ds-chip stats-ds-chip--model" title="the model dataset — toggle comparison chips to hide them">Model</span>' : '';
       allCmp.forEach(function(ds) {
         var off = S.dsHidden.has(ds.id);
         chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) + '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) + '">' + esc(dsLabel(ds.id)) + '</button>';
