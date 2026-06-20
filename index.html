@@ -5986,7 +5986,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 26d95b5 — click to check for updates">26d95b5</div>
+<div class="build-badge" id="buildBadge" title="build 568c33b — click to check for updates">568c33b</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -19299,6 +19299,7 @@ $results.addEventListener('drop', async (e) => {
   // additive path (a new comparison dataset) as the default, replace as the
   // explicit alternative. JSON projects always load (they're not a dataset).
   var isProject = /\.json$/i.test(file.name);
+  var isArchive = /\.zip$/i.test(file.name);
   if (currentFile && !isProject) {
     var choice = await bmaConfirm({
       title: 'Add “' + esc(file.name) + '”',
@@ -19309,6 +19310,25 @@ $results.addEventListener('drop', async (e) => {
     });
     if (choice === true) wsLoadComparisonFile(file, handle);
     else if (choice === 'extra') handleFile(file, handle);
+    return;
+  }
+  // Model-less project: a dropped data file is ambiguous (a comparison dataset or
+  // the project's model). Default to the safe additive path; "Set as model" starts
+  // a model-backed project (and, per the Standing Rule, warns that the current
+  // datasets won't carry over — preserving them across a model-add is future work).
+  if (currentProjectId && !currentFile && !isProject && !isArchive) {
+    var withData = datasets.filter(function(d) { return d.id !== 'model' && d.file; }).length;
+    var ch = await bmaConfirm({
+      title: 'Add “' + esc(file.name) + '”',
+      html: '<p>This project has no model. Add this file as a <strong>comparison dataset</strong>, or <strong>set it as the model</strong>' +
+        (withData ? ' (starts a model-backed project — the ' + withData + ' current dataset' + (withData > 1 ? 's' : '') + ' won’t carry over)' : '') +
+        '?</p>',
+      okLabel: 'Add as comparison',
+      extraLabel: 'Set as model',
+      cancelLabel: 'Cancel'
+    });
+    if (ch === true) wsLoadComparisonFile(file, handle);
+    else if (ch === 'extra') handleFile(file, handle);
     return;
   }
   handleFile(file, handle);
