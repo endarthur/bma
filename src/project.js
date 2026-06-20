@@ -1999,8 +1999,12 @@ function runWorkerAnalysis(xyzOverride, filter, dxyzOverride, cacheKey, fingerpr
   if (worker) worker.terminate();
   worker = new Worker(workerUrl);
 
-  // Always use overlay on the results panels
-  const panelsEl = $results.querySelector('.results-panels');
+  // Always use overlay on the results panels. On the rails shell the legacy
+  // .results-panels container is display:none (panels live in .results-main), so
+  // the overlay must mount on .results-main there or it would be invisible.
+  const panelsEl = (typeof wsRails !== 'undefined' && wsRails)
+    ? document.getElementById('resultsMain')
+    : $results.querySelector('.results-panels');
   // Remove any stale overlay
   const old = panelsEl.querySelector('.reanalysis-overlay');
   if (old) old.remove();
