@@ -1525,7 +1525,25 @@ function enterModellessWorkspaceUI() {
   $resultsTimeInfo.textContent = '';
   $resultsMemInfo.textContent = '';
   clearTabPlaceholders();
+  setModellessTabMessages();           // Statistics/Categories explain they need a model
   renderPreflightEmpty();              // model-import tab shows a "no model yet" prompt
+}
+
+// The Statistics and Categories tabs are model-column-primary (comparisons show
+// as Δ% overlays on the model's columns), so with no model they have nothing to
+// show. Replace the generic "Click Analyze" placeholder with a message that
+// points to the surfaces that DO work model-less. Overwritten by the real render
+// once a model is analyzed (displayResults).
+function setModellessTabMessages() {
+  var msg = function(lead) {
+    return '<div class="tab-empty-note">' +
+      '<div class="tab-empty-note-title">No block model</div>' +
+      '<div>' + lead + ' against the block model. Load a model on the <b>Import</b> tab, ' +
+      'or read a dataset on its own panel, or use <b>StatsCat</b>, <b>GT</b> and <b>Export</b> — each targets any dataset.</div>' +
+      '</div>';
+  };
+  if (typeof $statsContent !== 'undefined' && $statsContent) $statsContent.innerHTML = msg('Statistics compares each dataset');
+  if (typeof $catChart !== 'undefined' && $catChart) $catChart.innerHTML = msg('Categories compares proportions');
 }
 
 function newEmptyProject() {
@@ -1634,6 +1652,7 @@ async function setProjectModel(file, handle) {
     renderPreflight(data);                                  // sets preflightData, shows column config + model filter
     if (typeof catEnsureSeeded === 'function') catEnsureSeeded();   // seeds model props, pairs to existing comparison columns by name
     if (typeof refreshModelGridSection === 'function') refreshModelGridSection();
+    clearTabPlaceholders();   // a model exists now → Statistics/Categories show "Click Analyze", not the model-less note
     markAnalysisStale();
     showPanel('preflight');
     refreshCatalogTree();

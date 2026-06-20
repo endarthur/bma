@@ -4105,6 +4105,13 @@ table.cat-values tr.cat-aux-only td { background: color-mix(in srgb, var(--brand
 .preflight-empty-btn--primary:hover { background: var(--action); color: var(--bg); }
 .preflight-empty-hint { margin-top: 0.9rem; font-size: 0.72rem; color: var(--fg-dim); opacity: 0.7; }
 
+/* Model-optional: Statistics/Categories with no model */
+.tab-empty-note {
+  max-width: 440px; margin: 3rem auto; text-align: center;
+  font-family: var(--sans); font-size: 0.82rem; line-height: 1.5; color: var(--fg-dim);
+}
+.tab-empty-note-title { font-size: 1.0rem; color: var(--fg-bright); margin-bottom: 0.5rem; }
+
 .stats-weight-select {
   width: 100%; box-sizing: border-box;
   background: var(--bg2); color: var(--fg); border: 1px solid var(--border);
@@ -5991,7 +5998,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build fa4798d — click to check for updates">fa4798d</div>
+<div class="build-badge" id="buildBadge" title="build 5793eae — click to check for updates">5793eae</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -19011,7 +19018,25 @@ function enterModellessWorkspaceUI() {
   $resultsTimeInfo.textContent = '';
   $resultsMemInfo.textContent = '';
   clearTabPlaceholders();
+  setModellessTabMessages();           // Statistics/Categories explain they need a model
   renderPreflightEmpty();              // model-import tab shows a "no model yet" prompt
+}
+
+// The Statistics and Categories tabs are model-column-primary (comparisons show
+// as Δ% overlays on the model's columns), so with no model they have nothing to
+// show. Replace the generic "Click Analyze" placeholder with a message that
+// points to the surfaces that DO work model-less. Overwritten by the real render
+// once a model is analyzed (displayResults).
+function setModellessTabMessages() {
+  var msg = function(lead) {
+    return '<div class="tab-empty-note">' +
+      '<div class="tab-empty-note-title">No block model</div>' +
+      '<div>' + lead + ' against the block model. Load a model on the <b>Import</b> tab, ' +
+      'or read a dataset on its own panel, or use <b>StatsCat</b>, <b>GT</b> and <b>Export</b> — each targets any dataset.</div>' +
+      '</div>';
+  };
+  if (typeof $statsContent !== 'undefined' && $statsContent) $statsContent.innerHTML = msg('Statistics compares each dataset');
+  if (typeof $catChart !== 'undefined' && $catChart) $catChart.innerHTML = msg('Categories compares proportions');
 }
 
 function newEmptyProject() {
@@ -19120,6 +19145,7 @@ async function setProjectModel(file, handle) {
     renderPreflight(data);                                  // sets preflightData, shows column config + model filter
     if (typeof catEnsureSeeded === 'function') catEnsureSeeded();   // seeds model props, pairs to existing comparison columns by name
     if (typeof refreshModelGridSection === 'function') refreshModelGridSection();
+    clearTabPlaceholders();   // a model exists now → Statistics/Categories show "Click Analyze", not the model-less note
     markAnalysisStale();
     showPanel('preflight');
     refreshCatalogTree();

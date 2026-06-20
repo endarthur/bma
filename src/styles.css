@@ -4090,6 +4090,13 @@ table.cat-values tr.cat-aux-only td { background: color-mix(in srgb, var(--brand
 .preflight-empty-btn--primary:hover { background: var(--action); color: var(--bg); }
 .preflight-empty-hint { margin-top: 0.9rem; font-size: 0.72rem; color: var(--fg-dim); opacity: 0.7; }
 
+/* Model-optional: Statistics/Categories with no model */
+.tab-empty-note {
+  max-width: 440px; margin: 3rem auto; text-align: center;
+  font-family: var(--sans); font-size: 0.82rem; line-height: 1.5; color: var(--fg-dim);
+}
+.tab-empty-note-title { font-size: 1.0rem; color: var(--fg-bright); margin-bottom: 0.5rem; }
+
 .stats-weight-select {
   width: 100%; box-sizing: border-box;
   background: var(--bg2); color: var(--fg); border: 1px solid var(--border);
