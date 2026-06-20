@@ -623,6 +623,28 @@ function renderPreflight(data) {
   renderPreflightTable(data);
 }
 
+// Model-optional projects: the Import-Model tab when this project has no model
+// yet. The model slot stays available (drop a model CSV onto the window), but the
+// useful actions are adding point/drillhole comparison datasets.
+function renderPreflightEmpty() {
+  $preflightHead.style.display = 'none';   // no model → no model filter
+  $preflightSidebar.innerHTML = '';
+  $preflightPreview.innerHTML =
+    '<div class="preflight-empty-state">' +
+      '<div class="preflight-empty-title">No model loaded</div>' +
+      '<div class="preflight-empty-sub">This project has no block model yet. Drop a model CSV onto the window to set one, ' +
+        'or add a point cloud / drillhole dataset to work without a model.</div>' +
+      '<div class="preflight-empty-actions">' +
+        '<button type="button" class="preflight-empty-btn" id="pfEmptyAddPoint">+ Add point dataset</button>' +
+        '<button type="button" class="preflight-empty-btn" id="pfEmptyAddDh">+ Add drillhole set</button>' +
+      '</div>' +
+    '</div>';
+  var bp = document.getElementById('pfEmptyAddPoint');
+  var bd = document.getElementById('pfEmptyAddDh');
+  if (bp) bp.onclick = function() { if (typeof wsAddPointDataset === 'function') wsAddPointDataset(); };
+  if (bd) bd.onclick = function() { if (typeof wsAddDrillholeDataset === 'function') wsAddDrillholeDataset(); };
+}
+
 const $preflightSidebar = document.getElementById('preflightSidebar');
 
 function renderPreflightSidebar(data) {

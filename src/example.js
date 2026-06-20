@@ -521,3 +521,8 @@ async function downloadExampleZip() {
 // ── Landing button wiring ──
 var $exampleBtn = document.getElementById('exampleDownload');
 if ($exampleBtn) $exampleBtn.addEventListener('click', downloadExampleZip);
+
+var $newProjectBtn = document.getElementById('newProjectBtn');
+if ($newProjectBtn) $newProjectBtn.addEventListener('click', function() {
+  if (typeof newEmptyProject === 'function') newEmptyProject();
+});

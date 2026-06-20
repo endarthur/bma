@@ -581,6 +581,7 @@ function wsRecentMenuItems() {
 }
 function wsFileMenuItems() {
   return [
+    { label: 'New project', action: 'newProject' },
     { label: 'Open…', action: 'open' },
     { label: 'Open recent', children: wsRecentMenuItems },
     '---',
@@ -655,6 +656,7 @@ function wsMenuAction(a) {
   if (a.scale != null) { if (typeof applyUiScale === 'function') applyUiScale(a.scale); return; }
   if (a.recent) { if (typeof reopenRecent === 'function') reopenRecent(a.recent); return; }
   switch (a) {
+    case 'newProject': if (typeof newEmptyProject === 'function') newEmptyProject(); break;
     case 'open': { var fi = document.getElementById('fileInput'); if (fi) fi.click(); break; }
     case 'renameProject': if (typeof renameProjectPrompt === 'function') renameProjectPrompt(); break;
     case 'saveFlush': if (typeof flushProjectSave === 'function') flushProjectSave(); break;

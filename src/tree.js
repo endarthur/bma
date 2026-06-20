@@ -64,7 +64,8 @@ function renderCatalogTree(container) {
   }
   // A10 #18: add comparison datasets straight from the Data rail (mirrors the
   // [+] launcher / Data menu) — the most discoverable spot once a model exists.
-  if (typeof currentFile !== 'undefined' && currentFile) {
+  if ((typeof currentFile !== 'undefined' && currentFile) ||
+      (typeof currentProjectId !== 'undefined' && currentProjectId)) {
     html += '<button type="button" class="tree-add-ds" data-tree-add>+ Add dataset</button>';
   }
   // C6-5 discoverability footer: the variable context menu (C4) and tab

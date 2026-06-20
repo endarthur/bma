@@ -1330,46 +1330,10 @@ async function tryPackedProject(file) {
   return { project: project, modelFile: modelFile, auxFile: auxF, dhTrio: dhTrio, datasetFiles: datasetFiles, dhTriosByDs: dhTriosByDs };
 }
 
-async function handleFile(file, handle, skipRecents) {
-  if (!file) return;
-
-  // Bare project file: stash it and ask for its data file
-  if (/\.bma\.json$/i.test(file.name)) {
-    try {
-      const pj = JSON.parse(await file.text());
-      if (pj && pj._bma === 1 && pj.file && pj.file.name) {
-        pendingDroppedProject = pj;
-        $dropzone.querySelector('.label').innerHTML =
-          'Project loaded — now drop <strong>' + esc(pj.file.name) + '</strong> to apply it';
-        return;
-      }
-    } catch (e) { /* fall through to error */ }
-    $errorMsg.textContent = 'Not a valid BMA project file.';
-    $errorMsg.classList.add('active');
-    return;
-  }
-
-  // Packed project archive: extract data + config from the zip
-  if (/\.zip$/i.test(file.name) || file.type === 'application/zip') {
-    let packed = null;
-    try { packed = await tryPackedProject(file); } catch (e) { packed = null; }
-    if (packed) {
-      pendingDroppedProject = packed.project;
-      pendingDroppedAuxFile = packed.auxFile;
-      pendingDroppedDhTrio = packed.dhTrio;
-      pendingDroppedDhTrios = packed.dhTriosByDs || null; // p5-3b: d2+ drillhole trios, re-derived in displayResults once instances exist
-      pendingDroppedDatasetFiles = packed.datasetFiles || null; // 4e-b-iii: consumed in displayResults once instances exist
-      // Recents records the archive the user actually opened (re-openable
-      // via its handle) — not the extracted inner CSV, which used to land
-      // in the list under a name nobody dropped and could never re-open
-      saveToRecents(file, handle, true);
-      handleFile(packed.modelFile, null, true);
-      return;
-    }
-  }
-
-  currentFile = file;
-  if (!skipRecents) saveToRecents(file, handle);
+// Reset all per-project analysis/UI state to empty. Shared by handleFile (new
+// model) and newEmptyProject (model-less). Pure state resets — no file refs — so
+// the model-load path is byte-identical to the inlined block it replaced.
+function resetProjectState() {
   currentFilter = null;
   currentGroupBy = null;
   currentStatsCatVar = null;
@@ -1436,6 +1400,114 @@ async function handleFile(file, handle, skipRecents) {
   $appFooter.classList.remove('active');
   $filterError.classList.remove('active');
   $errorMsg.classList.remove('active');
+}
+
+// Placeholder content for the analysis tabs before any analysis has run. Shared
+// by handleFile and newEmptyProject (verbatim move — model path unchanged).
+function clearTabPlaceholders() {
+  const placeholder = '<div style="color:var(--fg-dim);font-size:0.78rem;padding:2rem;text-align:center;opacity:0.5;">Click Analyze to run analysis.</div>';
+  $geoContent.innerHTML = placeholder;
+  $geoBadge.textContent = '';
+  $fileInfo.innerHTML = '';
+  $statsContent.innerHTML = placeholder;
+  $statsBadge.textContent = '';
+  document.getElementById('statsVarList').innerHTML = '';
+  document.getElementById('statsVarSearch').value = '';
+  document.getElementById('statsMetricToggles').innerHTML = '';
+  document.getElementById('statsCdfChart').innerHTML = '<div class="stats-cdf-hint">Click column names to add CDF curves</div>';
+  $statsCatContent.innerHTML = placeholder;
+  $statsCatBadge.textContent = '';
+  $statsCatVarList.innerHTML = '';
+  $statsCatGroupList.innerHTML = '';
+  $statsCatVarSearch.value = '';
+  $statsCatGroupSearch.value = '';
+  $catColList.innerHTML = '';
+  $catToolbar.innerHTML = '';
+  $catChart.innerHTML = '';
+  $catValueTable.innerHTML = '';
+  $catBadge.textContent = '';
+  $exportColList.innerHTML = '';
+  $exportBadge.textContent = '0';
+  $exportInfo.textContent = '';
+  $exportProgress.classList.remove('active');
+  setCalcolCode('');
+  simulateCalcol();
+}
+
+// Start a fresh, model-less project (A10 model-optional): no model file, a
+// generated project id (dual-key persistence), an empty workspace the user fills
+// with point/drillhole datasets. The model slot stays available but empty.
+function newEmptyProject() {
+  resetProjectState();
+  currentFile = null;
+  preflightData = null;
+  currentColTypes = null;
+  currentHeader = null;
+  currentXYZ = null;
+  currentProjectId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : ('p' + Date.now() + '-' + Math.random().toString(36).slice(2));
+
+  // Workspace UI transition (mirrors handleFile, sans a model file)
+  $dropzone.classList.add('collapsed');
+  $dropzone.querySelector('.label').innerHTML = 'Drop a model file, or add datasets below:';
+  var loadedSpan = $dropzone.querySelector('.loaded-name');
+  if (loadedSpan) loadedSpan.textContent = '';
+  $results.classList.add('active');
+  document.querySelector('.app').classList.add('has-results');
+  $resultsFilename.textContent = projectTitle || 'Untitled project';
+  $resultsRowInfo.textContent = '';
+  $resultsTimeInfo.textContent = '';
+  $resultsMemInfo.textContent = '';
+  clearTabPlaceholders();
+  renderPreflightEmpty();              // model-import tab shows a "no model yet" prompt
+  showPanel('preflight');
+  refreshCatalogTree();
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+
+async function handleFile(file, handle, skipRecents) {
+  if (!file) return;
+
+  // Bare project file: stash it and ask for its data file
+  if (/\.bma\.json$/i.test(file.name)) {
+    try {
+      const pj = JSON.parse(await file.text());
+      if (pj && pj._bma === 1 && pj.file && pj.file.name) {
+        pendingDroppedProject = pj;
+        $dropzone.querySelector('.label').innerHTML =
+          'Project loaded — now drop <strong>' + esc(pj.file.name) + '</strong> to apply it';
+        return;
+      }
+    } catch (e) { /* fall through to error */ }
+    $errorMsg.textContent = 'Not a valid BMA project file.';
+    $errorMsg.classList.add('active');
+    return;
+  }
+
+  // Packed project archive: extract data + config from the zip
+  if (/\.zip$/i.test(file.name) || file.type === 'application/zip') {
+    let packed = null;
+    try { packed = await tryPackedProject(file); } catch (e) { packed = null; }
+    if (packed) {
+      pendingDroppedProject = packed.project;
+      pendingDroppedAuxFile = packed.auxFile;
+      pendingDroppedDhTrio = packed.dhTrio;
+      pendingDroppedDhTrios = packed.dhTriosByDs || null; // p5-3b: d2+ drillhole trios, re-derived in displayResults once instances exist
+      pendingDroppedDatasetFiles = packed.datasetFiles || null; // 4e-b-iii: consumed in displayResults once instances exist
+      // Recents records the archive the user actually opened (re-openable
+      // via its handle) — not the extracted inner CSV, which used to land
+      // in the list under a name nobody dropped and could never re-open
+      saveToRecents(file, handle, true);
+      handleFile(packed.modelFile, null, true);
+      return;
+    }
+  }
+
+  currentFile = file;
+  currentProjectId = null;   // model-backed: identity is the file key (dual-key)
+  if (!skipRecents) saveToRecents(file, handle);
+  resetProjectState();
 
   // Collapse dropzone
   $dropzone.classList.add('collapsed');
@@ -1464,33 +1536,7 @@ async function handleFile(file, handle, skipRecents) {
   markAnalysisStale();
 
   // Set placeholder content for tabs before first analysis
-  const placeholder = '<div style="color:var(--fg-dim);font-size:0.78rem;padding:2rem;text-align:center;opacity:0.5;">Click Analyze to run analysis.</div>';
-  $geoContent.innerHTML = placeholder;
-  $geoBadge.textContent = '';
-  $fileInfo.innerHTML = '';
-  $statsContent.innerHTML = placeholder;
-  $statsBadge.textContent = '';
-  document.getElementById('statsVarList').innerHTML = '';
-  document.getElementById('statsVarSearch').value = '';
-  document.getElementById('statsMetricToggles').innerHTML = '';
-  document.getElementById('statsCdfChart').innerHTML = '<div class="stats-cdf-hint">Click column names to add CDF curves</div>';
-  $statsCatContent.innerHTML = placeholder;
-  $statsCatBadge.textContent = '';
-  $statsCatVarList.innerHTML = '';
-  $statsCatGroupList.innerHTML = '';
-  $statsCatVarSearch.value = '';
-  $statsCatGroupSearch.value = '';
-  $catColList.innerHTML = '';
-  $catToolbar.innerHTML = '';
-  $catChart.innerHTML = '';
-  $catValueTable.innerHTML = '';
-  $catBadge.textContent = '';
-  $exportColList.innerHTML = '';
-  $exportBadge.textContent = '0';
-  $exportInfo.textContent = '';
-  $exportProgress.classList.remove('active');
-  setCalcolCode('');
-  simulateCalcol();
+  clearTabPlaceholders();
 
   // Run preflight
   runPreflight(file).then(async data => {

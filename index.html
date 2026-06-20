@@ -4072,6 +4072,34 @@ table.cat-values tr.cat-aux-only td { background: color-mix(in srgb, var(--brand
 .example-download-btn:hover { color: var(--action); border-color: var(--action); }
 .example-download-hint { color: var(--fg-dim); font-family: var(--sans); font-size: 0.72rem; opacity: 0.6; }
 
+/* Model-optional projects: landing "start empty" affordance */
+.landing-actions {
+  display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+  flex-wrap: wrap; margin: 0.9rem auto 0; max-width: 700px;
+}
+.landing-newproj-btn {
+  background: none; border: 1px solid var(--action); color: var(--action);
+  font: 0.74rem var(--sans); padding: 0.4rem 0.9rem; border-radius: 4px; cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.landing-newproj-btn:hover { background: var(--action); color: var(--bg); }
+.landing-newproj-hint { color: var(--fg-dim); font-family: var(--sans); font-size: 0.72rem; opacity: 0.7; }
+
+/* Model-optional: the Import-Model tab's empty state when a project has no model */
+.preflight-empty-state {
+  max-width: 460px; margin: 3rem auto; text-align: center;
+  font-family: var(--sans); color: var(--fg-dim);
+}
+.preflight-empty-title { font-size: 1.05rem; color: var(--fg-bright); margin-bottom: 0.5rem; }
+.preflight-empty-sub { font-size: 0.82rem; line-height: 1.5; margin-bottom: 1.2rem; }
+.preflight-empty-actions { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
+.preflight-empty-btn {
+  background: none; border: 1px dashed var(--border); color: var(--fg-dim);
+  font: 0.74rem var(--sans); padding: 0.4rem 0.9rem; border-radius: 4px; cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.preflight-empty-btn:hover { border-color: var(--action); color: var(--fg-bright); }
+
 .stats-weight-select {
   width: 100%; box-sizing: border-box;
   background: var(--bg2); color: var(--fg); border: 1px solid var(--border);
@@ -5318,6 +5346,13 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
     <input type="file" id="fileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM,.json,.JSON">
   </div>
 
+  <div class="landing-actions">
+    <button class="landing-newproj-btn" id="newProjectBtn">+ Start an empty project</button>
+    <span class="landing-newproj-hint">no block model needed — add drillholes or point data, then go</span>
+  </div>
+
+  <div class="project-list" id="projectList"></div>
+
   <div class="recent-files" id="recentFiles"></div>
 
   <div class="example-download">
@@ -5951,7 +5986,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 5fd285d — click to check for updates">5fd285d</div>
+<div class="build-badge" id="buildBadge" title="build 712d926 — click to check for updates">712d926</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8497,6 +8532,7 @@ const workerBlob = new Blob([WORKER_CODE], { type: 'application/javascript' });
 const workerUrl = URL.createObjectURL(workerBlob);
 
 let currentFile = null;
+let currentProjectId = null;   // model-optional projects: dual-key identity when no model file (else null → file key)
 let currentHeader = [];
 let currentColTypes = [];
 let currentXYZ = { x: -1, y: -1, z: -1 };
@@ -14481,6 +14517,28 @@ function renderPreflight(data) {
   renderPreflightTable(data);
 }
 
+// Model-optional projects: the Import-Model tab when this project has no model
+// yet. The model slot stays available (drop a model CSV onto the window), but the
+// useful actions are adding point/drillhole comparison datasets.
+function renderPreflightEmpty() {
+  $preflightHead.style.display = 'none';   // no model → no model filter
+  $preflightSidebar.innerHTML = '';
+  $preflightPreview.innerHTML =
+    '<div class="preflight-empty-state">' +
+      '<div class="preflight-empty-title">No model loaded</div>' +
+      '<div class="preflight-empty-sub">This project has no block model yet. Drop a model CSV onto the window to set one, ' +
+        'or add a point cloud / drillhole dataset to work without a model.</div>' +
+      '<div class="preflight-empty-actions">' +
+        '<button type="button" class="preflight-empty-btn" id="pfEmptyAddPoint">+ Add point dataset</button>' +
+        '<button type="button" class="preflight-empty-btn" id="pfEmptyAddDh">+ Add drillhole set</button>' +
+      '</div>' +
+    '</div>';
+  var bp = document.getElementById('pfEmptyAddPoint');
+  var bd = document.getElementById('pfEmptyAddDh');
+  if (bp) bp.onclick = function() { if (typeof wsAddPointDataset === 'function') wsAddPointDataset(); };
+  if (bd) bd.onclick = function() { if (typeof wsAddDrillholeDataset === 'function') wsAddDrillholeDataset(); };
+}
+
 const $preflightSidebar = document.getElementById('preflightSidebar');
 
 function renderPreflightSidebar(data) {
@@ -18749,46 +18807,10 @@ async function tryPackedProject(file) {
   return { project: project, modelFile: modelFile, auxFile: auxF, dhTrio: dhTrio, datasetFiles: datasetFiles, dhTriosByDs: dhTriosByDs };
 }
 
-async function handleFile(file, handle, skipRecents) {
-  if (!file) return;
-
-  // Bare project file: stash it and ask for its data file
-  if (/\.bma\.json$/i.test(file.name)) {
-    try {
-      const pj = JSON.parse(await file.text());
-      if (pj && pj._bma === 1 && pj.file && pj.file.name) {
-        pendingDroppedProject = pj;
-        $dropzone.querySelector('.label').innerHTML =
-          'Project loaded — now drop <strong>' + esc(pj.file.name) + '</strong> to apply it';
-        return;
-      }
-    } catch (e) { /* fall through to error */ }
-    $errorMsg.textContent = 'Not a valid BMA project file.';
-    $errorMsg.classList.add('active');
-    return;
-  }
-
-  // Packed project archive: extract data + config from the zip
-  if (/\.zip$/i.test(file.name) || file.type === 'application/zip') {
-    let packed = null;
-    try { packed = await tryPackedProject(file); } catch (e) { packed = null; }
-    if (packed) {
-      pendingDroppedProject = packed.project;
-      pendingDroppedAuxFile = packed.auxFile;
-      pendingDroppedDhTrio = packed.dhTrio;
-      pendingDroppedDhTrios = packed.dhTriosByDs || null; // p5-3b: d2+ drillhole trios, re-derived in displayResults once instances exist
-      pendingDroppedDatasetFiles = packed.datasetFiles || null; // 4e-b-iii: consumed in displayResults once instances exist
-      // Recents records the archive the user actually opened (re-openable
-      // via its handle) — not the extracted inner CSV, which used to land
-      // in the list under a name nobody dropped and could never re-open
-      saveToRecents(file, handle, true);
-      handleFile(packed.modelFile, null, true);
-      return;
-    }
-  }
-
-  currentFile = file;
-  if (!skipRecents) saveToRecents(file, handle);
+// Reset all per-project analysis/UI state to empty. Shared by handleFile (new
+// model) and newEmptyProject (model-less). Pure state resets — no file refs — so
+// the model-load path is byte-identical to the inlined block it replaced.
+function resetProjectState() {
   currentFilter = null;
   currentGroupBy = null;
   currentStatsCatVar = null;
@@ -18855,6 +18877,114 @@ async function handleFile(file, handle, skipRecents) {
   $appFooter.classList.remove('active');
   $filterError.classList.remove('active');
   $errorMsg.classList.remove('active');
+}
+
+// Placeholder content for the analysis tabs before any analysis has run. Shared
+// by handleFile and newEmptyProject (verbatim move — model path unchanged).
+function clearTabPlaceholders() {
+  const placeholder = '<div style="color:var(--fg-dim);font-size:0.78rem;padding:2rem;text-align:center;opacity:0.5;">Click Analyze to run analysis.</div>';
+  $geoContent.innerHTML = placeholder;
+  $geoBadge.textContent = '';
+  $fileInfo.innerHTML = '';
+  $statsContent.innerHTML = placeholder;
+  $statsBadge.textContent = '';
+  document.getElementById('statsVarList').innerHTML = '';
+  document.getElementById('statsVarSearch').value = '';
+  document.getElementById('statsMetricToggles').innerHTML = '';
+  document.getElementById('statsCdfChart').innerHTML = '<div class="stats-cdf-hint">Click column names to add CDF curves</div>';
+  $statsCatContent.innerHTML = placeholder;
+  $statsCatBadge.textContent = '';
+  $statsCatVarList.innerHTML = '';
+  $statsCatGroupList.innerHTML = '';
+  $statsCatVarSearch.value = '';
+  $statsCatGroupSearch.value = '';
+  $catColList.innerHTML = '';
+  $catToolbar.innerHTML = '';
+  $catChart.innerHTML = '';
+  $catValueTable.innerHTML = '';
+  $catBadge.textContent = '';
+  $exportColList.innerHTML = '';
+  $exportBadge.textContent = '0';
+  $exportInfo.textContent = '';
+  $exportProgress.classList.remove('active');
+  setCalcolCode('');
+  simulateCalcol();
+}
+
+// Start a fresh, model-less project (A10 model-optional): no model file, a
+// generated project id (dual-key persistence), an empty workspace the user fills
+// with point/drillhole datasets. The model slot stays available but empty.
+function newEmptyProject() {
+  resetProjectState();
+  currentFile = null;
+  preflightData = null;
+  currentColTypes = null;
+  currentHeader = null;
+  currentXYZ = null;
+  currentProjectId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : ('p' + Date.now() + '-' + Math.random().toString(36).slice(2));
+
+  // Workspace UI transition (mirrors handleFile, sans a model file)
+  $dropzone.classList.add('collapsed');
+  $dropzone.querySelector('.label').innerHTML = 'Drop a model file, or add datasets below:';
+  var loadedSpan = $dropzone.querySelector('.loaded-name');
+  if (loadedSpan) loadedSpan.textContent = '';
+  $results.classList.add('active');
+  document.querySelector('.app').classList.add('has-results');
+  $resultsFilename.textContent = projectTitle || 'Untitled project';
+  $resultsRowInfo.textContent = '';
+  $resultsTimeInfo.textContent = '';
+  $resultsMemInfo.textContent = '';
+  clearTabPlaceholders();
+  renderPreflightEmpty();              // model-import tab shows a "no model yet" prompt
+  showPanel('preflight');
+  refreshCatalogTree();
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+
+async function handleFile(file, handle, skipRecents) {
+  if (!file) return;
+
+  // Bare project file: stash it and ask for its data file
+  if (/\.bma\.json$/i.test(file.name)) {
+    try {
+      const pj = JSON.parse(await file.text());
+      if (pj && pj._bma === 1 && pj.file && pj.file.name) {
+        pendingDroppedProject = pj;
+        $dropzone.querySelector('.label').innerHTML =
+          'Project loaded — now drop <strong>' + esc(pj.file.name) + '</strong> to apply it';
+        return;
+      }
+    } catch (e) { /* fall through to error */ }
+    $errorMsg.textContent = 'Not a valid BMA project file.';
+    $errorMsg.classList.add('active');
+    return;
+  }
+
+  // Packed project archive: extract data + config from the zip
+  if (/\.zip$/i.test(file.name) || file.type === 'application/zip') {
+    let packed = null;
+    try { packed = await tryPackedProject(file); } catch (e) { packed = null; }
+    if (packed) {
+      pendingDroppedProject = packed.project;
+      pendingDroppedAuxFile = packed.auxFile;
+      pendingDroppedDhTrio = packed.dhTrio;
+      pendingDroppedDhTrios = packed.dhTriosByDs || null; // p5-3b: d2+ drillhole trios, re-derived in displayResults once instances exist
+      pendingDroppedDatasetFiles = packed.datasetFiles || null; // 4e-b-iii: consumed in displayResults once instances exist
+      // Recents records the archive the user actually opened (re-openable
+      // via its handle) — not the extracted inner CSV, which used to land
+      // in the list under a name nobody dropped and could never re-open
+      saveToRecents(file, handle, true);
+      handleFile(packed.modelFile, null, true);
+      return;
+    }
+  }
+
+  currentFile = file;
+  currentProjectId = null;   // model-backed: identity is the file key (dual-key)
+  if (!skipRecents) saveToRecents(file, handle);
+  resetProjectState();
 
   // Collapse dropzone
   $dropzone.classList.add('collapsed');
@@ -18883,33 +19013,7 @@ async function handleFile(file, handle, skipRecents) {
   markAnalysisStale();
 
   // Set placeholder content for tabs before first analysis
-  const placeholder = '<div style="color:var(--fg-dim);font-size:0.78rem;padding:2rem;text-align:center;opacity:0.5;">Click Analyze to run analysis.</div>';
-  $geoContent.innerHTML = placeholder;
-  $geoBadge.textContent = '';
-  $fileInfo.innerHTML = '';
-  $statsContent.innerHTML = placeholder;
-  $statsBadge.textContent = '';
-  document.getElementById('statsVarList').innerHTML = '';
-  document.getElementById('statsVarSearch').value = '';
-  document.getElementById('statsMetricToggles').innerHTML = '';
-  document.getElementById('statsCdfChart').innerHTML = '<div class="stats-cdf-hint">Click column names to add CDF curves</div>';
-  $statsCatContent.innerHTML = placeholder;
-  $statsCatBadge.textContent = '';
-  $statsCatVarList.innerHTML = '';
-  $statsCatGroupList.innerHTML = '';
-  $statsCatVarSearch.value = '';
-  $statsCatGroupSearch.value = '';
-  $catColList.innerHTML = '';
-  $catToolbar.innerHTML = '';
-  $catChart.innerHTML = '';
-  $catValueTable.innerHTML = '';
-  $catBadge.textContent = '';
-  $exportColList.innerHTML = '';
-  $exportBadge.textContent = '0';
-  $exportInfo.textContent = '';
-  $exportProgress.classList.remove('active');
-  setCalcolCode('');
-  simulateCalcol();
+  clearTabPlaceholders();
 
   // Run preflight
   runPreflight(file).then(async data => {
@@ -31583,7 +31687,8 @@ function renderCatalogTree(container) {
   }
   // A10 #18: add comparison datasets straight from the Data rail (mirrors the
   // [+] launcher / Data menu) — the most discoverable spot once a model exists.
-  if (typeof currentFile !== 'undefined' && currentFile) {
+  if ((typeof currentFile !== 'undefined' && currentFile) ||
+      (typeof currentProjectId !== 'undefined' && currentProjectId)) {
     html += '<button type="button" class="tree-add-ds" data-tree-add>+ Add dataset</button>';
   }
   // C6-5 discoverability footer: the variable context menu (C4) and tab
@@ -32874,6 +32979,11 @@ async function downloadExampleZip() {
 var $exampleBtn = document.getElementById('exampleDownload');
 if ($exampleBtn) $exampleBtn.addEventListener('click', downloadExampleZip);
 
+var $newProjectBtn = document.getElementById('newProjectBtn');
+if ($newProjectBtn) $newProjectBtn.addEventListener('click', function() {
+  if (typeof newEmptyProject === 'function') newEmptyProject();
+});
+
 // ─── Workspace shells (C1b) ─────────────────────────────────────────────
 // Two shells over the same singleton panels (docs/c1b-rails-docking.md):
 //
@@ -33457,6 +33567,7 @@ function wsRecentMenuItems() {
 }
 function wsFileMenuItems() {
   return [
+    { label: 'New project', action: 'newProject' },
     { label: 'Open…', action: 'open' },
     { label: 'Open recent', children: wsRecentMenuItems },
     '---',
@@ -33531,6 +33642,7 @@ function wsMenuAction(a) {
   if (a.scale != null) { if (typeof applyUiScale === 'function') applyUiScale(a.scale); return; }
   if (a.recent) { if (typeof reopenRecent === 'function') reopenRecent(a.recent); return; }
   switch (a) {
+    case 'newProject': if (typeof newEmptyProject === 'function') newEmptyProject(); break;
     case 'open': { var fi = document.getElementById('fileInput'); if (fi) fi.click(); break; }
     case 'renameProject': if (typeof renameProjectPrompt === 'function') renameProjectPrompt(); break;
     case 'saveFlush': if (typeof flushProjectSave === 'function') flushProjectSave(); break;
