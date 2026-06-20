@@ -5354,8 +5354,8 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
         <button class="execute-btn" id="executeBtn">Analyze &#9654;</button>
         <div class="filter-section" id="filterSection">
           <div class="filter-editor-body">
-            <div class="filter-label">FILTER</div>
-            <textarea class="filter-expr-input" id="filterExpr" rows="1" placeholder='e.g. r.Fe > 60' spellcheck="false"></textarea>
+            <div class="filter-label" title="Filters the model's rows. Comparison datasets have their own filter in each dataset's import panel.">MODEL FILTER</div>
+            <textarea class="filter-expr-input" id="filterExpr" rows="1" placeholder='e.g. r.Fe > 60  (filters the model)' spellcheck="false"></textarea>
             <div class="filter-btn-group">
               <button class="filter-apply-btn" id="filterApply">Apply</button>
               <button class="filter-clear-btn" id="filterClear">Clear</button>
@@ -5917,7 +5917,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 94e26a1 — click to check for updates">94e26a1</div>
+<div class="build-badge" id="buildBadge" title="build 6900b75 — click to check for updates">6900b75</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -15039,7 +15039,9 @@ function renderAuxConfig(ds, root) {
   if (d.isDm) meta += ' · DM ' + (d.dmFormat === 'ep' ? 'EP' : 'SP');
   else if (d.zipEntries) meta += ' · ZIP';
   var fileInfo = auxQ('[data-aux="fileInfo"]', root);
-  if (fileInfo) fileInfo.innerHTML = 'Aux: <strong style="color:var(--fg-bright)">' + esc(ds.file.name) + '</strong>' +
+  // The dataset's identity is the file name; the "Aux:" label was a pre-A10
+  // holdover that also (wrongly) prefixed d2+ panels.
+  if (fileInfo) fileInfo.innerHTML = '<strong style="color:var(--fg-bright)">' + esc(ds.file.name) + '</strong>' +
     '<span class="zip-size">' + formatBytes(ds.file.size) + ' — ' + meta + '</span>';
 
   // Sidebar: zip entry + prefix + coordinates + aux filter
@@ -15879,6 +15881,7 @@ function clearAux(ds, root) {
   if (sidebar) sidebar.innerHTML = '';
   var preview = auxQ('[data-aux="preview"]', root);
   if (preview) preview.innerHTML = '';
+  if (typeof wsSetDatasetTabTitle === 'function') wsSetDatasetTabTitle(ds);   // back to "Aux" when emptied
   renderAuxFromMain(ds, root);
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
   if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();
@@ -18274,6 +18277,33 @@ function saveProjectFile() {
 function updateProjectTitleDisplay() {
   if (!currentFile) return;
   $resultsFilename.textContent = (projectTitle ? projectTitle + ' — ' : '') + currentFile.name;
+}
+
+// Easy project rename (File ▸ Rename project… or click the header title). The
+// title shows in the header and names the packed archive; it was previously only
+// settable inside the Pack dialog.
+function renameProjectPrompt() {
+  if (!currentFile) return;
+  bmaConfirm({
+    title: 'Rename project',
+    html: '<p style="margin:0 0 0.6rem;color:var(--fg-dim);font-size:0.78rem">Shown in the header and used to name the packed archive (§14). Leave empty to use just the file name.</p>' +
+      '<input id="renameProjectInput" type="text" maxlength="80" placeholder="Project title" value="' + esc(projectTitle || '') +
+      '" style="width:100%;box-sizing:border-box;padding:0.4rem 0.55rem;font:inherit;background:var(--bg1);color:var(--fg);border:1px solid var(--border);border-radius:4px">',
+    okLabel: 'Rename'
+  }).then(function(ok) {
+    var el = document.getElementById('renameProjectInput');
+    if (!ok || !el) return;
+    projectTitle = el.value.trim() || null;
+    updateProjectTitleDisplay();
+    if (typeof autoSaveProject === 'function') autoSaveProject();
+  });
+  setTimeout(function() { var el = document.getElementById('renameProjectInput'); if (el) { el.focus(); el.select(); } }, 40);
+}
+// Click the header title to rename (only meaningful once a project is loaded).
+if ($resultsFilename) {
+  $resultsFilename.style.cursor = 'pointer';
+  $resultsFilename.title = 'Click to rename project';
+  $resultsFilename.addEventListener('click', function() { if (currentFile) renameProjectPrompt(); });
 }
 
 function openPackModal() {
@@ -33070,10 +33100,26 @@ function wsSpawnExportInstance(seedTargetDsId) {
   wsRails.activateTab(instId);                 // renderPanel → exportBuildInstancePanel
 }
 
-// Track the prefix in the tab title (loadAuxFile on load, onAuxConfigChange on edit)
+// Track the dataset in its tab title (loadAuxFile on load, onAuxConfigChange on
+// edit, clearAux on reset). The first comparison dataset's tab used to be hard-
+// labelled "Aux"; now it follows its loaded file like d2+ ("Import: <name>"), and
+// falls back to "Aux" only when empty — de-privileging the legacy name.
+function wsDatasetTabName(ds) {
+  if (ds.id === 'aux') {
+    if (!ds.file) return 'Aux';
+    return 'Import: ' + (ds.file.name || 'data').replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '').slice(0, 24);
+  }
+  return 'Import: ' + (ds.prefix || 'data');
+}
 function wsSetDatasetTabTitle(ds) {
-  if (!wsRails || !ds || ds.id === 'aux' || ds.id === 'model') return;
-  if (findTab(wsRails.state, ds.id)) wsRails.updateTab(ds.id, { title: 'Import: ' + (ds.prefix || 'data') });
+  if (!ds || ds.id === 'model') return;
+  var title = wsDatasetTabName(ds);
+  if (wsRails && findTab(wsRails.state, ds.id)) wsRails.updateTab(ds.id, { title: title });
+  // keep the legacy (<701px) tab button in sync for the singleton aux
+  if (ds.id === 'aux' && typeof $resultsTabs !== 'undefined' && $resultsTabs) {
+    var btn = $resultsTabs.querySelector('.results-tab[data-tab="aux"]');
+    if (btn) btn.textContent = title;
+  }
 }
 
 // Fully remove an instance: terminate its workers, close its tab (→
@@ -33237,6 +33283,7 @@ function wsFileMenuItems() {
     { label: 'Open…', action: 'open' },
     { label: 'Open recent', children: wsRecentMenuItems },
     '---',
+    { label: 'Rename project…', action: 'renameProject' },
     { label: 'Save', shortcut: 'Ctrl+S', action: 'saveFlush' },
     { label: 'Export project', action: 'export' },
     { label: 'Import project…', action: 'import' },
@@ -33308,6 +33355,7 @@ function wsMenuAction(a) {
   if (a.recent) { if (typeof reopenRecent === 'function') reopenRecent(a.recent); return; }
   switch (a) {
     case 'open': { var fi = document.getElementById('fileInput'); if (fi) fi.click(); break; }
+    case 'renameProject': if (typeof renameProjectPrompt === 'function') renameProjectPrompt(); break;
     case 'saveFlush': if (typeof flushProjectSave === 'function') flushProjectSave(); break;
     case 'export': saveProjectFile(); break;
     case 'import': $projectFileInput.click(); break;

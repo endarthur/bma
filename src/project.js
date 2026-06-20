@@ -908,6 +908,33 @@ function updateProjectTitleDisplay() {
   $resultsFilename.textContent = (projectTitle ? projectTitle + ' — ' : '') + currentFile.name;
 }
 
+// Easy project rename (File ▸ Rename project… or click the header title). The
+// title shows in the header and names the packed archive; it was previously only
+// settable inside the Pack dialog.
+function renameProjectPrompt() {
+  if (!currentFile) return;
+  bmaConfirm({
+    title: 'Rename project',
+    html: '<p style="margin:0 0 0.6rem;color:var(--fg-dim);font-size:0.78rem">Shown in the header and used to name the packed archive (§14). Leave empty to use just the file name.</p>' +
+      '<input id="renameProjectInput" type="text" maxlength="80" placeholder="Project title" value="' + esc(projectTitle || '') +
+      '" style="width:100%;box-sizing:border-box;padding:0.4rem 0.55rem;font:inherit;background:var(--bg1);color:var(--fg);border:1px solid var(--border);border-radius:4px">',
+    okLabel: 'Rename'
+  }).then(function(ok) {
+    var el = document.getElementById('renameProjectInput');
+    if (!ok || !el) return;
+    projectTitle = el.value.trim() || null;
+    updateProjectTitleDisplay();
+    if (typeof autoSaveProject === 'function') autoSaveProject();
+  });
+  setTimeout(function() { var el = document.getElementById('renameProjectInput'); if (el) { el.focus(); el.select(); } }, 40);
+}
+// Click the header title to rename (only meaningful once a project is loaded).
+if ($resultsFilename) {
+  $resultsFilename.style.cursor = 'pointer';
+  $resultsFilename.title = 'Click to rename project';
+  $resultsFilename.addEventListener('click', function() { if (currentFile) renameProjectPrompt(); });
+}
+
 function openPackModal() {
   if (!currentFile || !preflightData) return;
   var $m = document.getElementById('packModal');

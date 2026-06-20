@@ -35,7 +35,9 @@ function renderAuxConfig(ds, root) {
   if (d.isDm) meta += ' · DM ' + (d.dmFormat === 'ep' ? 'EP' : 'SP');
   else if (d.zipEntries) meta += ' · ZIP';
   var fileInfo = auxQ('[data-aux="fileInfo"]', root);
-  if (fileInfo) fileInfo.innerHTML = 'Aux: <strong style="color:var(--fg-bright)">' + esc(ds.file.name) + '</strong>' +
+  // The dataset's identity is the file name; the "Aux:" label was a pre-A10
+  // holdover that also (wrongly) prefixed d2+ panels.
+  if (fileInfo) fileInfo.innerHTML = '<strong style="color:var(--fg-bright)">' + esc(ds.file.name) + '</strong>' +
     '<span class="zip-size">' + formatBytes(ds.file.size) + ' — ' + meta + '</span>';
 
   // Sidebar: zip entry + prefix + coordinates + aux filter
@@ -875,6 +877,7 @@ function clearAux(ds, root) {
   if (sidebar) sidebar.innerHTML = '';
   var preview = auxQ('[data-aux="preview"]', root);
   if (preview) preview.innerHTML = '';
+  if (typeof wsSetDatasetTabTitle === 'function') wsSetDatasetTabTitle(ds);   // back to "Aux" when emptied
   renderAuxFromMain(ds, root);
   if (typeof renderSwathAuxVars === 'function') renderSwathAuxVars();
   if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();

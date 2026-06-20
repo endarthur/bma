@@ -358,10 +358,26 @@ function wsSpawnExportInstance(seedTargetDsId) {
   wsRails.activateTab(instId);                 // renderPanel → exportBuildInstancePanel
 }
 
-// Track the prefix in the tab title (loadAuxFile on load, onAuxConfigChange on edit)
+// Track the dataset in its tab title (loadAuxFile on load, onAuxConfigChange on
+// edit, clearAux on reset). The first comparison dataset's tab used to be hard-
+// labelled "Aux"; now it follows its loaded file like d2+ ("Import: <name>"), and
+// falls back to "Aux" only when empty — de-privileging the legacy name.
+function wsDatasetTabName(ds) {
+  if (ds.id === 'aux') {
+    if (!ds.file) return 'Aux';
+    return 'Import: ' + (ds.file.name || 'data').replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '').slice(0, 24);
+  }
+  return 'Import: ' + (ds.prefix || 'data');
+}
 function wsSetDatasetTabTitle(ds) {
-  if (!wsRails || !ds || ds.id === 'aux' || ds.id === 'model') return;
-  if (findTab(wsRails.state, ds.id)) wsRails.updateTab(ds.id, { title: 'Import: ' + (ds.prefix || 'data') });
+  if (!ds || ds.id === 'model') return;
+  var title = wsDatasetTabName(ds);
+  if (wsRails && findTab(wsRails.state, ds.id)) wsRails.updateTab(ds.id, { title: title });
+  // keep the legacy (<701px) tab button in sync for the singleton aux
+  if (ds.id === 'aux' && typeof $resultsTabs !== 'undefined' && $resultsTabs) {
+    var btn = $resultsTabs.querySelector('.results-tab[data-tab="aux"]');
+    if (btn) btn.textContent = title;
+  }
 }
 
 // Fully remove an instance: terminate its workers, close its tab (→
@@ -525,6 +541,7 @@ function wsFileMenuItems() {
     { label: 'Open…', action: 'open' },
     { label: 'Open recent', children: wsRecentMenuItems },
     '---',
+    { label: 'Rename project…', action: 'renameProject' },
     { label: 'Save', shortcut: 'Ctrl+S', action: 'saveFlush' },
     { label: 'Export project', action: 'export' },
     { label: 'Import project…', action: 'import' },
@@ -596,6 +613,7 @@ function wsMenuAction(a) {
   if (a.recent) { if (typeof reopenRecent === 'function') reopenRecent(a.recent); return; }
   switch (a) {
     case 'open': { var fi = document.getElementById('fileInput'); if (fi) fi.click(); break; }
+    case 'renameProject': if (typeof renameProjectPrompt === 'function') renameProjectPrompt(); break;
     case 'saveFlush': if (typeof flushProjectSave === 'function') flushProjectSave(); break;
     case 'export': saveProjectFile(); break;
     case 'import': $projectFileInput.click(); break;
