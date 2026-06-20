@@ -165,6 +165,8 @@ body {
 .app.has-results > .dropzone,
 .app.has-results > .about-section,
 .app.has-results > .recent-files,
+.app.has-results > .project-list,
+.app.has-results > .landing-actions,
 .app.has-results > .example-download,
 .app.has-results > .landing-footer { display: none; }
 .app.has-results > .error-msg { display: none; }
