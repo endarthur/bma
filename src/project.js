@@ -1001,18 +1001,20 @@ if ($resultsFilename) {
 }
 
 function openPackModal() {
-  if (!currentFile || !preflightData) return;
+  if ((!currentFile || !preflightData) && !currentProjectId) return;   // model-backed needs preflight; model-less just needs a project
   var $m = document.getElementById('packModal');
   document.getElementById('packTitle').value = projectTitle || '';
-  document.getElementById('packModelName').textContent = currentFile.name + ' (' + formatBytes(currentFile.size) + ')';
+  document.getElementById('packModelName').textContent = currentFile
+    ? currentFile.name + ' (' + formatBytes(currentFile.size) + ')'
+    : '(no model — comparison datasets only)';
   // A10 4e-b-iii: the include-comparison row now covers EVERY comparison
   // dataset (aux + the d2+ instances), so a packed project round-trips them all.
   var $auxRow = document.getElementById('packAuxRow');
   var auxPackSize = 0;
   var cmpLabels = [];
   var cmpNames = {};
-  cmpNames[currentFile.name] = true;
-  if (auxFile && auxFile.name !== currentFile.name) {
+  if (currentFile) cmpNames[currentFile.name] = true;
+  if (auxFile && (!currentFile || auxFile.name !== currentFile.name)) {
     if (dhIsDerivedAux(dsById('aux'))) {
       // D8: the raw trio rides the pack; the recipe re-derives the composites
       var trio = dhPackFiles(dsById('aux'));
@@ -1042,7 +1044,7 @@ function openPackModal() {
   }
   var $compress = document.getElementById('packCompress');
   var $note = document.getElementById('packNote');
-  var totalData = currentFile.size + auxPackSize;
+  var totalData = (currentFile ? currentFile.size : 0) + auxPackSize;
   if (typeof CompressionStream === 'undefined') {
     $compress.checked = false;
     $compress.disabled = true;
@@ -1076,19 +1078,24 @@ async function runPack() {
     // A10 4e-b-iii: one checkbox governs all comparison data (aux + d2+).
     var includeCmp = !!(document.getElementById('packAuxRow').style.display !== 'none' &&
       document.getElementById('packIncAux').checked);
-    var includeAux = !!(includeCmp && auxFile && auxFile.name !== currentFile.name);
+    var includeAux = !!(includeCmp && auxFile && (!currentFile || auxFile.name !== currentFile.name));
     var compress = !!document.getElementById('packCompress').checked;
 
-    var stem = currentFile.name.replace(/\.[^.]+$/, '');
     // Unicode-aware slug: \w is ASCII-only and would strip accented letters
     // ("Jatobá" → "Jatob"); keep letters/digits from any script
     var slug = projectTitle ? projectTitle.replace(/[^\p{L}\p{N}_-]+/gu, '_').replace(/^_+|_+$/g, '') : '';
+    // Archive/json stem: the model file's name when model-backed, else the title (or 'project')
+    var stem = currentFile ? currentFile.name.replace(/\.[^.]+$/, '') : (slug || 'project');
     var json = JSON.stringify(serializeProject(), null, 2);
 
     // Never re-deflate archives; everything else follows the toggle
     function wantsDeflate(name) { return compress && !/\.zip$/i.test(name); }
-    var files = [{ name: currentFile.name, blob: currentFile, deflate: wantsDeflate(currentFile.name) }];
-    var packed = {}; packed[currentFile.name] = true;   // dedup: one archive entry per name
+    var files = [];
+    var packed = {};   // dedup: one archive entry per name
+    if (currentFile) {
+      files.push({ name: currentFile.name, blob: currentFile, deflate: wantsDeflate(currentFile.name) });
+      packed[currentFile.name] = true;
+    }
     if (includeAux && dhIsDerivedAux(dsById('aux'))) {
       // D8: pack the raw trio, never the derived composite CSV
       dhPackFiles(dsById('aux')).forEach(function(f) {
@@ -1315,9 +1322,11 @@ async function tryPackedProject(file) {
   if (!pjEntry) return null;
   let project;
   try { project = JSON.parse(await readZipEntryText(file, pjEntry)); } catch (e) { return null; }
-  if (!project || project._bma !== 1 || !project.file || !project.file.name) return null;
-  const modelEntry = entries.find(e => e.name === project.file.name);
-  if (!modelEntry) return null;
+  if (!project || project._bma !== 1) return null;
+  // Model-optional: a model-less packed project has project.file === null and no
+  // model entry — its datasets ride in the archive and restore on their own.
+  const modelEntry = (project.file && project.file.name) ? entries.find(e => e.name === project.file.name) : null;
+  if (project.file && project.file.name && !modelEntry) return null;   // model-backed but the model file is missing
   // A10 phase 5: `drillholes` is a per-dataset map { dsId: recipe }; normalize a
   // legacy flat recipe to { aux }. The aux trio rides here (p5-3a); d2+ sets in
   // the archive ride as their own trios via the datasets loop below (p5-3b).
@@ -1329,7 +1338,7 @@ async function tryPackedProject(file) {
     html: 'This archive contains a BMA project' +
       (project.title ? ': <strong>' + esc(project.title) + '</strong>' : '') +
       '<div class="confirm-detail"><code>' + esc(pjEntry.name) + '</code></div>' +
-      'Load <strong>' + esc(project.file.name) + '</strong>' +
+      (project.file && project.file.name ? 'Load <strong>' + esc(project.file.name) + '</strong>' : 'Load this model-less project') +
       (dhAuxRecipe && dhAuxRecipe.files
         ? ' and the packed <strong>drillhole set</strong> (composites re-derive on load)'
         : (project.aux && project.aux.fileName ? ' and <strong>' + esc(project.aux.fileName) + '</strong>' : '')) +
@@ -1342,7 +1351,7 @@ async function tryPackedProject(file) {
     cancelLabel: 'Open as zip'
   });
   if (!ok) return null;
-  const modelFile = await zipEntryToFile(file, modelEntry);
+  const modelFile = modelEntry ? await zipEntryToFile(file, modelEntry) : null;
   let auxF = null;
   if (project.aux && project.aux.fileName) {
     const auxEntry = entries.find(e => e.name === project.aux.fileName);
@@ -1559,6 +1568,47 @@ async function openProjectById(id) {
   refreshCatalogTree();
 }
 
+// Open a model-less PACKED project (.bma.zip with project.file === null). Like
+// openProjectById, but the dataset files ride in the archive — load each into its
+// restored instance (the model-backed equivalent runs in displayResults, which
+// never fires with no model).
+async function openPackedModelless(packed) {
+  var project = packed.project;
+  resetProjectState();
+  currentFile = null;
+  preflightData = null;
+  currentColTypes = null;
+  currentHeader = null;
+  currentXYZ = null;
+  currentProjectId = project.id || ((typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID() : ('p' + Date.now() + '-' + Math.random().toString(36).slice(2)));
+  enterModellessWorkspaceUI();
+  showPanel('preflight');
+  try { await applyProject(project); } catch (e) { /* corrupt — ignore */ }
+  // Consume the bundled files (same loaders displayResults uses for model-backed)
+  if (packed.datasetFiles) {
+    Object.keys(packed.datasetFiles).forEach(function(id) {
+      var dds = dsById(id);
+      if (dds && packed.datasetFiles[id]) loadAuxFile(packed.datasetFiles[id], null, null, dds, dsConfigRoot(dds));
+    });
+  }
+  if (packed.dhTriosByDs) {
+    Object.keys(packed.dhTriosByDs).forEach(function(id) {
+      var dds = dsById(id);
+      if (dds && typeof dhLoadTrio === 'function') dhLoadTrio(dds, packed.dhTriosByDs[id]);
+    });
+  }
+  if (packed.auxFile) loadAuxFile(packed.auxFile, null);
+  else if (packed.dhTrio && typeof dhLoadTrio === 'function') dhLoadTrio(dsById('aux'), packed.dhTrio);
+  // these pending vars were set by the zip branch; model-less consumes them here
+  pendingDroppedAuxFile = null;
+  pendingDroppedDhTrio = null;
+  pendingDroppedDhTrios = null;
+  pendingDroppedDatasetFiles = null;
+  pendingDroppedProject = null;
+  refreshCatalogTree();
+}
+
 async function handleFile(file, handle, skipRecents) {
   if (!file) return;
 
@@ -1592,7 +1642,13 @@ async function handleFile(file, handle, skipRecents) {
       // via its handle) — not the extracted inner CSV, which used to land
       // in the list under a name nobody dropped and could never re-open
       saveToRecents(file, handle, true);
-      handleFile(packed.modelFile, null, true);
+      if (packed.modelFile) {
+        handleFile(packed.modelFile, null, true);
+      } else {
+        // Model-less packed project: no model file to re-enter through handleFile —
+        // bring up the empty workspace and load the bundled datasets directly.
+        await openPackedModelless(packed);
+      }
       return;
     }
   }
