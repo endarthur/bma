@@ -2456,6 +2456,32 @@ table.stats tr:hover td:first-child { background: var(--bg2); }
 .cat-table-bar .cat-value-search { margin-bottom: 0; flex: 1; min-width: 0; }
 .cat-sort-label { font: 0.6rem var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-dim); }
 .cat-filter-hint { font-family: var(--sans); font-size: 0.72rem; color: var(--fg-dim); margin-bottom: 0.4rem; opacity: 0.85; }
+/* Tick-to-filter inline apply bar (the model filter lives on the Import tab now) */
+.cat-filter-apply {
+  display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;
+  padding: 0.35rem 0.55rem; background: var(--bg2);
+  border: 1px solid var(--action); border-radius: 5px;
+}
+.cat-filter-apply .cat-filter-built {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--sans); font-size: 0.72rem; color: var(--fg-dim);
+}
+.cat-filter-apply .cat-filter-expr { font-family: var(--mono); color: var(--fg-bright); }
+.cat-filter-apply-btn {
+  background: var(--action); color: var(--bg); border: none; padding: 0.2rem 0.6rem;
+  border-radius: 3px; cursor: pointer; font-family: var(--mono); font-size: 0.66rem; font-weight: 600; flex-shrink: 0;
+}
+.cat-filter-apply-btn:hover { opacity: 0.9; }
+.cat-filter-clear-btn {
+  background: none; border: 1px solid var(--border); color: var(--fg-dim);
+  padding: 0.2rem 0.5rem; border-radius: 3px; cursor: pointer; font-family: var(--mono); font-size: 0.66rem; flex-shrink: 0;
+}
+.cat-filter-clear-btn:hover { border-color: var(--fg-dim); color: var(--fg); }
+/* The model filter moved into the Import (preflight) panel head — reset the
+   head's uppercase/letter-spacing so the typed expression isn't transformed. */
+.preflight-head .filter-section { text-transform: none; letter-spacing: normal; font-weight: 400; }
+.preflight-head .filter-section.active { flex: 0 1 auto; }
+.preflight-head .filter-label { color: var(--fg-dim); }
 .cat-cb-head { text-align: center; }
 .cat-sort-group {
   display: flex;
@@ -5352,17 +5378,6 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
     <div class="action-bar" id="appFooter">
       <div class="action-bar-inner">
         <button class="execute-btn" id="executeBtn">Analyze &#9654;</button>
-        <div class="filter-section" id="filterSection">
-          <div class="filter-editor-body">
-            <div class="filter-label" title="Filters the model's rows. Comparison datasets have their own filter in each dataset's import panel.">MODEL FILTER</div>
-            <textarea class="filter-expr-input" id="filterExpr" rows="1" placeholder='e.g. r.Fe > 60  (filters the model)' spellcheck="false"></textarea>
-            <div class="filter-btn-group">
-              <button class="filter-apply-btn" id="filterApply">Apply</button>
-              <button class="filter-clear-btn" id="filterClear">Clear</button>
-            </div>
-          </div>
-          <div class="filter-error" id="filterError"></div>
-        </div>
       </div>
     </div>
     <div class="results-tabs" id="resultsTabs">
@@ -5399,6 +5414,17 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
       <div class="results-panel active" id="panelPreflight" data-tab="preflight">
         <div class="preflight-head" id="preflightHead">
           <span class="preflight-zip" id="preflightZip"></span>
+          <div class="filter-section" id="filterSection">
+            <div class="filter-editor-body">
+              <div class="filter-label" title="Pre-filters the model's rows. Comparison datasets have their own filter in each dataset's import panel.">FILTER</div>
+              <textarea class="filter-expr-input" id="filterExpr" rows="1" placeholder='e.g. r.Fe > 60' spellcheck="false"></textarea>
+              <div class="filter-btn-group">
+                <button class="filter-apply-btn" id="filterApply">Apply</button>
+                <button class="filter-clear-btn" id="filterClear">Clear</button>
+              </div>
+            </div>
+            <div class="filter-error" id="filterError"></div>
+          </div>
         </div>
         <div class="preflight-body">
           <div class="preflight-sidebar" id="preflightSidebar"></div>
@@ -5660,6 +5686,11 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
                   <div class="cat-sort-group" id="catSortGroup" data-cat="sortGroup"></div>
                 </div>
                 <div class="cat-filter-hint">Tick values to filter the model to them — the header box selects all / none.</div>
+                <div class="cat-filter-apply" id="catFilterApplyBar" data-cat="filterApplyBar" style="display:none">
+                  <span class="cat-filter-built">Filter: <code class="cat-filter-expr" id="catFilterExprView"></code></span>
+                  <button class="cat-filter-apply-btn" id="catFilterApplyBtn">Apply to model</button>
+                  <button class="cat-filter-clear-btn" id="catFilterClearBtn">Clear</button>
+                </div>
                 <table class="cat-values" id="catValueTable" data-cat="valueTable"><tbody></tbody></table>
               </div>
             </div>
@@ -5917,7 +5948,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 6900b75 — click to check for updates">6900b75</div>
+<div class="build-badge" id="buildBadge" title="build d5c337b — click to check for updates">d5c337b</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -14427,7 +14458,10 @@ function renderPreflight(data) {
   } else {
     $preflightZip.innerHTML = '';
   }
-  $preflightHead.style.display = $preflightZip.innerHTML ? '' : 'none';
+  // The head always shows now — it hosts the model Filter (the zip/dm info is an
+  // optional left side); hide the empty zip span but keep the bar.
+  $preflightZip.style.display = $preflightZip.innerHTML ? '' : 'none';
+  $preflightHead.style.display = '';
 
   renderPreflightSidebar(data);
   renderPreflightTable(data);
@@ -18827,6 +18861,7 @@ async function handleFile(file, handle, skipRecents) {
   $resultsTimeInfo.textContent = '';
   $resultsMemInfo.textContent = '';
   showPanel('preflight');
+  if (typeof wsSetDatasetTabTitle === 'function' && typeof dsById === 'function') wsSetDatasetTabTitle(dsById('model'));  // tab follows the model filename
 
   // Show action bar with execute button and filter
   $appFooter.classList.add('active');
@@ -30607,6 +30642,7 @@ function renderCatMain(root) {
   renderCatSortGroup(root);
   renderCatBarChart(root);
   renderCatValueTable(root);
+  if (!root && typeof catSyncFilterBar === 'function') catSyncFilterBar();   // singleton: refresh the inline apply bar
 }
 
 // A10 4c-iv: dataset show/hide chips. Progressive disclosure — the section
@@ -31170,11 +31206,13 @@ function wireCatEvents(root) {
           var r = b.closest('tr'); if (r) r.classList.toggle('active', on);
         });
         rebuildFilterExpression();
+        catSyncFilterBar();
         return;
       }
       var tr = cb.closest('tr');
       if (tr) tr.classList.toggle('active', cb.checked);
       rebuildFilterExpression();
+      catSyncFilterBar();
       return;
     }
   });
@@ -31273,6 +31311,25 @@ function wireCatEvents(root) {
     });
   }
 }
+
+// Tick-to-filter apply bar (the model filter now lives in the Import panel, so
+// the Categories tab applies its built filter inline). Shows when the expression
+// built from the ticked values differs from the currently-applied model filter.
+function catSyncFilterBar() {
+  var bar = document.getElementById('catFilterApplyBar');
+  if (!bar) return;
+  var expr = (typeof $filterExpr !== 'undefined' && $filterExpr ? $filterExpr.value : '').trim();
+  var applied = currentFilter ? (currentFilter.expression || '').trim() : '';
+  var pending = !!expr && expr !== applied;
+  bar.style.display = pending ? '' : 'none';
+  if (pending) { var v = document.getElementById('catFilterExprView'); if (v) v.textContent = expr; }
+}
+(function wireCatFilterApply() {
+  var ap = document.getElementById('catFilterApplyBtn');
+  if (ap) ap.addEventListener('click', function() { if (typeof $filterApply !== 'undefined' && $filterApply) $filterApply.click(); });
+  var cl = document.getElementById('catFilterClearBtn');
+  if (cl) cl.addEventListener('click', function() { if (typeof $filterClear !== 'undefined' && $filterClear) $filterClear.click(); catSyncFilterBar(); });
+})();
 
 // ─── A10 4e-c-4b: cloneable Categories instances ───────────────────────────
 // A clone is a copy of #panelCategories with its ids stripped (DOM resolved by
@@ -33104,20 +33161,26 @@ function wsSpawnExportInstance(seedTargetDsId) {
 // edit, clearAux on reset). The first comparison dataset's tab used to be hard-
 // labelled "Aux"; now it follows its loaded file like d2+ ("Import: <name>"), and
 // falls back to "Aux" only when empty — de-privileging the legacy name.
+function wsFileStem(name) { return (name || 'data').replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '').slice(0, 24); }
 function wsDatasetTabName(ds) {
+  if (ds.id === 'model') {
+    return (typeof currentFile !== 'undefined' && currentFile) ? 'Import: ' + wsFileStem(currentFile.name) : 'Import Model';
+  }
   if (ds.id === 'aux') {
-    if (!ds.file) return 'Aux';
-    return 'Import: ' + (ds.file.name || 'data').replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '').slice(0, 24);
+    return ds.file ? 'Import: ' + wsFileStem(ds.file.name) : 'Aux';
   }
   return 'Import: ' + (ds.prefix || 'data');
 }
+// The model's import tab id is 'preflight'; aux/d2+ use their ds id. Keep the
+// rails tab + the legacy (<701px) tab button in sync.
 function wsSetDatasetTabTitle(ds) {
-  if (!ds || ds.id === 'model') return;
+  if (!ds) return;
   var title = wsDatasetTabName(ds);
-  if (wsRails && findTab(wsRails.state, ds.id)) wsRails.updateTab(ds.id, { title: title });
-  // keep the legacy (<701px) tab button in sync for the singleton aux
-  if (ds.id === 'aux' && typeof $resultsTabs !== 'undefined' && $resultsTabs) {
-    var btn = $resultsTabs.querySelector('.results-tab[data-tab="aux"]');
+  var tabId = ds.id === 'model' ? 'preflight' : ds.id;
+  if (wsRails && findTab(wsRails.state, tabId)) wsRails.updateTab(tabId, { title: title });
+  var legacy = (ds.id === 'model') ? 'preflight' : (ds.id === 'aux' ? 'aux' : null);
+  if (legacy && typeof $resultsTabs !== 'undefined' && $resultsTabs) {
+    var btn = $resultsTabs.querySelector('.results-tab[data-tab="' + legacy + '"]');
     if (btn) btn.textContent = title;
   }
 }

@@ -1456,6 +1456,7 @@ async function handleFile(file, handle, skipRecents) {
   $resultsTimeInfo.textContent = '';
   $resultsMemInfo.textContent = '';
   showPanel('preflight');
+  if (typeof wsSetDatasetTabTitle === 'function' && typeof dsById === 'function') wsSetDatasetTabTitle(dsById('model'));  // tab follows the model filename
 
   // Show action bar with execute button and filter
   $appFooter.classList.add('active');

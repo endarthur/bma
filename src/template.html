@@ -123,17 +123,6 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
     <div class="action-bar" id="appFooter">
       <div class="action-bar-inner">
         <button class="execute-btn" id="executeBtn">Analyze &#9654;</button>
-        <div class="filter-section" id="filterSection">
-          <div class="filter-editor-body">
-            <div class="filter-label" title="Filters the model's rows. Comparison datasets have their own filter in each dataset's import panel.">MODEL FILTER</div>
-            <textarea class="filter-expr-input" id="filterExpr" rows="1" placeholder='e.g. r.Fe > 60  (filters the model)' spellcheck="false"></textarea>
-            <div class="filter-btn-group">
-              <button class="filter-apply-btn" id="filterApply">Apply</button>
-              <button class="filter-clear-btn" id="filterClear">Clear</button>
-            </div>
-          </div>
-          <div class="filter-error" id="filterError"></div>
-        </div>
       </div>
     </div>
     <div class="results-tabs" id="resultsTabs">
@@ -170,6 +159,17 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
       <div class="results-panel active" id="panelPreflight" data-tab="preflight">
         <div class="preflight-head" id="preflightHead">
           <span class="preflight-zip" id="preflightZip"></span>
+          <div class="filter-section" id="filterSection">
+            <div class="filter-editor-body">
+              <div class="filter-label" title="Pre-filters the model's rows. Comparison datasets have their own filter in each dataset's import panel.">FILTER</div>
+              <textarea class="filter-expr-input" id="filterExpr" rows="1" placeholder='e.g. r.Fe > 60' spellcheck="false"></textarea>
+              <div class="filter-btn-group">
+                <button class="filter-apply-btn" id="filterApply">Apply</button>
+                <button class="filter-clear-btn" id="filterClear">Clear</button>
+              </div>
+            </div>
+            <div class="filter-error" id="filterError"></div>
+          </div>
         </div>
         <div class="preflight-body">
           <div class="preflight-sidebar" id="preflightSidebar"></div>
@@ -431,6 +431,11 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
                   <div class="cat-sort-group" id="catSortGroup" data-cat="sortGroup"></div>
                 </div>
                 <div class="cat-filter-hint">Tick values to filter the model to them — the header box selects all / none.</div>
+                <div class="cat-filter-apply" id="catFilterApplyBar" data-cat="filterApplyBar" style="display:none">
+                  <span class="cat-filter-built">Filter: <code class="cat-filter-expr" id="catFilterExprView"></code></span>
+                  <button class="cat-filter-apply-btn" id="catFilterApplyBtn">Apply to model</button>
+                  <button class="cat-filter-clear-btn" id="catFilterClearBtn">Clear</button>
+                </div>
                 <table class="cat-values" id="catValueTable" data-cat="valueTable"><tbody></tbody></table>
               </div>
             </div>

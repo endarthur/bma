@@ -2441,6 +2441,32 @@ table.stats tr:hover td:first-child { background: var(--bg2); }
 .cat-table-bar .cat-value-search { margin-bottom: 0; flex: 1; min-width: 0; }
 .cat-sort-label { font: 0.6rem var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-dim); }
 .cat-filter-hint { font-family: var(--sans); font-size: 0.72rem; color: var(--fg-dim); margin-bottom: 0.4rem; opacity: 0.85; }
+/* Tick-to-filter inline apply bar (the model filter lives on the Import tab now) */
+.cat-filter-apply {
+  display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;
+  padding: 0.35rem 0.55rem; background: var(--bg2);
+  border: 1px solid var(--action); border-radius: 5px;
+}
+.cat-filter-apply .cat-filter-built {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--sans); font-size: 0.72rem; color: var(--fg-dim);
+}
+.cat-filter-apply .cat-filter-expr { font-family: var(--mono); color: var(--fg-bright); }
+.cat-filter-apply-btn {
+  background: var(--action); color: var(--bg); border: none; padding: 0.2rem 0.6rem;
+  border-radius: 3px; cursor: pointer; font-family: var(--mono); font-size: 0.66rem; font-weight: 600; flex-shrink: 0;
+}
+.cat-filter-apply-btn:hover { opacity: 0.9; }
+.cat-filter-clear-btn {
+  background: none; border: 1px solid var(--border); color: var(--fg-dim);
+  padding: 0.2rem 0.5rem; border-radius: 3px; cursor: pointer; font-family: var(--mono); font-size: 0.66rem; flex-shrink: 0;
+}
+.cat-filter-clear-btn:hover { border-color: var(--fg-dim); color: var(--fg); }
+/* The model filter moved into the Import (preflight) panel head — reset the
+   head's uppercase/letter-spacing so the typed expression isn't transformed. */
+.preflight-head .filter-section { text-transform: none; letter-spacing: normal; font-weight: 400; }
+.preflight-head .filter-section.active { flex: 0 1 auto; }
+.preflight-head .filter-label { color: var(--fg-dim); }
 .cat-cb-head { text-align: center; }
 .cat-sort-group {
   display: flex;

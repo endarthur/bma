@@ -362,20 +362,26 @@ function wsSpawnExportInstance(seedTargetDsId) {
 // edit, clearAux on reset). The first comparison dataset's tab used to be hard-
 // labelled "Aux"; now it follows its loaded file like d2+ ("Import: <name>"), and
 // falls back to "Aux" only when empty — de-privileging the legacy name.
+function wsFileStem(name) { return (name || 'data').replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '').slice(0, 24); }
 function wsDatasetTabName(ds) {
+  if (ds.id === 'model') {
+    return (typeof currentFile !== 'undefined' && currentFile) ? 'Import: ' + wsFileStem(currentFile.name) : 'Import Model';
+  }
   if (ds.id === 'aux') {
-    if (!ds.file) return 'Aux';
-    return 'Import: ' + (ds.file.name || 'data').replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '').slice(0, 24);
+    return ds.file ? 'Import: ' + wsFileStem(ds.file.name) : 'Aux';
   }
   return 'Import: ' + (ds.prefix || 'data');
 }
+// The model's import tab id is 'preflight'; aux/d2+ use their ds id. Keep the
+// rails tab + the legacy (<701px) tab button in sync.
 function wsSetDatasetTabTitle(ds) {
-  if (!ds || ds.id === 'model') return;
+  if (!ds) return;
   var title = wsDatasetTabName(ds);
-  if (wsRails && findTab(wsRails.state, ds.id)) wsRails.updateTab(ds.id, { title: title });
-  // keep the legacy (<701px) tab button in sync for the singleton aux
-  if (ds.id === 'aux' && typeof $resultsTabs !== 'undefined' && $resultsTabs) {
-    var btn = $resultsTabs.querySelector('.results-tab[data-tab="aux"]');
+  var tabId = ds.id === 'model' ? 'preflight' : ds.id;
+  if (wsRails && findTab(wsRails.state, tabId)) wsRails.updateTab(tabId, { title: title });
+  var legacy = (ds.id === 'model') ? 'preflight' : (ds.id === 'aux' ? 'aux' : null);
+  if (legacy && typeof $resultsTabs !== 'undefined' && $resultsTabs) {
+    var btn = $resultsTabs.querySelector('.results-tab[data-tab="' + legacy + '"]');
     if (btn) btn.textContent = title;
   }
 }

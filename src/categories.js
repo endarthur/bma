@@ -70,6 +70,7 @@ function renderCatMain(root) {
   renderCatSortGroup(root);
   renderCatBarChart(root);
   renderCatValueTable(root);
+  if (!root && typeof catSyncFilterBar === 'function') catSyncFilterBar();   // singleton: refresh the inline apply bar
 }
 
 // A10 4c-iv: dataset show/hide chips. Progressive disclosure — the section
@@ -633,11 +634,13 @@ function wireCatEvents(root) {
           var r = b.closest('tr'); if (r) r.classList.toggle('active', on);
         });
         rebuildFilterExpression();
+        catSyncFilterBar();
         return;
       }
       var tr = cb.closest('tr');
       if (tr) tr.classList.toggle('active', cb.checked);
       rebuildFilterExpression();
+      catSyncFilterBar();
       return;
     }
   });
@@ -736,6 +739,25 @@ function wireCatEvents(root) {
     });
   }
 }
+
+// Tick-to-filter apply bar (the model filter now lives in the Import panel, so
+// the Categories tab applies its built filter inline). Shows when the expression
+// built from the ticked values differs from the currently-applied model filter.
+function catSyncFilterBar() {
+  var bar = document.getElementById('catFilterApplyBar');
+  if (!bar) return;
+  var expr = (typeof $filterExpr !== 'undefined' && $filterExpr ? $filterExpr.value : '').trim();
+  var applied = currentFilter ? (currentFilter.expression || '').trim() : '';
+  var pending = !!expr && expr !== applied;
+  bar.style.display = pending ? '' : 'none';
+  if (pending) { var v = document.getElementById('catFilterExprView'); if (v) v.textContent = expr; }
+}
+(function wireCatFilterApply() {
+  var ap = document.getElementById('catFilterApplyBtn');
+  if (ap) ap.addEventListener('click', function() { if (typeof $filterApply !== 'undefined' && $filterApply) $filterApply.click(); });
+  var cl = document.getElementById('catFilterClearBtn');
+  if (cl) cl.addEventListener('click', function() { if (typeof $filterClear !== 'undefined' && $filterClear) $filterClear.click(); catSyncFilterBar(); });
+})();
 
 // ─── A10 4e-c-4b: cloneable Categories instances ───────────────────────────
 // A clone is a copy of #panelCategories with its ids stripped (DOM resolved by

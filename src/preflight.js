@@ -614,7 +614,10 @@ function renderPreflight(data) {
   } else {
     $preflightZip.innerHTML = '';
   }
-  $preflightHead.style.display = $preflightZip.innerHTML ? '' : 'none';
+  // The head always shows now — it hosts the model Filter (the zip/dm info is an
+  // optional left side); hide the empty zip span but keep the bar.
+  $preflightZip.style.display = $preflightZip.innerHTML ? '' : 'none';
+  $preflightHead.style.display = '';
 
   renderPreflightSidebar(data);
   renderPreflightTable(data);
