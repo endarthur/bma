@@ -545,6 +545,7 @@ function serializeProject() {
       showSelectedOnly: statsCatShowSelectedOnly
     },
     statsTab: {
+      targetDsId: (typeof statsTargetDsId !== 'undefined') ? statsTargetDsId : 'model',   // ws-v2 phase 1: per-panel primary dataset
       selectedVars: statsSelectedVars ? Array.from(statsSelectedVars) : null,
       visibleMetrics: statsVisibleMetrics ? Array.from(statsVisibleMetrics) : null,
       percentiles: statsPercentiles,
@@ -2413,6 +2414,7 @@ function displayResults(data) {
 
     // Stats tab
     const st = restoredProject.statsTab || {};
+    statsTargetDsId = st.targetDsId || 'model';   // ws-v2 phase 1 (statsTargetDs falls back if it's gone)
     if (st.selectedVars) statsSelectedVars = new Set(st.selectedVars);
     if (st.visibleMetrics) statsVisibleMetrics = new Set(st.visibleMetrics);
     if (st.percentiles) statsPercentiles = st.percentiles;

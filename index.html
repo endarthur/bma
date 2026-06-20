@@ -5672,6 +5672,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
       <div class="results-panel" id="panelStatistics" data-tab="statistics">
         <div class="stats-body" id="statsBody" data-stat="body">
           <div class="stats-sidebar" id="statsSidebar" data-stat="sidebar">
+            <div class="stats-sidebar-section" data-sb="dataset" data-stat="datasetWrap"></div>
             <div class="stats-sidebar-section" data-sb="percentiles">
               <div class="stats-sidebar-title">Percentiles</div>
               <div class="stats-preset-btns" id="statsPresetBtns" data-stat="presetBtns">
@@ -6008,7 +6009,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build f9d4691 — click to check for updates">f9d4691</div>
+<div class="build-badge" id="buildBadge" title="build 1438c4d — click to check for updates">1438c4d</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8786,6 +8787,7 @@ function statEls(root) {
   function q(k) { return root ? root.querySelector('[data-stat="' + k + '"]') : null; }
   return {
     body: q('body'), sidebar: q('sidebar'), main: q('main'), content: q('content'), badge: q('badge'),
+    datasetWrap: q('datasetWrap'),
     presetBtns: q('presetBtns'), customPct: q('customPct'), weightSel: q('weightSel'), weightNote: q('weightNote'),
     metricToggles: q('metricToggles'), datasetsSection: q('datasetsSection'), datasetChips: q('datasetChips'),
     varSearch: q('varSearch'), varAll: q('varAll'), varNone: q('varNone'), varList: q('varList'),
@@ -9147,14 +9149,17 @@ function catSetRole(ds, role, name) {
 }
 
 // ── Pairing as property membership (legacy aux→model API over properties) ──
-// catModelMember: the model column grouped with (ds,name) — the dataset-generic
-// primitive (A10 4c). catPair is the aux-only legacy alias.
-function catModelMember(ds, name) {
+// catMemberIn: the column in `targetDsId` grouped with (ds,name) — the fully
+// dataset-generic primitive (ws-v2 phase 1; inverts the model-as-primary
+// assumption so any dataset can be the comparison anchor). catModelMember is
+// the model-anchored alias (A10 4c); catPair is the aux-only legacy alias.
+function catMemberIn(ds, name, targetDsId) {
   const rec = catVarPeek(ds, name);
   if (!rec) return null;
-  const m = rec.members.find(function(x) { return x.ds === 'model'; });
+  const m = rec.members.find(function(x) { return x.ds === targetDsId; });
   return m ? m.col : null;
 }
+function catModelMember(ds, name) { return catMemberIn(ds, name, 'model'); }
 function catPair(auxName) { return catModelMember('aux', auxName); }
 // Members of a model column's property in a given dataset (default aux)
 function catGroupMembers(modelName, dsId) {
@@ -18048,6 +18053,7 @@ function serializeProject() {
       showSelectedOnly: statsCatShowSelectedOnly
     },
     statsTab: {
+      targetDsId: (typeof statsTargetDsId !== 'undefined') ? statsTargetDsId : 'model',   // ws-v2 phase 1: per-panel primary dataset
       selectedVars: statsSelectedVars ? Array.from(statsSelectedVars) : null,
       visibleMetrics: statsVisibleMetrics ? Array.from(statsVisibleMetrics) : null,
       percentiles: statsPercentiles,
@@ -19916,6 +19922,7 @@ function displayResults(data) {
 
     // Stats tab
     const st = restoredProject.statsTab || {};
+    statsTargetDsId = st.targetDsId || 'model';   // ws-v2 phase 1 (statsTargetDs falls back if it's gone)
     if (st.selectedVars) statsSelectedVars = new Set(st.selectedVars);
     if (st.visibleMetrics) statsVisibleMetrics = new Set(st.visibleMetrics);
     if (st.percentiles) statsPercentiles = st.percentiles;
@@ -21425,7 +21432,13 @@ let _statsCdfParams = null; // coordinate system for CDF tooltip
 // its state with statStateForRoot(root); _statsNumCols/_statsHeader (the shared
 // analysis) stay module-level. Inert until clones exist (st-4).
 var statInstances = {};
+// ws-v2 phase 1: which dataset this panel treats as PRIMARY (its columns are the
+// table rows; every OTHER analyzed dataset becomes a Δ% comparison). Default
+// 'model' → bit-identical to the pre-targeting behavior. The singleton's target
+// lives in this module global; a clone keeps its own in statInstances[id].
+var statsTargetDsId = 'model';
 var _statSingleton = {
+  get statsTargetDsId() { return statsTargetDsId; }, set statsTargetDsId(v) { statsTargetDsId = v; },
   get statsSelectedVars() { return statsSelectedVars; }, set statsSelectedVars(v) { statsSelectedVars = v; },
   get statsVisibleMetrics() { return statsVisibleMetrics; }, set statsVisibleMetrics(v) { statsVisibleMetrics = v; },
   get statsPercentiles() { return statsPercentiles; }, set statsPercentiles(v) { statsPercentiles = v; },
@@ -21440,6 +21453,7 @@ var _statSingleton = {
 };
 function statNewInstState() {
   return {
+    statsTargetDsId: 'model',
     statsSelectedVars: null, statsVisibleMetrics: null, statsPercentiles: [25, 50, 75],
     statsCdfSelected: new Set(), statsCdfScale: 'linear', statsCdfMode: 'cdf', _statsCdfParams: null,
     cmpSel: {}, cdfCmpSel: {}, dsHidden: new Set(), refDs: null
@@ -21453,6 +21467,94 @@ function statStateForRoot(root) {
     return statInstances[id];
   }
   return _statSingleton;
+}
+
+// ─── ws-v2 phase 1: per-panel target dataset ───────────────────────────────
+// The Statistics table is no longer hardwired to the model. statsTargetDs(root)
+// is the panel's PRIMARY dataset (its columns are the table rows); statsCtx(root)
+// resolves that dataset's analysis. With target 'model' (the default) the ctx
+// returns the model snapshot globals verbatim, so rendering is bit-identical to
+// the pre-targeting code. Every render/event fn reads ctx instead of the
+// _statsNumCols/_statsHeader module globals (which stay the MODEL snapshot for
+// external readers: ctxmenu/cdf/settings). Mirrors gtCtx / statsCatCtx.
+function statsTargetableDatasets() {
+  var out = [];
+  for (var i = 0; i < datasets.length; i++) if (datasets[i].complete) out.push(datasets[i]);
+  return out;
+}
+function statsTargetDs(root) {
+  var id = statStateForRoot(root).statsTargetDsId;
+  var ds = dsById(id);
+  if (ds && ds.complete) return ds;
+  // Model-optional: the default model target has no analysis but a comparison
+  // does → target the first analyzed dataset so the panel stays usable.
+  var ts = statsTargetableDatasets();
+  return ts.length ? ts[0] : (dsById('model') || datasets[0]);
+}
+function statsCtx(root) {
+  var ds = statsTargetDs(root);
+  var isModel = ds.id === 'model';
+  if (isModel) {
+    return {
+      ds: ds, id: 'model', isModel: true, complete: lastCompleteData,
+      stats: lastDisplayedStats, header: lastDisplayedHeader,
+      numCols: lastDisplayedStats ? Object.keys(lastDisplayedStats).map(Number).sort(function(a, b) { return a - b; }) : [],
+      origColCount: currentOrigColCount || (lastDisplayedHeader ? lastDisplayedHeader.length : 0),
+      rowCount: (lastCompleteData && lastCompleteData.rowCount) || 0,
+      isFiltered: currentFilter !== null
+    };
+  }
+  var c = ds.complete || {};
+  return {
+    ds: ds, id: ds.id, isModel: false, complete: ds.complete,
+    stats: c.stats || null, header: c.header || null,
+    numCols: c.stats ? Object.keys(c.stats).map(Number).sort(function(a, b) { return a - b; }) : [],
+    origColCount: c.origColCount || (c.header ? c.header.length : 0),
+    rowCount: c.rowCount || 0, isFiltered: !!ds.filter
+  };
+}
+
+// The "Dataset" picker host at the top of the sidebar — shown only when 2+
+// datasets are analyzed (with one, Statistics is implicitly that dataset, as
+// before). Mirrors statsCatRenderDatasetPicker (onchange re-wired each render).
+function renderStatsDatasetPicker(root) {
+  var wrap = statEls(root).datasetWrap;
+  if (!wrap) return;
+  var ts = statsTargetableDatasets();
+  if (ts.length < 2) { wrap.innerHTML = ''; return; }
+  var cur = statsTargetDs(root).id;
+  wrap.innerHTML = '<div class="stats-sidebar-title">Dataset</div>' +
+    '<select class="stats-select" data-stat="datasetSel">' +
+    ts.map(function(d) { return '<option value="' + esc(d.id) + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
+    '</select>';
+  var sel = wrap.querySelector('[data-stat="datasetSel"]');
+  if (sel) sel.onchange = function() { setStatsTarget(sel.value, root); };
+}
+// Switch the panel's primary dataset and re-render it. Column-index selections
+// (selectedVars / cdfSelected) are indices into the OLD target → reset to the
+// default; comparison selections (cmpSel, keyed by ds id) survive.
+function setStatsTarget(id, root) {
+  var S = statStateForRoot(root);
+  if (id === S.statsTargetDsId) return;
+  S.statsTargetDsId = id;
+  S.statsSelectedVars = null;
+  S.statsCdfSelected = new Set();
+  var els = statEls(root);
+  if (els.varSearch) els.varSearch.value = '';
+  renderStatsTab(lastDisplayedStats, lastDisplayedHeader,
+    currentOrigColCount || (lastDisplayedHeader ? lastDisplayedHeader.length : 0),
+    currentFilter !== null, (lastCompleteData && lastCompleteData.rowCount) || 0, root);
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+// Keep the picker current as datasets analyze/clear; fall back to the model (or
+// first analyzed) if the target's analysis went away. Called from the analysis-
+// complete handlers (model + comparison) and clearAux.
+function statsRefreshDatasetPicker(root) {
+  var S = statStateForRoot(root);
+  if (S.statsTargetDsId !== 'model' && !(dsById(S.statsTargetDsId) && dsById(S.statsTargetDsId).complete)) {
+    S.statsTargetDsId = 'model';
+  }
+  renderStatsDatasetPicker(root);
 }
 
 // ─── A10 Statistics st-4: cloneable Statistics instances ───────────────────
@@ -21542,8 +21644,14 @@ function statCmpByName(map) {
 // Serialize one instance's live view (by NAME/value) — used by both the project
 // serialize and Duplicate (carry the source panel's view to the new clone).
 function statSerializeView(S) {
-  var hdr = lastDisplayedHeader;
+  // selectedVars/cdfSelected are column indices into the TARGET dataset → resolve
+  // their names against the target's header (model = lastDisplayedHeader). This
+  // keeps a comparison-targeted clone's selection from being serialized against
+  // the wrong header. Model-targeted clones are unchanged (hdr = lastDisplayedHeader).
+  var tid = S.statsTargetDsId || 'model';
+  var hdr = (tid !== 'model') ? (((dsById(tid) || {}).complete || {}).header || lastDisplayedHeader) : lastDisplayedHeader;
   return {
+    targetDsId: tid,   // ws-v2 phase 1
     selectedVars: S.statsSelectedVars ? statNamesFromColSet(S.statsSelectedVars, hdr) : null,
     visibleMetrics: S.statsVisibleMetrics ? Array.from(S.statsVisibleMetrics) : null,
     percentiles: S.statsPercentiles,
@@ -21594,7 +21702,10 @@ function statRestoreInstances(list) {
   list.forEach(function(rec) {
     if (!rec || !rec.id) return;
     var st = statNewInstState();
-    if (rec.view) st._pendingView = rec.view;
+    if (rec.view) {
+      st._pendingView = rec.view;
+      st.statsTargetDsId = rec.view.targetDsId || 'model';   // ws-v2 phase 1: build on-target before the view resolves
+    }
     statInstances[rec.id] = st;
     var m = /^statistics#(\d+)$/.exec(rec.id);
     if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
@@ -21611,20 +21722,32 @@ function statApplyAllInstances() {
   Object.keys(statInstances).forEach(function(id) {
     var S = statInstances[id], pv = S._pendingView;
     if (!pv) return;
-    if ('percentiles' in pv) {                 // model parts — resolve once
-      S.statsSelectedVars = pv.selectedVars ? statColSetFromNames(pv.selectedVars, lastDisplayedHeader) : null;
+    if ('percentiles' in pv) {                 // primary parts — resolve once the target's header exists
+      // Header-independent fields apply immediately (idempotent if we retry).
+      S.statsTargetDsId = pv.targetDsId || 'model';
       S.statsVisibleMetrics = pv.visibleMetrics ? new Set(pv.visibleMetrics) : null;
       S.statsPercentiles = pv.percentiles || [25, 50, 75];
-      S.statsCdfSelected = statColSetFromNames(pv.cdfSelected, lastDisplayedHeader);
       S.statsCdfScale = pv.cdfScale || 'linear';
       S.statsCdfMode = pv.cdfMode || 'cdf';
       S.dsHidden = new Set(pv.dsHidden || []);
       S.refDs = pv.refDs || null;
-      var rem = {};                            // keep only the comparison remainders pending
-      if (pv.cmpSel && Object.keys(pv.cmpSel).length) rem.cmpSel = pv.cmpSel;
-      if (pv.cdfCmpSel && Object.keys(pv.cdfCmpSel).length) rem.cdfCmpSel = pv.cdfCmpSel;
-      S._pendingView = (rem.cmpSel || rem.cdfCmpSel) ? rem : null;
-      pv = S._pendingView;
+      // selectedVars/cdfSelected are indices into the TARGET → need its header.
+      // For a comparison target not yet analyzed, keep the view pending; the
+      // aux-complete handler re-runs this once that dataset lands.
+      var tgtHdr = (S.statsTargetDsId !== 'model')
+        ? (((dsById(S.statsTargetDsId) || {}).complete || {}).header)
+        : lastDisplayedHeader;
+      if (tgtHdr) {
+        S.statsSelectedVars = pv.selectedVars ? statColSetFromNames(pv.selectedVars, tgtHdr) : null;
+        S.statsCdfSelected = statColSetFromNames(pv.cdfSelected, tgtHdr);
+        var rem = {};                          // keep only the comparison remainders pending
+        if (pv.cmpSel && Object.keys(pv.cmpSel).length) rem.cmpSel = pv.cmpSel;
+        if (pv.cdfCmpSel && Object.keys(pv.cdfCmpSel).length) rem.cdfCmpSel = pv.cdfCmpSel;
+        S._pendingView = (rem.cmpSel || rem.cdfCmpSel) ? rem : null;
+        pv = S._pendingView;
+      } else {
+        pv = null;                             // target unanalyzed — retry next pass (keep _pendingView intact)
+      }
     }
     if (pv) ['cmpSel', 'cdfCmpSel'].forEach(function(k) {   // comparison parts, per-ds
       if (!pv[k]) return;
@@ -21664,13 +21787,16 @@ function tdQuantileFromCentroids(centroids, totalCount, q) {
   return centroids[centroids.length - 1][0];
 }
 
-// A10 4c-ii: comparison datasets the stats table iterates — every non-model
-// dataset that has finished analysis (aux, then d2, d3…), in registry order.
-// The model is datasets[0]; aux is simply the first comparison.
-function statsCmpDatasets() {
+// A10 4c-ii / ws-v2 phase 1: comparison datasets the stats table iterates —
+// every analyzed dataset EXCEPT the panel's primary (target), in registry order.
+// With target 'model' this is datasets[1..] (bit-identical to before); with a
+// comparison target the model itself becomes one of the comparison rows.
+function statsCmpDatasets(root) {
+  var tid = statsTargetDs(root).id;
   var out = [];
-  for (var i = 1; i < datasets.length; i++) {
+  for (var i = 0; i < datasets.length; i++) {
     var d = datasets[i];
+    if (d.id === tid) continue;
     if (d && d.complete && d.complete.stats) out.push(d);
   }
   return out;
@@ -21680,7 +21806,7 @@ function statsCmpDatasets() {
 // datasets) let the user hide any of them; the sidebar/table/CDF iterate this.
 function statsShownCmpDatasets(root) {
   var hidden = statStateForRoot(root).dsHidden;
-  return statsCmpDatasets().filter(function(ds) { return !hidden.has(ds.id); });
+  return statsCmpDatasets(root).filter(function(ds) { return !hidden.has(ds.id); });
 }
 
 // A10 4d: the resolved Δ% reference dataset id for this panel. Defaults to the
@@ -21690,56 +21816,60 @@ function statsShownCmpDatasets(root) {
 function statsReferenceDs(root) {
   var refDs = statStateForRoot(root).refDs;
   var shownCmp = statsShownCmpDatasets(root);
-  // Model-optional projects: only offer 'model' as a reference when it's analyzed.
-  // When a model IS present this is identical to the original (model always first).
-  var hasModel = !!(datasets[0] && datasets[0].complete);
-  var shown = (hasModel ? ['model'] : []).concat(shownCmp.map(function(d) { return d.id; }));
+  // The panel's primary (target) is always a valid reference; default to the
+  // first shown comparison (samples) so the model+aux case still reads
+  // (model − samples)/samples. Self-heals if the chosen reference was hidden.
+  var primaryId = statsTargetDs(root).id;
+  var shown = [primaryId].concat(shownCmp.map(function(d) { return d.id; }));
   if (refDs && shown.indexOf(refDs) >= 0) return refDs;
-  return shownCmp.length ? shownCmp[0].id : (hasModel ? 'model' : null);
+  return shownCmp.length ? shownCmp[0].id : primaryId;
 }
 
-// The reference dataset's stats object for the property a model column (ci)
-// belongs to — stats[ci] when the model is the reference, else the reference
-// dataset's grouped column. null when the reference has no counterpart.
-function statsRefStatsFor(ci, refId, modelStats) {
-  if (refId === 'model') return modelStats[ci] || null;
+// The reference dataset's stats object for the property a primary column (ci)
+// belongs to — ctx.stats[ci] when the primary IS the reference, else the
+// reference dataset's grouped column. null when the reference has no counterpart.
+function statsRefStatsFor(ci, refId, ctx) {
+  if (refId === ctx.id) return (ctx.stats && ctx.stats[ci]) || null;
   var rds = dsById(refId);
   if (!rds || !rds.complete || !rds.complete.stats) return null;
-  var cols = getStatsCmpCols(rds);
+  var cols = getStatsCmpCols(rds, ctx);
   for (var i = 0; i < cols.length; i++) {
     if (cols[i].matchCi === ci) return rds.complete.stats[cols[i].idx] || null;
   }
   return null;
 }
 // The reference column's display label for a property (for Δ% tooltips).
-function statsRefLabelFor(ci, refId, header) {
-  if (refId === 'model') return header[ci];
+function statsRefLabelFor(ci, refId, ctx) {
+  if (refId === ctx.id) return ctx.header[ci];
   var rds = dsById(refId);
   if (!rds || !rds.complete) return dsLabel(refId);
-  var cols = getStatsCmpCols(rds);
+  var cols = getStatsCmpCols(rds, ctx);
   for (var i = 0; i < cols.length; i++) {
     if (cols[i].matchCi === ci) return dsLabel(refId) + ':' + cols[i].name;
   }
   return dsLabel(refId);
 }
 
-// Numeric columns of a comparison dataset, each grouped to the model column it
-// shares a property with (catModelMember → matchCi into the model stats) when
-// one exists. Selection defaults to "paired only" until the user materializes
-// a choice. Generalizes the old aux-only getStatsAuxCols.
-function getStatsCmpCols(ds) {
+// Numeric columns of a comparison dataset, each grouped to the PRIMARY (ctx)
+// column it shares a property with (catMemberIn → matchCi into the primary
+// stats) when one exists. Selection defaults to "paired only" until the user
+// materializes a choice. ws-v2 phase 1 inverts this off the hardwired model:
+// the anchor is whatever dataset the panel targets.
+function getStatsCmpCols(ds, ctx) {
   if (!ds || !ds.complete || !ds.complete.stats) return [];
+  ctx = ctx || statsCtx();   // default: the model singleton is the primary anchor
   catEnsureSeeded();
   var primaryByName = {};
-  for (var i = 0; i < _statsNumCols.length; i++) {
-    var ci = _statsNumCols[i];
-    primaryByName[_statsHeader[ci]] = ci;
+  var pHdr = ctx.header || [];
+  for (var i = 0; i < ctx.numCols.length; i++) {
+    var ci = ctx.numCols[i];
+    primaryByName[pHdr[ci]] = ci;
   }
   var st = ds.complete.stats, hdr = ds.complete.header;
   var out = [];
   Object.keys(st).map(Number).sort(function(a, b) { return a - b; }).forEach(function(ai) {
     var name = hdr[ai];
-    var p = catModelMember(ds.id, name);   // the model column in this column's property
+    var p = catMemberIn(ds.id, name, ctx.id);   // the primary column in this column's property
     var m = p !== null ? primaryByName[p] : undefined;
     out.push({ idx: ai, name: name, matchCi: m !== undefined ? m : null });
   });
@@ -21756,7 +21886,7 @@ function materializeStatsCmpSel(ds, root) {
   var S = statStateForRoot(root);
   if (S.cmpSel[ds.id]) return;
   var s = new Set();
-  getStatsCmpCols(ds).forEach(function(c) { if (c.matchCi !== null) s.add(c.idx); });
+  getStatsCmpCols(ds, statsCtx(root)).forEach(function(c) { if (c.matchCi !== null) s.add(c.idx); });
   S.cmpSel[ds.id] = s;
 }
 
@@ -21884,18 +22014,25 @@ function isMetricVisible(key, root) {
 }
 
 function renderStatsTab(stats, header, origColCount, isFiltered, rowCount, root) {
+  // The passed stats/header are always the MODEL snapshot (callers feed
+  // lastDisplayedStats/Header). Keep mirroring them into the module globals \u2014
+  // they're the model snapshot read by ctxmenu/cdf/settings, NOT the per-panel
+  // primary. The actual rendering resolves through statsCtx(root) so a panel
+  // targeting a comparison dataset shows that dataset's columns.
   lastDisplayedStats = stats;
   lastDisplayedHeader = header;
-  _statsNumCols = Object.keys(stats).map(Number).sort(function(a, b) { return a - b; });
+  _statsNumCols = stats ? Object.keys(stats).map(Number).sort(function(a, b) { return a - b; }) : [];
   _statsHeader = header;
   _statsOrigColCount = origColCount;
   var els = statEls(root);
+  var ctx = statsCtx(root);
 
-  els.badge.textContent = _statsNumCols.length + ' columns' + (isFiltered ? ' \u00B7 ' + rowCount.toLocaleString() + ' rows' : '');
+  els.badge.textContent = ctx.numCols.length + ' columns' + (ctx.isFiltered ? ' \u00B7 ' + ctx.rowCount.toLocaleString() + ' rows' : '');
 
-  if (_statsNumCols.length === 0) {
+  if (ctx.numCols.length === 0) {
     els.content.innerHTML = '<div style="color:var(--fg-dim);">No numeric columns detected.</div>';
-    els.sidebar.style.display = 'none';
+    renderStatsDatasetPicker(root);   // still let the user switch primary
+    els.sidebar.style.display = (statsTargetableDatasets().length >= 2) ? '' : 'none';
     return;
   }
   els.sidebar.style.display = '';
@@ -21913,9 +22050,13 @@ function renderStatsTab(stats, header, origColCount, isFiltered, rowCount, root)
 function renderStatsSidebar(root) {
   var els = statEls(root);
   var S = statStateForRoot(root);
-  var numCols = _statsNumCols;
-  var header = _statsHeader;
-  var origColCount = _statsOrigColCount;
+  var ctx = statsCtx(root);
+  var numCols = ctx.numCols;
+  var header = ctx.header || [];
+  var origColCount = ctx.origColCount;
+
+  // Dataset picker (≥2 analyzed datasets) — pick which one is the primary.
+  renderStatsDatasetPicker(root);
 
   // Metric toggles
   var metrics = getStatsMetricColumns(root);
@@ -21950,7 +22091,7 @@ function renderStatsSidebar(root) {
   // per dataset, shared with the Swath tab (catalog role, D3)
   var $wSel = els.weightSel;
   if ($wSel) {
-    var curWeight = catRole('model', 'weight');
+    var curWeight = catRole(ctx.id, 'weight');
     var wOpts = '<option value="">— none</option>';
     for (var wci of numCols) {
       var wName = header[wci];
@@ -21961,8 +22102,9 @@ function renderStatsSidebar(root) {
     var $wNote = els.weightNote;
     if ($wNote) {
       var noteParts = [];
-      if (curWeight && lastCompleteData && lastCompleteData.weightApplied !== curWeight) noteParts.push('re-run analysis to apply');
-      if (lastCompleteData && lastCompleteData.weightExcluded > 0) noteParts.push(lastCompleteData.weightExcluded.toLocaleString() + ' rows excluded (invalid weight)');
+      var cmp = ctx.complete;
+      if (curWeight && cmp && cmp.weightApplied !== curWeight) noteParts.push('re-run analysis to apply');
+      if (cmp && cmp.weightExcluded > 0) noteParts.push(cmp.weightExcluded.toLocaleString() + ' rows excluded (invalid weight)');
       $wNote.textContent = noteParts.join(' · ');
     }
   }
@@ -21981,29 +22123,30 @@ function renderStatsSidebar(root) {
     html += '<input type="checkbox"' + checkedAttr + ' data-col="' + ci + '">';
     html += '<span class="var-name">' + esc(name) + '</span>';
     if (isCalcol) html += '<span class="calcol-tag">CALC</span>';
-    html += statsEmptyTag('model', ci) + statsMixedTag('model', ci);
+    html += statsEmptyTag(ctx.id, ci) + statsMixedTag(ctx.id, ci);
     html += '</div>';
   }
 
   // Dataset chips (progressive disclosure) — only once a second comparison
-  // dataset joins (3+ total), so the common model+aux case stays uncluttered.
+  // dataset joins (3+ total), so the common primary+one-comparison case stays
+  // uncluttered. The primary (target) is the non-hideable anchor chip.
   var dsSection = els.datasetsSection;
   if (dsSection) {
-    var allCmp = statsCmpDatasets();
+    var allCmp = statsCmpDatasets(root);
     if (allCmp.length >= 2) {
-      // A10 4d: per-panel Δ% reference picker (Model + each shown comparison).
-      // Only here (≥2 comparisons) where the choice is ambiguous; with a lone
-      // comparison the reference is unambiguously it (badged in the table).
+      // A10 4d: per-panel Δ% reference picker (the primary + each shown
+      // comparison). Only here (≥2 comparisons) where the choice is ambiguous;
+      // with a lone comparison the reference is unambiguously it (badged in the table).
       var refNow = statsReferenceDs(root);
-      var hasModel = !!(datasets[0] && datasets[0].complete);
+      var primaryId = ctx.id;
       var refSel = '<div class="stats-ref-row"><span class="stats-ref-label" title="Δ% denominator — every other dataset is compared to this one">Δ% reference</span>' +
         '<select class="stats-select stats-ref-sel" data-stat="refSel">' +
-        (hasModel ? '<option value="model"' + (refNow === 'model' ? ' selected' : '') + '>Model</option>' : '');
+        '<option value="' + esc(primaryId) + '"' + (refNow === primaryId ? ' selected' : '') + '>' + esc(dsLabel(primaryId)) + '</option>';
       statsShownCmpDatasets(root).forEach(function(ds) {
         refSel += '<option value="' + esc(ds.id) + '"' + (refNow === ds.id ? ' selected' : '') + '>' + esc(dsLabel(ds.id)) + '</option>';
       });
       refSel += '</select></div>';
-      var chips = hasModel ? '<span class="stats-ds-chip stats-ds-chip--model" title="the model dataset — toggle comparison chips to hide them">Model</span>' : '';
+      var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the primary dataset — toggle comparison chips to hide them">' + esc(dsLabel(primaryId)) + '</span>';
       allCmp.forEach(function(ds) {
         var off = S.dsHidden.has(ds.id);
         chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) + '" aria-pressed="' + (off ? 'false' : 'true') + '" title="' + esc(off ? 'show ' : 'hide ') + esc(dsLabel(ds.id)) + '">' + esc(dsLabel(ds.id)) + '</button>';
@@ -22015,9 +22158,9 @@ function renderStatsSidebar(root) {
     }
   }
 
-  // Comparison-dataset variables (each shown non-model dataset: aux, d2…)
+  // Comparison-dataset variables (each shown dataset other than the primary)
   statsShownCmpDatasets(root).forEach(function(ds) {
-    var cols = getStatsCmpCols(ds);
+    var cols = getStatsCmpCols(ds, ctx);
     if (cols.length === 0) return;
     var label = dsLabel(ds.id);
     html += '<div class="stats-aux-divider">' + esc(label) + ': ' + esc(ds.file ? ds.file.name : '') + '</div>';
@@ -22039,26 +22182,27 @@ function renderStatsSidebar(root) {
 function renderStatsTable(root) {
   var els = statEls(root);
   var S = statStateForRoot(root);
-  var stats = lastDisplayedStats;
-  var header = lastDisplayedHeader;
+  var ctx = statsCtx(root);
+  var stats = ctx.stats;
+  var header = ctx.header;
   if (!stats || !header) return;
 
-  var numCols = Object.keys(stats).map(Number).sort(function(a, b) { return a - b; });
-  var origColCount = currentOrigColCount || header.length;
+  var numCols = ctx.numCols;
+  var origColCount = ctx.origColCount;
   var metrics = getStatsMetricColumns(root).filter(function(m) { return isMetricVisible(m.key, root); });
 
   var visCols = numCols.filter(function(ci) {
     return S.statsSelectedVars === null || S.statsSelectedVars.has(ci);
   });
 
-  // Selected comparison columns (across aux, d2…), grouped to their same-named
-  // model column where the property pairs them. cmpByMatch keeps registry order
-  // within a group (aux before d2…), cmpUnmatched holds property-less columns.
+  // Selected comparison columns (across the other datasets), grouped to their
+  // same-named PRIMARY column where the property pairs them. cmpByMatch keeps
+  // registry order within a group, cmpUnmatched holds property-less columns.
   var cmpByMatch = {};
   var cmpUnmatched = [];
   var cmpDatasets = statsShownCmpDatasets(root);
   cmpDatasets.forEach(function(ds) {
-    getStatsCmpCols(ds).forEach(function(col) {
+    getStatsCmpCols(ds, ctx).forEach(function(col) {
       if (!isStatsCmpSelected(ds, col, root)) return;
       var member = { ds: ds, col: col };
       if (col.matchCi !== null) (cmpByMatch[col.matchCi] = cmpByMatch[col.matchCi] || []).push(member);
@@ -22077,13 +22221,13 @@ function renderStatsTable(root) {
   function statsRefBadge(isRef) {
     return isRef ? ' <span class="stats-ref-badge" title="Δ% reference — every other dataset\'s Δ% is relative to this one">ref</span>' : '';
   }
-  // Δ% row for a subject (model col ci identifies the property) vs the reference.
+  // Δ% row for a subject (primary col ci identifies the property) vs the reference.
   // Empty when the subject IS the reference or the reference has no counterpart.
   function deltaRowFor(ci, subjectStats, subjectLabel) {
     if (ci === null || ci === undefined) return '';
-    var refStats = statsRefStatsFor(ci, refId, stats);
+    var refStats = statsRefStatsFor(ci, refId, ctx);
     if (!refStats || refStats === subjectStats) return '';
-    var refLabel = statsRefLabelFor(ci, refId, header);
+    var refLabel = statsRefLabelFor(ci, refId, ctx);
     var tip = '(' + subjectLabel + ' − ' + refLabel + ') / ' + refLabel;
     var rowHtml = '<tr class="stats-delta-row"><td title="' + esc(tip) + '">Δ%</td>';
     for (var m of metrics) rowHtml += '<td>' + formatDeltaPct(getStatValue(subjectStats, m), getStatValue(refStats, m), m) + '</td>';
@@ -22106,8 +22250,8 @@ function renderStatsTable(root) {
     return;
   }
 
-  // A9 F3: per-row filter/calcol errors from the model and comparison analyses
-  var html = workerErrNote(lastCompleteData);
+  // A9 F3: per-row filter/calcol errors from the primary and comparison analyses
+  var html = workerErrNote(ctx.complete, ctx.isModel ? undefined : dsLabel(ctx.id));
   cmpDatasets.forEach(function(ds) { html += workerErrNote(ds.complete, dsLabel(ds.id)); });
   html += '<table class="stats"><thead><tr><th>Column</th>';
   for (var m of metrics) html += '<th>' + esc(m.label) + '</th>';
@@ -22120,7 +22264,7 @@ function renderStatsTable(root) {
     var nameClass = cdfActive ? 'cdf-link cdf-active' : 'cdf-link';
     var nameHtml = '<a class="' + nameClass + '" data-col="' + ci + '" href="#">' + esc(header[ci]) + '</a>';
     if (isCalcol) nameHtml += '<span class="calcol-tag">CALC</span>';
-    nameHtml += statsRefBadge(refId === 'model') + statsEmptyTag('model', ci) + statsMixedTag('model', ci);
+    nameHtml += statsRefBadge(refId === ctx.id) + statsEmptyTag(ctx.id, ci) + statsMixedTag(ctx.id, ci);
 
     html += '<tr' + (isCalcol ? ' class="calcol-row"' : '') + '><td>' + nameHtml + '</td>';
     for (var m of metrics) {
@@ -22128,7 +22272,7 @@ function renderStatsTable(root) {
       html += '<td>' + formatStatValue(val, m) + '</td>';
     }
     html += '</tr>';
-    // Δ% of the model vs the reference (when the model isn't itself the reference)
+    // Δ% of the primary vs the reference (when the primary isn't itself the reference)
     html += deltaRowFor(ci, s, header[ci]);
     // Same-named comparison rows directly beneath their primary
     if (cmpByMatch[ci]) {
@@ -22163,8 +22307,9 @@ function renderStatsCdfPanel(root) {
     return;
   }
 
-  var stats = lastDisplayedStats;
-  var header = lastDisplayedHeader;
+  var ctx = statsCtx(root);
+  var stats = ctx.stats;
+  var header = ctx.header;
   if (!stats || !header) return;
 
   // Selected variables with no centroid data (empty column, everything
@@ -22665,10 +22810,16 @@ function wireStatsEvents(root) {
   // Shared support weight (D3): writing here also re-points the Swath
   // tab's weight select — one role, two views (global; model state)
   els.weightSel.addEventListener('change', function() {
-    catSetRole('model', 'weight', this.value || null);
-    var $sw = document.getElementById('swathWeight');
-    if ($sw) $sw.value = this.value || '';
-    markAnalysisStale();
+    var ctx = statsCtx(root);
+    catSetRole(ctx.id, 'weight', this.value || null);
+    if (ctx.isModel) {
+      // One support weight per dataset; the model's mirrors the Swath select.
+      var $sw = document.getElementById('swathWeight');
+      if ($sw) $sw.value = this.value || '';
+      markAnalysisStale();
+    } else if (typeof markAuxStale === 'function') {
+      markAuxStale(ctx.ds, (typeof dsConfigRoot === 'function') ? dsConfigRoot(ctx.ds) : null);
+    }
     renderStatsSidebar(root);
     autoSaveProject();
   });
@@ -22732,7 +22883,7 @@ function wireStatsEvents(root) {
     if (!cb) return;
     var colIdx = parseInt(cb.dataset.col);
     if (S.statsSelectedVars === null) {
-      S.statsSelectedVars = new Set(_statsNumCols);
+      S.statsSelectedVars = new Set(statsCtx(root).numCols);
     }
     if (cb.checked) S.statsSelectedVars.add(colIdx);
     else S.statsSelectedVars.delete(colIdx);
@@ -22744,11 +22895,11 @@ function wireStatsEvents(root) {
 
   // --- All/None buttons ---
   els.varAll.addEventListener('click', function() {
-    if (S.statsSelectedVars === null) S.statsSelectedVars = new Set(_statsNumCols);
+    if (S.statsSelectedVars === null) S.statsSelectedVars = new Set(statsCtx(root).numCols);
     els.varList.querySelectorAll('.stats-var-item[data-col]').forEach(function(el) {
       S.statsSelectedVars.add(parseInt(el.dataset.col));
     });
-    statsCmpDatasets().forEach(function(ds) { materializeStatsCmpSel(ds, root); });
+    statsCmpDatasets(root).forEach(function(ds) { materializeStatsCmpSel(ds, root); });
     els.varList.querySelectorAll('.stats-var-item[data-cmp-col]').forEach(function(el) {
       S.cmpSel[el.dataset.cmpDs].add(parseInt(el.dataset.cmpCol));
     });
@@ -22757,11 +22908,11 @@ function wireStatsEvents(root) {
     autoSaveProject();
   });
   els.varNone.addEventListener('click', function() {
-    if (S.statsSelectedVars === null) S.statsSelectedVars = new Set(_statsNumCols);
+    if (S.statsSelectedVars === null) S.statsSelectedVars = new Set(statsCtx(root).numCols);
     els.varList.querySelectorAll('.stats-var-item[data-col]').forEach(function(el) {
       S.statsSelectedVars.delete(parseInt(el.dataset.col));
     });
-    statsCmpDatasets().forEach(function(ds) { materializeStatsCmpSel(ds, root); });
+    statsCmpDatasets(root).forEach(function(ds) { materializeStatsCmpSel(ds, root); });
     els.varList.querySelectorAll('.stats-var-item[data-cmp-col]').forEach(function(el) {
       S.cmpSel[el.dataset.cmpDs].delete(parseInt(el.dataset.cmpCol));
     });

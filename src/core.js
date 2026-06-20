@@ -235,6 +235,7 @@ function statEls(root) {
   function q(k) { return root ? root.querySelector('[data-stat="' + k + '"]') : null; }
   return {
     body: q('body'), sidebar: q('sidebar'), main: q('main'), content: q('content'), badge: q('badge'),
+    datasetWrap: q('datasetWrap'),
     presetBtns: q('presetBtns'), customPct: q('customPct'), weightSel: q('weightSel'), weightNote: q('weightNote'),
     metricToggles: q('metricToggles'), datasetsSection: q('datasetsSection'), datasetChips: q('datasetChips'),
     varSearch: q('varSearch'), varAll: q('varAll'), varNone: q('varNone'), varList: q('varList'),
@@ -596,14 +597,17 @@ function catSetRole(ds, role, name) {
 }
 
 // ── Pairing as property membership (legacy aux→model API over properties) ──
-// catModelMember: the model column grouped with (ds,name) — the dataset-generic
-// primitive (A10 4c). catPair is the aux-only legacy alias.
-function catModelMember(ds, name) {
+// catMemberIn: the column in `targetDsId` grouped with (ds,name) — the fully
+// dataset-generic primitive (ws-v2 phase 1; inverts the model-as-primary
+// assumption so any dataset can be the comparison anchor). catModelMember is
+// the model-anchored alias (A10 4c); catPair is the aux-only legacy alias.
+function catMemberIn(ds, name, targetDsId) {
   const rec = catVarPeek(ds, name);
   if (!rec) return null;
-  const m = rec.members.find(function(x) { return x.ds === 'model'; });
+  const m = rec.members.find(function(x) { return x.ds === targetDsId; });
   return m ? m.col : null;
 }
+function catModelMember(ds, name) { return catMemberIn(ds, name, 'model'); }
 function catPair(auxName) { return catModelMember('aux', auxName); }
 // Members of a model column's property in a given dataset (default aux)
 function catGroupMembers(modelName, dsId) {
