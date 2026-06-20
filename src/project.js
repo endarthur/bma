@@ -2216,7 +2216,6 @@ function displayResults(data) {
   if (typeof swApplyAllInstances === 'function') swApplyAllInstances();      // s-5: re-apply restored clone configs
   if (typeof gtApplyAllInstances === 'function') gtApplyAllInstances();      // G3b-4: re-apply restored GT clone configs
   if (typeof swRefreshAllInstances === 'function') swRefreshAllInstances();  // follow-up: refresh live clone sidebars on re-analysis
-  renderSectionConfig(data);
 
   // Restore GT sidebar from project or snapshot
   var gtp = (restoredProject && restoredProject.gt) ? restoredProject.gt : gtSnapshot;
@@ -2426,9 +2425,8 @@ function displayResults(data) {
     $statsCatBadge.textContent = '';
   }
 
-  // Swath/Section tab labels (no badge until generated)
+  // Swath tab label (no badge until generated)
   wsTabBadge('swath', 'Swath', null);
-  wsTabBadge('section', 'Section', null);
 
   // Render calcol editor
   renderVariableBrowser();
