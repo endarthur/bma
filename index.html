@@ -5356,6 +5356,13 @@ table.stats tr.stats-delta-row td:first-child {
 .dh-ivt-status b { color: var(--fg); }
 .dh-ivt-err { color: var(--red); }
 
+/* A11 P3: multi-column split checkboxes */
+.dh-opt-wide { flex-basis: 100%; }
+.dh-split-cols { display: flex; flex-wrap: wrap; gap: 0.3rem 0.7rem; align-items: center; }
+.dh-split-chk { display: inline-flex; align-items: center; gap: 0.25rem; font: 0.66rem var(--mono); color: var(--fg); cursor: pointer; }
+.dh-split-chk input { margin: 0; }
+.dh-split-none { color: var(--fg-dim); font-size: 0.62rem; }
+
 .dh-report { margin-top: 0.7rem; }
 .dh-report-summary { color: var(--fg); font-size: 0.7rem; margin-bottom: 0.35rem; }
 .dh-report-clean { color: var(--green); font-size: 0.68rem; }
@@ -6056,7 +6063,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 39fd1bb — click to check for updates">39fd1bb</div>
+<div class="build-badge" id="buildBadge" title="build 429cca1 — click to check for updates">429cca1</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -13910,13 +13917,22 @@ function dhComposite(validated, opts) {
   var ivt = validated.intervals;
   var cols = ivt.cols || [];
   var L = opts.length;
-  var domainIdx = -1, densityIdx = -1;
+  var densityIdx = -1;
   for (var dci = 0; dci < cols.length; dci++) {
-    if (opts.domainColName && cols[dci].name === opts.domainColName) domainIdx = dci;
     // A11 P3: optional mass weighting — numeric means weight by length × density
     // (the density column itself stays length-weighted). Missing density on an
     // interval excludes it from mass-weighting and is counted (never silent).
     if (opts.densityColName && cols[dci].name === opts.densityColName && cols[dci].type === 'num') densityIdx = dci;
+  }
+  // A11 P3: split columns — composites restart where the TUPLE of these columns
+  // changes (any one flips → new composite). Generalizes the single domain
+  // break; falls back to [domainColName] for back-compat. Each split column is
+  // constant within a run by construction, so it rides into the output 1:1.
+  var splitNames = (opts.splitColNames && opts.splitColNames.length) ? opts.splitColNames
+    : (opts.domainColName ? [opts.domainColName] : []);
+  var splitIdxs = [];
+  for (var si = 0; si < splitNames.length; si++) {
+    for (var sj = 0; sj < cols.length; sj++) { if (cols[sj].name === splitNames[si]) { splitIdxs.push(sj); break; } }
   }
   // A11 P3: per-column combine rules keyed by column name. Numeric: 'mean'
   // (default, length/mass-weighted), 'sum' (Σ length×value), 'min', 'max'.
@@ -13950,17 +13966,23 @@ function dhComposite(validated, opts) {
       for (var mi = 0; mi < slice.length; mi++) maxTo = Math.max(maxTo, ivt.to[slice[mi]]);
       return { from: ivt.from[slice[0]], to: maxTo, idx: slice };
     }
+    var SPLIT_SEP = String.fromCharCode(31);   // unit separator → no cross-column key collisions
+    function splitKey(r2) {
+      var parts = [];
+      for (var sk = 0; sk < splitIdxs.length; sk++) parts.push(String(cols[splitIdxs[sk]].values[r2]));
+      return parts.join(SPLIT_SEP);
+    }
     var runs = [];
-    if (domainIdx < 0) {
+    if (!splitIdxs.length) {
       runs.push(makeRun(idx));
     } else {
-      var runStart = 0;
+      var runStart = 0, startKey = idx.length ? splitKey(idx[0]) : '';
       for (var ri = 1; ri <= idx.length; ri++) {
-        var changed = ri === idx.length ||
-          String(cols[domainIdx].values[idx[ri]]) !== String(cols[domainIdx].values[idx[runStart]]);
+        var changed = ri === idx.length || splitKey(idx[ri]) !== startKey;
         if (changed) {
           runs.push(makeRun(idx.slice(runStart, ri)));
           runStart = ri;
+          if (ri < idx.length) startKey = splitKey(idx[ri]);
         }
       }
     }
@@ -14069,6 +14091,7 @@ function dhProcess(tables, opts) {
     length: length,
     method: opts.method || 'minimumCurvature',
     domainColName: opts.domainCol || null,
+    splitColNames: opts.splitCols || null,
     densityColName: opts.densityCol || null,
     combine: opts.combine || null,
     minCoverage: opts.minCoverage || null,
@@ -16915,12 +16938,16 @@ function renderDhMapping(ds) {
 
   // options row
   var dataCols = dhIntervalDataCols(ds);
-  var catOpts = '<option value="">— none</option>';
+  var splitSel = dhSplitCols(D);   // A11 P3: effective split columns (migrates legacy domainCol)
+  var splitChecks = '';
   var densOpts = '<option value="">— none (length only)</option>';   // A11 P3
   for (var dc = 0; dc < dataCols.length; dc++) {
-    if (dataCols[dc].type === 'cat') catOpts += '<option value="' + esc(dataCols[dc].name) + '">' + esc(dataCols[dc].name) + '</option>';
-    else if (dataCols[dc].type === 'num') densOpts += '<option value="' + esc(dataCols[dc].name) + '">' + esc(dataCols[dc].name) + '</option>';
+    if (dataCols[dc].type === 'cat') {
+      var on = splitSel.indexOf(dataCols[dc].name) >= 0;
+      splitChecks += '<label class="dh-split-chk"><input type="checkbox" data-dh="split" data-dh-col="' + esc(dataCols[dc].name) + '"' + (on ? ' checked' : '') + '>' + esc(dataCols[dc].name) + '</label>';
+    } else if (dataCols[dc].type === 'num') densOpts += '<option value="' + esc(dataCols[dc].name) + '">' + esc(dataCols[dc].name) + '</option>';
   }
+  if (!splitChecks) splitChecks = '<span class="dh-split-none">— no categorical columns</span>';
   var autoLen = dhAutoLength(ds);
   function mOpt(v, label) {
     return '<option value="' + v + '"' + (D.opts.method === v ? ' selected' : '') + '>' + label + '</option>';
@@ -16931,7 +16958,7 @@ function renderDhMapping(ds) {
       mOpt('balancedTangential', 'Balanced tangential') +
       mOpt('tangential', 'Tangential') + '</select></div>' +
     '<div class="dh-opt"><label>Composite length</label><input type="number" data-dh="length" class="dh-narrow" min="0" step="any" value="' + esc(D.opts.length) + '" placeholder="' + (autoLen != null ? autoLen : 'auto') + '"></div>' +
-    '<div class="dh-opt"><label>Break on (domain)</label><select data-dh="domain">' + catOpts + '</select></div>' +
+    '<div class="dh-opt dh-opt-wide"><label>Break on (splits)</label><div class="dh-split-cols">' + splitChecks + '</div></div>' +
     '<div class="dh-opt"><label>Density (mass-weight)</label><select data-dh="density">' + densOpts + '</select></div>' +
     '<div class="dh-opt"><label>Min coverage %</label><input type="number" data-dh="minCov" class="dh-narrow" min="0" max="100" step="any" value="' + esc(D.opts.minCov) + '" placeholder="off"></div>' +
     '</div>';
@@ -16943,9 +16970,8 @@ function renderDhMapping(ds) {
     '<span class="dh-status" data-dh="status"></span></div>';
 
   $m.innerHTML = html;
-  // domain + density selects applied after render (option lists are data-driven)
-  var $dom = dhQ('[data-dh="domain"]', root);
-  if ($dom && D.opts.domainCol) $dom.value = D.opts.domainCol;
+  // density select applied after render (option list is data-driven; splits are
+  // checkboxes rendered checked inline)
   var $dens = dhQ('[data-dh="density"]', root);
   if ($dens && D.opts.densityCol) $dens.value = D.opts.densityCol;
   dhRenderIvtStatus(ds);   // A11 P2: calc-column / kept-row / error summary
@@ -16957,6 +16983,12 @@ function renderDhMapping(ds) {
 var DH_COMBINE_NUM = [['mean', 'Mean'], ['sum', 'Sum'], ['min', 'Min'], ['max', 'Max']];
 var DH_COMBINE_CAT = [['majority', 'Majority'], ['first', 'First']];
 function dhCombineDefault(type) { return type === 'num' ? 'mean' : 'majority'; }
+// A11 P3: the effective split columns, migrating a legacy single domainCol the
+// first time it's read (so old recipes/sessions become multi-split transparently).
+function dhSplitCols(D) {
+  if (!D.opts.splitCols && D.opts.domainCol) { D.opts.splitCols = [D.opts.domainCol]; D.opts.domainCol = ''; }
+  return D.opts.splitCols || [];
+}
 function dhCombineEditorHtml(ds) {
   var D = dhStateFor(ds);
   var cols = dhIntervalDataCols(ds);
@@ -17086,7 +17118,7 @@ function dhCompositeAndLoad(ds) {
     method: D.opts.method || 'minimumCurvature',
     dipConvention: D.dipConvention || 'pos-down',
     compositeLength: isFinite(lenInput) && lenInput > 0 ? lenInput : null,
-    domainCol: D.opts.domainCol || null,
+    splitCols: dhSplitCols(D).length ? dhSplitCols(D) : null,   // A11 P3: multi-column splits
     densityCol: D.opts.densityCol || null,   // A11 P3: mass weighting
     combine: D.opts.combine || null,         // A11 P3: per-column combine rules
     minCoverage: isFinite(covInput) && covInput > 0 ? covInput / 100 : null,
@@ -17226,7 +17258,7 @@ function dhSerialize(ds) {
     },
     map: { collar: dhMapToNames(ds, 'collar'), survey: dhMapToNames(ds, 'survey'), intervals: dhMapToNames(ds, 'intervals') },
     dipConvention: D.dipConvention,
-    opts: { method: D.opts.method, length: D.opts.length, domainCol: D.opts.domainCol, densityCol: D.opts.densityCol, combine: D.opts.combine || null, minCov: D.opts.minCov },
+    opts: { method: D.opts.method, length: D.opts.length, splitCols: dhSplitCols(D).length ? dhSplitCols(D) : null, densityCol: D.opts.densityCol, combine: D.opts.combine || null, minCov: D.opts.minCov },
     // A11 P2: the interval table's per-table calcols + filter (omitted when empty)
     intervalCalcols: (ivt.calcolCode || ivt.filter) ? { calcolCode: ivt.calcolCode || '', filter: ivt.filter || '' } : null,
     loaded: !!(ds.file && D.derivedName && ds.file.name === D.derivedName),
@@ -17278,7 +17310,9 @@ function dhTryApplyPendingRestore(ds) {
   if (pr.opts) {
     D.opts.method = pr.opts.method || 'minimumCurvature';
     D.opts.length = pr.opts.length || '';
-    D.opts.domainCol = pr.opts.domainCol || '';
+    // A11 P3: splits — accept the new array or migrate a legacy single domainCol
+    D.opts.splitCols = pr.opts.splitCols || (pr.opts.domainCol ? [pr.opts.domainCol] : null);
+    D.opts.domainCol = '';
     D.opts.densityCol = pr.opts.densityCol || '';   // A11 P3
     D.opts.combine = pr.opts.combine || null;       // A11 P3
     D.opts.minCov = pr.opts.minCov || '';
@@ -17384,7 +17418,14 @@ function wireDhCard(root, ds) {
     var k = e.target.dataset && e.target.dataset.dh;
     if (k === 'method') { D.opts.method = e.target.value; dhAutoSave(); }
     else if (k === 'length') { D.opts.length = e.target.value; dhAutoSave(); }
-    else if (k === 'domain') { D.opts.domainCol = e.target.value; dhAutoSave(); }
+    else if (k === 'split') {   // A11 P3: toggle a split column
+      var scol = e.target.dataset.dhCol;
+      var arr = D.opts.splitCols || (D.opts.splitCols = []);
+      var si = arr.indexOf(scol);
+      if (e.target.checked) { if (si < 0) arr.push(scol); }
+      else if (si >= 0) arr.splice(si, 1);
+      dhAutoSave();
+    }
     else if (k === 'density') { D.opts.densityCol = e.target.value; dhAutoSave(); }   // A11 P3
     else if (k === 'combine') {   // A11 P3: per-column combine rule
       var col = e.target.dataset.dhCol, rule = e.target.value;

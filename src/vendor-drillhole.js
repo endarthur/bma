@@ -324,13 +324,22 @@ function dhComposite(validated, opts) {
   var ivt = validated.intervals;
   var cols = ivt.cols || [];
   var L = opts.length;
-  var domainIdx = -1, densityIdx = -1;
+  var densityIdx = -1;
   for (var dci = 0; dci < cols.length; dci++) {
-    if (opts.domainColName && cols[dci].name === opts.domainColName) domainIdx = dci;
     // A11 P3: optional mass weighting — numeric means weight by length × density
     // (the density column itself stays length-weighted). Missing density on an
     // interval excludes it from mass-weighting and is counted (never silent).
     if (opts.densityColName && cols[dci].name === opts.densityColName && cols[dci].type === 'num') densityIdx = dci;
+  }
+  // A11 P3: split columns — composites restart where the TUPLE of these columns
+  // changes (any one flips → new composite). Generalizes the single domain
+  // break; falls back to [domainColName] for back-compat. Each split column is
+  // constant within a run by construction, so it rides into the output 1:1.
+  var splitNames = (opts.splitColNames && opts.splitColNames.length) ? opts.splitColNames
+    : (opts.domainColName ? [opts.domainColName] : []);
+  var splitIdxs = [];
+  for (var si = 0; si < splitNames.length; si++) {
+    for (var sj = 0; sj < cols.length; sj++) { if (cols[sj].name === splitNames[si]) { splitIdxs.push(sj); break; } }
   }
   // A11 P3: per-column combine rules keyed by column name. Numeric: 'mean'
   // (default, length/mass-weighted), 'sum' (Σ length×value), 'min', 'max'.
@@ -364,17 +373,23 @@ function dhComposite(validated, opts) {
       for (var mi = 0; mi < slice.length; mi++) maxTo = Math.max(maxTo, ivt.to[slice[mi]]);
       return { from: ivt.from[slice[0]], to: maxTo, idx: slice };
     }
+    var SPLIT_SEP = String.fromCharCode(31);   // unit separator → no cross-column key collisions
+    function splitKey(r2) {
+      var parts = [];
+      for (var sk = 0; sk < splitIdxs.length; sk++) parts.push(String(cols[splitIdxs[sk]].values[r2]));
+      return parts.join(SPLIT_SEP);
+    }
     var runs = [];
-    if (domainIdx < 0) {
+    if (!splitIdxs.length) {
       runs.push(makeRun(idx));
     } else {
-      var runStart = 0;
+      var runStart = 0, startKey = idx.length ? splitKey(idx[0]) : '';
       for (var ri = 1; ri <= idx.length; ri++) {
-        var changed = ri === idx.length ||
-          String(cols[domainIdx].values[idx[ri]]) !== String(cols[domainIdx].values[idx[runStart]]);
+        var changed = ri === idx.length || splitKey(idx[ri]) !== startKey;
         if (changed) {
           runs.push(makeRun(idx.slice(runStart, ri)));
           runStart = ri;
+          if (ri < idx.length) startKey = splitKey(idx[ri]);
         }
       }
     }
@@ -483,6 +498,7 @@ function dhProcess(tables, opts) {
     length: length,
     method: opts.method || 'minimumCurvature',
     domainColName: opts.domainCol || null,
+    splitColNames: opts.splitCols || null,
     densityColName: opts.densityCol || null,
     combine: opts.combine || null,
     minCoverage: opts.minCoverage || null,

@@ -5341,6 +5341,13 @@ table.stats tr.stats-delta-row td:first-child {
 .dh-ivt-status b { color: var(--fg); }
 .dh-ivt-err { color: var(--red); }
 
+/* A11 P3: multi-column split checkboxes */
+.dh-opt-wide { flex-basis: 100%; }
+.dh-split-cols { display: flex; flex-wrap: wrap; gap: 0.3rem 0.7rem; align-items: center; }
+.dh-split-chk { display: inline-flex; align-items: center; gap: 0.25rem; font: 0.66rem var(--mono); color: var(--fg); cursor: pointer; }
+.dh-split-chk input { margin: 0; }
+.dh-split-none { color: var(--fg-dim); font-size: 0.62rem; }
+
 .dh-report { margin-top: 0.7rem; }
 .dh-report-summary { color: var(--fg); font-size: 0.7rem; margin-bottom: 0.35rem; }
 .dh-report-clean { color: var(--green); font-size: 0.68rem; }
