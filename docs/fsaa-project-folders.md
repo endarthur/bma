@@ -124,6 +124,9 @@ gives this for free" rather than separately built.
   objects can use; design them together.
 - **A11** (drillhole container / emit) — the materialize-while-linked story this
   doc backs; linked-emit can land first, materialize-at-scale wants the folder.
+- **A18** (export presets + bound output) — a bound `showSaveFilePicker` handle
+  lets one-click *re-export* overwrite a CSV in place (BMA as a pipeline component
+  feeding Vulcan/Leapfrog/…); same persisted-handle machinery as the folder mount.
 - **B2** (parquet platform) — big-file projects live in a folder of parquet.
 - **`docs/io-architecture.md`** — the planned row-source / sidecar-index work that
   a mounted folder gives a real home.
