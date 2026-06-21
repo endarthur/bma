@@ -131,6 +131,14 @@ total. Extract conservative conjunctive clauses from the common shapes —
 contributes no pruning (full scan), never a wrong skip. Same playbook as
 Parquet/ORC readers.
 
+> **Better than shape-matching (2026-06-21, Arthur):** route the filter/calcol
+> DSL through an **expression IR** (`../auditable/ext/air`) instead of compiling
+> straight to `new Function`. The IR is *analyzable* — walk it for the clauses
+> above (principled, not regex shapes), still compile it to JS for the row path,
+> and it's the same IR that enables the parquet **vectorized fast path** (no
+> calcols + pushdown-able filter ⇒ stay columnar, skip row groups). This is the
+> `air`/pushdown phase of **C12** (`docs/derivation-lineage.md`); sequence with B2.
+
 **Staleness/identity.** Sidecar records data-file size + `lastModified` +
 hash of first/last N bytes. Mismatch ⇒ index ignored and rebuilt. Fits the
 existing recents/FSAA-handle machinery; for drag-dropped Files without a
