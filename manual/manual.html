@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>BMA — Manual do Usuário</title>
+<style>
+  :root {
+    --ink: #1d2129; --dim: #5b6470; --amber: #b87333; --line: #d8d3c8;
+    --code-bg: #f4f1ea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", system-ui, sans-serif; color: var(--ink);
+    font-size: 10.5pt; line-height: 1.55; margin: 0;
+  }
+  code, pre {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 9.5pt;
+    background: var(--code-bg); border-radius: 3px;
+  }
+  code { padding: 0.05em 0.35em; }
+  pre { padding: 0.7em 1em; overflow-x: hidden; white-space: pre-wrap; border-left: 3px solid var(--amber); }
+  h1 {
+    font-size: 17pt; color: var(--amber); border-bottom: 2px solid var(--amber);
+    padding-bottom: 0.2em; margin: 0 0 0.6em; letter-spacing: 0.02em;
+    page-break-before: always; padding-top: 0.4em;
+  }
+  h1 .secnum { color: var(--dim); font-weight: 400; margin-right: 0.4em; }
+  h2 { font-size: 12.5pt; margin: 1.2em 0 0.4em; color: #2c3340; page-break-after: avoid; }
+  h3 { font-size: 11pt; margin: 1em 0 0.3em; page-break-after: avoid; }
+  p { margin: 0.45em 0; }
+  ul, ol { margin: 0.4em 0 0.6em; padding-left: 1.4em; }
+  li { margin: 0.22em 0; }
+  table { border-collapse: collapse; width: 100%; margin: 0.6em 0; font-size: 9.5pt; }
+  th, td { border: 1px solid var(--line); padding: 0.32em 0.55em; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); }
+  figure { margin: 0.9em 0; page-break-inside: avoid; }
+  figure img { width: 100%; border: 1px solid var(--line); border-radius: 4px; display: block; }
+  figcaption { font-size: 8.5pt; color: var(--dim); margin-top: 0.35em; }
+  .tip, .warn {
+    border: 1px solid var(--line); border-left: 4px solid var(--amber);
+    border-radius: 3px; padding: 0.5em 0.8em; margin: 0.7em 0; font-size: 9.8pt;
+    page-break-inside: avoid;
+  }
+  .warn { border-left-color: #b04a3a; }
+  .tip::before { content: "Dica — "; font-weight: 600; color: var(--amber); }
+  .warn::before { content: "Atenção — "; font-weight: 600; color: #b04a3a; }
+  .kbd {
+    border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px;
+    padding: 0 0.35em; font-family: Consolas, monospace; font-size: 9pt; background: #fff;
+  }
+  /* Capa */
+  .cover { height: 95vh; display: flex; flex-direction: column; justify-content: center; page-break-after: always; }
+  .cover h1 { border: none; page-break-before: avoid; font-size: 34pt; margin: 0; }
+  .cover .sub { font-size: 14pt; color: var(--dim); margin-top: 0.4em; }
+  .cover .meta { margin-top: 3em; color: var(--dim); font-size: 10pt; line-height: 1.8; }
+  .cover .gcu { margin-top: 5em; font-size: 9pt; color: var(--dim); letter-spacing: 0.08em; }
+  /* Sumário */
+  .toc { page-break-after: always; }
+  .toc h1 { page-break-before: avoid; }
+  .toc ol { list-style: none; padding: 0; column-count: 1; }
+  .toc li { padding: 0.18em 0; border-bottom: 1px dotted var(--line); }
+  .toc .secnum { display: inline-block; width: 1.8em; color: var(--amber); }
+  .toc li.sub { padding: 0.08em 0 0.08em 2.2em; border-bottom: none; font-size: 9.5pt; color: var(--dim); }
+  .toc li.sub .secnum { width: 2.4em; color: var(--dim); }
+  @page { size: A4; margin: 18mm 16mm 20mm; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>BMA</h1>
+  <div class="sub">Block Model Atelier — Manual do Usuário</div>
+  <div class="meta">
+    Analisador de modelos de blocos no navegador<br>
+    <b>https://endarthur.github.io/bma/</b><br>
+    Versão do manual: junho de 2026 · BMA v1.3
+  </div>
+  <div class="gcu">GCU — Geoscientific Chaos Union</div>
+</div>
+
+<div class="toc">
+<h1>Sumário</h1>
+<ol>
+  <li><span class="secnum">1</span> O que é o BMA</li>
+  <li><span class="secnum">2</span> Primeiros passos</li>
+  <li class="sub"><span class="secnum">2.1</span> O dataset de exemplo</li>
+  <li class="sub"><span class="secnum">2.2</span> Carregando seus dados</li>
+  <li class="sub"><span class="secnum">2.3</span> Ajuda contextual</li>
+  <li class="sub"><span class="secnum">2.4</span> A área de trabalho: painéis que convivem</li>
+  <li class="sub"><span class="secnum">2.5</span> Sua primeira sessão: validando o modelo de exemplo</li>
+  <li><span class="secnum">3</span> Importação — conferindo antes de analisar</li>
+  <li><span class="secnum">4</span> Análise e a visão Summary</li>
+  <li><span class="secnum">5</span> O filtro de linhas</li>
+  <li><span class="secnum">6</span> Calc — colunas calculadas</li>
+  <li><span class="secnum">7</span> Statistics — estatísticas, pesos e CDF</li>
+  <li class="sub"><span class="secnum">7.1</span> A tabela</li>
+  <li class="sub"><span class="secnum">7.2</span> Pesos</li>
+  <li class="sub"><span class="secnum">7.3</span> CDF, Prob e Q–Q</li>
+  <li><span class="secnum">8</span> Categories — variáveis categóricas</li>
+  <li><span class="secnum">9</span> StatsCat — estatísticas por grupo</li>
+  <li><span class="secnum">10</span> GT — curvas teor–tonelagem</li>
+  <li class="sub"><span class="secnum">10.1</span> Curva teórica a partir das amostras</li>
+  <li><span class="secnum">11</span> Swath — perfis direcionais</li>
+  <li><span class="secnum">12</span> Conjuntos de comparação — validação</li>
+  <li class="sub"><span class="secnum">12.1</span> Carregando e configurando</li>
+  <li class="sub"><span class="secnum">12.2</span> Statistics e CDF comparadas</li>
+  <li class="sub"><span class="secnum">12.3</span> Swath comparado</li>
+  <li class="sub"><span class="secnum">12.4</span> Q–Q: o viés medido</li>
+  <li class="sub"><span class="secnum">12.5</span> Categories comparado</li>
+  <li class="sub"><span class="secnum">12.6</span> Calcols no auxiliar</li>
+  <li class="sub"><span class="secnum">12.7</span> Desagrupamento (declustering)</li>
+  <li class="sub"><span class="secnum">12.8</span> Top-cut — análise de capping</li>
+  <li><span class="secnum">13</span> Furos de sondagem — das tabelas brutas às compostas</li>
+  <li class="sub"><span class="secnum">13.1</span> A superfície de composição</li>
+  <li class="sub"><span class="secnum">13.2</span> Mesclando uma segunda tabela de intervalos</li>
+  <li class="sub"><span class="secnum">13.3</span> Composição &amp; o resultado</li>
+  <li><span class="secnum">14</span> A árvore de dados e os menus de contexto</li>
+  <li><span class="secnum">15</span> Projetos: salvar, empacotar, compartilhar</li>
+  <li class="sub"><span class="secnum">15.1</span> Salvamento automático</li>
+  <li class="sub"><span class="secnum">15.2</span> Save — o arquivo de projeto</li>
+  <li class="sub"><span class="secnum">15.3</span> Pack — o projeto portátil</li>
+  <li><span class="secnum">16</span> Export — exportando CSV</li>
+  <li><span class="secnum">17</span> Instalação, offline e atualizações</li>
+  <li class="sub"><span class="secnum">17.1</span> No navegador ou instalado (recomendado)</li>
+  <li class="sub"><span class="secnum">17.2</span> Cópia local: um arquivo só</li>
+  <li class="sub"><span class="secnum">17.3</span> Suporte de navegadores</li>
+  <li><span class="secnum">18</span> Dicas e solução de problemas</li>
+  <li><span class="secnum">A</span> Apêndice: referência de expressões</li>
+  <li><span class="secnum">B</span> Apêndice: referência rápida</li>
+  <li><span class="secnum">C</span> Apêndice: glossário</li>
+  <li><span class="secnum">D</span> Apêndice: receitas</li>
+  <li><span class="secnum">E</span> Apêndice: galeria de interpretação</li>
+  <li><span class="secnum">F</span> Índice</li>
+</ol>
+</div>
+
+<h1><span class="secnum">1</span>O que é o BMA</h1>
+<p>O <b>BMA (Block Model Atelier)</b> é um inspetor de modelos de blocos que roda inteiramente no seu navegador. Você arrasta um CSV exportado do Isatis, Vulcan, Surpac, Leapfrog, Datamine ou qualquer outro pacote de mineração e recebe, em segundos: estatísticas descritivas, detecção de geometria do grid, distribuição de categorias, curvas teor–tonelagem, perfis direcionais (swath) e comparação contra as amostras que deram origem ao modelo — ou contra qualquer número de outros conjuntos de dados.</p>
+<p>Três propriedades definem a ferramenta:</p>
+<ul>
+  <li><b>Nada sai do seu computador.</b> Não existe servidor: o arquivo é lido localmente, via streaming. Pode usar com dados confidenciais.</li>
+  <li><b>Arquivos enormes funcionam.</b> O BMA nunca carrega o arquivo inteiro na memória — ele processa linha a linha. Modelos de vários gigabytes rodam em um notebook comum. A velocidade é limitada por ler o arquivo uma vez, não pela RAM: espere alguns milhões de linhas em segundos e arquivos de vários gigabytes em (poucos) minutos numa máquina típica — arquivos mais largos (muitas colunas) e colunas calculadas somam a isso. Uma barra de progresso acompanha tudo e você pode cancelar a qualquer momento.</li>
+  <li><b>Uma passada só.</b> Tipos, estatísticas, geometria e colunas calculadas são computados em uma única leitura do arquivo, em uma thread separada (Web Worker), então a interface nunca trava.</li>
+</ul>
+<p>O BMA é <b>multi-dataset</b>: o modelo de blocos é o hub, e você o compara contra quantos outros conjuntos precisar — as compostas por trás dele, uma campanha de adensamento, uma re-estimativa, um segundo modelo. Cada conjunto é um par, com seu próprio painel de importação, filtros, colunas calculadas e (se tiver coordenadas) geometria. O endereço é <b>https://endarthur.github.io/bma/</b> — e também funciona offline depois da primeira visita (ver §17).</p>
+
+<h1><span class="secnum">2</span>Primeiros passos</h1>
+<figure><img src="shots/01-landing.png" alt="Tela inicial"><figcaption>Tela inicial: zona de arraste, “Começar um projeto vazio”, projetos salvos, arquivos recentes e o botão de download do dataset de exemplo.</figcaption></figure>
+<h2>2.1 O dataset de exemplo</h2>
+<p>Na tela inicial há um botão <b>“⤓ Download example dataset”</b>. Ele gera, no seu próprio navegador, um <code>bma-example.zip</code> contendo um modelo de blocos sintético, as compostas de sondagem “por trás” dele, as <b>tabelas brutas de sondagem</b> (collar/survey/assays, para o §13) e um <code>TUTORIAL.txt</code> passo a passo. É a melhor forma de conhecer a ferramenta: os dados foram desenhados para que cada gráfico mostre algo interessante (há um viés de +2% de Fe plantado nas amostras, de propósito).</p>
+<p class="tip">O zip de exemplo é também um <i>projeto empacotado</i>: se você arrastar o próprio zip de volta para o BMA e confirmar, tudo abre já configurado (ver §15).</p>
+<h2>2.2 Carregando seus dados</h2>
+<p>Arraste o arquivo para a zona pontilhada ou clique nela para procurar. Formatos aceitos:</p>
+<ul>
+  <li><code>.csv</code>, <code>.txt</code>, <code>.dat</code> — texto delimitado (vírgula, ponto-e-vírgula, tab ou espaço, detectado automaticamente);</li>
+  <li><code>.zip</code> — com um ou mais CSVs dentro (você escolhe qual analisar);</li>
+  <li><code>.bma.json</code> / <code>.bma.zip</code> — projetos salvos ou empacotados (§15).</li>
+</ul>
+<p>Arquivos abertos recentemente aparecem como cartões na tela inicial — em navegadores baseados em Chromium, clicar reabre direto, sem procurar de novo.</p>
+<p>Você não precisa começar por um modelo de blocos. <b>“Começar um projeto vazio”</b> abre o workspace sem modelo nenhum — útil quando você só tem furos de sondagem ou dados de pontos dispersos. A partir daí você <b>adiciona conjuntos</b> (próximo parágrafo), e as abas que precisam de um modelo (curva de teor–tonelagem, a referência Δ% do modelo) simplesmente miram o conjunto que você escolher. Um projeto sem modelo se salva como qualquer outro e volta pela lista <b>Projetos</b> na tela inicial (ele não tem um arquivo de modelo para arrastar, então essa lista é como você o reabre); você também pode <b>Empacotar</b> (Pack) num único <code>.bma.zip</code> (§15). Você pode dar um modelo ao projeto a qualquer momento — <b>Carregar arquivo de modelo…</b> na aba Importar, ou arrastando um CSV de modelo — <i>sem perder</i> os conjuntos que você já adicionou.</p>
+<figure><img src="shots/27-empty-project.png" alt="Projeto vazio"><figcaption>Um projeto sem modelo: a aba Importar Modelo oferece <b>Carregar arquivo de modelo…</b> (ou arraste um) e botões para adicionar pontos/furos; o <b>＋ Adicionar conjunto</b> da árvore faz o mesmo.</figcaption></figure>
+<p><b>Adicionando conjuntos.</b> Com um projeto aberto, use <b>＋ Adicionar conjunto</b> no pé da árvore de dados (§14), o lançador <b>＋</b> na barra de abas, ou <b>Dados → Adicionar conjunto de pontos / de furos</b>. Cada novo conjunto ganha seu próprio painel de importação; a primeira comparação é rotulada <code>d2</code>, a seguinte <code>d3</code>, e assim por diante. Você também pode simplesmente <b>arrastar um arquivo para um projeto aberto</b>: o BMA pergunta se deve adicioná-lo como conjunto de comparação ou usá-lo como modelo (substituindo o atual) — ele nunca substitui seus dados em silêncio.</p>
+<h2>2.3 Ajuda contextual</h2>
+<p>Em qualquer aba, pressione <span class="kbd">F1</span> (ou clique no <b>?</b> da barra) para abrir a ajuda daquela aba, com a explicação de cada controle.</p>
+
+<h2>2.4 A área de trabalho: painéis que convivem</h2>
+<figure><img src="shots/24-workspace.png" alt="Área de trabalho dividida"><figcaption>Statistics e Swath empilhados, com o GT em janela flutuante — cada painel re-renderiza seus gráficos na largura disponível.</figcaption></figure>
+<p>Em telas largas, as abas do BMA são <b>painéis acopláveis</b>. Tudo se comporta como uma barra de abas comum — até você <b>arrastar uma aba</b>:</p>
+<ul>
+  <li>solte no <b>vão entre painéis</b> (ou nas bordas) para <b>dividir</b> a área — Statistics ao lado do Swath, GT embaixo do Categories;</li>
+  <li>solte <b>sobre o corpo de um painel</b> para destacá-la em uma <b>janela flutuante</b>, que você move e redimensiona à vontade; solte sobre uma barra de abas para reacoplar;</li>
+  <li><b>botão direito em uma aba</b>: Float, Duplicate, Move to new rail, Close, Close others; botão direito na barra de título de uma janela flutuante: Dock / Close.</li>
+</ul>
+<p>Os painéis de análise também são <b>clonáveis</b>. Use <b>＋</b> na barra de abas (ou botão direito numa aba → <b>Duplicate</b>) para abrir um segundo <b>Statistics</b>, <b>Categories</b>, <b>Swath</b>, <b>StatsCat</b>, <b>GT</b> ou <b>Export</b> — uma visão independente, com sua própria seleção, direções, referência e <b>conjunto-alvo</b>. Coloque as estatísticas do Fe ao lado das do SiO₂, dois swaths em eixos diferentes, ou a curva teor–tonelagem do modelo ao lado da de um conjunto de comparação, lado a lado. Clones de Statistics, Categories e StatsCat são visões independentes da mesma análise; clones de Swath e GT rodam <i>sua própria</i> passada no worker; clones de Export exportam cada um o seu conjunto. Uma duplicata leva a configuração do painel de origem; cada clone é salvo com o projeto.</p>
+<p>Um workspace novo abre um <b>conjunto enxuto</b> — Import Model, Statistics e Categories — e os demais painéis abrem sob demanda, então você começa com uma superfície limpa em vez de uma parede de abas. Fechar um painel também não perde nada — o conteúdo continua vivo. Para abrir ou reabrir qualquer painel, use <b>⋮ → Panels</b> (os abertos aparecem marcados), a árvore de dados (§14) ou clique com o botão direito no fundo de qualquer barra de abas. <b>⋮ → Reset layout</b> volta a esse arranjo padrão de pilha única. O arranjo é salvo junto com o projeto, e a árvore de dados vive em uma coluna própria à esquerda, recolhível pelos botões ◀/▶.</p>
+<p class="tip">Em telas estreitas (celular), nada disso muda: o BMA mantém a navegação clássica por abas.</p>
+<p class="tip"><b>Abrindo um painel.</b> Um workspace novo mostra só <b>Import Model</b>, <b>Statistics</b> e <b>Categories</b>. As outras abas (Calc, GT, Swath, StatsCat, Export) abrem sob demanda — por <b>View → Panels</b> (um ✓ marca as abertas), pela árvore de dados, ou com o botão direito numa barra de abas. O passo a passo abaixo diz “abra a aba GT” etc.; é assim que se faz. (Um projeto empacotado ou salvo restaura o layout que você deixou, então o projeto de exemplo abre com tudo já no lugar.)</p>
+
+<h2>2.5 Sua primeira sessão: validando o modelo de exemplo</h2>
+<p>Este é o jeito mais rápido de entender o BMA — uma validação completa modelo × amostras no exemplo embutido, de ponta a ponta, em uns quinze minutos. O exemplo foi construído com três defeitos plantados de propósito: as amostras carregam um <b>viés de +2% de Fe</b> no laboratório, uma campanha de adensamento <b>agrupa</b> um quarto dos furos no leste rico (um viés de amostragem) e o modelo de blocos é <b>mais suave</b> que as amostras pontuais. Você vai fazer os três se revelarem.</p>
+<p><b>Preparo.</b> Na tela inicial clique <b>⤓ Download example dataset</b>, depois arraste o <code>bma-example.zip</code> resultante de volta ao BMA e confirme. Tudo abre pré-configurado. (Se preferir montar à mão para aprender os controles, siga os passos abaixo carregando o <code>bma-example-model.csv</code> primeiro; abra cada aba conforme chegar nela, conforme a nota acima.)</p>
+<p><b>Passo 1 — Leia o modelo antes de confiar nele.</b> No painel <b>Import Model</b>, após <b>Analyze ▶</b>, troque o painel direito para <b>Summary</b>. Confirme como é uma importação limpa: blocos de 10 m, grid 24×24×10, fill ratio 100% e o bloco de saúde de dados verde (nenhuma linha descartada). É a sua conferência de “o arquivo entrou certo” (§4).</p>
+<p><b>Passo 2 — Olhe a distribuição de teor.</b> Abra <b>Statistics</b>. Leia a média e o CV do Fe. Clique no nome <b>Fe</b> para plotar sua CDF abaixo, depois aperte <b>Prob</b> e ponha o eixo X em log: uma quase-reta significa aproximadamente lognormal — sua linha de base antes de qualquer comparação (§7.3).</p>
+<figure><img src="shots/20-logprob.png" alt="Gráfico Prob"><figcaption>Passo 2: Fe na escala de probabilidade normal — uma reta log-probabilística é a linha de base lognormal.</figcaption></figure>
+<p><b>Passo 3 — Traga as amostras.</b> As amostras já vêm no projeto empacotado; senão adicione-as com <b>Data ▸ Add point dataset</b> e <code>bma-example-samples.csv</code>, ponha <b>Weight = SUPPORT</b> e <b>Analyze</b> (§12.1). De volta ao Statistics, <code>aux:Fe</code> aparece recuado sob <code>Fe</code> com uma linha <b>Δ%</b> — e ela lê <i>bem acima</i> de +2%. Esse é o destaque, e é grande demais de propósito: o agrupamento está inflando. Os passos 6–7 separam isso.</p>
+<figure><img src="shots/10-statistics-aux.png" alt="Comparação no Statistics"><figcaption>Passo 3: o Fe das amostras (recuado, CDF tracejada) contra o do modelo, com a linha Δ%.</figcaption></figure>
+<p><b>Passo 4 — Confirme, e descubra o tipo.</b> Clique em <code>aux:Fe</code> para sobrepor sua CDF tracejada (a do modelo é mais íngreme — suporte). Depois troque o painel de CDF para <b>Q–Q</b> com Fe e aux:Fe selecionados: a nuvem corre <i>paralela e acima</i> da linha de 45°. Um deslocamento paralelo é viés aditivo, e a distância vertical <i>é</i> esse viés em % de Fe (§12.4).</p>
+<figure><img src="shots/11-qq.png" alt="Gráfico Q-Q"><figcaption>Passo 4: Q–Q — pontos paralelos mas acima da identidade medem o viés, quantil a quantil.</figcaption></figure>
+<p><b>Passo 5 — Veja que é geral, não local.</b> Abra <b>Swath</b>, mantenha a direção X e Generate. A série tracejada das amostras cavalga acima da sólida do modelo em <i>todas</i> as bandas — um deslocamento espacialmente consistente, não um artefato de borda. Marque Y e Z também para as outras direções (§11, §12.3).</p>
+<figure><img src="shots/13-swath-aux.png" alt="Comparação no Swath"><figcaption>Passo 5: as amostras (tracejado) ficam acima do modelo (sólido) banda após banda — viés consistente no espaço.</figcaption></figure>
+<p><b>Passo 6 — Descarte o efeito da malha.</b> No painel do conjunto de amostras, abra <b>Declustering</b> e <b>Run declustering</b>. A média ingênua (~54,3% Fe) cai para ~52,9% desagrupada — parte da riqueza aparente era só o adensamento no alto teor. Clique <b>Use as weight</b> e re-<b>Analyze</b> (§12.7).</p>
+<figure><img src="shots/18-declus.png" alt="Declustering"><figcaption>Passo 6: a varredura de desagrupamento — a média desagrupada por tamanho de célula, com o ótimo marcado.</figcaption></figure>
+<p><b>Passo 7 — Tire a conclusão.</b> Releia o Δ% sob o Fe agora que as amostras estão desagrupadas: ele cai para cerca dos <b>+2%</b> plantados. Esse resíduo é a parte que o desagrupamento <i>não</i> removeu — o viés de laboratório. Separar <b>viés de amostragem</b> (desagrupamento corrige) de <b>viés de teor</b> (não corrige) é o ponto inteiro do exercício, e o momento em que o propósito do BMA fica claro.</p>
+<p><b>Passo 8 (opcional) — Leve uma decisão adiante.</b> Troque o painel das amostras para <b>Top-cut</b>, arraste a linha vermelha do corte e use <b>Copy calcol</b> → cole no <b>Calc</b> → Analyze para aplicar um corte; ou use <b>Export</b> para gravar o conjunto limpo (§12.8, §16). Diagnósticos voltam para os dados.</p>
+<p class="tip"><b>Agora nos seus próprios dados,</b> um modelo que <i>passa</i> é a imagem espelhada do exemplo: Δ% perto de zero em todas as métricas, CDFs diferindo só nas caudas (suporte), séries de swath se entrelaçando banda a banda, e o desagrupamento quase não mexendo na média das amostras. Onde seus dados se afastam disso é exatamente onde olhar.</p>
+
+<h1><span class="secnum">3</span>Importação — conferindo antes de analisar</h1>
+<figure><img src="shots/02-preflight.png" alt="Import Model"><figcaption>O painel Import Model: prévia das primeiras linhas, tipos detectados e configuração de coordenadas e geometria.</figcaption></figure>
+<p>Assim que o arquivo cai, o BMA lê as primeiras ~100 linhas e mostra o painel <b>Import Model</b> (o modelo é o primeiro conjunto de dados; conjuntos de comparação carregados depois ganham seus próprios painéis de importação, §12). Nada pesado rodou ainda — este é o momento de conferir:</p>
+<ul>
+  <li><b>Tipos</b> — cada coluna é marcada NUM (numérica) ou CAT (categórica). Clique na etiqueta para forçar o tipo, ou desmarque <b>Skip</b> para excluir a coluna da análise.</li>
+  <li><b>XYZ</b> — as colunas de coordenadas são detectadas pelo nome (X/EAST/LESTE…); corrija nos seletores se necessário. Sem XYZ não há geometria, swath nem GT por volume.</li>
+  <li><b>DXYZ</b> — opcional: colunas de dimensão por bloco, para modelos sub-blocados.</li>
+  <li><b>Filtro por coluna</b> — expressões rápidas tipo <code>&gt; 0</code> que pré-filtram valores daquela coluna (ex.: ignorar teores zero).</li>
+  <li><b>ZIP</b> — se o arquivo for um zip com vários CSVs, um seletor de entrada aparece no topo.</li>
+  <li><b>Filtro de linhas</b> — a caixa <b>FILTER</b> no topo deste painel pré-filtra as linhas do modelo antes da análise (§5).</li>
+</ul>
+<p>Quando estiver satisfeito, clique <b>Analyze ▶</b> no canto superior esquerdo.</p>
+
+<h1><span class="secnum">4</span>Análise e a visão Summary</h1>
+<figure><img src="shots/03-summary.png" alt="Summary"><figcaption>Após a análise, o painel Import Model muda para sua visão Summary: metadados do arquivo e geometria do grid detectada.</figcaption></figure>
+<p>A análise roda em streaming, com barra de progresso e botão de cancelar (cancelando, o último resultado completo é restaurado). O <b>Summary</b> não é uma aba separada — fica dentro do painel Import Model, que ganha um alternador <b>Preview | Summary</b> assim que existe uma análise (espelhando como cada dataset de comparação mostra seu próprio resumo, §12). Ao final da execução, o painel muda para a visão Summary, que mostra:</p>
+<ul>
+  <li>contagem de linhas, colunas, tempo de processamento e estimativa de memória dos resultados;</li>
+  <li><b>geometria do grid</b>: tamanho de bloco em X/Y/Z, origem, extensão, ordenação das coordenadas, detecção de sub-blocos e <i>fill ratio</i> (fração do envelope realmente preenchida).</li>
+</ul>
+<p>Os resultados ficam em cache local: reabrir o mesmo arquivo com a mesma configuração restaura tudo instantaneamente. Qualquer mudança de configuração (filtro, calcol, peso…) marca a análise como desatualizada — o botão <b>Analyze</b> fica em destaque pedindo um novo Execute.</p>
+
+<h1><span class="secnum">5</span>O filtro de linhas</h1>
+<p>A caixa <b>FILTER</b> fica no topo do painel <b>Importar</b> do modelo (§3). Aceita uma expressão JavaScript sobre o objeto de linha <code>r</code>; só as linhas em que a expressão é verdadeira entram em <i>todas</i> as estatísticas e gráficos do modelo. Exemplos:</p>
+<pre>r.Fe &gt; 55
+r.LITO === 'HEM' &amp;&amp; r.Fe &gt; 60
+between(r.Z, 820, 860)
+r.RATIO &gt; 4        // filtros podem usar colunas calculadas!</pre>
+<p>Clique <b>Apply</b> (e depois <b>Analyze</b>) para aplicar; <b>Clear</b> remove. O Apêndice A lista todas as funções auxiliares disponíveis (<code>clamp</code>, <code>ifnull</code>, <code>between</code>…). Há autocompletar de nomes de colunas enquanto você digita.</p>
+<div class="tip" style="border-left-color:var(--ink)"><b style="color:var(--ink)">Básico de expressões</b> (a mesma sintaxe move filtros, filtros locais e calcols — você só precisa de algumas peças):
+<ul style="margin-top:0.3em">
+  <li><code>r.Fe</code> lê a coluna <b>Fe</b> da linha atual <code>r</code>. Coluna com espaços ou símbolos no nome: <code>r["Cu (ppm)"]</code>.</li>
+  <li><b>Comparar</b> com <code>&gt;</code> <code>&lt;</code> <code>&gt;=</code> <code>&lt;=</code>; <b>igual</b> é <code>===</code> e <b>diferente</b> é <code>!==</code> (dois/três caracteres — um único <code>=</code> <i>atribui</i>, não testa).</li>
+  <li><b>Combinar</b> condições com <code>&amp;&amp;</code> (e), <code>||</code> (ou), <code>!</code> (não): <code>r.Fe &gt; 55 &amp;&amp; r.LITO === 'HEM'</code>.</li>
+  <li><b>Texto</b> vai entre aspas: <code>'HEM'</code> ou <code>"HEM"</code>. Números não.</li>
+  <li><b>Se/senão</b> numa linha usa <code>? :</code> — <code>condição ? valorSeVerdadeiro : valorSeFalso</code> (usado nas calcols, §6).</li>
+</ul>
+Isso basta para quase tudo; o Apêndice A acrescenta funções prontas (<code>between</code>, <code>cap</code>, <code>clamp</code>…) para os casos restantes.</div>
+<p class="tip">Na aba Categories, desmarcar valores na tabela monta esse filtro automaticamente para você (§8).</p>
+
+<h1><span class="secnum">6</span>Calc — colunas calculadas</h1>
+<figure><img src="shots/04-calc.png" alt="Calc"><figcaption>Editor de colunas calculadas: código à esquerda do preview, colunas detectadas à direita.</figcaption></figure>
+<p>A aba <b>Calc</b> cria novas variáveis a partir das existentes. Você escreve um pequeno bloco de código que <b>adiciona colunas a cada linha</b> — atribua a um nome novo no objeto de linha <code>r</code> e esse nome vira uma coluna:</p>
+<pre>r.RATIO = r.Fe / r.SiO2;
+r.ORE = r.Fe &gt; 55 ? 'ore' : 'waste';</pre>
+<ul>
+  <li><b>Simulate</b> roda o código nas linhas de amostra e mostra as colunas novas detectadas, com tipo inferido (NUM/CAT) e uma tabela de preview. Erros aparecem na hora.</li>
+  <li>O navegador de variáveis (esquerda) insere <code>r.coluna</code> com um clique; expandir uma variável mostra min/máx/média ou os valores categóricos.</li>
+  <li>Vale JavaScript completo: condicionais, laços, strings (<code>r.LITO.startsWith('BIF')</code>).</li>
+  <li>O BMA infere o tipo de cada coluna nova pelos valores. Para <i>forçar</i> (avançado), some o nome à lista de tipo: <code>r.META.num.push('nome')</code> marca como numérica, <code>r.META.cat.push('nome')</code> como categórica.</li>
+  <li>Depois de simular, clique <b>Analyze</b> — as calcols são computadas durante a análise e aparecem em todas as abas (com etiqueta <b>CALC</b>), inclusive como candidatas a peso, eixo de GT, variável de swath etc.</li>
+</ul>
+<p class="warn">Calcols posteriores podem usar anteriores (<code>r.B = r.A * 2</code>), mas a ordem no código é a ordem de avaliação. Evite nomear colunas com nomes de funções (<code>abs</code>, <code>min</code>…), que seriam sombreados.</p>
+<p>Quando há mais de um conjunto carregado, um <b>seletor de conjunto</b> no topo do editor escolhe a qual dataset as calcols se aplicam — o modelo ou qualquer conjunto de comparação (cada um guarda seu próprio bloco de código); ver §12.6.</p>
+
+<h1><span class="secnum">7</span>Statistics — estatísticas, pesos e CDF</h1>
+<figure><img src="shots/05-statistics.png" alt="Statistics"><figcaption>Statistics: tabela de métricas configurável e painel de CDF abaixo.</figcaption></figure>
+<p class="tip">Com <b>dois ou mais conjuntos analisados</b>, um seletor <b>Dataset</b> aparece no topo da lateral: ele escolhe qual conjunto é o <b>primário</b> do painel (suas colunas são as linhas da tabela), e todo outro conjunto — o modelo incluído — vira uma comparação Δ% abaixo. Por padrão o primário é o modelo, então um projeto de modelo único fica exatamente como descrito aqui; o seletor só significa que qualquer conjunto pode ser a âncora (§12.2).</p>
+<h2>7.1 A tabela</h2>
+<p>Uma linha por variável numérica; colunas configuráveis na barra lateral: contagem, nulos, zeros, mín/máx, média, desvio, CV%, assimetria, curtose e os percentis que você quiser (presets de quartis/decis ou lista própria, ex.: <code>5,10,25,50,75,90,95</code>). <b>Copy table</b> copia tudo como tabela para colar no Excel.</p>
+<h2>7.2 Pesos</h2>
+<p>O seletor <b>Weight</b> pondera <i>todas</i> as estatísticas numéricas por uma coluna (ou calcol) — por exemplo, proporção de minério ou densidade (média ponderada por massa). O peso é um <i>papel</i> da variável: o mesmo vale para o Swath, e aparece como etiqueta <b>W</b> na árvore de dados (§14). Detalhes que importam:</p>
+<ul>
+  <li>mudar o peso exige um novo <b>Analyze</b>;</li>
+  <li>linhas com peso ausente, zero ou negativo são <b>excluídas</b> (o contador aparece sob o seletor);</li>
+  <li>com peso ativo, desvio/assimetria/curtose usam a forma populacional (correções de amostra pequena não se aplicam a pesos de escala arbitrária);</li>
+  <li>ative a métrica <b>ΣW</b> para ver o total de peso ao lado da contagem;</li>
+  <li>os percentis e a CDF também ficam ponderados — peso 2 equivale exatamente a repetir a linha duas vezes.</li>
+</ul>
+<h2>7.3 CDF, Prob e Q–Q</h2>
+<p>Clique no <i>nome</i> de qualquer variável na tabela para adicionar sua curva de distribuição acumulada (CDF) ao painel inferior; clique de novo para remover. Escala linear ou log, tooltip com leitura por curva, e botões <b>SVG/PNG</b> para exportar o gráfico. O modo <b>Q–Q</b> é descrito em §12.4 — ele compara duas distribuições quantil a quantil.</p>
+<figure><img src="shots/20-logprob.png" alt="Modo Prob"><figcaption>Modo Prob: o eixo Y vira escala de probabilidade normal. Com X em log, uma distribuição lognormal vira uma reta — e as caudas, espremidas na CDF comum, ganham espaço.</figcaption></figure>
+<p>O botão <b>Prob</b> troca o eixo Y para a <b>escala de probabilidade normal</b> (probit), com réguas de 0,2% a 99,8% — o clássico papel log-probabilístico da geoestatística. A leitura:</p>
+<ul>
+  <li>com <b>X em log</b>, uma distribuição <b>lognormal plota como reta</b>: curvatura é desvio de lognormalidade, quebras de inclinação sugerem populações misturadas;</li>
+  <li>as <b>caudas</b> — exatamente onde decisões de capping e de alto teor são tomadas — ficam expandidas em vez de coladas no 0% e no 100%;</li>
+  <li>funciona com quantas curvas você quiser, inclusive as do auxiliar (tracejadas), para comparar caudas modelo × amostras.</li>
+</ul>
+<p class="tip"><b>Lendo nos seus próprios dados:</b> uma CDF do modelo <i>logo dentro</i> da das amostras (um pouco menos espalhada, mesmo centro) é a assinatura normal do suporte de bloco. Curvas que se <b>cruzam</b>, ou diferem no <i>corpo</i> e não só nas caudas, apontam uma diferença real de distribuição — domínio, unidades ou estimativa — não apenas suporte.</p>
+
+<h1><span class="secnum">8</span>Categories — variáveis categóricas</h1>
+<p>A aba <b>Categories</b> explora colunas categóricas (litologia, domínio, classificação…). Selecione uma coluna na lateral para ver:</p>
+<ul>
+  <li><b>gráfico de barras</b> com contagens, percentuais e linha de Pareto (com marca dos 80%);</li>
+  <li><b>entropia de Shannon</b> (H) como medida de mistura;</li>
+  <li><b>tabela de valores</b> com busca, contagem e percentual.</li>
+</ul>
+<p>Recursos que valem conhecer:</p>
+<ul>
+  <li><b>Cores</b> — clique no quadradinho de cor de um valor para personalizá-la; a cor escolhida vale em <i>todas</i> as abas (StatsCat, GT…).</li>
+  <li><b>Ordem custom</b> — no modo de ordenação <i>Custom</i>, arraste as linhas da tabela; a ordem é respeitada nas outras abas.</li>
+  <li><b>Filtro por checkbox</b> — desmarcar valores monta a expressão e oferece aplicá-la ao filtro de linhas do modelo (uma barra <i>Aplicar</i> aparece; ex.: esconder o estéril de todas as estatísticas).</li>
+</ul>
+<p>Com um conjunto de comparação analisado, esta aba ganha a comparação de proporções modelo × amostras — ver §12.5 (a captura está lá). O Categories também é clonável (§2.4).</p>
+<p class="tip">Como no Statistics, com 2+ conjuntos analisados um seletor <b>Dataset</b> escolhe o conjunto categórico <b>primário</b> do painel (as barras); os outros se sobrepõem como losangos de proporção. O modelo é o primário padrão.</p>
+
+<h1><span class="secnum">9</span>StatsCat — estatísticas por grupo</h1>
+<figure><img src="shots/06-statscat.png" alt="StatsCat"><figcaption>StatsCat: estatísticas de Fe, SiO2 etc. quebradas por litologia.</figcaption></figure>
+<p>O <b>StatsCat</b> quebra as estatísticas numéricas por uma variável categórica (<b>Group By</b>) — média de Fe por litologia, por exemplo. Escolha o grupo e as variáveis na lateral (pode exigir um novo Analyze para incluir variáveis ainda não agrupadas) e marque quais grupos exibir.</p>
+<ul>
+  <li><b>Tabela por grupo</b> — contagem, média, desvio e percentis para cada combinação variável × grupo;</li>
+  <li><b>CDF por grupo</b> — curvas coloridas pela categoria (com as cores da aba Categories), escala linear/log e intervalo manual;</li>
+  <li><b>Cross-tab</b> — matriz de contagem (ou % por linha/coluna) entre duas categóricas.</li>
+</ul>
+<p>Se um peso estiver ativo na aba Statistics, as estatísticas agrupadas também ficam ponderadas (mesma análise).</p>
+<p class="tip">Com 2+ conjuntos analisados, um seletor <b>Dataset</b> escolhe qual conjunto o StatsCat quebra (o modelo por padrão) — assim você pode agrupar os teores de um conjunto de comparação pelas categorias dele.</p>
+
+<h1><span class="secnum">10</span>GT — curvas teor–tonelagem</h1>
+<figure><img src="shots/07-gt.png" alt="GT"><figcaption>GT: tonelagem (âmbar, eixo esquerdo), teor médio (azul, direito) e metal (verde tracejado) por teor de corte, com curvas por litologia. <b>Leia assim:</b> escolha um corte no eixo X e leia a tonelagem (esquerda) contra o teor médio acima dele (direita) — o trade-off mais-rocha-vs-mais-rico; o conteúdo metálico tem pico onde o produto deles tem.</figcaption></figure>
+<p>A aba <b>GT</b> varre teores de corte e produz as curvas clássicas de tonelagem, teor médio acima do corte e conteúdo metálico. Configuração:</p>
+<ul>
+  <li><b>Variáveis de teor</b> — uma curva por variável marcada, cada uma com sua unidade (%, g/t, ppm…), que controla o fator do metal;</li>
+  <li><b>Densidade</b> — uma coluna, um <b>valor constante</b> (ex.: 2,8 t/m³) ou nenhuma. <b>Sem densidade, a “tonelagem” é na verdade volume (m³)</b> — a interface avisa;</li>
+  <li><b>Peso</b> — coluna multiplicadora opcional por linha. Quando o conjunto não é um grid (sem volume de bloco), ela serve também como <b>coluna de tonelagem/volume</b>: escolha-a para ponderar a tonelagem por um valor explícito por linha;</li>
+  <li><b>Volume do bloco</b> — detectado automaticamente: DXYZ por linha se houver, senão a <b>geometria do grid</b> — mas só quando o conjunto é classificado como <i>grid</i> (§3). Um modelo classificado como <i>ponto</i>, ou sem DXYZ/override, cai para tonelagem <b>por contagem</b> (1 por linha); a lateral avisa e diz como obter ponderação por volume (defina como grid, atribua DXYZ, ponha um Override ou escolha uma coluna no Peso). O volume da geometria sempre pode ser sobrescrito;</li>
+  <li><b>Cutoffs</b> — intervalo (mín/máx/passo) ou lista própria;</li>
+  <li><b>Group by</b> — curvas separadas por categoria (litologia na figura), com seleção de quais grupos mostrar e linha de total;</li>
+  <li><b>Unidade de tonelagem</b> — t, kt, Mt ou divisor próprio.</li>
+</ul>
+<p>Passe o mouse para ler valores exatos no crosshair. Cada gráfico tem <b>Copy SVG</b> e <b>Download PNG</b> (versão clara, em alta resolução, com o nome da variável no título), e uma tabela recolhível com botão <b>Copy</b>.</p>
+<h2>10.1 Curva teórica a partir das amostras</h2>
+<figure><img src="shots/21-gt-theo.png" alt="GT teórica"><figcaption>Tracejado: a curva teórica derivada das amostras com correção de suporte (f ajustável). Sólido: a curva do modelo. A distância entre as duas é a conversa entre suavização da estimativa e mudança de suporte.</figcaption></figure>
+<p>A seção <b>Theoretical (samples)</b> da lateral sobrepõe ao gráfico a curva teor–tonelagem <i>teórica</i> derivada de uma distribuição de amostras, com <b>correção de suporte por afinidade</b> (correção afim): a variância da distribuição pontual é reduzida pelo fator <b>f</b> (slider), simulando o suporte de bloco. Está disponível sempre que o GT mira um dataset <b>em grid</b> — o modelo por padrão, ou qualquer <i>estimativa</i> de comparação em grid escolhida no seletor <b>Dataset</b> do GT — com um seletor <b>from</b> escolhendo qual dataset carregado fornece as amostras (você valida uma estimativa contra as amostras das quais ela foi construída, nunca contra ela mesma). Pontos de referência:</p>
+<ul>
+  <li><b>f = 1</b> reproduz exatamente a GT empírica das amostras (sem correção);</li>
+  <li><b>f &lt; 1</b> encolhe a variância em torno da média — menos tonelagem acima de cortes altos, teores médios mais baixos acima do corte: o efeito esperado ao passar de amostras pontuais para blocos;</li>
+  <li>a curva usa o <b>peso ativo do auxiliar</b> (ex.: desagrupamento, §12.7) — compare distribuições representativas, não enviesadas pela malha;</li>
+  <li>a sobreposição aparece nos gráficos <i>sem</i> group-by, escalada para a tonelagem total da estimativa-alvo.</li>
+</ul>
+<p>Se a curva da estimativa cair razoavelmente sobre a teórica para um f plausível (tipicamente 0,4–0,8 conforme a razão de suportes), a suavização da estimativa é compatível com a mudança de suporte esperada. Uma estimativa muito mais “suave” que a teórica em qualquer f é sinal de sobre-suavização — teores altos diluídos demais.</p>
+
+<h1><span class="secnum">11</span>Swath — perfis direcionais</h1>
+<p>O <b>Swath</b> fatia o modelo em bandas ao longo de uma direção e mostra como cada variável se comporta no espaço — a ferramenta padrão para enxergar tendências e validar estimativas.</p>
+<ul>
+  <li><b>Direções</b> — marque <b>X</b> (O→L), <b>Y</b> (S→N) e/ou <b>Z</b> (base→topo): todas as direções marcadas são calculadas em <i>uma única passada</i> e viram guias no resultado. Cada direção tem seu <b>bin width</b> (padrão = tamanho do bloco naquele eixo; aumente para suavizar);</li>
+  <li><b>Custom</b> — direção rotacionada definida por <i>dip direction</i> (0° = norte, horário), <i>dip</i> e <i>rake</i>, gerando o sistema U/V/W (U = direção do rake no plano, W = polo). Para o caso clássico “azimute + mergulho”, use dip direction = azimute, dip = mergulho, rake = 90°;</li>
+  <li><b>Estatística</b> — média ± desvio, P25/50/75 ou P10/50/90 (faixas sombreadas);</li>
+  <li><b>Weight</b> — pondera as estatísticas das bandas do conjunto primário (rotulado <b>Weight (model)</b> quando o primário é o modelo, onde é o mesmo peso da aba Statistics — mudar num lugar muda no outro);</li>
+  <li><b>Display</b> — liga/desliga faixas, barras de contagem e tabela; escala Y linear/log; layout <b>Overlay</b> (tudo num gráfico, um eixo Y por variável) ou <b>Split</b> (um painel por variável);</li>
+  <li><b>Cores</b> — clique no quadradinho ao lado da variável.</li>
+  <li><b>Dataset</b> — com 2+ conjuntos analisados, escolhe o conjunto primário do painel (a série sólida); todo outro conjunto se sobrepõe tracejado. O modelo é o primário padrão.</li>
+</ul>
+<p>Crosshair com leitura por variável, <b>Copy SVG / Download PNG</b>, e tabela por banda com cópia. A captura desta aba está em §12.3, já com a sobreposição das amostras — o uso mais valioso do swath.</p>
+
+<h1><span class="secnum">12</span>Conjuntos de comparação — validação</h1>
+<p>O BMA compara o modelo de blocos contra um ou <i>mais</i> outros conjuntos de dados — tipicamente as compostas de sondagem que alimentaram a estimativa, mas também uma campanha de adensamento, uma re-estimativa ou um segundo modelo. É a resposta da ferramenta à pergunta central da validação: <i>o modelo honra os dados?</i></p>
+<p>Cada conjunto de comparação é um <b>par</b> (peer) com seu próprio painel de importação. Adicione um por <b>Data ▸ Add point dataset…</b> ou <b>Add drillhole set…</b> (cada um abre uma nova aba de importação), ou arraste um arquivo para uma nova aba de conjunto. O primeiro comparativo é historicamente rotulado <b>aux</b>; os seguintes são <code>d2</code>, <code>d3</code>… Cada um carrega suas próprias coordenadas, filtro, colunas calculadas, peso e — quando tem XYZ — sua própria geometria.</p>
+<p>Um conjunto de comparação é um <b>conjunto separado de linhas</b>, não colunas extras no modelo: não há join por bloco. A comparação é estatística (médias, distribuições, proporções) e espacial (swath). Mas, no mais, um conjunto de comparação é <b>de primeira classe</b> — se traz coordenadas, ganha geometria de grid, override grid/point, bounding box e exportação OBJ + CSV pela sua visão Summary (§16), exatamente como o modelo.</p>
+<h2>12.1 Carregando e configurando</h2>
+<figure><img src="shots/09-aux-config.png" alt="Configuração de um conjunto de comparação"><figcaption>O painel de importação de um conjunto de comparação: prefixo de exibição, coordenadas, geometria de bloco, filtro, peso e o botão Analyze.</figcaption></figure>
+<ul>
+  <li><b>Carregar</b> — arraste o arquivo para o painel de importação do conjunto, ou: se o dado principal veio de um zip com vários CSVs, use “<i>use an entry from…</i>” para apontar outra entrada; se você arrastar um zip aqui, um seletor de entrada aparece na lateral.</li>
+  <li><b>Display prefix</b> — apenas o rótulo das variáveis do conjunto na interface (<code>aux:Fe</code>, <code>samples:Fe</code>…). <b>Cosmético</b>: nos códigos e filtros a referência é sempre o <i>handle</i> do conjunto (<code>aux.</code>, <code>d2.</code>…).</li>
+  <li><b>Coordinates</b> — X/Y/Z do conjunto (detectadas por nome: EAST/NORTH/ELEV…). Modelo e comparação precisam estar no <b>mesmo sistema de coordenadas</b> para o swath fazer sentido.</li>
+  <li><b>Block geometry</b> — o mesmo override grid/point/auto do modelo (§3); um conjunto de amostras esparso fica em <b>auto</b> e é detectado como pontos.</li>
+  <li><b>Filter</b> — pré-filtra as linhas do conjunto, com o <i>handle</i> dele: ex. <code>aux.SUPPORT &gt; 1</code>.</li>
+  <li><b>Weight</b> — peso para <i>todas</i> as estatísticas do conjunto: comprimento de composto (na figura, <code>SUPPORT</code>), uma coluna ou calcol qualquer, ou <b>(declustered weights)</b> — os pesos de desagrupamento calculados pelo próprio BMA (§12.7). Pesos ausentes/≤0 excluem a linha.</li>
+  <li><b>Analyze</b> — roda a passada estatística completa do conjunto. Necessário para as comparações de Statistics/CDF/Q–Q/Categories (o swath roda a própria passada e não depende dele). Mudou filtro/peso/calc? O status avisa “re-run Analyze”.</li>
+</ul>
+<h2>12.2 Statistics e CDF comparadas</h2>
+<figure><img src="shots/10-statistics-aux.png" alt="Statistics com um conjunto de comparação"><figcaption>Cada variável de nome igual do comparativo vira uma linha recuada sob a do modelo, com uma linha Δ%; a CDF das amostras entra tracejada.</figcaption></figure>
+<p>Depois do Analyze de um conjunto de comparação, suas variáveis aparecem ao final da lateral (pré-marcadas quando têm homônima no modelo). Na tabela, <code>aux:Fe</code> fica logo abaixo de <code>Fe</code> — média contra média, CV contra CV — com uma linha <b>Δ%</b> mostrando a diferença contra o conjunto de referência. No exemplo, a média de Fe das amostras roda ~2% acima da do modelo: o viés plantado, visível de imediato. Clique no nome <code>aux:Fe</code> para sobrepor sua CDF tracejada: a curva do modelo é mais íngreme — o suporte de bloco suaviza as caudas que as amostras pontuais ainda têm (o “efeito de suavização” da krigagem).</p>
+<p class="tip"><b>Lendo nos seus próprios dados:</b> Δ% dentro de um ou dois por cento em todas as métricas significa que o modelo honra as amostras no agregado. Um <i>sinal consistente</i> nas médias de vários teores (todos modelo-baixo ou todos modelo-alto) sugere um viés genuíno; uma diferença grande de CV ou assimetria com médias parecidas costuma ser suporte (média de bloco) — confirme com o Q–Q (§12.4) e uma comparação desagrupada (§12.7) antes de concluir.</p>
+<p>Dois controles deixam a comparação flexível. Um seletor <b>Dataset</b> (topo da lateral, mostrado com 2+ conjuntos analisados) define o <b>primário</b> do painel — o conjunto cujas colunas são as linhas; todo outro conjunto, o modelo incluído, vira comparação. O primário padrão é o modelo, então nada muda numa checagem comum modelo × amostras; o seletor só deixa você inverter a âncora — tornar as amostras o primário e ler o modelo como comparação, por exemplo. Depois, com <b>três ou mais conjuntos</b> carregados, surge uma linha de <b>chips de conjunto</b>: alterne quais comparações aparecem e escolha a <b>referência do Δ%</b> (o denominador) por painel — assim um clone de Statistics pode comparar contra as amostras enquanto outro compara contra uma re-estimativa.</p>
+<h2>12.3 Swath comparado</h2>
+<figure><img src="shots/13-swath-aux.png" alt="Swath com um conjunto de comparação"><figcaption>A série tracejada das amostras cavalga acima da sólida do modelo em todas as bandas: viés espacialmente consistente. Barras de contagem vazadas = suporte amostral por banda.</figcaption></figure>
+<p>Na aba Swath, as variáveis de cada conjunto de comparação entram no fim da lista (divididas por um separador com o nome do conjunto). A série comparativa é <b>tracejada na mesma cor e mesmo eixo Y</b> da variável homônima do modelo — de propósito: eixos independentes “autoescalariam” a diferença para fora do gráfico, escondendo exatamente o viés que o gráfico existe para mostrar. O tooltip traz <code>n=</code> por banda. Todo conjunto carregado é processado na mesma passada; os chips de conjunto escolhem quais desenhar.</p>
+<p class="tip"><b>Lendo nos seus próprios dados:</b> uma sobreposição saudável tem a série tracejada e a sólida se <i>entrelaçando</i> banda a banda. Uma diferença persistente para um lado na maioria das bandas é viés espacial (condicional); divergência só nas bandas extremas — onde a contagem de amostras é minúscula (olhe as barras de contagem) — costuma ser só suporte fino ali, não falha do modelo.</p>
+<h2>12.4 Q–Q: o viés medido</h2>
+<figure><img src="shots/11-qq.png" alt="Q-Q"><figcaption>Q–Q de aux:Fe contra Fe: a nuvem corre paralela e acima da linha de identidade — viés aditivo, quantil a quantil.</figcaption></figure>
+<p>No painel de CDF, o botão <b>Q–Q</b> troca para o gráfico quantil–quantil: a <i>primeira</i> curva selecionada vira o eixo de referência (X) e as demais plotam seus quantis contra ela, de P1 a P99 (pontos maiores nos decis; passe o mouse para ler os valores). Leitura:</p>
+<ul>
+  <li><b>pontos sobre a linha tracejada de 45°</b> → distribuições equivalentes;</li>
+  <li><b>deslocamento paralelo</b> → viés (a distância vertical É o viés, em unidades da variável);</li>
+  <li><b>rotação/achatamento</b> → diferença de dispersão — tipicamente o suporte de bloco encolhendo a variância.</li>
+</ul>
+<p>Funciona entre quaisquer duas curvas (dois domínios do modelo, por exemplo), não só modelo × amostras. Escala log–log disponível; exporta com os mesmos botões SVG/PNG.</p>
+<p class="tip"><b>Lendo nos seus próprios dados:</b> pontos <i>sobre</i> a linha de 45° = as duas distribuições batem. Um deslocamento <i>paralelo</i> = viés aditivo (leia o tamanho no eixo). Uma <i>rotação</i> para fora da linha de 45° = uma diferença de variância (dispersão): a nuvem inclina para o conjunto mais espalhado — amostras pontuais são mais largas que estimativas em suporte de bloco, então uma leve inclinação é a assinatura normal do suporte, enquanto uma rotação forte é sobre-suavização. Uma dobra ou “S” = a concordância muda com o teor, muitas vezes uma questão de capping/top-cut em alto teor.</p>
+<h2>12.5 Categories comparado</h2>
+<figure><img src="shots/12-categories-aux.png" alt="Categories com aux"><figcaption>Losangos vazados = proporção logada nas amostras, no mesmo eixo das barras do modelo. HEM: 5% modelado vs 15% amostrado; “CAN” só existe nas amostras.</figcaption></figure>
+<p>Quando um conjunto de comparação tem uma coluna categórica de mesmo nome (LITO × LITO), a aba Categories sobrepõe um <b>losango vazado</b> por valor, marcando a proporção de cada conjunto na mesma escala das barras. A tabela ganha colunas <b>n / %</b> por conjunto, e valores que só existem em um comparativo aparecem ao final com a etiqueta <i>comparison-only</i> — uma litologia logada que o modelo nunca usou é exatamente o tipo de desacordo que vale enxergar.</p>
+<h2>12.6 Calcols no auxiliar</h2>
+<figure><img src="shots/14-calc-aux.png" alt="Calc em modo Aux"><figcaption>O mesmo editor, apontado para as amostras: código referencia <code>aux.</code>, preview usa as linhas auxiliares.</figcaption></figure>
+<p>O <b>seletor de conjunto</b> no editor Calc aponta o editor para qualquer conjunto de comparação: as colunas completam como <code>aux.coluna</code> (ou <code>d2.coluna</code>…), o preview usa as linhas daquele conjunto e as colunas criadas valem para tudo que é dele — inclusive como <b>peso</b> e nas comparações. Se a calcol auxiliar tiver o <i>mesmo nome</i> de uma do modelo (ex.: <code>RATIO</code> nos dois), elas se pareiam automaticamente em todas as comparações (e o pareamento pode ser editado à mão — §14). Depois de editar, rode o Analyze do conjunto de novo.</p>
+
+<h2>12.7 Desagrupamento (declustering)</h2>
+<figure><img src="shots/18-declus.png" alt="Declustering"><figcaption>A curva de varredura: média desagrupada por tamanho de célula. O mínimo marca o tamanho ótimo; clique na curva para fixar outro tamanho.</figcaption></figure>
+<p>Sondagem adensa onde o teor é alto — e a média “ingênua” das amostras herda esse otimismo. A seção <b>Declustering</b> da lateral implementa o desagrupamento por células do GSLIB (<code>DECLUS</code>): o espaço é dividido em células, cada amostra recebe peso inverso à lotação da sua célula, e uma varredura de tamanhos de célula procura o que minimiza (ou maximiza) a média desagrupada.</p>
+<ul>
+  <li><b>Cell sizes</b> — faixa da varredura (automática: do 1/100 ao 1/2 da maior extensão) e número de passos; <b>anis Y/Z</b> deforma as células para malhas anisotrópicas;</li>
+  <li><b>Find</b> — minimizar (caso típico: adensamento em alto teor) ou maximizar a média desagrupada;</li>
+  <li><b>Run declustering</b> — roda a varredura e mostra: média ingênua → média desagrupada, tamanho ótimo de célula, faixa de pesos e a <b>curva interativa</b> (crosshair para ler; <b>clique para fixar</b> um tamanho de célula específico — o pino sobrevive a re-runs do projeto);</li>
+  <li><b>Use as aux weight</b> — aplica os pesos como peso do auxiliar; o seletor Weight passa a mostrar <b>(declustered weights)</b>. Rode o Analyze auxiliar de novo: todas as comparações passam a usar a distribuição desagrupada.</li>
+</ul>
+<p>No dataset de exemplo, a malha tem adensamento plantado na zona rica de propósito: a média ingênua das amostras (~54,3% Fe) cai para ~52,9% desagrupada — e a diferença restante contra o modelo é o viés de laboratório plantado. Separar <i>viés de amostragem</i> (desagrupamento resolve) de <i>viés de teor</i> (desagrupamento não resolve) é exatamente o que esta ferramenta faz.</p>
+<p class="warn">Os pesos nunca são salvos no projeto — só os parâmetros. Ao reabrir, rode <b>Run declustering</b> de novo (o status avisa). Mudar filtro, calcols ou coordenadas do auxiliar invalida os pesos automaticamente.</p>
+
+<h2>12.8 Top-cut — análise de capping</h2>
+<figure><img src="shots/19-topcut.png" alt="Top-cut"><figcaption>Quatro gráficos ligados pela linha vermelha do corte: histograma, log-probabilidade, média × corte e metal removido. Arraste a linha em qualquer um deles.</figcaption></figure>
+<p>O botão <b>Top-cut</b> (topo da área principal da aba Aux) troca a prévia pela análise de capping da variável escolhida — as quatro vistas clássicas para decidir teor de corte superior, todas sobre a distribuição <i>exata</i> das amostras:</p>
+<ul>
+  <li><b>histograma</b> e <b>gráfico log-probabilístico</b> — onde a cauda descola da lognormal é o candidato natural a corte;</li>
+  <li><b>média capada × corte</b> — quanto a média cede conforme o corte desce;</li>
+  <li><b>metal removido × corte</b> — % do metal total cortado.</li>
+</ul>
+<p>A <b>linha vermelha</b> é o corte: arraste-a em qualquer gráfico (ou digite o valor) e a faixa de status recalcula na hora — n capado, % das amostras, média e CV antes/depois, metal removido. <b>Raw | Declustered</b> alterna para a distribuição ponderada pelos pesos de desagrupamento (§12.7), e <b>Linear | Log</b> controla o eixo X.</p>
+<p>Decidido o corte, <b>Copy calcol</b> copia a linha pronta — ex.: <code>aux.Fe_cap = cap(aux.Fe, 63.91);</code> — para colar no editor Calc (modo Aux). A variável capada entra nas comparações como qualquer outra. Para capar antes de uma limpeza (<code>ifnull</code>, filtros), aponte o top-cut para a calcol limpa em vez da coluna crua.</p>
+
+
+<h1><span class="secnum">13</span>Furos de sondagem — das tabelas brutas às compostas</h1>
+<figure><img src="shots/25-dh-mapping.png" alt="Conjunto de sondagem"><figcaption>O cartão Drillhole set: três arquivos nos seus papéis, mapeamento de colunas detectado e a linha destacada da convenção de dip — este levantamento usa dip negativo = para baixo.</figcaption></figure>
+<p>Campanhas reais não chegam compostas: chegam como <b>collar</b> (boca do furo), <b>survey</b> (desvios) e <b>intervalos</b> (análises). A tela de importação de cada dataset tem um cartão <b>Drillhole set</b> que recebe os três arquivos (ou um zip com eles): cada um cai no seu papel — detectado pelo cabeçalho — e o mapeamento de colunas aparece preenchido, sempre editável. Como cada dataset tem o seu cartão, um projeto pode ter <b>vários conjuntos de sondagem</b>. Cada tabela tem ainda um <b>↓ CSV</b> no título, e <b>Download tables (zip)</b> empacota o conjunto bruto exatamente como foi importado.</p>
+
+<h2>13.1 A superfície de composição</h2>
+<p>O cartão é uma pequena bancada de composição. Acima das opções de geometria:</p>
+<ul>
+  <li><b>Convenção de dip</b> — a linha destacada em âmbar: o BMA detecta pelo levantamento se o arquivo usa dip positivo ou negativo para baixo, e o botão está ali para corrigir. <i>Sempre confira contra a exportação dos seus surveys.</i></li>
+  <li><b>Método de desurvey</b> — curvatura mínima (padrão), tangencial balanceado ou tangencial (segmentos retos — útil para reproduzir desurveys históricos);</li>
+  <li><b>Composite length</b> — padrão = o comprimento de intervalo mais comum do arquivo; <b>Min coverage</b> filtra compostas pouco amostradas (desligado por padrão — nada é descartado em silêncio, a cauda curta é contada).</li>
+</ul>
+<p>E os três controles que moldam como os intervalos viram compostas:</p>
+<ul>
+  <li><b>Break on (splits)</b> — marque quaisquer colunas categóricas; a composta <b>reinicia em cada contato</b> dessas colunas, então nenhuma composta atravessa um contato de litologia ou zona. Marque mais de uma e ela quebra onde <i>qualquer</i> uma muda — sem precisar montar à mão uma chave de domínio combinada. Cada coluna de split entra na composta sem alteração (é constante dentro da composta por construção).</li>
+  <li><b>Density (mass-weight)</b> — indique uma coluna de densidade e as médias de teor passam a ser ponderadas por <b>comprimento × densidade</b> (massa) — a média geologicamente correta quando há densidade. A própria coluna de densidade segue ponderada por comprimento, o <code>SUPPORT</code> segue o comprimento coberto, e intervalos sem densidade utilizável são excluídos da ponderação por massa e contados.</li>
+  <li><b>Combine rules</b> — por coluna de saída, como ela agrega na composta: numérica <i>mean</i> (padrão, ponderada por comprimento/massa), <i>sum</i>, <i>min</i> ou <i>max</i>; categórica <i>majority</i> (por comprimento coberto) ou <i>first</i> (a mais rasa). Padrões sensatos por tipo, sobreponíveis por coluna.</li>
+</ul>
+<p>Cada tabela de intervalos carrega também os seus próprios <b>calcols &amp; filter</b> (a caixa <i>Interval calcols &amp; filter</i>), igual a um dataset (§12.6): uma coluna derivada ou um filtro de linhas escrito aqui se aplica àquela tabela na exportação e na composição — o lar natural que uma única composta achatada nunca teve.</p>
+
+<h2>13.2 Mesclando uma segunda tabela de intervalos</h2>
+<figure><img src="shots/27-dh-merge.png" alt="Mesclar uma segunda tabela de intervalos"><figcaption>Análises mais uma segunda tabela de intervalos (aqui um log de domínio grosseiro): o painel de mescla mapeia a segunda tabela; a composta carrega colunas das duas. A nota diz o que ela adiciona e que as lacunas são contadas.</figcaption></figure>
+<p>Análises e litologia normalmente vivem em tabelas <b>separadas</b>, com quebras que não coincidem. Solte um segundo arquivo de intervalos e ele entra como <b>tabela de mescla</b>: o BMA o junta à primeira por <code>BHID</code> + <code>FROM/TO</code> via <b>re-segmentação por união</b> — cada segmento de saída cai dentro de no máximo um intervalo de cada tabela, então as colunas são carregadas sem palpite de agregação. A composta passa a carregar as colunas das <i>duas</i> tabelas (teor <i>e</i> domínio). Um segmento sem correspondente de um lado é preenchido com nulo e <b>contado</b> — nunca descartado em silêncio — e a tabela de mescla tem os seus próprios calcols/filtro pré-mescla (derive um domínio simplificado, ou descarte linhas marcadas no QA, antes da junção).</p>
+
+<h2>13.3 Composição &amp; o resultado</h2>
+<figure><img src="shots/26-dh-loaded.png" alt="Compostas carregadas"><figcaption>Depois do Composite &amp; load: compostas dessurveyadas como dataset, SUPPORT já como peso, e a faixa de proveniência com Report e Edit &amp; re-composite.</figcaption></figure>
+<p><b>Composite &amp; load</b> roda o desurvey (interpolação no arco), faz a composição ponderada (por comprimento ou massa) e carrega o resultado como aquele dataset: XYZ no ponto médio de cada composta, uma coluna <code>SUPPORT</code> (comprimento coberto) já aplicada como peso, e todas as outras colunas junto. Tudo das seções 12.1–12.8 funciona igual a partir daí.</p>
+<figure><img src="shots/28-dh-histogram.png" alt="Relatório de consistência e histograma de comprimento"><figcaption>O relatório de consistência com o histograma de suporte antes/depois: comprimentos brutos dos intervalos contra o SUPPORT das compostas, no mesmo eixo (aqui ambos ~2 m — as amostras de exemplo já são regulares).</figcaption></figure>
+<p>O <b>relatório de consistência</b> lista tudo que não casou: BHIDs órfãos, FROM ≥ TO, intervalos sobrepostos, furos sem survey (dessurveyados verticais, contados), lacunas de mescla… nada some em silêncio. Abaixo dele, um <b>histograma de distribuição de comprimento</b> mostra o suporte <i>antes</i> (os comprimentos brutos dos intervalos) contra <i>depois</i> (o <code>SUPPORT</code> das compostas), no mesmo eixo — você vê num relance como a composição regularizou o suporte e onde fica a cauda curta de baixa cobertura (a população que o <i>Min coverage</i> mira). A faixa de proveniência guarda o <i>Report</i> e o <i>Edit &amp; re-composite</i>.</p>
+<p class="tip">O <b>Pack</b> (§15) de um projeto com sondagem carrega os arquivos <i>brutos</i> de collar/survey/intervalos (e qualquer tabela de mescla) + a receita de cada um — as compostas se re-derivam ao abrir, nunca são armazenadas (mesma filosofia dos pesos de desagrupamento). O dataset de exemplo traz um conjunto: <code>bma-example-collar/survey/assays.csv</code>, com dips negativos de propósito.</p>
+
+<h1><span class="secnum">14</span>A árvore de dados e os menus de contexto</h1>
+<figure><img src="shots/22-tree.png" alt="Árvore de dados"><figcaption>A árvore à esquerda: datasets, grupos de variáveis, cores, unidades, papéis e pareamentos. Clicar em uma variável abre o editor — aqui, o pareamento de aux:Fe.</figcaption></figure>
+<p>O painel à esquerda das abas é a <b>árvore de dados</b> — o catálogo de propriedades de tudo que está carregado. Uma <b>caixa de busca</b> no topo filtra a árvore por nome de variável conforme você digita. Para cada dataset (modelo e auxiliar), as variáveis aparecem agrupadas em <b>Coordinates</b> (com os eixos X/Y/Z atribuídos), <b>Grades</b>, <b>Categories</b> e <b>Calculated</b>, cada uma com:</p>
+<ul>
+  <li><b>chip de cor</b> — a cor da série nos gráficos (Swath, CDF…). Variável auxiliar pareada herda a cor da homônima do modelo, de propósito;</li>
+  <li><b>unidade</b> — %, g/t, ppm… <b>Uma unidade por variável</b>, válida em todas as abas (mudar aqui muda no Swath, no GT e no Summary ao mesmo tempo);</li>
+  <li><b>papéis</b> — etiquetas de função: <b>W</b> (peso das estatísticas), densidade e fator de tonelagem do GT;</li>
+  <li><b>pareamento</b> (variáveis auxiliares) — <code>⇄ Fe</code> indica com qual variável do modelo ela é comparada; <code>⇄ —</code> em vermelho marca uma <b>órfã</b>, que não entra em comparação nenhuma.</li>
+</ul>
+<p><b>Clique em qualquer variável</b> para abrir o editor: cor (paleta ou hex, com “auto” para voltar ao padrão), unidade, papéis e — nas auxiliares — o seletor <b>Paired with (model)</b>. O pareamento automático é por nome igual (sem diferenciar maiúsculas); aqui você corrige os casos em que os nomes diferem: <code>FE_PCT</code> das amostras pareado com <code>Fe</code> do modelo, sem precisar renomear nada. Tudo que você definir fica salvo no projeto.</p>
+<p>A coluna da árvore recolhe e reabre pelos botões ◀/▶ no seu topo (em telas estreitas, pelo botão no canto esquerdo da barra de abas).</p>
+<figure><img src="shots/23-ctxmenu.png" alt="Menu de contexto"><figcaption>Botão direito sobre aux:Fe na tabela de estatísticas: as mesmas ações da árvore, onde você estiver.</figcaption></figure>
+<p><b>Botão direito</b> sobre uma variável — em qualquer lugar: árvore, tabela ou lateral do Statistics, listas do Swath e do GT, colunas do Categories — abre o <b>menu de contexto</b> com as mesmas ações: <i>Properties…</i> (o editor acima, no lugar do clique), definir/limpar papéis, adicionar/remover curva CDF, desparear ou trocar o pareamento. Onde houver tabela com botão de cópia, o menu oferece <i>Copy table</i>; no painel de CDF, exportar SVG/PNG; nos valores do Categories, <i>Set color…</i>. <span class="kbd">Ctrl</span>+botão direito sempre abre o menu nativo do navegador.</p>
+
+<h1><span class="secnum">15</span>Projetos: salvar, empacotar, compartilhar</h1>
+<h2>15.1 Salvamento automático</h2>
+<p>Toda a configuração — preflight, filtros, calcols (de cada conjunto), seleções e clones de cada painel, pesos, cores, o layout do workspace — é salva automaticamente <i>por arquivo</i> no próprio navegador. Feche, reabra, arraste o mesmo arquivo: tudo volta como estava, incluindo a análise (que fica em cache). Um <b>projeto sem modelo</b> (§2.2) é salvo do mesmo jeito, sob sua própria identidade, e reabre pela lista <b>Projetos</b> na tela inicial, em vez de arrastar um arquivo de modelo; seus conjuntos depois aguardam o reenvio (rearraste cada um, ou use o Pack para carregá-los).</p>
+<h2>15.2 Save — o arquivo de projeto</h2>
+<p>O botão <b>Save</b> da barra baixa um <code>nome.bma.json</code> com a configuração completa (sem os dados). Para usar: arraste o <code>.bma.json</code> na tela inicial — o BMA pede o arquivo de dados correspondente; arraste-o em seguida e o projeto se aplica.</p>
+<h2>15.3 Pack — o projeto portátil</h2>
+<figure><img src="shots/15-pack.png" alt="Pack"><figcaption>Diálogo Pack: título, conteúdo e compressão. O resultado é um único .bma.zip com tudo dentro.</figcaption></figure>
+<p>O botão <b>Pack</b> empacota <b>dados + auxiliar + configuração</b> em um único <code>nome.bma.zip</code> — o jeito certo de mandar uma análise inteira para um colega. No diálogo:</p>
+<ul>
+  <li><b>Title</b> — nome do projeto (aparece na barra ao lado do arquivo e batiza o zip);</li>
+  <li><b>Contents</b> — o modelo (se houver) e a configuração sempre vão; os conjuntos de comparação são opcionais (uma caixa cobre todos). Um conjunto derivado de furos empacota os arquivos <i>brutos</i> de collar/survey/intervalos, não o composto — eles se re-derivam ao carregar. Um projeto sem modelo é empacotado igual, sem entrada de modelo;</li>
+  <li><b>Compress</b> — liga a compressão deflate (CSV encolhe 4–6×). Vem ligada para dados de até ~500 MB; acima disso o padrão é desligada, porque sem compressão o empacotamento e a reabertura têm custo de memória <i>zero</i> em qualquer tamanho. Não há limite de 4 GB: os arquivos usam Zip64 automaticamente quando preciso.</li>
+</ul>
+<figure><img src="shots/17-packed-load.png" alt="Diálogo de projeto empacotado"><figcaption>Ao arrastar um projeto empacotado, o BMA pergunta antes de aplicar a configuração embutida.</figcaption></figure>
+<p>Quem recebe só precisa <b>arrastar o zip</b> no BMA: o diálogo acima pergunta se quer carregar o projeto embutido; confirmando, modelo e amostras saem do próprio arquivo e tudo abre configurado. (<i>Open as zip</i> ignora o projeto e abre como um zip comum.)</p>
+
+<h1><span class="secnum">16</span>Export — exportando CSV</h1>
+<figure><img src="shots/08-export.png" alt="Export"><figcaption>Export: seleção, renomeação e reordenação de colunas, com opções de formato.</figcaption></figure>
+<p>A aba <b>Export</b> regrava um conjunto (já com o seu filtro aplicado e com as colunas calculadas disponíveis) como um novo CSV, também em streaming — funciona para arquivos de qualquer tamanho. Um seletor de <b>Conjunto</b> no topo escolhe qual exportar quando há mais de um carregado (o modelo, por padrão).</p>
+<ul>
+  <li>marque/desmarque colunas; arraste para reordenar; clique no nome de saída para renomear;</li>
+  <li>opções: delimitador, fim de linha, separador decimal, texto para nulos e precisão numérica;</li>
+  <li>barra de progresso com contagem de linhas durante a gravação.</li>
+</ul>
+<p>Um seletor <b>Dataset</b> no topo da lateral (quando há dois ou mais conjuntos analisados) aponta o Export para <b>qualquer conjunto</b> — cada um com sua própria seleção de colunas. Um conjunto de comparação também pode ser exportado pela sua visão <b>Summary</b>: <i>Export rows (CSV)</i> grava todas as suas colunas e calcols (com o filtro do conjunto aplicado), e — quando ele é um grid — a bounding box sai como malha <b>OBJ</b>. Pontos e conjuntos derivados de sondagem emitem as mesmas formas que o modelo.</p>
+<p>Além do CSV, espalhados pela interface há exports de gráfico (<b>Copy SVG</b>, <b>Download PNG</b> em Statistics/GT/Swath) e botões <b>Copy</b> de tabela (Statistics, GT, Swath, Categories) que colam direto em planilhas.</p>
+
+<h1><span class="secnum">17</span>Instalação, offline e atualizações</h1>
+<p>O BMA pode ser usado de três formas, do mais ao menos conectado:</p>
+<figure><img src="shots/16-update-banner.png" alt="Banner de atualização"><figcaption>O banner de atualização e, no canto inferior direito, o selo do build.</figcaption></figure>
+<h2>17.1 No navegador ou instalado (recomendado)</h2>
+<ul>
+  <li><b>Instalar como aplicativo</b> — o BMA é um PWA: no Chrome/Edge, use o ícone de instalação na barra de endereço. Ele vira um app com janela própria e funciona <b>offline</b> depois da primeira visita.</li>
+  <li><b>Selo de build</b> — o código no canto inferior direito (ex.: <code>c18b3dc</code>) identifica exatamente a versão que está rodando. <b>Clique nele para verificar atualizações</b> na hora.</li>
+  <li><b>Banner de atualização</b> — quando uma versão nova é publicada, o BMA percebe sozinho (na carga seguinte) e mostra o banner acima; clique <b>Reload</b> para atualizar. Nenhum dado seu é afetado — projetos e caches são preservados.</li>
+</ul>
+<h2>17.2 Cópia local: um arquivo só</h2>
+<p>O aplicativo inteiro é um único arquivo HTML. Você pode salvá-lo (<span class="kbd">Ctrl+S</span> na página, ou recebê-lo de alguém), renomear como quiser — <code>bma.html</code>, <code>bma-c18b3dc.html</code> — e abrir com clique duplo, <b>sem internet, sem instalação e sem servidor</b>. Tudo funciona: todas as abas, o dataset auxiliar, pesos, projetos empacotados, o exemplo embutido. O salvamento automático de configurações também funciona na cópia local.</p>
+<p>Caveats da cópia local:</p>
+<ul>
+  <li><b>Ela nunca se atualiza</b> — é uma fotografia da versão em que foi salva. O selo de build no canto diz <i>qual</i>: compare com o do site para saber se a sua cópia está atrasada (clicar no selo mostra “n/a”, já que não há de onde verificar).</li>
+  <li>A instalação como PWA e o modo offline automático são exclusivos da versão hospedada (um arquivo local já <i>é</i> offline por natureza).</li>
+  <li>As fontes da interface podem cair no monoespaçado do sistema se você estiver sem rede — só estética.</li>
+</ul>
+<p class="tip">A cópia local é um ótimo plano B para ambientes sem internet ou com rede restrita — e, como nada nunca sai do navegador em nenhuma das formas, a privacidade é a mesma nas três.</p>
+<h2>17.3 Suporte de navegadores</h2>
+<p>O <b>núcleo do BMA funciona em qualquer navegador moderno</b> — análise, todos os gráficos e tabelas, conjuntos de comparação, empacotar e ler projetos <code>.bma.zip</code>. Algumas conveniências dependem da API <i>File System Access</i>, que hoje só os navegadores Chromium (Chrome, Edge, Brave, Opera) implementam; nos demais o BMA degrada com elegância.</p>
+<table>
+  <tr><th>Recurso</th><th>Chrome / Edge</th><th>Firefox</th><th>Safari</th></tr>
+  <tr><td>Análise, gráficos, comparação, packs</td><td>✓</td><td>✓</td><td>✓</td></tr>
+  <tr><td>Reabrir um arquivo recente com um clique</td><td>✓</td><td>re-selecionar o arquivo</td><td>re-selecionar o arquivo</td></tr>
+  <tr><td>Exportação CSV em streaming (qualquer tamanho)</td><td>✓ direto ao disco</td><td>download em memória</td><td>download em memória</td></tr>
+  <tr><td>Instalar como app (PWA) / offline</td><td>✓</td><td>—</td><td>limitado</td></tr>
+</table>
+<p>“Re-selecionar o arquivo” significa que o seletor de arquivos abre de novo em vez de reabrir em silêncio (os dados nunca foram enviados, então o navegador não pode guardar uma referência a eles). “Download em memória” significa que uma exportação muito grande é montada na memória antes de salvar, então no Firefox/Safari mantenha exportações de arquivos de vários gigabytes no Chromium. <b>Recomendação:</b> use Chrome ou Edge para a experiência mais fluida; qualquer navegador serve para revisar.</p>
+
+<h1><span class="secnum">18</span>Dicas e solução de problemas</h1>
+<table>
+  <tr><th>Sintoma / dúvida</th><th>Explicação</th></tr>
+  <tr><td>“Tonelagem” do GT parece baixa demais, ou diz por contagem</td><td>Sem densidade, densidade = 1 e o eixo é <b>volume (m³)</b>. E sem um volume de bloco (o conjunto é <i>ponto</i>, ou sem DXYZ/grid), a tonelagem é <b>por contagem</b> (1 por linha). Defina o conjunto como <b>grid</b> na importação (§3), atribua DXYZ, ponha um Override ou escolha uma coluna de tonelagem/volume no Peso.</td></tr>
+  <tr><td>Mudei filtro/peso/calcol/modo de grid e nada mudou</td><td>Essas mudanças exigem nova passada: clique <b>Analyze</b> (o botão fica destacado quando há mudanças pendentes). Trocar grid/ponto não re-analisa — só muda se o conjunto conta como grid daí para frente.</td></tr>
+  <tr><td>A contagem caiu ao usar peso</td><td>Linhas com peso ausente, zero ou negativo são excluídas — o número de excluídas aparece sob o seletor de peso.</td></tr>
+  <tr><td>Swath do aux não aparece</td><td>Confira se X/Y/Z do auxiliar estão atribuídos na aba Aux, e se os dois datasets estão no mesmo sistema de coordenadas.</td></tr>
+  <tr><td>Comparações (Statistics/Categories/Q–Q) não mostram o aux</td><td>Elas dependem do botão <b>Analyze</b> da aba Aux (o swath não). O status da aba indica se a análise auxiliar está desatualizada.</td></tr>
+  <tr><td>Variáveis não pareiam entre modelo e amostras</td><td>O pareamento automático é por nome igual (sem diferenciar maiúsculas). Nomes diferentes? Clique na variável auxiliar na árvore (ou botão direito → <i>Properties…</i>) e escolha o par no seletor <b>Paired with</b> (§14).</td></tr>
+  <tr><td>Comparações pararam de usar o desagrupamento depois de reabrir</td><td>Os pesos de desagrupamento nunca são salvos — só os parâmetros. Rode <b>Run declustering</b> de novo na aba Aux (§12.7).</td></tr>
+  <tr><td>Arquivo .zip com vários CSVs</td><td>Seletor de entrada no Import Model (principal) e na lateral do painel de cada conjunto de comparação; um conjunto também pode apontar para outra entrada do zip principal.</td></tr>
+  <tr><td>Perdi a configuração?</td><td>Ela é automática por arquivo (mesmo nome + tamanho). Para garantir/portar, use <b>Save</b> ou <b>Pack</b>.</td></tr>
+  <tr><td>Statistics/Categories vazios após analisar</td><td>Provavelmente o filtro removeu todas as linhas (confira a caixa FILTER e os contadores de saúde de dados no Summary), ou todas as colunas numéricas foram desmarcadas/Skip na importação. Limpe o filtro, reveja os tipos de coluna e Analyze de novo.</td></tr>
+  <tr><td>“Sem colunas numéricas” / um teor aparece como categórico</td><td>A detecção de tipo amostra a coluna; um valor de texto perdido ou um decimal sem ponto pode jogá-la para CAT. Clique na etiqueta de tipo na importação para forçar NUM, ou corrija a origem. Colunas vazias ganham um selo ∅ em vez de sumir.</td></tr>
+  <tr><td>Geometria errada / sem swath ou GT por volume</td><td>XYZ foram detectados errado. Defina o X/Y/Z correto na importação; sem eles não há geometria. Se for dado disperso, ponha Block geometry em <b>point</b>; se for um grid lido como pontos, ponha <b>grid</b> (§3).</td></tr>
+  <tr><td>Um erro de expressão</td><td>Filtros e calcols são validados enquanto você digita (mensagem em vermelho) e no Simulate. Um nome de coluna com erro mostra um aviso “Unknown column” no escopo do handle do conjunto (<code>r.</code>, <code>aux.</code>…). Corrija antes do Analyze; uma expressão ainda quebrada é reportada, nunca ignorada em silêncio.</td></tr>
+  <tr><td>Modelo e amostras não batem no espaço</td><td>O BMA não detecta incompatibilidade de sistema de coordenadas ou de unidades — assume que ambos compartilham um. Se um swath ou bounding box parecer impossível, confirme que os dois arquivos estão no mesmo CRS e unidades; senão a comparação espacial é sem sentido mesmo que os números apareçam.</td></tr>
+  <tr><td>Uma aba que preciso não aparece</td><td>Um workspace novo abre só Import Model, Statistics e Categories. Abra qualquer outro painel por <b>View → Panels</b> (ou o menu ⋮, ou a árvore de dados); ver §2.4. Projetos empacotados/salvos restauram o layout que você deixou.</td></tr>
+  <tr><td>Privacidade</td><td>Nenhum dado sai do navegador, nunca. O app funciona até desconectado.</td></tr>
+</table>
+
+<h1><span class="secnum">A</span>Apêndice: referência de expressões</h1>
+<p>Filtros (global e aux), filtros locais (Swath/GT) e calcols compilam JavaScript com este preâmbulo disponível:</p>
+<table>
+  <tr><th>Função</th><th>Descrição</th></tr>
+  <tr><td><code>abs, sqrt, pow, exp, hypot</code></td><td>aritmética básica (de <code>Math</code>)</td></tr>
+  <tr><td><code>log, log2, log10</code></td><td>logaritmos natural, base 2 e base 10</td></tr>
+  <tr><td><code>min(a,b…), max(a,b…)</code></td><td>mínimo / máximo</td></tr>
+  <tr><td><code>round, floor, ceil, trunc, sign</code></td><td>arredondamentos e sinal</td></tr>
+  <tr><td><code>sin, cos, tan, asin, acos, atan, atan2</code></td><td>trigonometria (radianos); <code>PI</code> e <code>E</code> disponíveis</td></tr>
+  <tr><td><code>clamp(v, lo, hi)</code></td><td>limita v ao intervalo [lo, hi]</td></tr>
+  <tr><td><code>cap(v, hi)</code> / <code>cap(v, lo, hi)</code></td><td>corta por cima (capping de teor) ou pelos dois lados; preserva null</td></tr>
+  <tr><td><code>ifnull(v, padrão)</code></td><td>substitui null/NaN pelo padrão</td></tr>
+  <tr><td><code>ifnum(v, padrão)</code> / <code>isnum(v)</code></td><td>idem só para números válidos / testa se é número finito</td></tr>
+  <tr><td><code>between(v, lo, hi)</code></td><td>verdadeiro se lo ≤ v ≤ hi</td></tr>
+  <tr><td><code>remap(v, {de: para}, padrão)</code></td><td>tradução por dicionário: <code>remap(r.LITO, {HEM:'óxido'}, 'outro')</code></td></tr>
+  <tr><td><code>fn.round(v, n)</code></td><td>arredonda com n casas decimais</td></tr>
+</table>
+<p>O objeto de linha é <code>r</code> no modelo e o <i>handle</i> do conjunto (<code>aux</code>, <code>d2</code>…) num conjunto de comparação. Colunas com espaços ou caracteres especiais: <code>r["minha coluna"]</code>.</p>
+
+<h1><span class="secnum">B</span>Apêndice: referência rápida</h1>
+<h2>Teclado</h2>
+<table>
+  <tr><th>Tecla</th><th>Ação</th></tr>
+  <tr><td><span class="kbd">F1</span></td><td>Ajuda contextual da aba ativa</td></tr>
+  <tr><td><span class="kbd">Ctrl+S</span></td><td>Salvar o projeto (descarrega o autosave, “Saved ✓”)</td></tr>
+  <tr><td><span class="kbd">Enter</span> (numa caixa de filtro)</td><td>Aplicar o filtro</td></tr>
+  <tr><td><span class="kbd">Ctrl</span>+botão direito</td><td>Ignora o menu do BMA, abre o nativo do navegador</td></tr>
+  <tr><td><span class="kbd">Esc</span></td><td>Fechar popover / menu / modal</td></tr>
+</table>
+<h2>Cola de expressões</h2>
+<p><code>r.Col</code> ler coluna · <code>r["Nome Estranho"]</code> nome entre colchetes · <code>=</code> atribuir (calcols) · <code>===</code>/<code>!==</code> igual/diferente · <code>&gt; &lt; &gt;= &lt;=</code> comparar · <code>&amp;&amp; || !</code> e/ou/não · <code>'texto'</code> strings · <code>cond ? a : b</code> se/senão. Auxiliares: <code>between(v,lo,hi)</code>, <code>cap(v,hi)</code>, <code>clamp(v,lo,hi)</code>, <code>ifnull(v,d)</code>, <code>remap(v,{A:'x'},d)</code>, <code>round/floor/ceil</code>, <code>min/max</code>, <code>log/log10</code> (lista completa no Apêndice A).</p>
+<h2>Qual aba responde qual pergunta?</h2>
+<table>
+  <tr><th>Você quer…</th><th>Vá em</th></tr>
+  <tr><td>Conferir se o arquivo entrou certo (grid, saúde)</td><td>Import Model → Summary (§4)</td></tr>
+  <tr><td>Descrever uma variável (média, CV, percentis, CDF)</td><td>Statistics (§7)</td></tr>
+  <tr><td>Quebrar um teor por litologia/domínio</td><td>StatsCat (§9)</td></tr>
+  <tr><td>Ver proporções de uma categórica</td><td>Categories (§8)</td></tr>
+  <tr><td>Teor–tonelagem por corte</td><td>GT (§10)</td></tr>
+  <tr><td>Ver tendência espacial / validar estimativas no espaço</td><td>Swath (§11)</td></tr>
+  <tr><td>Comparar o modelo com as amostras</td><td>adicione um conjunto de comparação (§12); leia Statistics/Q–Q/Swath</td></tr>
+  <tr><td>Corrigir amostragem agrupada</td><td>Declustering (§12.7)</td></tr>
+  <tr><td>Decidir um top cut</td><td>Top-cut (§12.8)</td></tr>
+  <tr><td>Compor a partir de furos brutos</td><td>Drillhole set (§13)</td></tr>
+  <tr><td>Criar uma variável nova</td><td>Calc (§6)</td></tr>
+  <tr><td>Gravar CSV / OBJ</td><td>Export (§16)</td></tr>
+  <tr><td>Mandar a análise inteira para um colega</td><td>Pack (§15.3)</td></tr>
+</table>
+
+<h1><span class="secnum">C</span>Apêndice: glossário</h1>
+<table>
+  <tr><th>Termo</th><th>Significado no BMA</th></tr>
+  <tr><td><b>Modelo de blocos</b></td><td>A estimativa sob inspeção — o conjunto hub. O primeiro conjunto carregado; os outros comparam contra ele.</td></tr>
+  <tr><td><b>Conjunto de comparação</b></td><td>Qualquer conjunto par carregado junto ao modelo (amostras, uma re-estimativa, um segundo modelo) — um conjunto separado de linhas, não colunas extras. Rotulado <code>aux</code>, <code>d2</code>, <code>d3</code>…</td></tr>
+  <tr><td><b>Primário (de um painel)</b></td><td>O conjunto cujas colunas são as linhas/séries principais do painel; todo outro conjunto vira comparação. Escolhido pelo seletor <b>Dataset</b> do painel; o modelo por padrão.</td></tr>
+  <tr><td><b>Calcol</b></td><td>Coluna calculada — uma variável derivada por expressão (§6).</td></tr>
+  <tr><td><b>Composta</b></td><td>Uma amostra de furo de comprimento fixo, montada dos intervalos de análise por média ponderada por comprimento (§13).</td></tr>
+  <tr><td><b>Desurvey</b></td><td>Transformar collar + survey + intervalos em pontos XYZ ao longo do caminho real (curvo) de cada furo (§13).</td></tr>
+  <tr><td><b>Suporte / mudança de suporte</b></td><td>O volume que um valor representa. Amostras pontuais têm suporte pequeno, blocos grande; mediar para suporte de bloco encolhe a variância (menos valores extremos). Comparar os dois é o coração da validação.</td></tr>
+  <tr><td><b>Correção de suporte (f)</b></td><td>O fator de redução de variância Var(blocos)/Var(amostras) usado para desenhar a GT teórica a partir das amostras (§10.1). Você o fornece; nunca é derivado do modelo.</td></tr>
+  <tr><td><b>Desagrupamento / média desagrupada</b></td><td>Reduzir o peso de áreas super-amostradas (agrupadas) para a média ser representativa. A média <i>ingênua</i> ignora o agrupamento; a <i>desagrupada</i> corrige (§12.7).</td></tr>
+  <tr><td><b>Referência do Δ%</b></td><td>O conjunto contra o qual os valores Δ% de um painel são medidos (o denominador) — escolha por painel (§7, §12.2).</td></tr>
+  <tr><td><b>Pareamento / órfã</b></td><td>Qual variável de comparação mapeia para qual variável do modelo (automático por nome; editável). Uma <i>órfã</i> (⇄ —) não pareia com nada e não entra em comparação (§14).</td></tr>
+  <tr><td><b>Propriedade</b></td><td>Uma quantidade nomeada compartilhada entre conjuntos; cor e unidade vivem na propriedade, então a cópia de cada conjunto segue (§14).</td></tr>
+  <tr><td><b>Grid vs ponto</b></td><td>Se um conjunto é tratado como grid regular de blocos (geometria, GT por volume) ou pontos dispersos. Definido por conjunto; auto-detectado por padrão (§3).</td></tr>
+  <tr><td><b>Fill ratio</b></td><td>A fração do envelope de um grid realmente ocupada por blocos (§4).</td></tr>
+  <tr><td><b>Top-cut / cap</b></td><td>Um teto de alto teor aplicado para domar outliers (§12.8); <code>cap()</code> aplica numa calcol.</td></tr>
+  <tr><td><b>Swath</b></td><td>Média (ou percentil) de cada variável em fatias ao longo de uma direção — o gráfico de tendência espacial / validação de estimativa (§11).</td></tr>
+  <tr><td><b>Pack (.bma.zip)</b></td><td>Um único arquivo reunindo dados + cada comparação + configuração — a forma portátil de uma análise inteira (§15.3).</td></tr>
+</table>
+
+<h1><span class="secnum">D</span>Apêndice: receitas</h1>
+<p>Procedimentos curtos para os trabalhos comuns. Cada um aponta a seção com o detalhe.</p>
+<h2>Validar um modelo contra suas compostas</h2>
+<ol>
+  <li>Carregue o modelo, Analyze; confira o Summary (geometria, saúde) — §3, §4.</li>
+  <li>Adicione as compostas como conjunto de comparação; ponha a coluna de comprimento como Weight; Analyze — §12.1.</li>
+  <li>Statistics: leia o Δ% sob cada teor; sobreponha CDFs — §12.2.</li>
+  <li>Q–Q do teor contra sua amostra: deslocamento paralelo = viés, inclinação = suporte — §12.4.</li>
+  <li>Swath em X/Y/Z: confirme que o deslocamento é espacialmente consistente — §12.3.</li>
+  <li>Desagrupe as compostas e re-Analyze: o Δ% residual é a parte que <i>não</i> é malha — §12.7.</li>
+</ol>
+<h2>Explorar um único modelo isolado (sem amostras)</h2>
+<ol>
+  <li>Carregue e Analyze; leia o Summary — §4.</li>
+  <li>Statistics para cada teor (média/CV/percentis, CDF, Prob) — §7.</li>
+  <li>Categories / StatsCat para domínios e teor-por-domínio — §8, §9.</li>
+  <li>GT para o quadro teor–tonelagem; Swath para a tendência espacial — §10, §11.</li>
+</ol>
+<h2>Decidir e aplicar um top cut</h2>
+<ol>
+  <li>No painel do conjunto troque para Top-cut, Load distribution da variável — §12.8.</li>
+  <li>Arraste a linha vermelha para onde a cauda deixa a lognormal no log-prob; observe o metal removido.</li>
+  <li>Copy calcol, cole no Calc, Analyze — a variável capada flui para todas as vistas — §6.</li>
+</ol>
+<h2>Compor a partir de tabelas brutas de furos</h2>
+<ol>
+  <li>Solte collar + survey + assays (ou o zip deles) no cartão Drillhole set de um conjunto — §13.</li>
+  <li>Confira papéis detectados, mapeamento de colunas e, sobretudo, a convenção de dip.</li>
+  <li>Defina o comprimento de composta e Composite &amp; load; leia o relatório de consistência.</li>
+  <li>Analyze — as compostas se comportam como qualquer conjunto de comparação daí em diante.</li>
+</ol>
+<h2>Reconciliar duas estimativas</h2>
+<ol>
+  <li>Carregue o primeiro modelo; adicione o segundo como conjunto de comparação; Analyze os dois — §12.1.</li>
+  <li>No Statistics, use o seletor Dataset para tornar qualquer um o primário; leia o Δ% com o outro como referência — §7, §12.2.</li>
+  <li>Q–Q um contra o outro; Swath ambos para ver onde divergem no espaço — §12.3, §12.4.</li>
+</ol>
+<h2>Compartilhar uma análise inteira</h2>
+<ol>
+  <li>Pack → marque os conjuntos a incluir → grava um único <code>.bma.zip</code> — §15.3.</li>
+  <li>Quem recebe arrasta o zip no BMA e confirma; tudo abre configurado.</li>
+</ol>
+
+<h1><span class="secnum">E</span>Apêndice: galeria de interpretação</h1>
+<p>O dataset de exemplo ensina como é um <i>problema</i> (um viés plantado). Para ler o seu próprio modelo você também precisa saber como é o <b>saudável</b>. Cada par abaixo põe uma validação limpa (esquerda — modelo contra amostras sem viés e regularmente espaçadas) ao lado da falha do exemplo (direita), na mesma vista.</p>
+
+<h2>Tabela Δ% e CDF</h2>
+<div style="display:flex;gap:0.6em;align-items:flex-start">
+  <figure style="flex:1;margin:0.4em 0"><img src="shots/gallery-stats-clean.png" alt="Statistics saudável"><figcaption><b>Saudável.</b> Cada linha Δ% paira em torno de zero; a CDF tracejada das amostras fica quase sobre a do modelo, um pouco mais larga nas caudas.</figcaption></figure>
+  <figure style="flex:1;margin:0.4em 0"><img src="shots/10-statistics-aux.png" alt="Statistics com problema"><figcaption><b>Problema.</b> O Δ% do Fe é claramente positivo em todas as métricas; a CDF das amostras está deslocada, não só mais larga — um viés.</figcaption></figure>
+</div>
+<p><b>Leia assim:</b> Δ% perto de zero em toda métrica = concordância agregada. Um sinal não-nulo consistente nas médias é um viés a investigar (desagrupe primeiro, §12.7); uma diferença só no CV/dispersão com médias iguais costuma ser só suporte.</p>
+
+<h2>Q–Q</h2>
+<div style="display:flex;gap:0.6em;align-items:flex-start">
+  <figure style="flex:1;margin:0.4em 0"><img src="shots/gallery-qq-clean.png" alt="Q-Q saudável"><figcaption><b>Saudável.</b> A nuvem fica sobre a linha de identidade de 45° — as duas distribuições concordam quantil a quantil.</figcaption></figure>
+  <figure style="flex:1;margin:0.4em 0"><img src="shots/11-qq.png" alt="Q-Q com problema"><figcaption><b>Problema.</b> A nuvem corre paralela mas acima da linha — um viés aditivo cujo tamanho vertical você lê no eixo.</figcaption></figure>
+</div>
+<p><b>Leia assim:</b> sobre a linha = batem; deslocamento paralelo = viés aditivo; uma inclinação para fora dos 45° = diferença de dispersão (suporte); uma dobra = desacordo que muda com o teor.</p>
+
+<h2>Swath</h2>
+<div style="display:flex;gap:0.6em;align-items:flex-start">
+  <figure style="flex:1;margin:0.4em 0"><img src="shots/gallery-swath-clean.png" alt="Swath saudável"><figcaption><b>Saudável.</b> Tracejado (amostras) e sólido (modelo) se entrelaçam banda a banda — sem deriva espacial.</figcaption></figure>
+  <figure style="flex:1;margin:0.4em 0"><img src="shots/13-swath-aux.png" alt="Swath com problema"><figcaption><b>Problema.</b> A série tracejada cavalga acima da sólida em todas as bandas — um viés espacialmente consistente.</figcaption></figure>
+</div>
+<p><b>Leia assim:</b> séries entrelaçadas = o modelo honra as amostras no espaço; uma diferença persistente para um lado = viés condicional; divergência só nas bandas finas das pontas (poucas amostras — olhe as barras de contagem) é só suporte ali.</p>
+
+<h1><span class="secnum">F</span>Índice</h1>
+<div style="column-count:2;column-gap:1.4em;font-size:9.5pt">
+<p style="margin:0.15em 0">Análise (Analyze) — §3, §4</p>
+<p style="margin:0.15em 0">Amostras / comparação — §12</p>
+<p style="margin:0.15em 0">Árvore de dados — §14</p>
+<p style="margin:0.15em 0">Bounding box / OBJ — §16</p>
+<p style="margin:0.15em 0">Calc / colunas calculadas — §6</p>
+<p style="margin:0.15em 0">Categories — §8, §12.5</p>
+<p style="margin:0.15em 0">CDF — §7.3</p>
+<p style="margin:0.15em 0">Clones / duplicar painéis — §2.4</p>
+<p style="margin:0.15em 0">Compostas — §13</p>
+<p style="margin:0.15em 0">Conjunto de comparação — §12</p>
+<p style="margin:0.15em 0">Cutoffs (cortes) — §10</p>
+<p style="margin:0.15em 0">Densidade (GT) — §10</p>
+<p style="margin:0.15em 0">Desagrupamento — §12.7</p>
+<p style="margin:0.15em 0">Δ% (referência) — §7, §12.2</p>
+<p style="margin:0.15em 0">Desurvey — §13</p>
+<p style="margin:0.15em 0">Exemplo (dataset) — §2.1, §2.5</p>
+<p style="margin:0.15em 0">Export (CSV) — §16</p>
+<p style="margin:0.15em 0">Expressões — §5, Ap. A</p>
+<p style="margin:0.15em 0">F1 / ajuda contextual — §2.3</p>
+<p style="margin:0.15em 0">Filtro (de linhas) — §5</p>
+<p style="margin:0.15em 0">Furos de sondagem — §13</p>
+<p style="margin:0.15em 0">Galeria de interpretação — Ap. E</p>
+<p style="margin:0.15em 0">Geometria (grid/point) — §3, §4</p>
+<p style="margin:0.15em 0">GT (teor–tonelagem) — §10</p>
+<p style="margin:0.15em 0">GT teórica — §10.1</p>
+<p style="margin:0.15em 0">Instalação / offline — §17</p>
+<p style="margin:0.15em 0">Mudança de suporte — §10.1, Ap. C</p>
+<p style="margin:0.15em 0">Pack (.bma.zip) — §15.3</p>
+<p style="margin:0.15em 0">Painéis (abrir/fechar) — §2.4</p>
+<p style="margin:0.15em 0">Pareamento / órfã — §14</p>
+<p style="margin:0.15em 0">Percentis — §7.1</p>
+<p style="margin:0.15em 0">Prob (log-probabilidade) — §7.3</p>
+<p style="margin:0.15em 0">Primeira sessão — §2.5</p>
+<p style="margin:0.15em 0">Projeto vazio (sem modelo) — §2.2</p>
+<p style="margin:0.15em 0">PWA / instalar — §17.1</p>
+<p style="margin:0.15em 0">Q–Q — §12.4</p>
+<p style="margin:0.15em 0">Receitas — Ap. D</p>
+<p style="margin:0.15em 0">Salvamento automático — §15.1</p>
+<p style="margin:0.15em 0">Save (projeto) — §15.2</p>
+<p style="margin:0.15em 0">Seletor Dataset (por painel) — §7, §12.2</p>
+<p style="margin:0.15em 0">StatsCat (por grupo) — §9</p>
+<p style="margin:0.15em 0">Statistics — §7</p>
+<p style="margin:0.15em 0">Summary (visão) — §4</p>
+<p style="margin:0.15em 0">Swath — §11, §12.3</p>
+<p style="margin:0.15em 0">Suporte de navegadores — §17.3</p>
+<p style="margin:0.15em 0">Top-cut / cap — §12.8</p>
+<p style="margin:0.15em 0">Unidades — §14</p>
+<p style="margin:0.15em 0">Weight (peso) — §7.2</p>
+<p style="margin:0.15em 0">Workspace / docking — §2.4</p>
+<p style="margin:0.15em 0">Entrada ZIP — §2.2</p>
+</div>
+
+<p style="margin-top:3em;color:var(--dim);font-size:9pt;border-top:1px solid var(--line);padding-top:0.8em;">
+BMA — Block Model Atelier · GCU (Geoscientific Chaos Union) · Este manual foi gerado a partir de capturas reais do aplicativo com o dataset de exemplo embutido.
+</p>
+
+</body>
+</html>

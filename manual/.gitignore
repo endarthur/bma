@@ -1,0 +1,7 @@
+# Generated artifacts — rebuild with the scripts here (kept out of the repo to
+# avoid bloat). The HTML source + build scripts are tracked.
+shots/
+*.pdf
+bma-example-*.csv
+bma-example.zip
+bma.html

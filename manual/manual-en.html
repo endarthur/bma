@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BMA — User Manual</title>
+<style>
+  :root {
+    --ink: #1d2129; --dim: #5b6470; --amber: #b87333; --line: #d8d3c8;
+    --code-bg: #f4f1ea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", system-ui, sans-serif; color: var(--ink);
+    font-size: 10.5pt; line-height: 1.55; margin: 0;
+  }
+  code, pre {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 9.5pt;
+    background: var(--code-bg); border-radius: 3px;
+  }
+  code { padding: 0.05em 0.35em; }
+  pre { padding: 0.7em 1em; overflow-x: hidden; white-space: pre-wrap; border-left: 3px solid var(--amber); }
+  h1 {
+    font-size: 17pt; color: var(--amber); border-bottom: 2px solid var(--amber);
+    padding-bottom: 0.2em; margin: 0 0 0.6em; letter-spacing: 0.02em;
+    page-break-before: always; padding-top: 0.4em;
+  }
+  h1 .secnum { color: var(--dim); font-weight: 400; margin-right: 0.4em; }
+  h2 { font-size: 12.5pt; margin: 1.2em 0 0.4em; color: #2c3340; page-break-after: avoid; }
+  h3 { font-size: 11pt; margin: 1em 0 0.3em; page-break-after: avoid; }
+  p { margin: 0.45em 0; }
+  ul, ol { margin: 0.4em 0 0.6em; padding-left: 1.4em; }
+  li { margin: 0.22em 0; }
+  table { border-collapse: collapse; width: 100%; margin: 0.6em 0; font-size: 9.5pt; }
+  th, td { border: 1px solid var(--line); padding: 0.32em 0.55em; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); }
+  figure { margin: 0.9em 0; page-break-inside: avoid; }
+  figure img { width: 100%; border: 1px solid var(--line); border-radius: 4px; display: block; }
+  figcaption { font-size: 8.5pt; color: var(--dim); margin-top: 0.35em; }
+  .tip, .warn {
+    border: 1px solid var(--line); border-left: 4px solid var(--amber);
+    border-radius: 3px; padding: 0.5em 0.8em; margin: 0.7em 0; font-size: 9.8pt;
+    page-break-inside: avoid;
+  }
+  .warn { border-left-color: #b04a3a; }
+  .tip::before { content: "Tip — "; font-weight: 600; color: var(--amber); }
+  .warn::before { content: "Note — "; font-weight: 600; color: #b04a3a; }
+  .kbd {
+    border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px;
+    padding: 0 0.35em; font-family: Consolas, monospace; font-size: 9pt; background: #fff;
+  }
+  /* Cover */
+  .cover { height: 95vh; display: flex; flex-direction: column; justify-content: center; page-break-after: always; }
+  .cover h1 { border: none; page-break-before: avoid; font-size: 34pt; margin: 0; }
+  .cover .sub { font-size: 14pt; color: var(--dim); margin-top: 0.4em; }
+  .cover .meta { margin-top: 3em; color: var(--dim); font-size: 10pt; line-height: 1.8; }
+  .cover .gcu { margin-top: 5em; font-size: 9pt; color: var(--dim); letter-spacing: 0.08em; }
+  /* TOC */
+  .toc { page-break-after: always; }
+  .toc h1 { page-break-before: avoid; }
+  .toc ol { list-style: none; padding: 0; column-count: 1; }
+  .toc li { padding: 0.18em 0; border-bottom: 1px dotted var(--line); }
+  .toc .secnum { display: inline-block; width: 1.8em; color: var(--amber); }
+  .toc li.sub { padding: 0.08em 0 0.08em 2.2em; border-bottom: none; font-size: 9.5pt; color: var(--dim); }
+  .toc li.sub .secnum { width: 2.4em; color: var(--dim); }
+  @page { size: A4; margin: 18mm 16mm 20mm; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>BMA</h1>
+  <div class="sub">Block Model Atelier — User Manual</div>
+  <div class="meta">
+    Block model analyzer in the browser<br>
+    <b>https://endarthur.github.io/bma/</b><br>
+    Manual version: June 2026 · BMA v1.3
+  </div>
+  <div class="gcu">GCU — Geoscientific Chaos Union</div>
+</div>
+
+<div class="toc">
+<h1>Contents</h1>
+<ol>
+  <li><span class="secnum">1</span> What BMA is</li>
+  <li><span class="secnum">2</span> Getting started</li>
+  <li class="sub"><span class="secnum">2.1</span> The example dataset</li>
+  <li class="sub"><span class="secnum">2.2</span> Loading your own data</li>
+  <li class="sub"><span class="secnum">2.3</span> Contextual help</li>
+  <li class="sub"><span class="secnum">2.4</span> The workspace: panels that coexist</li>
+  <li class="sub"><span class="secnum">2.5</span> Your first session: validating the example model</li>
+  <li><span class="secnum">3</span> Import — checking before analyzing</li>
+  <li><span class="secnum">4</span> Analysis and the Summary view</li>
+  <li><span class="secnum">5</span> The row filter</li>
+  <li><span class="secnum">6</span> Calc — calculated columns</li>
+  <li><span class="secnum">7</span> Statistics — metrics, weights and CDF</li>
+  <li class="sub"><span class="secnum">7.1</span> The table</li>
+  <li class="sub"><span class="secnum">7.2</span> Weights</li>
+  <li class="sub"><span class="secnum">7.3</span> CDF, Prob and Q–Q</li>
+  <li><span class="secnum">8</span> Categories — categorical variables</li>
+  <li><span class="secnum">9</span> StatsCat — statistics by group</li>
+  <li><span class="secnum">10</span> GT — grade–tonnage curves</li>
+  <li class="sub"><span class="secnum">10.1</span> Theoretical curve from the samples</li>
+  <li><span class="secnum">11</span> Swath — directional profiles</li>
+  <li><span class="secnum">12</span> Comparison datasets — validation</li>
+  <li class="sub"><span class="secnum">12.1</span> Loading and configuring</li>
+  <li class="sub"><span class="secnum">12.2</span> Statistics and CDF compared</li>
+  <li class="sub"><span class="secnum">12.3</span> Swath compared</li>
+  <li class="sub"><span class="secnum">12.4</span> Q–Q: the bias, measured</li>
+  <li class="sub"><span class="secnum">12.5</span> Categories compared</li>
+  <li class="sub"><span class="secnum">12.6</span> Calcols on a comparison dataset</li>
+  <li class="sub"><span class="secnum">12.7</span> Declustering</li>
+  <li class="sub"><span class="secnum">12.8</span> Top-cut — capping analysis</li>
+  <li><span class="secnum">13</span> Drillholes — from raw tables to composites</li>
+  <li class="sub"><span class="secnum">13.1</span> The compositing surface</li>
+  <li class="sub"><span class="secnum">13.2</span> Merging a second interval table</li>
+  <li class="sub"><span class="secnum">13.3</span> Compositing &amp; the result</li>
+  <li><span class="secnum">14</span> The data tree and context menus</li>
+  <li><span class="secnum">15</span> Projects: save, pack, share</li>
+  <li class="sub"><span class="secnum">15.1</span> Automatic saving</li>
+  <li class="sub"><span class="secnum">15.2</span> Save — the project file</li>
+  <li class="sub"><span class="secnum">15.3</span> Pack — the portable project</li>
+  <li><span class="secnum">16</span> Export — writing CSV, OBJ</li>
+  <li><span class="secnum">17</span> Installation, offline use and updates</li>
+  <li class="sub"><span class="secnum">17.1</span> In the browser, or installed (recommended)</li>
+  <li class="sub"><span class="secnum">17.2</span> A local copy: one single file</li>
+  <li class="sub"><span class="secnum">17.3</span> Browser support</li>
+  <li><span class="secnum">18</span> Tips and troubleshooting</li>
+  <li><span class="secnum">A</span> Appendix: expression reference</li>
+  <li><span class="secnum">B</span> Appendix: quick reference</li>
+  <li><span class="secnum">C</span> Appendix: glossary</li>
+  <li><span class="secnum">D</span> Appendix: recipes</li>
+  <li><span class="secnum">E</span> Appendix: interpretation gallery</li>
+  <li><span class="secnum">F</span> Index</li>
+</ol>
+</div>
+
+<h1><span class="secnum">1</span>What BMA is</h1>
+<p><b>BMA (Block Model Atelier)</b> is a block model inspector that runs entirely in your browser. Drop a CSV exported from Isatis, Vulcan, Surpac, Leapfrog, Datamine or any other mining package and you get, in seconds: descriptive statistics, grid geometry detection, category breakdowns, grade–tonnage curves, directional (swath) profiles, and comparison against the samples the model was estimated from — or against any number of other datasets.</p>
+<p>Three properties define the tool:</p>
+<ul>
+  <li><b>Nothing leaves your computer.</b> There is no server: the file is read locally, by streaming. Safe to use with confidential data.</li>
+  <li><b>Huge files just work.</b> BMA never loads the whole file into memory — it processes row by row. Multi-gigabyte models run on an ordinary laptop. Speed is bounded by reading the file once, not by RAM: expect a few million rows in seconds and multi-gigabyte files in (low) minutes on a typical machine — wider files (many columns) and calculated columns add to that. A progress bar runs throughout and you can cancel at any time.</li>
+  <li><b>One pass only.</b> Types, statistics, geometry and calculated columns are computed in a single read of the file, on a separate thread (Web Worker), so the interface never freezes.</li>
+</ul>
+<p>BMA is <b>multi-dataset</b>: the block model is the hub, and you compare it against as many other datasets as you need — the composites behind it, an infill campaign, a re-estimate, a second model. Every dataset is a peer with its own import panel, filters, calculated columns and (if it has coordinates) geometry. The address is <b>https://endarthur.github.io/bma/</b> — and it also works offline after the first visit (see §17).</p>
+
+<h1><span class="secnum">2</span>Getting started</h1>
+<figure><img src="shots/01-landing.png" alt="Landing page"><figcaption>Landing page: drop zone, “Start an empty project”, saved projects, recent files, and the example-dataset download button.</figcaption></figure>
+<h2>2.1 The example dataset</h2>
+<p>The landing page has a <b>“⤓ Download example dataset”</b> button. It generates, in your own browser, a <code>bma-example.zip</code> containing a synthetic block model, the drillhole composites “behind” it, the <b>raw drillhole tables</b> (collar/survey/assays, for §13), and a step-by-step <code>TUTORIAL.txt</code>. It is the best way to get to know the tool: the data was designed so every chart shows something interesting (there is a +2% Fe bias planted in the samples, on purpose).</p>
+<p class="tip">The example zip is also a <i>packed project</i>: drag the zip itself back into BMA and confirm, and everything opens already configured (see §15).</p>
+<h2>2.2 Loading your own data</h2>
+<p>Drag the file onto the dotted zone, or click it to browse. Accepted formats:</p>
+<ul>
+  <li><code>.csv</code>, <code>.txt</code>, <code>.dat</code> — delimited text (comma, semicolon, tab or space, auto-detected);</li>
+  <li><code>.zip</code> — with one or more CSVs inside (you choose which one to analyze);</li>
+  <li><code>.bma.json</code> / <code>.bma.zip</code> — saved or packed projects (§15).</li>
+</ul>
+<p>Recently opened files appear as cards on the landing page — in Chromium-based browsers, clicking reopens the file directly, no browsing again.</p>
+<p>You don't have to start from a block model. <b>“Start an empty project”</b> opens the workspace with no model at all — useful when you only have drillholes or scattered point data. From there you <b>add datasets</b> (next paragraph), and tabs that need a model (grade–tonnage, the model Δ% reference) simply target the dataset you choose instead. A model-less project saves itself like any other and comes back from the <b>Projects</b> list on the landing page (it has no model file to drop, so that list is how you reopen it); you can also <b>Pack</b> it to a single <code>.bma.zip</code> (§15). You can give the project a model at any time — <b>Load model file…</b> on the Import tab, or drop a model CSV — <i>without losing</i> the datasets you've already added.</p>
+<figure><img src="shots/27-empty-project.png" alt="Empty project"><figcaption>A model-less project: the Import-Model tab offers <b>Load model file…</b> (or just drop one) and buttons to add point/drillhole data; the data tree's <b>＋ Add dataset</b> does the same.</figcaption></figure>
+<p><b>Adding datasets.</b> Once a project is open, use <b>＋ Add dataset</b> at the foot of the data tree (§14), the <b>＋</b> launcher on the tab strip, or <b>Data → Add point / drillhole dataset</b>. Each new dataset gets its own import panel; the first comparison is labelled <code>d2</code>, the next <code>d3</code>, and so on. You can also just <b>drop a file onto an open project</b>: BMA asks whether to add it as a comparison dataset or use it as the (replacement) model — it never replaces your data silently.</p>
+<h2>2.3 Contextual help</h2>
+<p>On any tab, press <span class="kbd">F1</span> (or click the <b>?</b> in the toolbar) to open that tab's help, with an explanation of every control.</p>
+
+<h2>2.4 The workspace: panels that coexist</h2>
+<figure><img src="shots/24-workspace.png" alt="Split workspace"><figcaption>Statistics and Swath stacked, with GT in a floating window — every panel re-renders its charts at the available width.</figcaption></figure>
+<p>On wide screens, BMA's tabs are <b>dockable panels</b>. Everything behaves like an ordinary tab bar — until you <b>drag a tab</b>:</p>
+<ul>
+  <li>drop it in the <b>gap between panels</b> (or at the edges) to <b>split</b> the workspace — Statistics next to Swath, GT under Categories;</li>
+  <li>drop it <b>on a panel's body</b> to tear it off into a <b>floating window</b> you can move and resize freely; drop it on a tab strip to re-dock;</li>
+  <li><b>right-click a tab</b>: Float, Duplicate, Move to new rail, Close, Close others; right-click a floating window's titlebar: Dock / Close.</li>
+</ul>
+<p>The analysis panels are also <b>cloneable</b>. Use <b>＋</b> on the tab strip (or right-click a tab → <b>Duplicate</b>) to open a second <b>Statistics</b>, <b>Categories</b>, <b>Swath</b>, <b>StatsCat</b>, <b>GT</b> or <b>Export</b> — an independent view with its own selection, directions, reference and <b>target dataset</b>. Put Fe statistics beside SiO₂ statistics, two swaths along different axes, or the model's grade–tonnage beside a comparison dataset's, side by side. Statistics, Categories and StatsCat clones are independent views of the shared analysis; Swath and GT clones run <i>their own</i> worker pass; Export clones each export their own dataset. A duplicate carries the source panel's configuration; each clone is saved with the project.</p>
+<p>A fresh workspace opens a <b>focused set</b> — Import Model, Statistics and Categories — and the rest open on demand, so you start with a clean surface instead of a wall of tabs. Closing a panel loses nothing either — its content stays alive. To open or reopen any panel use <b>⋮ → Panels</b> (open panels show a checkmark), the data tree (§14), or right-click the background of any tab strip. <b>⋮ → Reset layout</b> returns to that default single-stack arrangement. The arrangement is saved with the project, and the data tree lives in its own collapsible column on the left (◀/▶ buttons).</p>
+<p class="tip">On narrow screens (phones) none of this changes: BMA keeps the classic tab navigation.</p>
+<p class="tip"><b>Opening a panel.</b> A fresh workspace shows only <b>Import Model</b>, <b>Statistics</b> and <b>Categories</b>. The other tabs (Calc, GT, Swath, StatsCat, Export) open on demand — from <b>View → Panels</b> (a ✓ marks open ones), from the data tree, or by right-clicking a tab strip. The walkthrough below says “open the GT tab” and so on; that's how. (A packed or saved project restores whatever layout you left, so the example project opens with everything already in place.)</p>
+
+<h2>2.5 Your first session: validating the example model</h2>
+<p>This is the fastest way to understand BMA — a complete model-vs-samples validation on the built-in example, end to end, in about fifteen minutes. The example was built with three defects planted on purpose: the samples carry a <b>+2% Fe assay bias</b>, an infill campaign <b>clusters</b> a quarter of the holes in the rich east (a sampling bias), and the block model is <b>smoother</b> than the point samples. You'll make all three reveal themselves.</p>
+<p><b>Setup.</b> On the landing page click <b>⤓ Download example dataset</b>, then drag the resulting <code>bma-example.zip</code> back onto BMA and confirm. Everything opens pre-configured. (If you'd rather build it by hand to learn the controls, follow the steps below loading <code>bma-example-model.csv</code> first; open each tab as you reach it, per the note above.)</p>
+<p><b>Step 1 — Read the model before trusting it.</b> On the <b>Import Model</b> panel, after <b>Analyze ▶</b>, switch the right pane to <b>Summary</b>. Confirm what a clean import looks like: 10 m blocks, a 24×24×10 grid, fill ratio 100%, and a green data-health block (no rows dropped). This is your "the file came in correctly" check (§4).</p>
+<p><b>Step 2 — Look at the grade distribution.</b> Open <b>Statistics</b>. Read Fe's mean and CV. Click the <b>Fe</b> name to plot its CDF below, then press <b>Prob</b> and set the X axis to log: a near-straight line means roughly lognormal — your baseline before any comparison (§7.3).</p>
+<figure><img src="shots/20-logprob.png" alt="Prob plot"><figcaption>Step 2: Fe on the normal-probability scale — a nearly straight log-probability line is the lognormal baseline.</figcaption></figure>
+<p><b>Step 3 — Bring in the samples.</b> The samples are already loaded in the packed project; otherwise add them with <b>Data ▸ Add point dataset</b> and <code>bma-example-samples.csv</code>, set <b>Weight = SUPPORT</b>, and <b>Analyze</b> (§12.1). Back on Statistics, <code>aux:Fe</code> now sits indented under <code>Fe</code> with a <b>Δ%</b> line — and it reads <i>well above</i> +2%. That's the headline, and it's deliberately too big: clustering is inflating it. Steps 6–7 untangle that.</p>
+<figure><img src="shots/10-statistics-aux.png" alt="Statistics comparison"><figcaption>Step 3: the samples' Fe (indented, dashed CDF) against the model's, with the Δ% line.</figcaption></figure>
+<p><b>Step 4 — Confirm it, and learn its kind.</b> Click <code>aux:Fe</code> to overlay its dashed CDF (the model's is steeper — support). Then switch the CDF panel to <b>Q–Q</b> with Fe and aux:Fe selected: the cloud runs <i>parallel to and above</i> the 45° line. A parallel offset is additive bias, and the vertical gap <i>is</i> that bias in % Fe (§12.4).</p>
+<figure><img src="shots/11-qq.png" alt="Q-Q plot"><figcaption>Step 4: Q–Q — points parallel to but above the identity line measure the bias, quantile by quantile.</figcaption></figure>
+<p><b>Step 5 — Check it's everywhere, not local.</b> Open <b>Swath</b>, keep direction X, and Generate. The dashed sample series rides above the solid model line in <i>every</i> band — a spatially consistent offset, not an edge artifact. Tick Y and Z too for the other directions (§11, §12.3).</p>
+<figure><img src="shots/13-swath-aux.png" alt="Swath comparison"><figcaption>Step 5: the samples (dashed) sit above the model (solid) band after band — consistent bias in space.</figcaption></figure>
+<p><b>Step 6 — Rule out the drilling pattern.</b> On the samples dataset's panel, open <b>Declustering</b> and <b>Run declustering</b>. The naive mean (~54.3% Fe) drops to ~52.9% declustered — part of the apparent richness was just the infill clustering in high grade. Click <b>Use as weight</b> and re-<b>Analyze</b> (§12.7).</p>
+<figure><img src="shots/18-declus.png" alt="Declustering"><figcaption>Step 6: the declustering sweep — the declustered mean by cell size, with the optimum marked.</figcaption></figure>
+<p><b>Step 7 — Draw the conclusion.</b> Re-read the Δ% under Fe now that the samples are declustered: it falls to roughly the planted <b>+2%</b>. That residual is the part declustering could <i>not</i> remove — the assay bias. Separating <b>sampling bias</b> (declustering fixes it) from <b>grade bias</b> (it doesn't) is the whole point of the exercise, and the moment BMA's purpose clicks.</p>
+<p><b>Step 8 (optional) — Carry a decision out.</b> Switch the samples panel to <b>Top-cut</b>, drag the red cap line, and use <b>Copy calcol</b> → paste in <b>Calc</b> → Analyze to apply a cap; or use <b>Export</b> to write the cleaned dataset back out (§12.8, §16). Diagnoses flow back into the data.</p>
+<p class="tip"><b>Now on your own data,</b> a model that <i>passes</i> looks like the mirror image of the example: Δ% near zero across metrics, CDFs differing only by the tails (support), swath series interleaving band to band, and declustering barely moving the sample mean. Anywhere your data departs from that is exactly where to look.</p>
+
+<h1><span class="secnum">3</span>Import — checking before analyzing</h1>
+<figure><img src="shots/02-preflight.png" alt="Import Model"><figcaption>The Import Model panel: preview of the first rows, detected types, coordinate and geometry configuration.</figcaption></figure>
+<p>As soon as the file lands, BMA reads the first ~100 lines and shows the <b>Import Model</b> panel (the model is the first dataset; later comparison datasets get their own import panels, §12). Nothing heavy has run yet — this is the moment to check:</p>
+<ul>
+  <li><b>Types</b> — each column is tagged NUM (numeric) or CAT (categorical). Click the tag to force the type, or untick <b>Skip</b> to exclude the column from the analysis.</li>
+  <li><b>XYZ</b> — coordinate columns are detected by name (X/EAST/EASTING…); fix them in the selectors if needed. Without XYZ there is no geometry, no swath and no volume-based GT.</li>
+  <li><b>Block Dimensions (DXYZ)</b> — optional: per-block dimension columns, for sub-blocked models.</li>
+  <li><b>Block geometry</b> — the grid classification: <b>grid</b> / <b>point</b> / <b>auto</b>. An imported model defaults to <b>grid</b> (a regular block model); switch to <b>point</b> for scattered data that should never be treated as a grid, or <b>auto</b> to let the detected spacing decide. After analysis a badge shows the outcome — <b>▦ grid</b> with the block sizes, or <b>∴ points</b> — and notes when an override disagrees with the detection. The choice is saved.</li>
+  <li><b>Per-column filter</b> — quick expressions like <code>&gt; 0</code> that pre-filter values of that column (e.g. ignore zero grades).</li>
+  <li><b>ZIP</b> — if the file is a zip with several CSVs, an entry selector appears at the top.</li>
+  <li><b>Row filter</b> — the <b>FILTER</b> box at the top of this panel pre-filters the model's rows before analysis (§5).</li>
+</ul>
+<p>When you are happy, click <b>Analyze ▶</b> at the top left.</p>
+
+<h1><span class="secnum">4</span>Analysis and the Summary view</h1>
+<figure><img src="shots/03-summary.png" alt="Summary"><figcaption>After the analysis the Import Model panel switches to its Summary view: file metadata and the detected grid geometry.</figcaption></figure>
+<p>The analysis runs as a stream, with a progress bar and a cancel button (cancelling restores the last complete result). The <b>Summary</b> is not a separate tab — it lives inside the Import Model panel, which gains a <b>Preview | Summary</b> toggle once an analysis exists (mirroring how every comparison dataset shows its own summary, §12). When the run finishes the panel switches to the Summary view, which shows:</p>
+<ul>
+  <li>row count, column count, processing time and an estimate of result memory;</li>
+  <li><b>grid geometry</b>: block size in X/Y/Z, origin, extent, coordinate ordering, sub-block detection, and the <i>fill ratio</i> (fraction of the envelope actually filled) — shown whenever the dataset is classified as a grid. A comparison dataset with coordinates gets the same table in its own Summary view (§12);</li>
+  <li>a <b>data-health</b> block: any rows or values dropped for being unparseable, out of range or filtered — BMA never loses data silently, it counts it.</li>
+</ul>
+<p>Results are cached locally: reopening the same file with the same configuration restores everything instantly. Any configuration change (filter, calcol, weight, grid mode…) marks the analysis as stale — the <b>Analyze</b> button highlights, asking for a new run.</p>
+
+<h1><span class="secnum">5</span>The row filter</h1>
+<p>The <b>FILTER</b> box lives at the top of the model's <b>Import</b> panel (§3). It takes a JavaScript expression over the row object <code>r</code>; only rows where the expression is true enter <i>all</i> the model's statistics and charts. Examples:</p>
+<pre>r.Fe &gt; 55
+r.LITO === 'HEM' &amp;&amp; r.Fe &gt; 60
+between(r.Z, 820, 860)
+r.RATIO &gt; 4        // filters can use calculated columns!</pre>
+<p>Click <b>Apply</b> (then <b>Analyze</b>) to apply; <b>Clear</b> removes it. Appendix A lists every helper function available (<code>clamp</code>, <code>ifnull</code>, <code>between</code>…). Column names autocomplete as you type.</p>
+<div class="tip" style="border-left-color:var(--ink)"><b style="color:var(--ink)">Expression basics</b> (the same syntax powers filters, local filters and calcols — you only need a handful of pieces):
+<ul style="margin-top:0.3em">
+  <li><code>r.Fe</code> reads the column <b>Fe</b> of the current row <code>r</code>. A column whose name has spaces or symbols: <code>r["Cu (ppm)"]</code>.</li>
+  <li><b>Compare</b> with <code>&gt;</code> <code>&lt;</code> <code>&gt;=</code> <code>&lt;=</code>; <b>equal</b> is <code>===</code> and <b>not-equal</b> is <code>!==</code> (two/three characters — a single <code>=</code> <i>assigns</i>, it does not test).</li>
+  <li><b>Combine</b> conditions with <code>&amp;&amp;</code> (and), <code>||</code> (or), <code>!</code> (not): <code>r.Fe &gt; 55 &amp;&amp; r.LITO === 'HEM'</code>.</li>
+  <li><b>Text</b> goes in quotes: <code>'HEM'</code> or <code>"HEM"</code>. Numbers don't.</li>
+  <li><b>If/else</b> in one line uses <code>? :</code> — <code>condition ? valueIfTrue : valueIfFalse</code> (used in calcols, §6).</li>
+</ul>
+That's enough for almost everything; Appendix A adds ready-made helpers (<code>between</code>, <code>cap</code>, <code>clamp</code>…) so you rarely need more.</div>
+<p class="tip">On the Categories tab, unticking values in the table builds this filter automatically for you (§8). Each comparison dataset has its own filter, set on its import panel or from the tree's <i>Filter…</i> action (§12, §14).</p>
+
+<h1><span class="secnum">6</span>Calc — calculated columns</h1>
+<figure><img src="shots/04-calc.png" alt="Calc"><figcaption>Calculated-columns editor: code to the left of the preview, detected columns on the right.</figcaption></figure>
+<p>The <b>Calc</b> tab creates new variables from the existing ones. You write a small code block that <b>adds columns to each row</b> — assign to a new name on the row object <code>r</code> and that name becomes a column:</p>
+<pre>r.RATIO = r.Fe / r.SiO2;
+r.ORE = r.Fe &gt; 55 ? 'ore' : 'waste';</pre>
+<ul>
+  <li><b>Simulate</b> runs the code on the sample rows and shows the new columns detected, with inferred type (NUM/CAT) and a preview table. Errors show immediately.</li>
+  <li>The variable browser (left) inserts <code>r.column</code> with one click; expanding a variable shows min/max/mean or the categorical values.</li>
+  <li>Full JavaScript is allowed: conditionals, loops, strings (<code>r.LITO.startsWith('BIF')</code>).</li>
+  <li>BMA infers each new column's type from its values. To <i>force</i> it (advanced), add the name to the type list: <code>r.META.num.push('name')</code> marks it numeric, <code>r.META.cat.push('name')</code> categorical.</li>
+  <li>After simulating, click <b>Analyze</b> — calcols are computed during the analysis and appear in every tab (tagged <b>CALC</b>), including as candidates for weight, GT grade, swath variable, and so on.</li>
+</ul>
+<p class="warn">Later calcols can use earlier ones (<code>r.B = r.A * 2</code>), but code order is evaluation order. Avoid naming columns after functions (<code>abs</code>, <code>min</code>…), which would be shadowed.</p>
+<p>When more than one dataset is loaded, a <b>dataset picker</b> at the top of the editor switches which dataset the calcols apply to — the model or any comparison dataset (each keeps its own code block); see §12.6.</p>
+
+<h1><span class="secnum">7</span>Statistics — metrics, weights and CDF</h1>
+<figure><img src="shots/05-statistics.png" alt="Statistics"><figcaption>Statistics: configurable metrics table with the CDF panel below.</figcaption></figure>
+<p class="tip">With <b>two or more datasets analyzed</b>, a <b>Dataset</b> picker appears at the top of the sidebar: it chooses which dataset is the panel's <b>primary</b> (its columns are the table rows), and every other dataset — the model included — becomes a Δ% comparison below. By default the primary is the model, so a single-model project looks exactly as described here; the picker just means any dataset can be the anchor (§12.2).</p>
+<h2>7.1 The table</h2>
+<p>One row per numeric variable; columns configurable in the sidebar: count, nulls, zeros, min/max, mean, standard deviation, CV%, skewness, kurtosis, and whatever percentiles you want (quartile/decile presets or your own list, e.g. <code>5,10,25,50,75,90,95</code>). <b>Copy table</b> copies everything as a table to paste into Excel.</p>
+<p class="tip">Statistics is cloneable (§2.4): open a second one with <b>＋ → New Statistics</b> (or tab → Duplicate) to keep two independent variable selections — for example one panel for grades, another for contaminants.</p>
+<h2>7.2 Weights</h2>
+<p>The <b>Weight</b> selector weights <i>all</i> numeric statistics by a column (or calcol) — for example, ore proportion or density (mass-weighted means). The weight is a <i>role</i> of the variable: the same one drives the Swath tab, and shows as a <b>W</b> badge in the data tree (§14). Details that matter:</p>
+<ul>
+  <li>changing the weight requires a new <b>Analyze</b>;</li>
+  <li>rows with a missing, zero or negative weight are <b>excluded</b> (the counter appears under the selector);</li>
+  <li>with a weight active, std/skewness/kurtosis use the population form (small-sample corrections do not apply to arbitrary-scale weights);</li>
+  <li>enable the <b>ΣW</b> metric to see the total weight next to the count;</li>
+  <li>percentiles and the CDF are weighted too — weight 2 is exactly equivalent to repeating the row twice.</li>
+</ul>
+<h2>7.3 CDF, Prob and Q–Q</h2>
+<p>Click the <i>name</i> of any variable in the table to add its cumulative distribution (CDF) curve to the lower panel; click again to remove it. Linear or log scale, a tooltip with per-curve readings, and <b>SVG/PNG</b> buttons to export the chart. The <b>Q–Q</b> mode is described in §12.4 — it compares two distributions quantile by quantile.</p>
+<figure><img src="shots/20-logprob.png" alt="Prob mode"><figcaption>Prob mode: the Y axis becomes a normal-probability scale. With X in log, a lognormal distribution plots as a straight line — and the tails, squeezed in a plain CDF, get room.</figcaption></figure>
+<p>The <b>Prob</b> button switches the Y axis to the <b>normal-probability scale</b> (probit), ruled from 0.2% to 99.8% — the classic log-probability paper of geostatistics. How to read it:</p>
+<ul>
+  <li>with <b>X in log</b>, a <b>lognormal distribution plots as a straight line</b>: curvature is departure from lognormality, slope breaks suggest mixed populations;</li>
+  <li>the <b>tails</b> — exactly where capping and high-grade decisions are made — are expanded instead of being glued to 0% and 100%;</li>
+  <li>it works with as many curves as you like, including comparison datasets (dashed), to compare model × samples tails.</li>
+</ul>
+<p class="tip"><b>Reading it on your own data:</b> a model CDF that sits <i>just inside</i> the samples' (slightly less spread, same centre) is the normal signature of block support. Curves that <b>cross</b>, or differ in the <i>body</i> rather than only the tails, point to a real distribution difference — a domaining, units, or estimation issue worth chasing, not just support.</p>
+
+<h1><span class="secnum">8</span>Categories — categorical variables</h1>
+<p>The <b>Categories</b> tab explores categorical columns (lithology, domain, classification…). Select a column in the sidebar to see:</p>
+<ul>
+  <li>a <b>bar chart</b> with counts, percentages and a Pareto line (with the 80% mark);</li>
+  <li><b>Shannon entropy</b> (H) as a measure of mixing;</li>
+  <li>a <b>value table</b> with search, count and percentage.</li>
+</ul>
+<p>Features worth knowing:</p>
+<ul>
+  <li><b>Colors</b> — click a value's color swatch to customize it; the chosen color applies in <i>every</i> tab (StatsCat, GT…).</li>
+  <li><b>Custom order</b> — drag the table rows (the handles are always visible); the order is respected in the other tabs.</li>
+  <li><b>Checkbox filter</b> — unticking values builds the expression and offers to apply it to the model's row filter (an inline <i>Apply</i> bar appears; e.g. hide waste from all statistics).</li>
+</ul>
+<p>With a comparison dataset analyzed, this tab gains the model × samples proportion comparison — see §12.5 (the screenshot is there). Categories is cloneable too (§2.4).</p>
+<p class="tip">As on Statistics, with 2+ datasets analyzed a <b>Dataset</b> picker chooses the panel's <b>primary</b> categorical dataset (the bars); the others overlay as proportion diamonds. The model is the default primary.</p>
+
+<h1><span class="secnum">9</span>StatsCat — statistics by group</h1>
+<figure><img src="shots/06-statscat.png" alt="StatsCat"><figcaption>StatsCat: Fe, SiO2 etc. statistics broken down by lithology.</figcaption></figure>
+<p><b>StatsCat</b> breaks the numeric statistics down by a categorical variable (<b>Group By</b>) — mean Fe by lithology, for example. Choose the group and the variables in the sidebar (it may require a new Analyze to include variables not yet grouped) and tick which groups to display.</p>
+<ul>
+  <li><b>Per-group table</b> — count, mean, std and percentiles for each variable × group combination;</li>
+  <li><b>Per-group CDF</b> — curves colored by category (using the Categories tab colors), linear/log scale and a manual range;</li>
+  <li><b>Cross-tab</b> — a count matrix (or row/column %) between two categoricals.</li>
+</ul>
+<p>If a weight is active on the Statistics tab, the grouped statistics are weighted too (same analysis).</p>
+<p class="tip">With 2+ datasets analyzed, a <b>Dataset</b> picker selects which dataset StatsCat breaks down (the model by default) — so you can group a comparison dataset's grades by its own categories.</p>
+
+<h1><span class="secnum">10</span>GT — grade–tonnage curves</h1>
+<figure><img src="shots/07-gt.png" alt="GT"><figcaption>GT: tonnage (amber, left axis), mean grade (blue, right) and metal (dashed green) by cutoff grade, with per-lithology curves. <b>Read it:</b> pick a cutoff on the X axis and read tonnage (left) against mean grade above it (right) — the more-rock-vs-richer trade-off; metal content peaks where their product does.</figcaption></figure>
+<p>The <b>GT</b> tab sweeps cutoff grades and produces the classic curves of tonnage, mean grade above cutoff, and metal content. Configuration:</p>
+<ul>
+  <li><b>Grade variables</b> — one curve per ticked variable, each with its unit (%, g/t, ppm…), which drives the metal factor;</li>
+  <li><b>Density</b> — a column, a <b>constant value</b> (e.g. 2.8 t/m³) or none. <b>Without a density, the “tonnage” is actually volume (m³)</b> — the interface warns you;</li>
+  <li><b>Weight</b> — an optional per-row multiplier column. When the dataset is not a grid (no block volume), this doubles as the <b>tonnage/volume column</b>: pick it to weight tonnage by an explicit per-row value;</li>
+  <li><b>Block volume</b> — feature-detected: per-row DXYZ if present, else the <b>grid geometry</b> — but only when the dataset is classified as a <i>grid</i> (§3). A <i>point</i>-classified model, or one with no DXYZ/override, falls back to <b>count-based</b> tonnage (1 per row); the sidebar says so and how to get volume weighting (set to grid, assign DXYZ, set an Override, or pick a Weight column). The geometry volume can always be overridden;</li>
+  <li><b>Cutoffs</b> — a range (min/max/step) or your own list;</li>
+  <li><b>Group by</b> — separate curves per category (lithology in the figure), with a picker for which groups to show and a total line;</li>
+  <li><b>Tonnage unit</b> — t, kt, Mt or a custom divisor.</li>
+</ul>
+<p>Hover to read exact values on the crosshair. Each chart has <b>Copy SVG</b> and <b>Download PNG</b> (a light, high-resolution version with the variable name in the title), and a collapsible table with a <b>Copy</b> button.</p>
+<h2>10.1 Theoretical curve from the samples</h2>
+<figure><img src="shots/21-gt-theo.png" alt="Theoretical GT"><figcaption>Dashed: the theoretical curve derived from the samples with support correction (adjustable f). Solid: the model's curve. The distance between the two is the conversation between estimation smoothing and change of support.</figcaption></figure>
+<p>The <b>Theoretical (samples)</b> section of the sidebar overlays the <i>theoretical</i> grade–tonnage curve derived from a sample distribution, with an <b>affine support correction</b>: the variance of the point distribution is shrunk by the factor <b>f</b> (slider), simulating block support. It is available whenever GT targets a <b>gridded</b> dataset — the model by default, or any gridded comparison <i>estimate</i> selected with the GT <b>Dataset</b> picker — with a <b>from</b> selector choosing which loaded dataset supplies the samples (you validate one estimate against the samples it was built from, never against itself). Reference points:</p>
+<ul>
+  <li><b>f = 1</b> reproduces the samples' empirical GT exactly (no correction);</li>
+  <li><b>f &lt; 1</b> shrinks the variance around the mean — less tonnage above high cutoffs, lower mean grades above cutoff: the expected effect of going from point samples to blocks;</li>
+  <li>the curve uses the comparison dataset's <b>active weight</b> (e.g. declustering, §12.7) — compare representative distributions, not ones biased by the drilling pattern;</li>
+  <li>the overlay appears on charts <i>without</i> group-by, scaled to the target estimate's total tonnage.</li>
+</ul>
+<p>If the estimate's curve lands reasonably on the theoretical one for a plausible f (typically 0.4–0.8 depending on the support ratio), the estimation smoothing is consistent with the expected change of support. An estimate much “smoother” than the theoretical curve at any f is a sign of over-smoothing — high grades diluted too much.</p>
+
+<h1><span class="secnum">11</span>Swath — directional profiles</h1>
+<p><b>Swath</b> slices the model into bands along a direction and shows how each variable behaves in space — the standard tool for seeing trends and validating estimates.</p>
+<ul>
+  <li><b>Directions</b> — tick <b>X</b> (W→E), <b>Y</b> (S→N) and/or <b>Z</b> (bottom→top): all ticked directions are computed in <i>a single pass</i> and become tabs in the output. Each direction has its own <b>bin width</b> (default = the block size on that axis; increase it to smooth);</li>
+  <li><b>Custom</b> — a rotated direction defined by <i>dip direction</i> (0° = north, clockwise), <i>dip</i> and <i>rake</i>, generating the U/V/W frame (U = the rake direction in the plane, W = the pole). For the classic “azimuth + plunge” case, use dip direction = azimuth, dip = plunge, rake = 90°;</li>
+  <li><b>Statistic</b> — mean ± std, P25/50/75 or P10/50/90 (shaded bands);</li>
+  <li><b>Weight</b> — weights the primary dataset's band statistics (labelled <b>Weight (model)</b> when the primary is the model, where it is the same weight as the Statistics tab — changing it in one place changes it in the other);</li>
+  <li><b>Display</b> — toggles for bands, count bars and the table; linear/log Y scale; <b>Overlay</b> layout (everything in one chart, one Y axis per variable) or <b>Split</b> (one panel per variable);</li>
+  <li><b>Colors</b> — click the swatch next to the variable.</li>
+  <li><b>Dataset</b> — with 2+ datasets analyzed, picks the panel's primary dataset (the solid series); every other dataset overlays dashed. The model is the default primary.</li>
+</ul>
+<p>A crosshair with per-variable readings, <b>Copy SVG / Download PNG</b>, and a per-band table with copy. Swath is cloneable (§2.4) — and each clone runs <i>its own</i> directions and comparison fan-out, so you can show two independent swaths at once. The screenshot for this tab is in §12.3, already with the samples overlaid — the most valuable use of the swath.</p>
+
+<h1><span class="secnum">12</span>Comparison datasets — validation</h1>
+<p>BMA compares the block model against one or <i>more</i> other datasets — typically the drillhole composites that fed the estimate, but also an infill campaign, a re-estimate, or a second model. It is the tool's answer to the central question of validation: <i>does the model honor the data?</i></p>
+<p>Each comparison dataset is a peer with its own import panel. Add one with <b>Data ▸ Add point dataset…</b> or <b>Add drillhole set…</b> (each opens a fresh import tab), or drag a file onto a new dataset tab. The first comparison is historically labelled <b>aux</b>; further ones are <code>d2</code>, <code>d3</code>… Each carries its own coordinates, filter, calculated columns, weight and — when it has XYZ — its own geometry.</p>
+<p>A comparison dataset is a <b>separate set of rows</b>, not extra columns on the model: there is no per-block join. The comparison is statistical (means, distributions, proportions) and spatial (swath). But a comparison dataset is otherwise <b>first-class</b> — if it carries coordinates it gets grid geometry, a grid/point override, a bounding box, and OBJ + CSV export from its Summary view (§16), exactly like the model.</p>
+<h2>12.1 Loading and configuring</h2>
+<figure><img src="shots/09-aux-config.png" alt="Comparison dataset config"><figcaption>A comparison dataset's import panel: display prefix, coordinates, block geometry, filter, weight and the Analyze button.</figcaption></figure>
+<ul>
+  <li><b>Loading</b> — drag the file onto the dataset's import panel, or: if the main data came from a zip with several CSVs, use “<i>use an entry from…</i>” to point at another entry; if you drop a zip here, an entry selector appears in the sidebar.</li>
+  <li><b>Display prefix</b> — just the label of the dataset's variables in the interface (<code>aux:Fe</code>, <code>samples:Fe</code>…). <b>Cosmetic</b>: in code and filters the reference is always the dataset's handle (<code>aux.</code>, <code>d2.</code>…).</li>
+  <li><b>Coordinates</b> — the dataset's X/Y/Z (detected by name: EAST/NORTH/ELEV…). Model and comparison must be in the <b>same coordinate system</b> for the swath to make sense.</li>
+  <li><b>Block geometry</b> — the same grid/point/auto override as the model (§3); a scattered sample set defaults to <b>auto</b> and is detected as points.</li>
+  <li><b>Filter</b> — pre-filters the dataset's rows, with the dataset's handle: e.g. <code>aux.SUPPORT &gt; 1</code>.</li>
+  <li><b>Weight</b> — a weight for <i>all</i> of that dataset's statistics: composite length (in the figure, <code>SUPPORT</code>), any column or calcol, or <b>(declustered weights)</b> — the declustering weights BMA computes itself (§12.7). Missing/≤0 weights exclude the row.</li>
+  <li><b>Analyze</b> — runs the dataset's full statistical pass. Required for the Statistics/CDF/Q–Q/Categories comparisons (the swath runs its own pass and does not depend on it). Changed a filter/weight/calcol? The status says “re-run Analyze”.</li>
+</ul>
+<h2>12.2 Statistics and CDF compared</h2>
+<figure><img src="shots/10-statistics-aux.png" alt="Statistics with a comparison dataset"><figcaption>Each same-named comparison variable becomes an indented row under the model's, with a Δ% line; the samples' CDF comes in dashed.</figcaption></figure>
+<p>After a comparison dataset's Analyze, its variables appear at the end of the sidebar (pre-ticked when they have a model counterpart). In the table, <code>aux:Fe</code> sits right below <code>Fe</code> — mean against mean, CV against CV — with a <b>Δ%</b> line showing the difference against the reference dataset. In the example, the samples' Fe mean runs ~2% above the model's: the planted bias, visible immediately. Click the <code>aux:Fe</code> name to overlay its dashed CDF: the model's curve is steeper — block support smooths out the tails that point samples still have.</p>
+<p class="tip"><b>Reading it on your own data:</b> Δ% within a percent or two across all metrics means the model honors the samples in aggregate. A <i>consistent sign</i> on the means of several grades (all model-low or all model-high) suggests a genuine bias; a large CV or skewness gap with similar means is usually support (block averaging) — confirm with Q–Q (§12.4) and a declustered comparison (§12.7) before concluding.</p>
+<p>Two controls make the comparison flexible. A <b>Dataset</b> picker (top of the sidebar, shown with 2+ datasets analyzed) sets the panel's <b>primary</b> — the dataset whose columns are the rows; every other dataset, the model included, becomes a comparison. The default primary is the model, so nothing changes for a plain model-vs-samples check; the picker just lets you flip the anchor — make the samples the primary and read the model as the comparison, say. Then, with <b>three or more datasets</b> loaded, a row of <b>dataset chips</b> appears: toggle which comparisons show, and pick the <b>Δ% reference</b> (the denominator) per panel — so one Statistics clone can compare against the samples while another compares against a re-estimate.</p>
+<h2>12.3 Swath compared</h2>
+<figure><img src="shots/13-swath-aux.png" alt="Swath with a comparison dataset"><figcaption>The samples' dashed series rides above the model's solid one in every band: spatially consistent bias. Hollow count bars = sample support per band.</figcaption></figure>
+<p>On the Swath tab, each comparison dataset's variables join the end of the list (split off by a separator with the dataset name). The comparison series is <b>dashed, in the same color and on the same Y axis</b> as the model's counterpart variable — deliberately: independent axes would “autoscale” the difference out of the chart, hiding exactly the bias the chart exists to show. The tooltip shows <code>n=</code> per band. Every loaded dataset fans out in the same pass; the dataset chips choose which to draw.</p>
+<p class="tip"><b>Reading it on your own data:</b> a healthy overlay has the dashed and solid series <i>interleaving</i> band to band. A persistent one-sided gap across most bands is a spatial (conditional) bias; divergence only at the extreme bands — where sample counts are tiny (watch the count bars) — is usually just thin support there, not a model fault.</p>
+<h2>12.4 Q–Q: the bias, measured</h2>
+<figure><img src="shots/11-qq.png" alt="Q-Q"><figcaption>Q–Q of aux:Fe against Fe: the cloud runs parallel to and above the identity line — additive bias, quantile by quantile.</figcaption></figure>
+<p>In the CDF panel, the <b>Q–Q</b> button switches to the quantile–quantile plot: the <i>first</i> selected curve becomes the reference axis (X) and the others plot their quantiles against it, from P1 to P99 (bigger dots at the deciles; hover to read values). How to read it:</p>
+<ul>
+  <li><b>points on the dashed 45° line</b> → equivalent distributions;</li>
+  <li><b>a parallel offset</b> → bias (the vertical distance IS the bias, in the variable's units);</li>
+  <li><b>rotation/flattening</b> → a dispersion difference — typically block support shrinking the variance.</li>
+</ul>
+<p>It works between any two curves (two model domains, two datasets), not just model × samples. Log–log scale available; exports with the same SVG/PNG buttons.</p>
+<p class="tip"><b>Reading it on your own data:</b> points <i>on</i> the 45° line = the two distributions match. A <i>parallel</i> offset = additive bias (read its size off the axis). A <i>rotation</i> off the 45° line = a variance (spread) difference: the cloud tilts toward whichever dataset is more spread — point samples are wider than block-support estimates, so a mild tilt is the normal support signature, while a strong rotation is over-smoothing. A kink or S-shape = the agreement changes with grade, often a high-grade capping or top-cut question.</p>
+<h2>12.5 Categories compared</h2>
+<figure><img src="shots/12-categories-aux.png" alt="Categories with a comparison dataset"><figcaption>Hollow diamonds = the proportion logged in the samples, on the same axis as the model's bars. HEM: 5% modeled vs 15% sampled; “CAN” exists only in the samples.</figcaption></figure>
+<p>When a comparison dataset has a same-named categorical column (LITO × LITO), the Categories tab overlays a <b>hollow diamond</b> per value, marking each dataset's proportion on the same scale as the bars. The table gains <b>n / %</b> columns per dataset, and values that exist only in a comparison appear at the end with the <i>comparison-only</i> tag — a logged lithology the model never used is exactly the kind of disagreement worth seeing.</p>
+<h2>12.6 Calcols on a comparison dataset</h2>
+<figure><img src="shots/14-calc-aux.png" alt="Calc in Aux mode"><figcaption>The same editor, pointed at the samples: code references <code>aux.</code>, the preview uses the comparison rows.</figcaption></figure>
+<p>The <b>dataset picker</b> in the Calc editor points it at any comparison dataset: columns autocomplete as <code>aux.column</code> (or <code>d2.column</code>…), the preview uses that dataset's rows, and the columns you create apply to everything for it — including as a <b>weight</b> and in the comparisons. If a comparison calcol has the <i>same name</i> as a model one (e.g. <code>RATIO</code> in both), they pair automatically in every comparison (and the pairing can be edited by hand — §14). After editing, run the dataset's Analyze again.</p>
+
+<h2>12.7 Declustering</h2>
+<figure><img src="shots/18-declus.png" alt="Declustering"><figcaption>The sweep curve: declustered mean by cell size. The minimum marks the optimal size; click the curve to pin a different one.</figcaption></figure>
+<p>Drilling clusters where grade is high — and the samples' “naive” mean inherits that optimism. The <b>Declustering</b> section of a dataset's sidebar implements GSLIB's cell declustering (<code>DECLUS</code>): space is divided into cells, each sample gets a weight inverse to its cell's occupancy, and a sweep of cell sizes searches for the one that minimizes (or maximizes) the declustered mean.</p>
+<ul>
+  <li><b>Cell sizes</b> — the sweep range (automatic: from 1/100 to 1/2 of the largest extent) and the number of steps; <b>anis Y/Z</b> stretches the cells for anisotropic drill patterns;</li>
+  <li><b>Find</b> — minimize (the typical case: infill in high grade) or maximize the declustered mean;</li>
+  <li><b>Run declustering</b> — runs the sweep and reports: naive mean → declustered mean, optimal cell size, the weight range, and the <b>interactive curve</b> (crosshair to read; <b>click to pin</b> a specific cell size — the pin survives project re-runs);</li>
+  <li><b>Use as weight</b> — applies the weights as the dataset's weight; the Weight selector switches to <b>(declustered weights)</b>. Run the dataset's Analyze again: every comparison now uses the declustered distribution.</li>
+</ul>
+<p>In the example dataset, the drill pattern has infill planted in the rich zone on purpose: the samples' naive mean (~54.3% Fe) drops to ~52.9% declustered — and the remaining difference against the model is the planted assay bias. Separating <i>sampling bias</i> (declustering fixes it) from <i>grade bias</i> (declustering does not) is exactly what this tool is for.</p>
+<p class="warn">The weights are never saved in the project — only the parameters. After reopening, click <b>Run declustering</b> again (the status reminds you). Changing the dataset's filter, calcols or coordinates invalidates the weights automatically.</p>
+
+<h2>12.8 Top-cut — capping analysis</h2>
+<figure><img src="shots/19-topcut.png" alt="Top-cut"><figcaption>Four charts linked by the red cut line: histogram, log-probability, mean × cut and metal removed. Drag the line in any of them.</figcaption></figure>
+<p>The <b>Top-cut</b> button (top of a comparison dataset's main area) swaps the preview for the capping analysis of the chosen variable — the four classic views for deciding a top cut, all over the dataset's <i>exact</i> distribution:</p>
+<ul>
+  <li>the <b>histogram</b> and the <b>log-probability plot</b> — where the tail peels away from lognormal is the natural cut candidate;</li>
+  <li><b>capped mean × cut</b> — how much the mean gives up as the cut comes down;</li>
+  <li><b>metal removed × cut</b> — % of total metal cut away.</li>
+</ul>
+<p>The <b>red line</b> is the cut: drag it in any chart (or type the value) and the status strip recomputes instantly — capped n, % of samples, mean and CV before/after, metal removed. <b>Raw | Declustered</b> switches to the distribution weighted by the declustering weights (§12.7), and <b>Linear | Log</b> controls the X axis.</p>
+<p>Once the cut is decided, <b>Copy calcol</b> copies the ready-made line — e.g. <code>aux.Fe_cap = cap(aux.Fe, 63.91);</code> — to paste into the Calc editor. The capped variable enters the comparisons like any other.</p>
+
+
+<h1><span class="secnum">13</span>Drillholes — from raw tables to composites</h1>
+<figure><img src="shots/25-dh-mapping.png" alt="Drillhole set"><figcaption>The Drillhole set card: three files in their roles, column mapping detected, and the highlighted dip-convention row — this survey uses negative = down.</figcaption></figure>
+<p>Real campaigns don't arrive composited: they arrive as <b>collar</b>, <b>survey</b> and <b>interval</b> tables. Every dataset's import panel has a <b>Drillhole set</b> card that takes the three files (or a zip containing them): each lands in its role — detected from the headers — and the column mapping appears filled in, always editable. Because each dataset has its own card, a project can hold <b>several drillhole sets</b> — e.g. exploration composites in one dataset, grade-control in another. Each table also has a small <b>↓ CSV</b> link on its title, and <b>Download tables (zip)</b> bundles the raw set exactly as imported — handy for moving the cleaned tables into another tool.</p>
+
+<h2>13.1 The compositing surface</h2>
+<p>The card is a small compositing workbench. Above the geometry settings:</p>
+<ul>
+  <li><b>Dip convention</b> — the amber-highlighted row: BMA detects from the survey whether the file uses positive- or negative-down dips, and the toggle is right there to override. <i>Always check it against how your surveys were exported.</i></li>
+  <li><b>Desurvey method</b> — minimum curvature (default), balanced tangential, or tangential (straight segments — useful for matching historic desurveys);</li>
+  <li><b>Composite length</b> — defaults to the file's most common interval length; <b>Min coverage</b> filters poorly-sampled composites (off by default — nothing is dropped silently, the short tail is counted).</li>
+</ul>
+<p>And the three controls that shape how intervals become composites:</p>
+<ul>
+  <li><b>Break on (splits)</b> — tick any categorical columns; a composite <b>restarts at every contact</b> of those columns, so no composite ever straddles a lithology or zone boundary. Tick more than one and it breaks where <i>any</i> of them changes — no need to hand-build a combined-domain key. Each split column rides into the composite unchanged (it is constant within the composite by construction).</li>
+  <li><b>Density (mass-weight)</b> — name a density column and grade means become <b>length × density</b> (mass) weighted — the geologically correct average once density exists. The density column itself stays length-weighted, <code>SUPPORT</code> stays the covered length, and intervals with no usable density are excluded from the mass-weighting and counted.</li>
+  <li><b>Combine rules</b> — per output column, how it aggregates over a composite: numeric <i>mean</i> (default, length/mass-weighted), <i>sum</i>, <i>min</i> or <i>max</i>; categorical <i>majority</i> (by covered length) or <i>first</i> (shallowest). Sensible defaults by type, overridable per column.</li>
+</ul>
+<p>Each interval table also carries its own <b>calcols &amp; filter</b> (the <i>Interval calcols &amp; filter</i> box), exactly like a dataset (§12.6): a derived column or a row filter authored here applies to that table on export and on compositing — the natural home a single flat composite never had.</p>
+
+<h2>13.2 Merging a second interval table</h2>
+<figure><img src="shots/27-dh-merge.png" alt="Merge a second interval table"><figcaption>Assays plus a second interval table (here a coarse domain log): the merge panel maps the second table; the composite carries columns from both. The note states what it adds and that gaps are counted.</figcaption></figure>
+<p>Assays and lithology usually live in <b>separate</b> downhole tables whose breaks don't line up. Drop a second interval file and it is staged as a <b>merge table</b>: BMA joins it to the first on <code>BHID</code> + <code>FROM/TO</code> by <b>union re-segment</b> — every output segment falls inside at most one interval of each table, so columns are carried with no aggregation guesswork. The composite then carries <i>both</i> tables' columns (grade <i>and</i> domain). A segment with no counterpart on one side is null-filled and <b>counted</b> — never silently dropped — and the merge table has its own pre-merge calcols/filter (derive a simplified domain, or drop QA-flagged rows, before the join).</p>
+
+<h2>13.3 Compositing &amp; the result</h2>
+<figure><img src="shots/26-dh-loaded.png" alt="Composites loaded"><figcaption>After Composite &amp; load: desurveyed composites as the dataset, SUPPORT already the weight, and the provenance strip with Report and Edit &amp; re-composite.</figcaption></figure>
+<p><b>Composite &amp; load</b> desurveys (arc-correct interpolation), runs the (mass-)weighted compositing, and loads the result as that dataset: XYZ at each composite's midpoint, a <code>SUPPORT</code> column (covered length) already applied as the weight, and every other column riding along. Everything in §12.1–12.8 works the same from there.</p>
+<figure><img src="shots/28-dh-histogram.png" alt="Consistency report and length histogram"><figcaption>The consistency report with the before/after support histogram: raw interval lengths against composite SUPPORT, on a shared axis (here both ~2 m — the example samples are already regular).</figcaption></figure>
+<p>The <b>consistency report</b> lists everything that didn't join: orphan BHIDs, FROM ≥ TO, overlapping intervals, holes without surveys (desurveyed vertical, counted), merge gaps… nothing vanishes silently. Below it, a <b>length-distribution histogram</b> shows the support <i>before</i> (the raw interval lengths) against <i>after</i> (the composite <code>SUPPORT</code>), on a shared axis — you see at a glance how compositing regularized the support and where the short, low-coverage tail sits (the population <i>Min coverage</i> targets). The provenance strip keeps <i>Report</i> and <i>Edit &amp; re-composite</i> at hand.</p>
+<p class="tip"><b>Pack</b> (§15) of a project with drillhole sets carries the raw collar/survey/interval files (and any merge table) + the recipe for each — the composites re-derive on load, never stored (the declustering-weights philosophy). The example dataset ships one set: <code>bma-example-collar/survey/assays.csv</code>, with negative dips on purpose.</p>
+
+<h1><span class="secnum">14</span>The data tree and context menus</h1>
+<figure><img src="shots/22-tree.png" alt="Data tree"><figcaption>The tree on the left: datasets, variable groups, colors, units, roles and pairings. Clicking a variable opens the editor — here, aux:Fe's pairing.</figcaption></figure>
+<p>The panel to the left of the tabs is the <b>data tree</b> — the property catalog of everything loaded. A <b>search box</b> at its top filters the tree by variable name as you type. For each dataset (the model and every comparison), variables appear grouped under <b>Coordinates</b> (with the assigned X/Y/Z axes), <b>Grades</b>, <b>Categories</b> and <b>Calculated</b>, each with:</p>
+<ul>
+  <li>a <b>color chip</b> — the series color in the charts (Swath, CDF…). A paired comparison variable inherits its model counterpart's color, on purpose;</li>
+  <li>a <b>unit</b> — %, g/t, ppm… <b>One unit per property</b>, valid in every tab (changing it here changes Swath, GT and Summary at once);</li>
+  <li><b>roles</b> — function badges: <b>W</b> (the statistics weight), GT density and GT tonnage factor;</li>
+  <li><b>pairing</b> (comparison variables) — <code>⇄ Fe</code> shows which model variable it is compared against; a red <code>⇄ —</code> marks an <b>orphan</b>, which enters no comparison at all.</li>
+</ul>
+<p><b>Click any variable</b> to open the editor: color (palette or hex, with “auto” to return to the default), unit, roles and — on comparisons — the <b>Grouped with (model)</b> selector. Automatic pairing is by equal name (case-insensitive); here you fix the cases where names differ: <code>FE_PCT</code> from the samples paired with the model's <code>Fe</code>, no renaming required. A property is the named quantity shared across datasets; colour and unit live on it, so every member follows. Everything you set is saved in the project.</p>
+<p>Right-clicking a dataset header offers <i>Filter…</i> (a per-dataset filter, with an instant filtered-size preview) and opens its import panel. The tree column collapses and restores with the ◀/▶ buttons at its top (on narrow screens, with the button at the left end of the tab bar).</p>
+<figure><img src="shots/23-ctxmenu.png" alt="Context menu"><figcaption>Right-click on aux:Fe in the statistics table: the same actions as the tree, wherever you are.</figcaption></figure>
+<p><b>Right-click</b> a variable — anywhere: the tree, the Statistics table or sidebar, the Swath and GT lists, the Categories columns — and the <b>context menu</b> opens with the same actions: <i>Properties…</i> (the editor above, at the cursor), set/clear roles, add/remove a CDF curve, unpair or change the grouping. Wherever a table has a copy button, the menu offers <i>Copy table</i>; on the CDF panel, SVG/PNG export; on Categories values, <i>Set color…</i>. <span class="kbd">Ctrl</span>+right-click always opens the browser's native menu.</p>
+
+<h1><span class="secnum">15</span>Projects: save, pack, share</h1>
+<h2>15.1 Automatic saving</h2>
+<p>The entire configuration — preflight, filters, calcols (for every dataset), each panel's selections and clones, weights, colors, the workspace layout — is saved automatically <i>per file</i> in the browser itself. Close, reopen, drop the same file: everything comes back as it was, including the analysis (which is cached). A <b>model-less project</b> (§2.2) is saved the same way, under its own identity, and reopens from the <b>Projects</b> list on the landing page rather than by dropping a model file; its datasets then await re-supply (re-drop each, or use Pack to carry them).</p>
+<h2>15.2 Save — the project file</h2>
+<p>The <b>Save</b> action (File menu, or the toolbar) downloads a <code>name.bma.json</code> with the full configuration (without the data). To use it: drop the <code>.bma.json</code> on the landing page — BMA asks for the matching data file; drop that next and the project applies. Comparison datasets come back as empty import panels awaiting their files (re-drop each, or use Pack to carry them).</p>
+<h2>15.3 Pack — the portable project</h2>
+<figure><img src="shots/15-pack.png" alt="Pack"><figcaption>Pack dialog: title, contents and compression. The result is a single .bma.zip with everything inside.</figcaption></figure>
+<p>The <b>Pack</b> action bundles <b>data + every comparison dataset + configuration</b> into a single <code>name.bma.zip</code> — the right way to send a whole analysis to a colleague. In the dialog:</p>
+<ul>
+  <li><b>Title</b> — the project name (shows in the toolbar next to the file and names the zip);</li>
+  <li><b>Contents</b> — the model (if any) and the configuration always go; the comparison datasets are optional (one checkbox covers them all). A drillhole-derived dataset packs its <i>raw</i> collar/survey/interval files, not the composite — they re-derive on load. A model-less project packs the same way, with no model entry;</li>
+  <li><b>Compress</b> — enables deflate compression (CSV shrinks 4–6×). On by default for data up to ~500 MB; above that the default is off, because without compression both packing and reopening have <i>zero</i> memory cost at any size. There is no 4 GB limit: the files use Zip64 automatically when needed.</li>
+</ul>
+<figure><img src="shots/17-packed-load.png" alt="Packed project dialog"><figcaption>When a packed project is dropped, BMA asks before applying the embedded configuration.</figcaption></figure>
+<p>The recipient only needs to <b>drop the zip</b> into BMA: the dialog above asks whether to load the embedded project; on confirming, the model and every comparison dataset come out of the file itself and everything opens configured. (<i>Open as zip</i> ignores the project and opens it as a plain zip.)</p>
+
+<h1><span class="secnum">16</span>Export — writing CSV, OBJ</h1>
+<figure><img src="shots/08-export.png" alt="Export"><figcaption>Export: column selection, renaming and reordering, with format options.</figcaption></figure>
+<p>The <b>Export</b> tab rewrites a dataset (with its filter applied and calculated columns available) as a new CSV, by streaming — it works for files of any size. A <b>Dataset</b> picker at the top chooses which dataset to export when more than one is loaded (the model by default).</p>
+<ul>
+  <li>tick/untick columns; drag to reorder; click the output name to rename;</li>
+  <li>options: delimiter, line ending, decimal separator, null text and numeric precision;</li>
+  <li>a progress bar with the row count while writing.</li>
+</ul>
+<p><b>Any dataset can be exported.</b> A comparison dataset's Summary view carries an <b>Export</b> section: <i>Export rows (CSV)</i> writes all its columns and calcols (with the dataset's filter applied), and — when it is gridded — the bounding box exports as an <b>OBJ</b> mesh. Points and drillhole-derived datasets emit the same shapes as the model.</p>
+<p>Beyond CSV, scattered through the interface there are chart exports (<b>Copy SVG</b>, <b>Download PNG</b> in Statistics/GT/Swath) and table <b>Copy</b> buttons (Statistics, GT, Swath, Categories) that paste straight into spreadsheets.</p>
+
+<h1><span class="secnum">17</span>Installation, offline use and updates</h1>
+<p>BMA can be used three ways, from most to least connected:</p>
+<figure><img src="shots/16-update-banner.png" alt="Update banner"><figcaption>The update banner and, in the bottom-right corner, the build badge.</figcaption></figure>
+<h2>17.1 In the browser, or installed (recommended)</h2>
+<ul>
+  <li><b>Install as an app</b> — BMA is a PWA: in Chrome/Edge, use the install icon in the address bar. It becomes an app with its own window and works <b>offline</b> after the first visit.</li>
+  <li><b>Build badge</b> — the code in the bottom-right corner (e.g. <code>c18b3dc</code>) identifies exactly which version is running. <b>Click it to check for updates</b> on the spot.</li>
+  <li><b>Update banner</b> — when a new version is published, BMA notices on its own (on the next load) and shows the banner above; click <b>Reload</b> to update. None of your data is affected — projects and caches are preserved.</li>
+</ul>
+<h2>17.2 A local copy: one single file</h2>
+<p>The whole application is a single HTML file. You can save it (<span class="kbd">Ctrl+S</span> on the page, or receive it from someone), rename it however you like — <code>bma.html</code>, <code>bma-c18b3dc.html</code> — and open it with a double click, <b>no internet, no installation, no server</b>. Everything works: all the tabs, comparison datasets, weights, packed projects, the built-in example. Automatic configuration saving works in the local copy too.</p>
+<p>Local-copy caveats:</p>
+<ul>
+  <li><b>It never updates itself</b> — it is a snapshot of the version it was saved from. The build badge in the corner says <i>which</i>: compare it with the site's to know whether your copy is behind (clicking the badge shows “n/a”, since there is nowhere to check against).</li>
+  <li>PWA installation and the automatic offline mode are exclusive to the hosted version (a local file already <i>is</i> offline by nature).</li>
+  <li>The interface fonts may fall back to the system monospace when you have no network — cosmetic only.</li>
+</ul>
+<p class="tip">The local copy is a great plan B for environments with no internet or a locked-down network — and since nothing ever leaves the browser in any of the three forms, privacy is the same in all of them.</p>
+<h2>17.3 Browser support</h2>
+<p>The <b>core of BMA works in any modern browser</b> — analysis, every chart and table, comparison datasets, packing and reading <code>.bma.zip</code> projects. A few conveniences rely on the <i>File System Access</i> API, which today only Chromium browsers (Chrome, Edge, Brave, Opera) implement; elsewhere BMA falls back gracefully.</p>
+<table>
+  <tr><th>Capability</th><th>Chrome / Edge</th><th>Firefox</th><th>Safari</th></tr>
+  <tr><td>Analysis, charts, comparison, packs</td><td>✓</td><td>✓</td><td>✓</td></tr>
+  <tr><td>Reopen a recent file in one click</td><td>✓</td><td>re-pick the file</td><td>re-pick the file</td></tr>
+  <tr><td>Streaming CSV export (any size)</td><td>✓ direct-to-disk</td><td>in-memory download</td><td>in-memory download</td></tr>
+  <tr><td>Install as an app (PWA) / offline</td><td>✓</td><td>—</td><td>limited</td></tr>
+</table>
+<p>“Re-pick the file” means the file picker opens again instead of reopening silently (the data was never uploaded, so the browser can't keep a handle to it). “In-memory download” means a very large export is assembled in memory before saving, so on Firefox/Safari keep exports of multi-gigabyte files to Chromium. <b>Recommendation:</b> use Chrome or Edge for the smoothest experience; any browser is fine for review.</p>
+
+<h1><span class="secnum">18</span>Tips and troubleshooting</h1>
+<table>
+  <tr><th>Symptom / question</th><th>Explanation</th></tr>
+  <tr><td>GT “tonnage” looks far too low, or says count-based</td><td>Without a density, density = 1 and the axis is <b>volume (m³)</b>. And without a block volume (the dataset is classified as <i>point</i>, or has no DXYZ/grid), tonnage is <b>count-based</b> (1 per row). Set the dataset to <b>grid</b> in Import (§3), assign DXYZ, set an Override, or pick a tonnage/volume column under Weight.</td></tr>
+  <tr><td>I changed a filter/weight/calcol/grid mode and nothing changed</td><td>Those changes require a new pass: click <b>Analyze</b> (the button highlights when changes are pending). Changing grid/point does not re-analyze — it only flips whether the dataset counts as a grid downstream.</td></tr>
+  <tr><td>The count dropped when I used a weight</td><td>Rows with a missing, zero or negative weight are excluded — the excluded count appears under the weight selector.</td></tr>
+  <tr><td>A comparison swath does not show</td><td>Check that the dataset's X/Y/Z are assigned on its import panel, and that it shares the model's coordinate system.</td></tr>
+  <tr><td>Comparisons (Statistics/Categories/Q–Q) do not show a dataset</td><td>They depend on that dataset's <b>Analyze</b> button (the swath does not). At 3+ datasets, also check the dataset chips — a hidden dataset is toggled off.</td></tr>
+  <tr><td>Variables do not pair between model and a comparison</td><td>Automatic pairing is by equal name (case-insensitive). Different names? Click the variable in the tree (or right-click → <i>Properties…</i>) and choose its partner in the <b>Grouped with</b> selector (§14).</td></tr>
+  <tr><td>Comparisons stopped using declustering after reopening</td><td>Declustering weights are never saved — only the parameters. Click <b>Run declustering</b> again on the dataset's panel (§12.7).</td></tr>
+  <tr><td>A .zip with several CSVs</td><td>Entry selector in Import (model) and in each dataset's sidebar; a comparison can also point at another entry of the main zip.</td></tr>
+  <tr><td>Lost your configuration?</td><td>It is automatic per file (same name + size). To make sure / to carry it elsewhere, use <b>Save</b> or <b>Pack</b>.</td></tr>
+  <tr><td>Statistics/Categories look empty after analyzing</td><td>Likely the filter removed every row (check the FILTER box and the data-health counters in Summary), or all numeric columns were unticked/Skip-ped in Import. Clear the filter, re-check column types, and Analyze again.</td></tr>
+  <tr><td>“No numeric columns” / a grade shows as categorical</td><td>Type detection samples the column; a stray text value or a non-dot decimal can tip it to CAT. Click the type tag in Import to force NUM, or fix the source. Empty columns get an ∅ badge rather than vanishing.</td></tr>
+  <tr><td>Geometry is wrong / no swath or volume GT</td><td>XYZ were mis-detected. Set the correct X/Y/Z in Import; without them there is no geometry. If it's scattered data, set Block geometry to <b>point</b>; if it's a grid read as points, set <b>grid</b> (§3).</td></tr>
+  <tr><td>An expression error</td><td>Filters and calcols are validated as you type (red message) and on Simulate. A typo'd column name shows an “Unknown column” warning scoped to that dataset's handle (<code>r.</code>, <code>aux.</code>…). Fix it before Analyze; a still-broken expression is reported, never silently ignored.</td></tr>
+  <tr><td>Model and samples don't line up in space</td><td>BMA cannot detect a coordinate-system or unit mismatch — it assumes both datasets share one. If a swath or bounding box looks impossible, confirm both files are in the same CRS and units; otherwise the spatial comparison is meaningless even though the numbers render.</td></tr>
+  <tr><td>A tab I need isn't showing</td><td>A fresh workspace opens only Import Model, Statistics and Categories. Open any other panel from <b>View → Panels</b> (or the ⋮ menu, or the data tree); see §2.4. Packed/saved projects restore whatever layout you left.</td></tr>
+  <tr><td>Privacy</td><td>No data ever leaves the browser. The app even works disconnected.</td></tr>
+</table>
+
+<h1><span class="secnum">A</span>Appendix: expression reference</h1>
+<p>Filters (global and per-dataset), local filters (Swath/GT) and calcols compile JavaScript with this preamble available:</p>
+<table>
+  <tr><th>Function</th><th>Description</th></tr>
+  <tr><td><code>abs, sqrt, pow, exp, hypot</code></td><td>basic arithmetic (from <code>Math</code>)</td></tr>
+  <tr><td><code>log, log2, log10</code></td><td>natural, base-2 and base-10 logarithms</td></tr>
+  <tr><td><code>min(a,b…), max(a,b…)</code></td><td>minimum / maximum</td></tr>
+  <tr><td><code>round, floor, ceil, trunc, sign</code></td><td>rounding and sign</td></tr>
+  <tr><td><code>sin, cos, tan, asin, acos, atan, atan2</code></td><td>trigonometry (radians); <code>PI</code> and <code>E</code> available</td></tr>
+  <tr><td><code>clamp(v, lo, hi)</code></td><td>limits v to the interval [lo, hi]</td></tr>
+  <tr><td><code>cap(v, hi)</code> / <code>cap(v, lo, hi)</code></td><td>cuts from above (grade capping) or on both sides; preserves null</td></tr>
+  <tr><td><code>ifnull(v, default)</code></td><td>replaces null/NaN with the default</td></tr>
+  <tr><td><code>ifnum(v, default)</code> / <code>isnum(v)</code></td><td>same but only for valid numbers / tests for a finite number</td></tr>
+  <tr><td><code>between(v, lo, hi)</code></td><td>true when lo ≤ v ≤ hi</td></tr>
+  <tr><td><code>remap(v, {from: to}, default)</code></td><td>dictionary translation: <code>remap(r.LITO, {HEM:'oxide'}, 'other')</code></td></tr>
+  <tr><td><code>fn.round(v, n)</code></td><td>rounds to n decimal places</td></tr>
+</table>
+<p>The row object is <code>r</code> in the model and the dataset's handle (<code>aux</code>, <code>d2</code>…) in a comparison dataset. Columns with spaces or special characters: <code>r["my column"]</code>.</p>
+
+<h1><span class="secnum">B</span>Appendix: quick reference</h1>
+<h2>Keyboard</h2>
+<table>
+  <tr><th>Key</th><th>Action</th></tr>
+  <tr><td><span class="kbd">F1</span></td><td>Contextual help for the active tab</td></tr>
+  <tr><td><span class="kbd">Ctrl+S</span></td><td>Save the project (flush autosave, “Saved ✓”)</td></tr>
+  <tr><td><span class="kbd">Enter</span> (in a filter box)</td><td>Apply the filter</td></tr>
+  <tr><td><span class="kbd">Ctrl</span>+right-click</td><td>Bypass BMA's menu, open the browser's native one</td></tr>
+  <tr><td><span class="kbd">Esc</span></td><td>Close a popover / menu / modal</td></tr>
+</table>
+<h2>Expression cheat</h2>
+<p><code>r.Col</code> read a column · <code>r["Odd Name"]</code> bracketed name · <code>=</code> assign (calcols) · <code>===</code>/<code>!==</code> equal/not · <code>&gt; &lt; &gt;= &lt;=</code> compare · <code>&amp;&amp; || !</code> and/or/not · <code>'text'</code> strings · <code>cond ? a : b</code> if/else. Helpers: <code>between(v,lo,hi)</code>, <code>cap(v,hi)</code>, <code>clamp(v,lo,hi)</code>, <code>ifnull(v,d)</code>, <code>remap(v,{A:'x'},d)</code>, <code>round/floor/ceil</code>, <code>min/max</code>, <code>log/log10</code> (full list in Appendix A).</p>
+<h2>Which tab answers which question?</h2>
+<table>
+  <tr><th>You want to…</th><th>Go to</th></tr>
+  <tr><td>Check the file imported correctly (grid, health)</td><td>Import Model → Summary (§4)</td></tr>
+  <tr><td>Describe a variable (mean, CV, percentiles, CDF)</td><td>Statistics (§7)</td></tr>
+  <tr><td>Break a grade down by lithology/domain</td><td>StatsCat (§9)</td></tr>
+  <tr><td>See proportions of a categorical</td><td>Categories (§8)</td></tr>
+  <tr><td>Grade–tonnage by cutoff</td><td>GT (§10)</td></tr>
+  <tr><td>See a spatial trend / validate estimates in space</td><td>Swath (§11)</td></tr>
+  <tr><td>Compare the model to its samples</td><td>add a comparison dataset (§12); read Statistics/Q–Q/Swath</td></tr>
+  <tr><td>Correct clustered sampling</td><td>Declustering (§12.7)</td></tr>
+  <tr><td>Decide a top cut</td><td>Top-cut (§12.8)</td></tr>
+  <tr><td>Build composites from raw drillholes</td><td>Drillhole set (§13)</td></tr>
+  <tr><td>Make a new variable</td><td>Calc (§6)</td></tr>
+  <tr><td>Write CSV / OBJ out</td><td>Export (§16)</td></tr>
+  <tr><td>Send the whole analysis to a colleague</td><td>Pack (§15.3)</td></tr>
+</table>
+
+<h1><span class="secnum">C</span>Appendix: glossary</h1>
+<table>
+  <tr><th>Term</th><th>Meaning in BMA</th></tr>
+  <tr><td><b>Block model</b></td><td>The estimate being inspected — the hub dataset. The first dataset loaded; other datasets compare against it.</td></tr>
+  <tr><td><b>Comparison dataset</b></td><td>Any peer dataset loaded alongside the model (samples, a re-estimate, a second model) — a separate set of rows, not extra columns. Labelled <code>aux</code>, <code>d2</code>, <code>d3</code>…</td></tr>
+  <tr><td><b>Primary (of a panel)</b></td><td>The dataset whose columns are a panel's main rows/series; every other dataset becomes a comparison. Chosen by the panel's <b>Dataset</b> picker; the model by default.</td></tr>
+  <tr><td><b>Calcol</b></td><td>Calculated column — a variable you derive with an expression (§6).</td></tr>
+  <tr><td><b>Composite</b></td><td>A down-hole sample of fixed length, built from raw assay intervals by length-weighted averaging (§13).</td></tr>
+  <tr><td><b>Desurvey</b></td><td>Turning collar + survey + intervals into XYZ points along each hole's true (curved) path (§13).</td></tr>
+  <tr><td><b>Support / change of support</b></td><td>The volume a value represents. Point samples have small support, blocks large; averaging to block support shrinks variance (fewer extreme values). Comparing the two is the heart of validation.</td></tr>
+  <tr><td><b>Support correction (f)</b></td><td>The variance reduction factor Var(blocks)/Var(samples) used to draw the theoretical GT from samples (§10.1). You supply it; it is never derived from the model.</td></tr>
+  <tr><td><b>Declustering / declustered mean</b></td><td>Down-weighting over-sampled (clustered) areas so the sample mean is representative. The <i>naive</i> mean ignores clustering; the <i>declustered</i> mean corrects it (§12.7).</td></tr>
+  <tr><td><b>Δ% reference</b></td><td>The dataset a panel's Δ% values are measured against (the denominator) — pick it per panel (§7, §12.2).</td></tr>
+  <tr><td><b>Pairing / orphan</b></td><td>Which comparison variable maps to which model variable (auto by name; editable). An <i>orphan</i> (⇄ —) pairs with nothing and enters no comparison (§14).</td></tr>
+  <tr><td><b>Property</b></td><td>A named quantity shared across datasets; colour and unit live on the property, so every dataset's copy follows (§14).</td></tr>
+  <tr><td><b>Grid vs point</b></td><td>Whether a dataset is treated as a regular block grid (geometry, volume GT) or scattered points. Set per dataset; auto-detected by default (§3).</td></tr>
+  <tr><td><b>Fill ratio</b></td><td>The fraction of a grid's bounding envelope actually occupied by blocks (§4).</td></tr>
+  <tr><td><b>Top-cut / cap</b></td><td>A high-grade ceiling applied to tame outliers (§12.8); <code>cap()</code> applies it in a calcol.</td></tr>
+  <tr><td><b>Swath</b></td><td>Mean (or percentile) of each variable in slices along a direction — the spatial trend / estimate-validation plot (§11).</td></tr>
+  <tr><td><b>Pack (.bma.zip)</b></td><td>A single file bundling data + every comparison + configuration — the portable form of a whole analysis (§15.3).</td></tr>
+</table>
+
+<h1><span class="secnum">D</span>Appendix: recipes</h1>
+<p>Short procedures for the common jobs. Each points at the section with the detail.</p>
+<h2>Validate a block model against its composites</h2>
+<ol>
+  <li>Load the model, Analyze; check Summary (geometry, health) — §3, §4.</li>
+  <li>Add the composites as a comparison dataset; set the length column as Weight; Analyze — §12.1.</li>
+  <li>Statistics: read the Δ% under each grade; overlay CDFs — §12.2.</li>
+  <li>Q–Q the grade vs its sample: parallel offset = bias, slope = support — §12.4.</li>
+  <li>Swath in X/Y/Z: confirm the offset is spatially consistent — §12.3.</li>
+  <li>Decluster the composites and re-Analyze: the residual Δ% is the part that is <i>not</i> drilling pattern — §12.7.</li>
+</ol>
+<h2>Explore a single standalone model (no samples)</h2>
+<ol>
+  <li>Load and Analyze; read Summary — §4.</li>
+  <li>Statistics for each grade (mean/CV/percentiles, CDF, Prob) — §7.</li>
+  <li>Categories / StatsCat for domains and grade-by-domain — §8, §9.</li>
+  <li>GT for the grade–tonnage picture; Swath for spatial trend — §10, §11.</li>
+</ol>
+<h2>Decide and apply a top cut</h2>
+<ol>
+  <li>On the dataset's panel switch to Top-cut, Load distribution for the variable — §12.8.</li>
+  <li>Drag the red line to where the tail leaves lognormal on the log-prob plot; watch metal-removed.</li>
+  <li>Copy calcol, paste in Calc, Analyze — the capped variable flows into every view — §6.</li>
+</ol>
+<h2>Build composites from raw drillhole tables</h2>
+<ol>
+  <li>Drop collar + survey + assays (or their zip) on a dataset's Drillhole set card — §13.</li>
+  <li>Check the detected roles, column mapping, and especially the dip convention.</li>
+  <li>Set composite length and Composite &amp; load; read the consistency report.</li>
+  <li>Analyze — the composites behave like any comparison dataset from here.</li>
+</ol>
+<h2>Reconcile two estimates</h2>
+<ol>
+  <li>Load the first model; add the second as a comparison dataset; Analyze both — §12.1.</li>
+  <li>On Statistics, use the Dataset picker to make either the primary; read Δ% with the other as reference — §7, §12.2.</li>
+  <li>Q–Q one against the other; Swath both to see where they diverge in space — §12.3, §12.4.</li>
+</ol>
+<h2>Share a whole analysis</h2>
+<ol>
+  <li>Pack → tick the datasets to include → it writes one <code>.bma.zip</code> — §15.3.</li>
+  <li>The recipient drops the zip into BMA and confirms; everything opens configured.</li>
+</ol>
+
+<h1><span class="secnum">E</span>Appendix: interpretation gallery</h1>
+<p>The example dataset teaches what a <i>problem</i> looks like (a planted bias). To read your own model you also need to know what <b>healthy</b> looks like. Each pair below puts a clean validation (left — model vs unbiased, regularly-spaced samples) next to the example's flawed one (right), in the same view.</p>
+
+<h2>Δ% table and CDF</h2>
+<div style="display:flex;gap:0.6em;align-items:flex-start">
+  <figure style="flex:1;margin:0.4em 0"><img src="shots/gallery-stats-clean.png" alt="Healthy statistics"><figcaption><b>Healthy.</b> Each Δ% line hovers around zero; the dashed sample CDF sits almost on the model's, a touch wider in the tails.</figcaption></figure>
+  <figure style="flex:1;margin:0.4em 0"><img src="shots/10-statistics-aux.png" alt="Problematic statistics"><figcaption><b>Problem.</b> Fe's Δ% runs clearly positive across metrics; the sample CDF is shifted, not just wider — a bias.</figcaption></figure>
+</div>
+<p><b>Read it:</b> Δ% near zero on every metric = aggregate agreement. A consistent non-zero sign on the means is a bias to chase (decluster first, §12.7); a gap only in CV/spread with matched means is usually just support.</p>
+
+<h2>Q–Q</h2>
+<div style="display:flex;gap:0.6em;align-items:flex-start">
+  <figure style="flex:1;margin:0.4em 0"><img src="shots/gallery-qq-clean.png" alt="Healthy Q-Q"><figcaption><b>Healthy.</b> The cloud sits on the 45° identity line — the two distributions agree quantile by quantile.</figcaption></figure>
+  <figure style="flex:1;margin:0.4em 0"><img src="shots/11-qq.png" alt="Problematic Q-Q"><figcaption><b>Problem.</b> The cloud runs parallel to but above the line — an additive bias whose vertical size you can read off the axis.</figcaption></figure>
+</div>
+<p><b>Read it:</b> on the line = match; parallel offset = additive bias; a tilt off 45° = a spread (support) difference; a kink = grade-dependent disagreement.</p>
+
+<h2>Swath</h2>
+<div style="display:flex;gap:0.6em;align-items:flex-start">
+  <figure style="flex:1;margin:0.4em 0"><img src="shots/gallery-swath-clean.png" alt="Healthy swath"><figcaption><b>Healthy.</b> Dashed (samples) and solid (model) interleave band to band — no spatial drift.</figcaption></figure>
+  <figure style="flex:1;margin:0.4em 0"><img src="shots/13-swath-aux.png" alt="Problematic swath"><figcaption><b>Problem.</b> The dashed series rides above the solid one in every band — a spatially consistent bias.</figcaption></figure>
+</div>
+<p><b>Read it:</b> interleaving series = the model honors the samples in space; a persistent one-sided gap = conditional bias; divergence only in the thin end bands (few samples — watch the count bars) is just support there.</p>
+
+<h1><span class="secnum">F</span>Index</h1>
+<div style="column-count:2;column-gap:1.4em;font-size:9.5pt">
+<p style="margin:0.15em 0">Analyze (run) — §3, §4</p>
+<p style="margin:0.15em 0">Autosave — §15.1</p>
+<p style="margin:0.15em 0">Block geometry (grid/point) — §3, §4</p>
+<p style="margin:0.15em 0">Bounding box / OBJ export — §16</p>
+<p style="margin:0.15em 0">Calc / calculated columns — §6</p>
+<p style="margin:0.15em 0">Categories — §8, §12.5</p>
+<p style="margin:0.15em 0">CDF — §7.3</p>
+<p style="margin:0.15em 0">Change of support — §10.1, App. C</p>
+<p style="margin:0.15em 0">Clones / duplicate panels — §2.4</p>
+<p style="margin:0.15em 0">Comparison dataset — §12</p>
+<p style="margin:0.15em 0">Composites — §13</p>
+<p style="margin:0.15em 0">Context menu — §14</p>
+<p style="margin:0.15em 0">Cutoffs — §10</p>
+<p style="margin:0.15em 0">Dataset picker (per panel) — §7, §12.2</p>
+<p style="margin:0.15em 0">Data tree — §14</p>
+<p style="margin:0.15em 0">Declustering — §12.7</p>
+<p style="margin:0.15em 0">Δ% reference — §7, §12.2</p>
+<p style="margin:0.15em 0">Density (GT) — §10</p>
+<p style="margin:0.15em 0">Desurvey — §13</p>
+<p style="margin:0.15em 0">Drillholes — §13</p>
+<p style="margin:0.15em 0">Empty project (no model) — §2.2</p>
+<p style="margin:0.15em 0">Example dataset — §2.1, §2.5</p>
+<p style="margin:0.15em 0">Export (CSV) — §16</p>
+<p style="margin:0.15em 0">Expressions — §5, App. A</p>
+<p style="margin:0.15em 0">F1 / contextual help — §2.3</p>
+<p style="margin:0.15em 0">Filter (row) — §5</p>
+<p style="margin:0.15em 0">First session (walkthrough) — §2.5</p>
+<p style="margin:0.15em 0">Grade–tonnage (GT) — §10</p>
+<p style="margin:0.15em 0">Grid geometry / fill ratio — §4</p>
+<p style="margin:0.15em 0">Interpretation gallery — App. E</p>
+<p style="margin:0.15em 0">Offline / local copy — §17</p>
+<p style="margin:0.15em 0">Pack (.bma.zip) — §15.3</p>
+<p style="margin:0.15em 0">Pairing / orphan — §14</p>
+<p style="margin:0.15em 0">Panels (open/close) — §2.4</p>
+<p style="margin:0.15em 0">Percentiles — §7.1</p>
+<p style="margin:0.15em 0">Prob plot (log-probability) — §7.3</p>
+<p style="margin:0.15em 0">PWA / install — §17.1</p>
+<p style="margin:0.15em 0">Q–Q — §12.4</p>
+<p style="margin:0.15em 0">Recipes — App. D</p>
+<p style="margin:0.15em 0">Save (project) — §15.2</p>
+<p style="margin:0.15em 0">StatsCat (by group) — §9</p>
+<p style="margin:0.15em 0">Statistics — §7</p>
+<p style="margin:0.15em 0">Summary view — §4</p>
+<p style="margin:0.15em 0">Swath — §11, §12.3</p>
+<p style="margin:0.15em 0">Theoretical GT — §10.1</p>
+<p style="margin:0.15em 0">Top-cut / cap — §12.8</p>
+<p style="margin:0.15em 0">Troubleshooting — §18</p>
+<p style="margin:0.15em 0">Units — §14</p>
+<p style="margin:0.15em 0">Weight — §7.2</p>
+<p style="margin:0.15em 0">Workspace / docking — §2.4</p>
+<p style="margin:0.15em 0">ZIP input — §2.2</p>
+</div>
+
+<p style="margin-top:3em;color:var(--dim);font-size:9pt;border-top:1px solid var(--line);padding-top:0.8em;">
+BMA — Block Model Atelier · GCU (Geoscientific Chaos Union) · This manual was generated from real screenshots of the application running the built-in example dataset.
+</p>
+
+</body>
+</html>
