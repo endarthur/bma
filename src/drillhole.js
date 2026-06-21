@@ -354,7 +354,7 @@ async function dhAssignOne(ds, file) {
   // A11 P5: a second interval-role table (the primary intervals slot is taken) is
   // staged as the MERGE secondary, not an overwrite (assays + lithology → both).
   if (role === 'intervals' && D.files.intervals) {
-    D.secondary = { file: file, parsed: parsed, map: dhAutoMap('intervals', parsed.header) };
+    D.secondary = { file: file, parsed: parsed, map: dhAutoMap('intervals', parsed.header), calcolCode: '', filter: null };
     return;
   }
   D.files[role] = file;
@@ -448,7 +448,13 @@ function dhColSelectParsed(parsed, mapKey, field, sel, optionalLabel) {
 function dhSecondaryPanelHtml(ds) {
   var D = dhStateFor(ds), sx = D.secondary;
   if (!sx || !sx.parsed) return '';
-  var cols = dhDataCols(sx.parsed, sx.map).map(function(c) { return c.name; });
+  // the columns the merge adds — reflect any pre-merge calcols
+  var srcParsed = sx.parsed;
+  if ((sx.calcolCode && sx.calcolCode.trim()) || (sx.filter && sx.filter.trim())) {
+    var ev = dhTableEval(sx.parsed, sx.calcolCode, sx.filter);
+    srcParsed = { header: ev.header, rows: ev.rows };
+  }
+  var cols = dhDataCols(srcParsed, sx.map).map(function(c) { return c.name; });
   return '<div class="dh-merge-panel">' +
     '<div class="dh-merge-head">⋈ Merge a 2nd interval table' +
       '<button type="button" class="dh-merge-remove" data-dh="removeSecondary" title="Remove the merge table">✕</button></div>' +
@@ -456,6 +462,11 @@ function dhSecondaryPanelHtml(ds) {
       '<div class="dh-map-row"><label>BHID</label>' + dhColSelectParsed(sx.parsed, 'secondary', 'bhid', sx.map.bhid) + '</div>' +
       '<div class="dh-map-row"><label>From</label>' + dhColSelectParsed(sx.parsed, 'secondary', 'from', sx.map.from) + '</div>' +
       '<div class="dh-map-row"><label>To</label>' + dhColSelectParsed(sx.parsed, 'secondary', 'to', sx.map.to) + '</div></div>' +
+    '<details class="dh-ivt-edit"' + ((sx.calcolCode || sx.filter) ? ' open' : '') + '>' +
+      '<summary class="dh-ivt-edit-title">Calcols &amp; filter<span class="dh-ivt-edit-hint"> — applied to this table before merging</span></summary>' +
+      '<textarea data-dh="secCalc" class="dh-ivt-calc" rows="2" spellcheck="false" placeholder="r.DOMAIN = r.LITO == \'IF\' ? 1 : 0">' + esc(sx.calcolCode || '') + '</textarea>' +
+      '<div class="dh-map-row"><label>Filter</label><input type="text" data-dh="secFilter" class="dh-ivt-filter" spellcheck="false" value="' + esc(sx.filter || '') + '" placeholder="r.REC > 80"></div>' +
+    '</details>' +
     '<div class="dh-merge-note">union re-segment + carry — adds <b>' + cols.length + '</b> column' + (cols.length !== 1 ? 's' : '') +
       ' to the composite' + (cols.length ? ' (' + cols.map(esc).join(', ') + ')' : '') + '; gaps are null-filled and counted</div>' +
     '</div>';
@@ -473,7 +484,8 @@ function dhDataCols(parsed, map) {
     var num = 0, nonEmpty = 0;
     var step = Math.max(1, Math.floor(parsed.rows.length / 200));
     for (var i = 0; i < parsed.rows.length; i += step) {
-      var v = (parsed.rows[i][c] || '').trim();
+      var cell = parsed.rows[i][c];
+      var v = (cell == null ? '' : String(cell)).trim();   // robust to calcol numeric cells (merge path)
       if (v === '') continue;
       nonEmpty++;
       if (isFinite(parseFloat(v)) && /^[-+0-9.eE]+$/.test(v)) num++;
@@ -494,11 +506,12 @@ function dhColumnar(parsed, map) {
   for (var c = 0; c < dataCols.length; c++) iv.cols.push({ name: dataCols[c].name, type: dataCols[c].type, values: [] });
   for (var k = 0; k < parsed.rows.length; k++) {
     var rk = parsed.rows[k];
-    iv.bhid.push((rk[map.bhid] || '').trim());
+    iv.bhid.push((rk[map.bhid] == null ? '' : String(rk[map.bhid])).trim());
     iv.from.push(parseFloat(rk[map.from]));
     iv.to.push(parseFloat(rk[map.to]));
     for (var c2 = 0; c2 < dataCols.length; c2++) {
-      var raw = (rk[dataCols[c2].idx] || '').trim();
+      var cell = rk[dataCols[c2].idx];
+      var raw = (cell == null ? '' : String(cell)).trim();   // robust to calcol numeric cells (merge path)
       iv.cols[c2].values.push(dataCols[c2].type === 'num' ? (raw === '' ? NaN : parseFloat(raw)) : (raw === '' ? null : raw));
     }
   }
@@ -719,7 +732,14 @@ function dhBuildTables(ds) {
   // composite carries columns from both; its merge report rides alongside.
   D._mergeReport = null;
   if (dhHasSecondary(D)) {
-    var merged = Drillhole.mergeIntervals(iv, dhColumnar(D.secondary.parsed, D.secondary.map));
+    var sx = D.secondary, secParsed = sx.parsed;
+    // pre-merge per-table calcols/filter on the secondary (calcols append cols,
+    // bhid/from/to indices unchanged, so the map still resolves)
+    if ((sx.calcolCode && sx.calcolCode.trim()) || (sx.filter && sx.filter.trim())) {
+      var ev = dhTableEval(sx.parsed, sx.calcolCode, sx.filter);
+      secParsed = { header: ev.header, rows: ev.rows };
+    }
+    var merged = Drillhole.mergeIntervals(iv, dhColumnar(secParsed, sx.map));
     iv = { bhid: merged.bhid, from: merged.from, to: merged.to, cols: merged.cols };
     D._mergeReport = merged.report;
   }
@@ -940,9 +960,11 @@ function dhSerialize(ds) {
     intervals: { name: ivt.file.name, size: ivt.file.size },
   };
   var map = { collar: dhMapToNames(ds, 'collar'), survey: dhMapToNames(ds, 'survey'), intervals: dhMapToNames(ds, 'intervals') };
+  var secondaryCalcols = null;
   if (dhHasSecondary(D)) {   // A11 P5: the merge table rides as a 4th "role" (files+map) for pack extraction
     files.secondary = { name: D.secondary.file.name, size: D.secondary.file.size };
     map.secondary = dhMapNamesFromParsed(D.secondary.parsed, D.secondary.map);
+    if (D.secondary.calcolCode || D.secondary.filter) secondaryCalcols = { calcolCode: D.secondary.calcolCode || '', filter: D.secondary.filter || '' };
   }
   return {
     files: files,
@@ -951,6 +973,7 @@ function dhSerialize(ds) {
     opts: { method: D.opts.method, length: D.opts.length, splitCols: dhSplitCols(D).length ? dhSplitCols(D) : null, densityCol: D.opts.densityCol, combine: D.opts.combine || null, minCov: D.opts.minCov },
     // A11 P2: the interval table's per-table calcols + filter (omitted when empty)
     intervalCalcols: (ivt.calcolCode || ivt.filter) ? { calcolCode: ivt.calcolCode || '', filter: ivt.filter || '' } : null,
+    secondaryCalcols: secondaryCalcols,   // A11 P5: the merge table's pre-merge calcols/filter
     loaded: !!(ds.file && D.derivedName && ds.file.name === D.derivedName),
   };
 }
@@ -999,6 +1022,7 @@ function dhTryApplyPendingRestore(ds) {
   if (pr.files && pr.files.secondary) {   // A11 P5: restore the merge table when its file lands
     if (D.secondary && D.secondary.file.name === pr.files.secondary.name) {
       D.secondary.map = dhMapIdxFromParsed(D.secondary.parsed, (pr.map && pr.map.secondary) || {});
+      if (pr.secondaryCalcols) { D.secondary.calcolCode = pr.secondaryCalcols.calcolCode || ''; D.secondary.filter = pr.secondaryCalcols.filter || null; }
     } else allMatch = false;
   }
   if (pr.dipConvention) D.dipConvention = pr.dipConvention;
@@ -1036,7 +1060,7 @@ async function dhLoadTrio(ds, trio) {
     }
   }
   if (trio.secondary) {   // A11 P5: the packed merge table re-derives like the trio
-    D.secondary = { file: trio.secondary, parsed: await dhParseFile(trio.secondary), map: {} };
+    D.secondary = { file: trio.secondary, parsed: await dhParseFile(trio.secondary), map: {}, calcolCode: '', filter: null };
     D.secondary.map = dhAutoMap('intervals', D.secondary.parsed.header);
   }
   D.dipConvention = dhDetectConventionFromParsed(ds);
@@ -1147,6 +1171,14 @@ function wireDhCard(root, ds) {
         if (k === 'ivtCalc') ivt.calcolCode = e.target.value;
         else ivt.filter = e.target.value;
         dhRenderIvtStatus(ds);
+        dhAutoSave();
+      }
+    }
+    else if (k === 'secCalc' || k === 'secFilter') {   // A11 P5: pre-merge calcols on the 2nd table
+      if (D.secondary) {
+        if (k === 'secCalc') D.secondary.calcolCode = e.target.value;
+        else D.secondary.filter = e.target.value;
+        renderDhMapping(ds);   // refresh the merge note (added columns may change)
         dhAutoSave();
       }
     }
