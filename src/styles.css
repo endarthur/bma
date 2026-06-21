@@ -5356,6 +5356,18 @@ table.stats tr.stats-delta-row td:first-child {
 .dh-merge-note { color: var(--fg-dim); font-size: 0.62rem; margin-top: 0.35rem; }
 .dh-merge-note b { color: var(--fg); }
 
+/* A17: composite length-distribution histograms (before vs after) */
+.dh-hist { margin-top: 0.6rem; border-top: 1px solid var(--border); padding-top: 0.5rem; }
+.dh-hist-title { color: var(--fg-dim); font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+.dh-hist-row { display: flex; align-items: flex-end; gap: 0.5rem; margin-bottom: 0.3rem; }
+.dh-hist-label { width: 8.5rem; flex-shrink: 0; font: 0.62rem var(--mono); color: var(--fg); }
+.dh-hist-label span { display: block; color: var(--fg-dim); font-size: 0.58rem; }
+.dh-hist-bars { flex: 1; display: flex; align-items: flex-end; gap: 1px; height: 2.4rem; }
+.dh-hist-bar { flex: 1; min-height: 1px; border-radius: 1px 1px 0 0; }
+.dh-hist-bar.before { background: var(--fg-dim); }
+.dh-hist-bar.after { background: var(--action); }
+.dh-hist-axis { display: flex; justify-content: space-between; font: 0.55rem var(--mono); color: var(--fg-dim); margin-left: 9rem; }
+
 .dh-report { margin-top: 0.7rem; }
 .dh-report-summary { color: var(--fg); font-size: 0.7rem; margin-bottom: 0.35rem; }
 .dh-report-clean { color: var(--green); font-size: 0.68rem; }

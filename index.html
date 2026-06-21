@@ -5371,6 +5371,18 @@ table.stats tr.stats-delta-row td:first-child {
 .dh-merge-note { color: var(--fg-dim); font-size: 0.62rem; margin-top: 0.35rem; }
 .dh-merge-note b { color: var(--fg); }
 
+/* A17: composite length-distribution histograms (before vs after) */
+.dh-hist { margin-top: 0.6rem; border-top: 1px solid var(--border); padding-top: 0.5rem; }
+.dh-hist-title { color: var(--fg-dim); font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+.dh-hist-row { display: flex; align-items: flex-end; gap: 0.5rem; margin-bottom: 0.3rem; }
+.dh-hist-label { width: 8.5rem; flex-shrink: 0; font: 0.62rem var(--mono); color: var(--fg); }
+.dh-hist-label span { display: block; color: var(--fg-dim); font-size: 0.58rem; }
+.dh-hist-bars { flex: 1; display: flex; align-items: flex-end; gap: 1px; height: 2.4rem; }
+.dh-hist-bar { flex: 1; min-height: 1px; border-radius: 1px 1px 0 0; }
+.dh-hist-bar.before { background: var(--fg-dim); }
+.dh-hist-bar.after { background: var(--action); }
+.dh-hist-axis { display: flex; justify-content: space-between; font: 0.55rem var(--mono); color: var(--fg-dim); margin-left: 9rem; }
+
 .dh-report { margin-top: 0.7rem; }
 .dh-report-summary { color: var(--fg); font-size: 0.7rem; margin-bottom: 0.35rem; }
 .dh-report-clean { color: var(--green); font-size: 0.68rem; }
@@ -6071,7 +6083,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build ca68e4e — click to check for updates">ca68e4e</div>
+<div class="build-badge" id="buildBadge" title="build 85f42bd — click to check for updates">85f42bd</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -16914,6 +16926,7 @@ function dhClearAll(ds) {
   D.secondary = null;            // A11 P5: drop the merge table
   D.dipConvention = null;
   D.lastReport = null;
+  D._lengthHist = null;          // A17: drop the length histograms
   var $r = dhQ('[data-dh="reportInline"]', dhCardRoot(ds));
   if ($r) $r.innerHTML = '';
   renderDhCard(ds); // re-writes the pending-restore hint when one is staged
@@ -17261,6 +17274,47 @@ function dhCsvCell(v) {
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
+// ── A17: composite length-distribution histograms (compositing QA) ─────────
+// The raw interval lengths (TO−FROM of the imported intervals table) vs the
+// composite SUPPORT (covered length, result column 6) — the geologist sees at a
+// glance how compositing regularized the support, and the short / low-coverage
+// tail the min-coverage filter targets. Viz-only; both quantities already exist.
+function dhComputeLengthHist(D, rows) {
+  var raw = [], pr = D.parsed.intervals, mi = D.map.intervals;
+  if (pr && mi) {
+    for (var i = 0; i < pr.rows.length; i++) {
+      var L = parseFloat(pr.rows[i][mi.to]) - parseFloat(pr.rows[i][mi.from]);
+      if (isFinite(L) && L > 0) raw.push(L);
+    }
+  }
+  var comp = [];
+  for (var j = 0; j < rows.length; j++) { var sup = rows[j][6]; if (isFinite(sup) && sup > 0) comp.push(sup); }
+  return (raw.length && comp.length) ? { raw: raw, comp: comp } : null;
+}
+function dhLengthHistHtml(h) {
+  if (!h || !h.raw || !h.raw.length || !h.comp || !h.comp.length) return '';
+  var all = h.raw.concat(h.comp), max = 0;
+  for (var i = 0; i < all.length; i++) if (all[i] > max) max = all[i];
+  if (!(max > 0)) return '';
+  var NB = 14, bw = max / NB;
+  function bin(arr) { var b = []; for (var i = 0; i < NB; i++) b.push(0); for (var k = 0; k < arr.length; k++) b[Math.min(NB - 1, Math.floor(arr[k] / bw))]++; return b; }
+  function mean(a) { var s = 0; for (var i = 0; i < a.length; i++) s += a[i]; return a.length ? s / a.length : 0; }
+  var rb = bin(h.raw), cb = bin(h.comp), pm = 1;
+  for (var i2 = 0; i2 < NB; i2++) { if (rb[i2] > pm) pm = rb[i2]; if (cb[i2] > pm) pm = cb[i2]; }
+  function bars(b, cls) {
+    var s = '';
+    for (var i = 0; i < NB; i++) s += '<div class="dh-hist-bar ' + cls + '" style="height:' + Math.round(b[i] / pm * 100) + '%" title="' + (i * bw).toFixed(1) + '–' + ((i + 1) * bw).toFixed(1) + ': ' + b[i] + '"></div>';
+    return s;
+  }
+  function lab(name, a) { return '<div class="dh-hist-label">' + name + ' <span>n=' + a.length.toLocaleString() + ' · mean ' + mean(a).toFixed(2) + '</span></div>'; }
+  return '<div class="dh-hist">' +
+    '<div class="dh-hist-title">Support length — before vs after compositing</div>' +
+    '<div class="dh-hist-row">' + lab('before', h.raw) + '<div class="dh-hist-bars">' + bars(rb, 'before') + '</div></div>' +
+    '<div class="dh-hist-row">' + lab('after', h.comp) + '<div class="dh-hist-bars">' + bars(cb, 'after') + '</div></div>' +
+    '<div class="dh-hist-axis"><span>0</span><span>length →</span><span>' + max.toFixed(1) + '</span></div>' +
+    '</div>';
+}
+
 function dhCompositeAndLoad(ds) {
   var D = dhStateFor(ds);
   var root = dhCardRoot(ds);
@@ -17291,6 +17345,7 @@ function dhCompositeAndLoad(ds) {
     D.lastReport.checks = D.lastReport.checks.concat(D._mergeReport.checks);
     D.lastReport.merged = true;
   }
+  D._lengthHist = dhComputeLengthHist(D, result.rows);   // A17: support before/after compositing
   renderDhReport(ds, dhQ('[data-dh="reportInline"]', root));
   if (result.rows.length === 0) {
     dhSetStatus(ds, 'No composites produced — check the report above.', true);
@@ -17335,6 +17390,7 @@ function renderDhReport(ds, container) {
         '</div></details>';
     }
   }
+  html += dhLengthHistHtml(dhStateFor(ds)._lengthHist);   // A17: before/after support histograms
   container.innerHTML = html;
 }
 
