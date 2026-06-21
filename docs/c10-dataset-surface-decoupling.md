@@ -137,11 +137,84 @@ per-surface smokes. No big-bang.
   over them would be more code, not less). Categories' `StateForRoot` also stays
   bespoke (lazy non-creating lookup over `panelState.categories`). Bit-identical;
   all clone + persist + perds smokes green.
-- **Phase 4** — formalize DatasetSource as the documented interface the registry
-  guarantees; A11/A16 build against it.
+- **Phase 4** *(done — documentation, not code)* — the `DatasetSource` contract
+  written down as the interface the registry already guarantees (the "as built"
+  section below). No code change: P0–P3 proved every dataset satisfies it; P4
+  names it so A11 tables and an A16 dataset implement one shape instead of
+  reverse-engineering six surfaces. Includes a "first-class checklist" a new
+  dataset kind fills out.
 
 Phases 0–1 are pure win with near-zero risk; 2–3 are the real consolidation; 4 is
 the interface contract that makes A11/A16 cheap.
+
+## The DatasetSource contract (Phase 4, as built)
+
+Every entry in the `datasets` registry (`src/core.js`) satisfies this interface.
+Three backings implement it today and are **interchangeable to a surface**:
+
+- **model** — `datasets[0]`, a getter/setter *view* over the legacy `current*` /
+  `lastCompleteData` / `preflightData` globals (so existing code stays
+  byte-identical; the A10 bit-identical contract).
+- **aux** — `datasets[1]`, a view over the `aux*` globals (the first comparison).
+- **d2, d3, …** — real plain objects from `dsCreate()` (`dsAdd`/`dsRemove`).
+
+A surface reads a dataset **only** through `dsById(id)` + the facade functions
+below — never by reaching into `current*` / `aux*` directly. That indirection is
+what lets a new dataset kind (an A11 table, an A16 orientation set) appear as a
+first-class target with zero per-surface work.
+
+### Fields & accessors
+
+| Group | Member | Notes |
+|-------|--------|-------|
+| identity | `ds.id` | `'model'` \| `'aux'` \| `'d2'`… — catalog namespace, project key, pack folder, expression handle. |
+| identity | `dsLabel(id)` | display label (`'Model'`, else `ds.prefix` / `auxPrefix`). Don't read `ds.prefix` directly. |
+| schema | `ds.preflight` | sampling result: header, `autoTypes`, `xyz`, units. The pre-analysis schema store. |
+| schema | `ds.complete` | the analysis result (stats / categories / geometry / header / colTypes / rowCount / totalRowCount / origColCount …). Shape: `docs/worker-protocol.md`. `null` until analyzed. |
+| schema | `ds.calcolCode` / `ds.calcolMeta` | calculated-column block + metadata. |
+| rows | `ds.file` / `ds.handle` | the `File` (and FS handle) the worker streams. |
+| rows | `ds.filter` | global filter expression (`{expression}` or null). |
+| rows | `ds.rowVar` | expression handle: model `currentRowVar` (`'r'`), aux `AUX_ROW_VAR`, d2+ = its `id`. |
+| rows | `ds.source` | `'file'` today (model + d2+; aux implicit). Room for non-file sources (A11 derived tables). |
+| analysis | `ds.stale` | results no longer match config → needs re-analyze. |
+| facets | `dsHasFacet(ds, facet)` | `'analyzed'` / `'categorical'` / `'gridded'` implemented; others reserved (see below). |
+| facets | `dsHasGrid(ds)` / `dsGrid(ds)` | the block-geometry facet (respects `dsGridMode`). `dsHasXYZ(ds)` = XYZ assigned. |
+| roles | `catRole(ds.id, role)` | `'weight'` / `'density'` / `'tonnageFactor'` — the catalog's per-dataset role bindings. |
+| config | `ds.gridMode` | `'grid'`/`'point'`/`'auto'` override (`dsGridMode(ds)` resolves the default). |
+| config | `ds.declus` / `ds.topcut` / `ds.view` | per-dataset analysis-tool config. |
+
+### Facets (the capability layer)
+
+`dsHasFacet(ds, facet)` is the one predicate table surfaces filter on (P0). A
+facet **presupposes an analysis** (`ds.complete`). Implemented today:
+
+| facet | predicate |
+|-------|-----------|
+| `analyzed` | `!!ds.complete` |
+| `categorical` | `ds.complete.categories` non-empty |
+| `gridded` | `ds.complete.geometry.x.blockSize` present (raw — note `dsHasGrid` is the override-aware form) |
+
+Reserved for consumers that need them — **add the row + nothing else**:
+`numeric` (≥1 numeric column), `xyz`, `orientation` (A16: attitude columns).
+
+### First-class checklist (what a new dataset kind implements)
+
+An A11 container table or A16 orientation set becomes a target everywhere by
+satisfying the above: give it an `id` + `dsLabel`; populate `preflight` then
+`complete` from an analysis pass; expose `file`/`filter`/`calcolCode`/`rowVar`
+for the worker; declare which facets it has (it just needs the data — the facet
+predicates read `complete`). No surface code changes; the picker, targeting, and
+clone framework (P1–P3) already consume the contract.
+
+### Invariants
+
+- The model's `datasets[0]`-over-globals view must keep satisfying this contract
+  **byte-identically** — every accessor proxies to the live global, so external
+  readers (`project.js` serialize/restore, `ctxmenu`, `settings.js`) are
+  unchanged. This is the A10 bit-identical contract; P0–P3 held it.
+- Per-surface, per-dataset *selection* state (today `ds.statsCat`, `ds.export`)
+  is **surface-owned**, not part of DatasetSource — the dataset stays a pure
+  source. (Open: move these into the surface layer keyed by ds id; see below.)
 
 ## Decisions (open)
 
