@@ -5307,6 +5307,21 @@ table.stats tr.stats-delta-row td:first-child {
 .dh-status { color: var(--fg-dim); font-size: 0.66rem; }
 .dh-status.err { color: var(--red); }
 
+/* A11 P1: raw-table export controls */
+.dh-table-dl {
+  background: none; border: 1px solid var(--border); color: var(--fg-dim);
+  border-radius: 3px; font: 0.58rem var(--mono); padding: 0 0.3rem; margin-left: 0.4rem;
+  cursor: pointer; text-transform: none; letter-spacing: 0; vertical-align: middle;
+}
+.dh-table-dl:hover { color: var(--fg); border-color: var(--fg-dim); }
+.dh-export-row { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.5rem; }
+.dh-zip-dl {
+  background: var(--bg); border: 1px solid var(--border); color: var(--fg);
+  border-radius: 4px; font: 0.66rem var(--mono); padding: 0.3rem 0.7rem; cursor: pointer;
+}
+.dh-zip-dl:hover { border-color: var(--action); color: var(--action); }
+.dh-export-hint { color: var(--fg-dim); font-size: 0.62rem; }
+
 .dh-report { margin-top: 0.7rem; }
 .dh-report-summary { color: var(--fg); font-size: 0.7rem; margin-bottom: 0.35rem; }
 .dh-report-clean { color: var(--green); font-size: 0.68rem; }

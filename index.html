@@ -5322,6 +5322,21 @@ table.stats tr.stats-delta-row td:first-child {
 .dh-status { color: var(--fg-dim); font-size: 0.66rem; }
 .dh-status.err { color: var(--red); }
 
+/* A11 P1: raw-table export controls */
+.dh-table-dl {
+  background: none; border: 1px solid var(--border); color: var(--fg-dim);
+  border-radius: 3px; font: 0.58rem var(--mono); padding: 0 0.3rem; margin-left: 0.4rem;
+  cursor: pointer; text-transform: none; letter-spacing: 0; vertical-align: middle;
+}
+.dh-table-dl:hover { color: var(--fg); border-color: var(--fg-dim); }
+.dh-export-row { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.5rem; }
+.dh-zip-dl {
+  background: var(--bg); border: 1px solid var(--border); color: var(--fg);
+  border-radius: 4px; font: 0.66rem var(--mono); padding: 0.3rem 0.7rem; cursor: pointer;
+}
+.dh-zip-dl:hover { border-color: var(--action); color: var(--action); }
+.dh-export-hint { color: var(--fg-dim); font-size: 0.62rem; }
+
 .dh-report { margin-top: 0.7rem; }
 .dh-report-summary { color: var(--fg); font-size: 0.7rem; margin-bottom: 0.35rem; }
 .dh-report-clean { color: var(--green); font-size: 0.68rem; }
@@ -6022,7 +6037,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build bf5dbbb — click to check for updates">bf5dbbb</div>
+<div class="build-badge" id="buildBadge" title="build 10e185d — click to check for updates">10e185d</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -16417,6 +16432,61 @@ function dhContainer(D) {
     intervalTables: dhIvtList(D)
   };
 }
+
+// ── A11 Phase 1: raw-table export ─────────────────────────────────────────
+// Each retained table (collar / survey / interval tables) downloads as CSV, and
+// the whole set bundles as a zip — the original "export the raw tables" ask, now
+// a one-liner per table because each IS a table with columns (the P0 container).
+// P1 has no per-table filter/calcols yet (P2): a table serializes its parsed rows
+// verbatim, so dhTableCsv is exactly where P2's filter+calcols will slot in.
+function dhTableCsv(parsed) {
+  var lines = [parsed.header.map(dhCsvCell).join(',')];
+  for (var i = 0; i < parsed.rows.length; i++) lines.push(parsed.rows[i].map(dhCsvCell).join(','));
+  return lines.join('\n') + '\n';
+}
+function dhDownload(blob, name) {
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+// The set's retained tables as [{role, name, parsed}] — collar, survey, then each
+// interval table (one today). Skips slots not yet loaded.
+function dhRetainedTables(ds) {
+  var D = dhStateFor(ds), out = [];
+  if (D.files.collar && D.parsed.collar) out.push({ role: 'collar', name: D.files.collar.name, parsed: D.parsed.collar });
+  if (D.files.survey && D.parsed.survey) out.push({ role: 'survey', name: D.files.survey.name, parsed: D.parsed.survey });
+  dhIvtList(D).forEach(function(t) { if (t.file && t.parsed) out.push({ role: t.id, name: t.file.name, parsed: t.parsed }); });
+  return out;
+}
+function dhExportTable(ds, role) {
+  var all = dhRetainedTables(ds), t = null;
+  for (var i = 0; i < all.length; i++) if (all[i].role === role) { t = all[i]; break; }
+  if (!t) return;
+  dhDownload(new Blob([dhTableCsv(t.parsed)], { type: 'text/csv' }), t.name);
+}
+async function dhExportTablesZip(ds) {
+  var tables = dhRetainedTables(ds);
+  if (!tables.length) return;
+  var entries = [], used = {};
+  for (var i = 0; i < tables.length; i++) {
+    var name = tables[i].name;
+    while (used[name]) name = tables[i].role + '-' + name;   // keep zip entries unique
+    used[name] = true;
+    var blob = new Blob([dhTableCsv(tables[i].parsed)], { type: 'text/csv' });
+    var crc = crc32Update(-1, new Uint8Array(await blob.arrayBuffer()));
+    entries.push({ name: name, crc: (crc ^ -1) >>> 0, method: 0, data: blob, uncompSize: blob.size });
+  }
+  var D = dhStateFor(ds);
+  var stem = (D.files.intervals && D.files.intervals.name.replace(/\.(csv|txt|dat)$/i, '')) || 'drillholes';
+  dhDownload(assembleZip(entries), stem + '-tables.zip');
+}
+// The ⬇ CSV link injected into each mapping-table title (P1).
+function dhTableDlBtn(role) {
+  return ' <button type="button" class="dh-table-dl" data-dh="exportTable" data-dh-role="' + role +
+    '" title="Download this table as CSV">↓ CSV</button>';
+}
 // The dataset config-panel element that hosts this set's card.
 function dhCardRoot(ds) { return (typeof dsConfigRoot === 'function') ? dsConfigRoot(ds || dsById('aux')) : null; }
 function dhQ(sel, root) { return root ? root.querySelector(sel) : null; }
@@ -16680,23 +16750,29 @@ function renderDhMapping(ds) {
   }
 
   var html = '<div class="dh-map-tables">';
-  html += '<div class="dh-map-table"><div class="dh-map-title">Collar — ' + esc(D.files.collar.name) + '</div>' +
+  html += '<div class="dh-map-table"><div class="dh-map-title">Collar — ' + esc(D.files.collar.name) + dhTableDlBtn('collar') + '</div>' +
     '<div class="dh-map-row"><label>BHID</label>' + dhColSelect(ds, 'collar', 'bhid', D.map.collar.bhid) + '</div>' +
     '<div class="dh-map-row"><label>X</label>' + dhColSelect(ds, 'collar', 'x', D.map.collar.x) + '</div>' +
     '<div class="dh-map-row"><label>Y</label>' + dhColSelect(ds, 'collar', 'y', D.map.collar.y) + '</div>' +
     '<div class="dh-map-row"><label>Z</label>' + dhColSelect(ds, 'collar', 'z', D.map.collar.z) + '</div>' +
     '<div class="dh-map-row"><label>EOH</label>' + dhColSelect(ds, 'collar', 'eoh', D.map.collar.eoh, 'none (advisory)') + '</div></div>';
-  html += '<div class="dh-map-table"><div class="dh-map-title">Survey — ' + esc(D.files.survey.name) + '</div>' +
+  html += '<div class="dh-map-table"><div class="dh-map-title">Survey — ' + esc(D.files.survey.name) + dhTableDlBtn('survey') + '</div>' +
     '<div class="dh-map-row"><label>BHID</label>' + dhColSelect(ds, 'survey', 'bhid', D.map.survey.bhid) + '</div>' +
     '<div class="dh-map-row"><label>Depth</label>' + dhColSelect(ds, 'survey', 'at', D.map.survey.at) + '</div>' +
     '<div class="dh-map-row"><label>Azimuth</label>' + dhColSelect(ds, 'survey', 'az', D.map.survey.az) + '</div>' +
     '<div class="dh-map-row"><label>Dip</label>' + dhColSelect(ds, 'survey', 'dip', D.map.survey.dip) + '</div></div>';
-  html += '<div class="dh-map-table"><div class="dh-map-title">Intervals — ' + esc(D.files.intervals.name) + '</div>' +
+  html += '<div class="dh-map-table"><div class="dh-map-title">Intervals — ' + esc(D.files.intervals.name) + dhTableDlBtn('intervals') + '</div>' +
     '<div class="dh-map-row"><label>BHID</label>' + dhColSelect(ds, 'intervals', 'bhid', D.map.intervals.bhid) + '</div>' +
     '<div class="dh-map-row"><label>From</label>' + dhColSelect(ds, 'intervals', 'from', D.map.intervals.from) + '</div>' +
     '<div class="dh-map-row"><label>To</label>' + dhColSelect(ds, 'intervals', 'to', D.map.intervals.to) + '</div>' +
     '<div class="dh-map-row" style="color:var(--fg-dim);font-size:0.65rem">every other column rides along (composited)</div></div>';
   html += '</div>';
+
+  // A11 P1: download the raw tables (as imported) — single CSVs via the titles
+  // above, or the whole set as a zip here.
+  html += '<div class="dh-export-row">' +
+    '<button type="button" class="dh-zip-dl" data-dh="exportZip" title="Download collar + survey + intervals as a zip">↓ Download tables (zip)</button>' +
+    '<span class="dh-export-hint">the raw tables, exactly as imported</span></div>';
 
   // dip convention — the deliberately loud row (D1)
   var conv = D.dipConvention || 'pos-down';
@@ -17107,6 +17183,10 @@ function wireDhCard(root, ds) {
     else if (k === 'minCov') { D.opts.minCov = e.target.value; dhAutoSave(); }
   });
   $card.addEventListener('click', function(e) {
+    var btn = e.target.closest ? e.target.closest('[data-dh]') : null;
+    var dk = btn && btn.dataset.dh;
+    if (dk === 'exportTable') { dhExportTable(ds, btn.dataset.dhRole); return; }   // A11 P1
+    if (dk === 'exportZip') { dhExportTablesZip(ds); return; }                     // A11 P1
     if (e.target.dataset && e.target.dataset.dh === 'go') { dhCompositeAndLoad(ds); return; }
     if (e.target.dataset && e.target.dataset.dh === 'clearBtn') { dhClearAll(ds); return; }
     var conv = e.target.dataset && e.target.dataset.dhconv;
