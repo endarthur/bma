@@ -293,17 +293,9 @@ function gtResetInstances() {
 // comparison dataset reads its registry view (ds.complete/file/filter/calcols/
 // preflight/rowVar). Only datasets with a completed analysis are targetable.
 function gtTargetDs(root) {
-  var id = gtStateForRoot(root).gtTargetDsId;
-  var ds = dsById(id);
-  if (ds && ds.complete) return ds;
-  // Model-optional projects: if the (default) model target has no analysis but a
-  // comparison does, target that so GT stays usable with no model. When a model
-  // IS analyzed, target 'model' resolves above → bit-identical to before.
-  if (id === 'model') {
-    var ts = gtTargetableDatasets();
-    if (ts.length) return ts[0];
-  }
-  return ds || dsById('model');
+  // keepUnanalyzed (model-optional): only a 'model' target with no analysis
+  // bounces to the first analyzed dataset; a comparison target is kept (C10 P2).
+  return surfaceTarget('analyzed', gtStateForRoot(root).gtTargetDsId, { keepUnanalyzed: true });
 }
 function gtCtx(root) {
   var ds = gtTargetDs(root);

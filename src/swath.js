@@ -94,11 +94,9 @@ function swStateForRoot(root) {
 // globals → bit-identical. A swath-able dataset needs a gridded geometry.
 function swathTargetableDatasets() { return surfaceTargetableDatasets('gridded'); }  // C10 P0
 function swathTargetDs(root) {
-  var id = swStateForRoot(root).swathTargetDsId || 'model';
-  var ds = dsById(id);
-  if (ds && ds.complete) return ds;
-  var ts = swathTargetableDatasets();
-  return ts.length ? ts[0] : (dsById('model') || datasets[0]);
+  // Targetable by 'gridded' but usable by .complete (swath shows a comparison's
+  // sidebar even before its geometry resolves) — C10 P2 keeps that split.
+  return surfaceTarget('gridded', swStateForRoot(root).swathTargetDsId || 'model');
 }
 function swathCtx(root) {
   var ds = swathTargetDs(root);

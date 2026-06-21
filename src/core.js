@@ -312,6 +312,30 @@ function surfaceTargetableDatasets(facet) {
   for (var i = 0; i < datasets.length; i++) if (dsHasFacet(datasets[i], facet)) out.push(datasets[i]);
   return out;
 }
+// C10 P2: resolve the dataset a surface targets, given its stored target `id`
+// and the `facet` it consumes. Five surfaces (stats/cat/swath/export/gt) hand-
+// rolled this same id→ds resolution with two fallback policies; centralizing
+// both lets their TargetDs become one-line delegations (each Ctx keeps its own
+// thin schema resolver). Bit-identical to the prior per-surface bodies:
+//   - usable(ds) → the stored target itself (default: has an analysis;
+//     Categories overrides to also require category data).
+//   - opts.keepUnanalyzed (export/gt): only a 'model' target bounces to the
+//     first facet-targetable dataset; a non-model target is KEPT (re-analyzed on
+//     demand) or floors to the model.
+//   - else (stats/cat/swath): any unusable target bounces to the first facet-
+//     targetable dataset, flooring to model/datasets[0].
+function surfaceTarget(facet, id, opts) {
+  opts = opts || {};
+  var ds = dsById(id);
+  var usable = opts.usable || function(d) { return d && d.complete; };
+  if (usable(ds)) return ds;
+  var ts = surfaceTargetableDatasets(facet);
+  if (opts.keepUnanalyzed) {
+    if (id === 'model' && ts.length) return ts[0];
+    return ds || dsById('model');
+  }
+  return ts.length ? ts[0] : (dsById('model') || datasets[0]);
+}
 // C10 P1: the shared "Dataset" picker markup — a title + a <select> of the
 // datasets exposing `facet`, the current one pre-selected. Returns '' below 2
 // targetable datasets (the surface is then implicitly its sole dataset, as

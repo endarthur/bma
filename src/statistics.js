@@ -92,13 +92,9 @@ function statStateForRoot(root) {
 // external readers: ctxmenu/cdf/settings). Mirrors gtCtx / statsCatCtx.
 function statsTargetableDatasets() { return surfaceTargetableDatasets('analyzed'); }  // C10 P0
 function statsTargetDs(root) {
-  var id = statStateForRoot(root).statsTargetDsId;
-  var ds = dsById(id);
-  if (ds && ds.complete) return ds;
-  // Model-optional: the default model target has no analysis but a comparison
-  // does → target the first analyzed dataset so the panel stays usable.
-  var ts = statsTargetableDatasets();
-  return ts.length ? ts[0] : (dsById('model') || datasets[0]);
+  // Model-optional: an unusable target (incl. the default model with no analysis
+  // when a comparison exists) bounces to the first analyzed dataset (C10 P2).
+  return surfaceTarget('analyzed', statStateForRoot(root).statsTargetDsId);
 }
 function statsCtx(root) {
   var ds = statsTargetDs(root);

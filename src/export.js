@@ -60,16 +60,9 @@ function exportEls(root) {
     datasetWrap: q('exportDatasetWrap') };
 }
 function exportTargetDs(root) {
-  var id = exportInstTarget(root);
-  var ds = dsById(id);
-  if (ds && ds.complete) return ds;
-  // Model-optional: if the default model target has no analysis but a comparison
-  // does, target that. Model-present (target 'model' analyzed) is bit-identical.
-  if (id === 'model') {
-    var ts = exportTargetableDatasets();
-    if (ts.length) return ts[0];
-  }
-  return ds || dsById('model');
+  // keepUnanalyzed: a non-model target restored before re-analysis is kept (it
+  // re-analyzes on demand); only the model target bounces to a comparison (C10 P2).
+  return surfaceTarget('analyzed', exportInstTarget(root), { keepUnanalyzed: true });
 }
 function exportCtx(root) {
   var ds = exportTargetDs(root);

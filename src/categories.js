@@ -11,10 +11,8 @@ let _catData = null;       // cached { categories, header, origColCount, rowCoun
 function catTargetableDatasets() { return surfaceTargetableDatasets('categorical'); }  // C10 P0
 function catTargetDs(root) {
   var id = (catStateForRoot(root) || {}).catTargetDsId || 'model';
-  var ds = dsById(id);
-  if (ds && ds.complete && ds.complete.categories) return ds;
-  var ts = catTargetableDatasets();
-  return ts.length ? ts[0] : (dsById('model') || datasets[0]);
+  // Usability requires category data, not just an analysis (C10 P2 usable hook).
+  return surfaceTarget('categorical', id, { usable: function(d) { return d && d.complete && d.complete.categories; } });
 }
 function catCtx(root) {
   var ds = catTargetDs(root);

@@ -114,8 +114,15 @@ per-surface smokes. No big-bang.
   inner markup in its own section (it wires onchange via sidebar delegation, not
   a per-picker querySelector). Bit-identical (`esc()` is a no-op on dataset ids);
   proven by the six `*-perds` smokes + the clone smokes.
-- **Phase 2** — `surfaceTarget` / `surfaceCtx` unification (the per-surface
-  TargetDs/Ctx keep their thin schema resolver, route through the shared core).
+- **Phase 2** *(done)* — `surfaceTarget(facet, id, opts)` in core.js centralizes
+  the id→ds target resolution (usability test + the two fallback policies the
+  surfaces grew: stats/cat/swath bounce ANY unusable target to the first
+  facet-targetable; export/gt `keepUnanalyzed` keep a non-model target and only
+  bounce the model). Five `<x>TargetDs` become one-line delegations; each `Ctx`
+  keeps its own thin schema resolver (the model-globals-vs-`ds.complete` field
+  mapping is genuinely per-surface). StatsCat stays bespoke (its resolver is the
+  simpler `dsById(id) || model` with no `.complete` check — routing it would
+  change behavior). Bit-identical; targeting + clone smokes green.
 - **Phase 3** — factor the clone-instance StateForRoot + persistence into the
   framework (the heaviest; the clone arcs converge).
 - **Phase 4** — formalize DatasetSource as the documented interface the registry

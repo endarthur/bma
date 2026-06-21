@@ -6022,7 +6022,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build fa23b8d — click to check for updates">fa23b8d</div>
+<div class="build-badge" id="buildBadge" title="build eee4329 — click to check for updates">eee4329</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8876,6 +8876,30 @@ function surfaceTargetableDatasets(facet) {
   var out = [];
   for (var i = 0; i < datasets.length; i++) if (dsHasFacet(datasets[i], facet)) out.push(datasets[i]);
   return out;
+}
+// C10 P2: resolve the dataset a surface targets, given its stored target `id`
+// and the `facet` it consumes. Five surfaces (stats/cat/swath/export/gt) hand-
+// rolled this same id→ds resolution with two fallback policies; centralizing
+// both lets their TargetDs become one-line delegations (each Ctx keeps its own
+// thin schema resolver). Bit-identical to the prior per-surface bodies:
+//   - usable(ds) → the stored target itself (default: has an analysis;
+//     Categories overrides to also require category data).
+//   - opts.keepUnanalyzed (export/gt): only a 'model' target bounces to the
+//     first facet-targetable dataset; a non-model target is KEPT (re-analyzed on
+//     demand) or floors to the model.
+//   - else (stats/cat/swath): any unusable target bounces to the first facet-
+//     targetable dataset, flooring to model/datasets[0].
+function surfaceTarget(facet, id, opts) {
+  opts = opts || {};
+  var ds = dsById(id);
+  var usable = opts.usable || function(d) { return d && d.complete; };
+  if (usable(ds)) return ds;
+  var ts = surfaceTargetableDatasets(facet);
+  if (opts.keepUnanalyzed) {
+    if (id === 'model' && ts.length) return ts[0];
+    return ds || dsById('model');
+  }
+  return ts.length ? ts[0] : (dsById('model') || datasets[0]);
 }
 // C10 P1: the shared "Dataset" picker markup — a title + a <select> of the
 // datasets exposing `facet`, the current one pre-selected. Returns '' below 2
@@ -21602,13 +21626,9 @@ function statStateForRoot(root) {
 // external readers: ctxmenu/cdf/settings). Mirrors gtCtx / statsCatCtx.
 function statsTargetableDatasets() { return surfaceTargetableDatasets('analyzed'); }  // C10 P0
 function statsTargetDs(root) {
-  var id = statStateForRoot(root).statsTargetDsId;
-  var ds = dsById(id);
-  if (ds && ds.complete) return ds;
-  // Model-optional: the default model target has no analysis but a comparison
-  // does → target the first analyzed dataset so the panel stays usable.
-  var ts = statsTargetableDatasets();
-  return ts.length ? ts[0] : (dsById('model') || datasets[0]);
+  // Model-optional: an unusable target (incl. the default model with no analysis
+  // when a comparison exists) bounces to the first analyzed dataset (C10 P2).
+  return surfaceTarget('analyzed', statStateForRoot(root).statsTargetDsId);
 }
 function statsCtx(root) {
   var ds = statsTargetDs(root);
@@ -23231,16 +23251,9 @@ function exportEls(root) {
     datasetWrap: q('exportDatasetWrap') };
 }
 function exportTargetDs(root) {
-  var id = exportInstTarget(root);
-  var ds = dsById(id);
-  if (ds && ds.complete) return ds;
-  // Model-optional: if the default model target has no analysis but a comparison
-  // does, target that. Model-present (target 'model' analyzed) is bit-identical.
-  if (id === 'model') {
-    var ts = exportTargetableDatasets();
-    if (ts.length) return ts[0];
-  }
-  return ds || dsById('model');
+  // keepUnanalyzed: a non-model target restored before re-analysis is kept (it
+  // re-analyzes on demand); only the model target bounces to a comparison (C10 P2).
+  return surfaceTarget('analyzed', exportInstTarget(root), { keepUnanalyzed: true });
 }
 function exportCtx(root) {
   var ds = exportTargetDs(root);
@@ -24334,11 +24347,9 @@ function swStateForRoot(root) {
 // globals → bit-identical. A swath-able dataset needs a gridded geometry.
 function swathTargetableDatasets() { return surfaceTargetableDatasets('gridded'); }  // C10 P0
 function swathTargetDs(root) {
-  var id = swStateForRoot(root).swathTargetDsId || 'model';
-  var ds = dsById(id);
-  if (ds && ds.complete) return ds;
-  var ts = swathTargetableDatasets();
-  return ts.length ? ts[0] : (dsById('model') || datasets[0]);
+  // Targetable by 'gridded' but usable by .complete (swath shows a comparison's
+  // sidebar even before its geometry resolves) — C10 P2 keeps that split.
+  return surfaceTarget('gridded', swStateForRoot(root).swathTargetDsId || 'model');
 }
 function swathCtx(root) {
   var ds = swathTargetDs(root);
@@ -26951,17 +26962,9 @@ function gtResetInstances() {
 // comparison dataset reads its registry view (ds.complete/file/filter/calcols/
 // preflight/rowVar). Only datasets with a completed analysis are targetable.
 function gtTargetDs(root) {
-  var id = gtStateForRoot(root).gtTargetDsId;
-  var ds = dsById(id);
-  if (ds && ds.complete) return ds;
-  // Model-optional projects: if the (default) model target has no analysis but a
-  // comparison does, target that so GT stays usable with no model. When a model
-  // IS analyzed, target 'model' resolves above → bit-identical to before.
-  if (id === 'model') {
-    var ts = gtTargetableDatasets();
-    if (ts.length) return ts[0];
-  }
-  return ds || dsById('model');
+  // keepUnanalyzed (model-optional): only a 'model' target with no analysis
+  // bounces to the first analyzed dataset; a comparison target is kept (C10 P2).
+  return surfaceTarget('analyzed', gtStateForRoot(root).gtTargetDsId, { keepUnanalyzed: true });
 }
 function gtCtx(root) {
   var ds = gtTargetDs(root);
@@ -31472,10 +31475,8 @@ let _catData = null;       // cached { categories, header, origColCount, rowCoun
 function catTargetableDatasets() { return surfaceTargetableDatasets('categorical'); }  // C10 P0
 function catTargetDs(root) {
   var id = (catStateForRoot(root) || {}).catTargetDsId || 'model';
-  var ds = dsById(id);
-  if (ds && ds.complete && ds.complete.categories) return ds;
-  var ts = catTargetableDatasets();
-  return ts.length ? ts[0] : (dsById('model') || datasets[0]);
+  // Usability requires category data, not just an analysis (C10 P2 usable hook).
+  return surfaceTarget('categorical', id, { usable: function(d) { return d && d.complete && d.complete.categories; } });
 }
 function catCtx(root) {
   var ds = catTargetDs(root);
