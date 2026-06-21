@@ -5322,6 +5322,25 @@ table.stats tr.stats-delta-row td:first-child {
 .dh-zip-dl:hover { border-color: var(--action); color: var(--action); }
 .dh-export-hint { color: var(--fg-dim); font-size: 0.62rem; }
 
+/* A11 P2: per-table calcols & filter editor */
+.dh-ivt-edit { margin-top: 0.5rem; border: 1px solid var(--border); border-radius: 4px; padding: 0.3rem 0.5rem; }
+.dh-ivt-edit-title { color: var(--fg-dim); font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; }
+.dh-ivt-edit-hint { text-transform: none; letter-spacing: 0; }
+.dh-ivt-calc {
+  width: 100%; box-sizing: border-box; margin-top: 0.35rem; resize: vertical;
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 3px; font: 0.66rem var(--mono); padding: 0.3rem 0.4rem;
+}
+.dh-ivt-filter {
+  flex: 1; min-width: 0;
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 3px; font: 0.66rem var(--mono); padding: 0.15rem 0.3rem;
+}
+.dh-ivt-edit .dh-map-row { margin-top: 0.3rem; }
+.dh-ivt-status { color: var(--fg-dim); font-size: 0.62rem; margin-top: 0.3rem; min-height: 0.8rem; }
+.dh-ivt-status b { color: var(--fg); }
+.dh-ivt-err { color: var(--red); }
+
 .dh-report { margin-top: 0.7rem; }
 .dh-report-summary { color: var(--fg); font-size: 0.7rem; margin-bottom: 0.35rem; }
 .dh-report-clean { color: var(--green); font-size: 0.68rem; }

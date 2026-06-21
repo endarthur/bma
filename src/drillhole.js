@@ -101,6 +101,64 @@ function dhTableCsv(parsed) {
   for (var i = 0; i < parsed.rows.length; i++) lines.push(parsed.rows[i].map(dhCsvCell).join(','));
   return lines.join('\n') + '\n';
 }
+
+// A11 P2: coerce a raw cell to a number for EVALUATION (calcols/filter compute on
+// numbers); raw columns still export as their original strings (no silent
+// reformatting — the BMA standing rule), only calcol-produced columns are new.
+function dhCoerceCell(s) {
+  if (s == null || s === '') return s;
+  var n = +s;
+  return (!isNaN(n) && isFinite(n)) ? n : s;
+}
+// Apply a table's per-table calcols + filter (A11 P2) on the main thread — tables
+// are small. Calcols (r.NEW = expr, rowVar 'r', same DSL + MATH_PREAMBLE as the
+// worker) APPEND columns; the filter (return (expr)) drops rows. Original columns
+// pass through VERBATIM (their raw strings); only new calcol columns are computed.
+// Syntax/runtime errors and the kept/total counts are RETURNED so the UI surfaces
+// them — never a silent loss.
+function dhTableEval(parsed, calcolCode, filterExpr) {
+  var header = parsed.header, origLen = header.length;
+  var res = { header: header.slice(), rows: [], calcCols: [], calcErrors: 0, filterErrors: 0,
+    kept: 0, total: parsed.rows.length, calcSyntaxError: null, filterSyntaxError: null };
+  var calFn = null, filFn = null;
+  if (calcolCode && calcolCode.trim()) {
+    try { calFn = new Function('r', MATH_PREAMBLE_MAIN + calcolCode); }
+    catch (e) { res.calcSyntaxError = e.message; }
+  }
+  if (filterExpr && filterExpr.trim()) {
+    try { filFn = new Function('r', MATH_PREAMBLE_MAIN + 'return (' + filterExpr + ');'); }
+    catch (e) { res.filterSyntaxError = e.message; }
+  }
+  var calcKeys = [], calcSeen = {}, staged = [];
+  for (var i = 0; i < parsed.rows.length; i++) {
+    var arr = parsed.rows[i], r = {};
+    for (var c = 0; c < origLen; c++) r[header[c]] = dhCoerceCell(arr[c]);
+    if (calFn) {
+      r.META = { cat: [], num: [] };   // calcol code may push type hints; ignored on export
+      try { calFn(r); } catch (e) { res.calcErrors++; }
+      for (var k in r) {
+        if (!r.hasOwnProperty(k) || k === 'META') continue;
+        if (header.indexOf(k) < 0 && !calcSeen[k]) { calcSeen[k] = true; calcKeys.push(k); }
+      }
+    }
+    if (filFn) {
+      var keep;
+      try { keep = !!filFn(r); } catch (e) { res.filterErrors++; keep = false; }
+      if (!keep) continue;
+    }
+    res.kept++;
+    staged.push({ arr: arr, r: r });
+  }
+  res.calcCols = calcKeys;
+  res.header = header.concat(calcKeys);
+  res.rows = staged.map(function(s) {
+    var out = [];
+    for (var c = 0; c < origLen; c++) out.push(c < s.arr.length ? s.arr[c] : '');   // raw cells verbatim
+    for (var j = 0; j < calcKeys.length; j++) { var v = s.r[calcKeys[j]]; out.push(v == null ? '' : v); }
+    return out;
+  });
+  return res;
+}
 function dhDownload(blob, name) {
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -114,14 +172,25 @@ function dhRetainedTables(ds) {
   var D = dhStateFor(ds), out = [];
   if (D.files.collar && D.parsed.collar) out.push({ role: 'collar', name: D.files.collar.name, parsed: D.parsed.collar });
   if (D.files.survey && D.parsed.survey) out.push({ role: 'survey', name: D.files.survey.name, parsed: D.parsed.survey });
-  dhIvtList(D).forEach(function(t) { if (t.file && t.parsed) out.push({ role: t.id, name: t.file.name, parsed: t.parsed }); });
+  dhIvtList(D).forEach(function(t) {
+    if (t.file && t.parsed) out.push({ role: t.id, name: t.file.name, parsed: t.parsed, calcolCode: t.calcolCode, filter: t.filter });
+  });
   return out;
+}
+// CSV for a retained table — applies its per-table calcols + filter when set
+// (A11 P2: interval tables today), else the raw table verbatim (collar/survey).
+function dhTableExportCsv(t) {
+  if ((t.calcolCode && t.calcolCode.trim()) || (t.filter && t.filter.trim())) {
+    var ev = dhTableEval(t.parsed, t.calcolCode, t.filter);
+    return dhTableCsv({ header: ev.header, rows: ev.rows });
+  }
+  return dhTableCsv(t.parsed);
 }
 function dhExportTable(ds, role) {
   var all = dhRetainedTables(ds), t = null;
   for (var i = 0; i < all.length; i++) if (all[i].role === role) { t = all[i]; break; }
   if (!t) return;
-  dhDownload(new Blob([dhTableCsv(t.parsed)], { type: 'text/csv' }), t.name);
+  dhDownload(new Blob([dhTableExportCsv(t)], { type: 'text/csv' }), t.name);
 }
 async function dhExportTablesZip(ds) {
   var tables = dhRetainedTables(ds);
@@ -131,7 +200,7 @@ async function dhExportTablesZip(ds) {
     var name = tables[i].name;
     while (used[name]) name = tables[i].role + '-' + name;   // keep zip entries unique
     used[name] = true;
-    var blob = new Blob([dhTableCsv(tables[i].parsed)], { type: 'text/csv' });
+    var blob = new Blob([dhTableExportCsv(tables[i])], { type: 'text/csv' });
     var crc = crc32Update(-1, new Uint8Array(await blob.arrayBuffer()));
     entries.push({ name: name, crc: (crc ^ -1) >>> 0, method: 0, data: blob, uncompSize: blob.size });
   }
@@ -425,6 +494,9 @@ function renderDhMapping(ds) {
     '<div class="dh-map-row" style="color:var(--fg-dim);font-size:0.65rem">every other column rides along (composited)</div></div>';
   html += '</div>';
 
+  // A11 P2: per-interval-table calcols + filter (applied on export)
+  html += dhIvtEditorHtml(ds);
+
   // A11 P1: download the raw tables (as imported) — single CSVs via the titles
   // above, or the whole set as a zip here.
   html += '<div class="dh-export-row">' +
@@ -470,6 +542,39 @@ function renderDhMapping(ds) {
   // domain select value applied after render (option list is data-driven)
   var $dom = dhQ('[data-dh="domain"]', root);
   if ($dom && D.opts.domainCol) $dom.value = D.opts.domainCol;
+  dhRenderIvtStatus(ds);   // A11 P2: calc-column / kept-row / error summary
+}
+
+// A11 P2: the interval table's calcols + filter editor (applied on export).
+function dhIvtEditorHtml(ds) {
+  var ivt = dhPrimaryIvt(dhStateFor(ds));
+  if (!ivt) return '';
+  var code = ivt.calcolCode || '', filt = ivt.filter || '';
+  return '<details class="dh-ivt-edit"' + ((code || filt) ? ' open' : '') + '>' +
+    '<summary class="dh-ivt-edit-title">Interval calcols &amp; filter<span class="dh-ivt-edit-hint"> — added columns + row filter, applied on export</span></summary>' +
+    '<textarea data-dh="ivtCalc" class="dh-ivt-calc" rows="2" spellcheck="false" placeholder="r.Fe_pct = r.Fe / 100">' + esc(code) + '</textarea>' +
+    '<div class="dh-map-row"><label>Filter</label><input type="text" data-dh="ivtFilter" class="dh-ivt-filter" spellcheck="false" value="' + esc(filt) + '" placeholder="r.Fe > 0"></div>' +
+    '<div class="dh-ivt-status" data-dh="ivtStatus"></div>' +
+    '</details>';
+}
+// Live status under the editor: detected calc columns, kept/total rows, and any
+// syntax/runtime/excluded counts — surfaced, never silently dropped (A9 rule).
+function dhRenderIvtStatus(ds) {
+  var D = dhStateFor(ds), ivt = dhPrimaryIvt(D);
+  var $s = dhQ('[data-dh="ivtStatus"]', dhCardRoot(ds));
+  if (!$s) return;
+  var hasCalc = ivt && ivt.calcolCode && ivt.calcolCode.trim();
+  var hasFilt = ivt && ivt.filter && ivt.filter.trim();
+  if (!ivt || !ivt.parsed || (!hasCalc && !hasFilt)) { $s.innerHTML = ''; return; }
+  var ev = dhTableEval(ivt.parsed, ivt.calcolCode, ivt.filter);
+  var bits = [];
+  if (ev.calcSyntaxError) bits.push('<span class="dh-ivt-err">calcol syntax: ' + esc(ev.calcSyntaxError) + '</span>');
+  else if (ev.calcCols.length) bits.push('<b>' + ev.calcCols.length + '</b> calc col' + (ev.calcCols.length > 1 ? 's' : '') + ' (' + ev.calcCols.map(esc).join(', ') + ')');
+  if (ev.filterSyntaxError) bits.push('<span class="dh-ivt-err">filter syntax: ' + esc(ev.filterSyntaxError) + '</span>');
+  else if (hasFilt) bits.push('<b>' + ev.kept.toLocaleString() + '</b>/' + ev.total.toLocaleString() + ' rows kept');
+  if (ev.calcErrors) bits.push('<span class="dh-ivt-err">' + ev.calcErrors + ' calc-error row' + (ev.calcErrors > 1 ? 's' : '') + '</span>');
+  if (ev.filterErrors) bits.push('<span class="dh-ivt-err">' + ev.filterErrors + ' filter-error row' + (ev.filterErrors > 1 ? 's' : '') + ' excluded</span>');
+  $s.innerHTML = bits.join(' · ');
 }
 
 function dhAutoLength(ds) {
@@ -687,6 +792,8 @@ function dhSerialize(ds) {
     map: { collar: dhMapToNames(ds, 'collar'), survey: dhMapToNames(ds, 'survey'), intervals: dhMapToNames(ds, 'intervals') },
     dipConvention: D.dipConvention,
     opts: { method: D.opts.method, length: D.opts.length, domainCol: D.opts.domainCol, minCov: D.opts.minCov },
+    // A11 P2: the interval table's per-table calcols + filter (omitted when empty)
+    intervalCalcols: (ivt.calcolCode || ivt.filter) ? { calcolCode: ivt.calcolCode || '', filter: ivt.filter || '' } : null,
     loaded: !!(ds.file && D.derivedName && ds.file.name === D.derivedName),
   };
 }
@@ -738,6 +845,10 @@ function dhTryApplyPendingRestore(ds) {
     D.opts.length = pr.opts.length || '';
     D.opts.domainCol = pr.opts.domainCol || '';
     D.opts.minCov = pr.opts.minCov || '';
+  }
+  if (pr.intervalCalcols) {   // A11 P2: per-table calcols/filter (once the intervals table exists)
+    var ivt = dhPrimaryIvt(D);
+    if (ivt) { ivt.calcolCode = pr.intervalCalcols.calcolCode || ''; ivt.filter = pr.intervalCalcols.filter || ''; }
   }
   if (allMatch) {
     var wasLoaded = pr.loaded;
@@ -838,6 +949,15 @@ function wireDhCard(root, ds) {
     else if (k === 'length') { D.opts.length = e.target.value; dhAutoSave(); }
     else if (k === 'domain') { D.opts.domainCol = e.target.value; dhAutoSave(); }
     else if (k === 'minCov') { D.opts.minCov = e.target.value; dhAutoSave(); }
+    else if (k === 'ivtCalc' || k === 'ivtFilter') {   // A11 P2: per-table calcols/filter
+      var ivt = dhPrimaryIvt(D);
+      if (ivt) {
+        if (k === 'ivtCalc') ivt.calcolCode = e.target.value;
+        else ivt.filter = e.target.value;
+        dhRenderIvtStatus(ds);
+        dhAutoSave();
+      }
+    }
   });
   $card.addEventListener('click', function(e) {
     var btn = e.target.closest ? e.target.closest('[data-dh]') : null;
