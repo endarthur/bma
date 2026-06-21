@@ -1087,21 +1087,18 @@ var _helpTabs = {
       '<div class="help-row"><span>Drop a .zip and select which CSV entry to analyze from the dropdown.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Projects</div>' +
       '<div class="help-row"><span><strong>Save</strong> (toolbar) — download the workspace config as <code>.bma.json</code>. Drop it on the landing page later, then drop the matching data file to apply it.</span></div>' +
-      '<div class="help-row"><span><strong>Pack</strong> (toolbar) — bundle the data file(s), the aux dataset, and the project into one portable <code>.bma.zip</code>. The dialog sets a project title, picks contents, and toggles deflate compression; archives use Zip64 automatically, so size is not a limit. Dropping a packed zip offers to load everything pre-configured.</span></div></div>'
-  },
-  summary: {
-    title: 'Summary',
-    html:
-      '<div class="help-section"><div class="help-section-title">Overview</div>' +
-      '<div class="help-row"><span>File metadata, grid geometry, and column overview with type/completeness info.</span></div></div>' +
+      '<div class="help-row"><span><strong>Pack</strong> (toolbar) — bundle the data file(s), the aux dataset, and the project into one portable <code>.bma.zip</code>. The dialog sets a project title, picks contents, and toggles deflate compression; archives use Zip64 automatically, so size is not a limit. Dropping a packed zip offers to load everything pre-configured.</span></div></div>' +
+      // ws-v2 phase 2: the Summary now lives in this panel's Preview/Summary toggle.
+      '<div class="help-section"><div class="help-section-title">Summary view</div>' +
+      '<div class="help-row"><span>After analysis, switch the right pane to <strong>Summary</strong> for file metadata, grid geometry, data health, and a column overview.</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Grid Geometry</div>' +
-      '<div class="help-row"><span>Auto-detected XYZ extents, block sizes, sub-block ratios. Requires XYZ assignment in Import Model.</span></div>' +
-      '<div class="help-row"><span><strong>OBJ Export</strong> \u2014 download bounding box as a 3D mesh file</span></div></div>' +
+      '<div class="help-row"><span>Auto-detected XYZ extents, block sizes, sub-block ratios. Requires XYZ assignment.</span></div>' +
+      '<div class="help-row"><span><strong>OBJ Export</strong> — download bounding box as a 3D mesh file</span></div></div>' +
       '<div class="help-section"><div class="help-section-title">Column Overview</div>' +
       '<div class="help-row"><span>Table of all columns with type, count, nulls, zeros, completeness, and range.</span></div>' +
-      '<div class="help-row"><span><strong>Unit</strong> column \u2014 assign grade units (%, ppm, g/t, etc.) that propagate to GT and Swath</span></div>' +
-      '<div class="help-row"><span><strong>Sniff units</strong> \u2014 auto-detect units from column name patterns like <code>_ppm</code>, <code>(g/t)</code>, <code>_pct</code></span></div>' +
-      '<div class="help-row"><span><strong>Copy table</strong> \u2014 copy the overview as tab-separated text</span></div></div>'
+      '<div class="help-row"><span><strong>Unit</strong> column — assign grade units (%, ppm, g/t, etc.) that propagate to GT and Swath</span></div>' +
+      '<div class="help-row"><span><strong>Sniff units</strong> — auto-detect units from column name patterns like <code>_ppm</code>, <code>(g/t)</code>, <code>_pct</code></span></div>' +
+      '<div class="help-row"><span><strong>Copy table</strong> — copy the overview as tab-separated text</span></div></div>'
   },
   calcols: {
     title: 'Calculated Columns',

@@ -141,7 +141,6 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
       </button>
       <button class="results-tab active" data-tab="preflight">Import Model</button>
       <button class="results-tab" data-tab="aux">Aux</button>
-      <button class="results-tab" data-tab="summary">Summary</button>
       <button class="results-tab" data-tab="calcols">Calc</button>
       <button class="results-tab" data-tab="statistics">Statistics</button>
       <button class="results-tab" data-tab="categories">Categories</button>
@@ -180,7 +179,49 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
         <div class="preflight-body">
           <div class="preflight-sidebar" id="preflightSidebar"></div>
           <div class="preflight-preview-wrap">
+            <!-- ws-v2 phase 2: Summary folded into the Import Model panel as a
+                 right-pane view (mirrors the comparison-dataset Preview/Summary
+                 toggle). Shown once an analysis exists. -->
+            <div class="aux-view-toggle" id="modelViewToggle" data-pf="viewToggle" style="display:none">
+              <button class="aux-view-btn active" data-pfview="preview">Preview</button>
+              <button class="aux-view-btn" data-pfview="summary">Summary</button>
+            </div>
             <div class="preflight-preview" id="preflightPreview"></div>
+            <div class="preflight-summary" id="preflightSummary" data-pf="summaryView" style="display:none">
+              <div class="section section--geo" id="geoSection">
+                <div class="section-head">
+                  Grid Geometry
+                  <span><span class="badge" id="geoBadge"></span><button class="copy-table-btn" id="exportObjBtn" title="Download bounding box as .obj" style="display:none">Export OBJ</button><button class="copy-table-btn" id="copyGeoBtn" title="Copy as table">Copy table</button></span>
+                </div>
+                <div class="section-body">
+                  <div class="xyz-config" id="xyzConfig"></div>
+                  <div id="geoContent"></div>
+                </div>
+              </div>
+
+              <div class="section section--health" id="healthSection" style="display:none">
+                <div class="section-head">
+                  Data Health
+                  <span><span class="badge" id="healthBadge"></span></span>
+                </div>
+                <div class="section-body" id="healthContent"></div>
+              </div>
+
+              <div class="section section--file">
+                <div class="section-head">File Info</div>
+                <div class="section-body">
+                  <div class="file-info" id="fileInfo"></div>
+                </div>
+              </div>
+
+              <div class="section section--cols" id="colOverviewSection" style="display:none">
+                <div class="section-head">
+                  Column Overview
+                  <span><span class="badge" id="colOverviewBadge"></span><button class="sniff-units-btn" id="sniffUnitsBtn" title="Auto-detect units from column names">Sniff units</button><button class="copy-table-btn" id="copyColOverviewBtn" title="Copy as table">Copy table</button></span>
+                </div>
+                <div class="section-body" id="colOverviewContent"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -239,43 +280,8 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
         </div>
       </div>
 
-      <div class="results-panel" id="panelSummary" data-tab="summary">
-        <div class="panel-inner">
-          <div class="section section--geo" id="geoSection">
-            <div class="section-head">
-              Grid Geometry
-              <span><span class="badge" id="geoBadge"></span><button class="copy-table-btn" id="exportObjBtn" title="Download bounding box as .obj" style="display:none">Export OBJ</button><button class="copy-table-btn" id="copyGeoBtn" title="Copy as table">Copy table</button></span>
-            </div>
-            <div class="section-body">
-              <div class="xyz-config" id="xyzConfig"></div>
-              <div id="geoContent"></div>
-            </div>
-          </div>
-
-          <div class="section section--health" id="healthSection" style="display:none">
-            <div class="section-head">
-              Data Health
-              <span><span class="badge" id="healthBadge"></span></span>
-            </div>
-            <div class="section-body" id="healthContent"></div>
-          </div>
-
-          <div class="section section--file">
-            <div class="section-head">File Info</div>
-            <div class="section-body">
-              <div class="file-info" id="fileInfo"></div>
-            </div>
-          </div>
-
-          <div class="section section--cols" id="colOverviewSection" style="display:none">
-            <div class="section-head">
-              Column Overview
-              <span><span class="badge" id="colOverviewBadge"></span><button class="sniff-units-btn" id="sniffUnitsBtn" title="Auto-detect units from column names">Sniff units</button><button class="copy-table-btn" id="copyColOverviewBtn" title="Copy as table">Copy table</button></span>
-            </div>
-            <div class="section-body" id="colOverviewContent"></div>
-          </div>
-        </div>
-      </div>
+      <!-- ws-v2 phase 2: #panelSummary retired — its sections now live in the
+           Import Model panel's Summary view (above). -->
 
       <div class="results-panel" id="panelCalcols" data-tab="calcols">
         <div class="calcol-layout">

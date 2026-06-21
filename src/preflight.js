@@ -1,5 +1,41 @@
 // ─── Preflight: main-thread helpers ────────────────────────────────────
 
+// ws-v2 phase 2: the Import Model panel's right-pane view. 'preview' shows the
+// sampled rows; 'summary' shows the folded Summary (grid geometry / file info /
+// data health / column overview) — what used to be the standalone Summary tab.
+// Mirrors the comparison-dataset Preview/Summary toggle (renderAuxView).
+var modelView = 'preview';
+function renderModelView() {
+  var toggle = document.getElementById('modelViewToggle');
+  var preview = document.getElementById('preflightPreview');
+  var summary = document.getElementById('preflightSummary');
+  if (!preview || !summary) return;
+  var showSummary = modelView === 'summary';
+  if (toggle) {
+    // The Summary view only has content once an analysis has run.
+    toggle.style.display = (typeof hasResults !== 'undefined' && hasResults) ? '' : 'none';
+    toggle.querySelectorAll('.aux-view-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.pfview === modelView);
+    });
+  }
+  preview.style.display = showSummary ? 'none' : '';
+  summary.style.display = showSummary ? '' : 'none';
+}
+function setModelView(v) {
+  // Can't show Summary before there's an analysis to summarize.
+  modelView = (v === 'summary' && typeof hasResults !== 'undefined' && hasResults) ? 'summary' : 'preview';
+  renderModelView();
+}
+(function wireModelViewToggle() {
+  var toggle = document.getElementById('modelViewToggle');
+  if (!toggle) return;
+  toggle.addEventListener('click', function(e) {
+    var btn = e.target.closest('.aux-view-btn');
+    if (!btn) return;
+    setModelView(btn.dataset.pfview);
+  });
+})();
+
 const DELIMITERS_MAIN = [',', '\t', ';', '|', ' '];
 const NULL_SENTINELS_MAIN = new Set(['', 'NA', 'NaN', 'na', 'nan', 'N/A', 'n/a', 'null', 'NULL', '*', '-', '-999', '-99', '#N/A', 'VOID', 'void', '-1.0e+32', '-1e+32', '1e+31', '-9999', '-99999']);
 

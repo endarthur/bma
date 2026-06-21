@@ -3904,13 +3904,15 @@ table.cat-values td.cat-pct-cell {
     max-width: 1600px;
   }
 
-  /* Summary panel: two-column layout */
-  #panelSummary .panel-inner {
+  /* ws-v2 phase 2: the model Summary lives in the Import panel's preview pane;
+     two-column on wide screens */
+  .preflight-summary {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
+    gap: 1.25rem;
     align-items: start;
   }
+  .preflight-summary .section { margin-bottom: 0; }
 }
 
 @media (min-width: 1400px) {
@@ -4237,6 +4239,10 @@ table.cat-values tr.cat-aux-only td { background: color-mix(in srgb, var(--brand
 .aux-topcut { padding: 0.5rem 0.7rem 1rem; overflow-y: auto; }
 /* A10 — per-dataset summary (bbox + health) in the aux panel */
 .aux-summary { overflow-y: auto; }
+/* ws-v2 phase 2: the model Summary view inside the Import Model panel's preview pane */
+.preflight-summary { overflow-y: auto; padding: 1rem 1.25rem; }
+.preflight-summary .section { margin-bottom: 1rem; }
+.preflight-summary .section:last-child { margin-bottom: 0; }
 .aux-bbox-table { border-collapse: collapse; font: 0.74rem var(--mono); }
 .aux-bbox-table th, .aux-bbox-table td {
   padding: 0.25rem 0.9rem 0.25rem 0; text-align: right; color: var(--fg);

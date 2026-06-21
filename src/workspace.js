@@ -30,7 +30,7 @@ var wsMenuBar = null;    // C6-2 desktop menubar (rails shell only); null on leg
 var WS_PANELS = [
   { id: 'preflight',  title: 'Import Model',  el: 'panelPreflight' },
   { id: 'aux',        title: 'Aux',        el: 'panelAux' },
-  { id: 'summary',    title: 'Summary',    el: 'panelSummary' },
+  // ws-v2 phase 2: Summary folded into the Import Model panel (no standalone tab).
   { id: 'calcols',    title: 'Calc',       el: 'panelCalcols' },
   { id: 'statistics', title: 'Statistics', el: 'panelStatistics' },
   { id: 'categories', title: 'Categories', el: 'panelCategories' },
@@ -47,6 +47,14 @@ var WS_MAIN_RAIL = 'rMain', WS_MAIN_STACK = 'sMain';
 // Shell-agnostic panel activation — the one entry point for programmatic
 // tab switches (project restore, ctx-menu focus, deep links)
 function showPanel(tabId) {
+  // ws-v2 phase 2: Summary folded into the Import Model panel — 'summary' now
+  // means "open the model panel, switch its right pane to the Summary view".
+  // Keeps old call sites + restored projects (activeTab:'summary') working.
+  if (tabId === 'summary') {
+    switchTab('preflight');
+    if (typeof setModelView === 'function') setModelView('summary');
+    return;
+  }
   switchTab(tabId); // core.js — delegates to wsActivateInRails on the rails shell
 }
 

@@ -491,6 +491,7 @@ function serializeProject() {
     id: currentProjectId,   // model-optional: set for model-less projects, null when model-backed
     title: projectTitle,
     activeTab: document.querySelector('.results-tab.active')?.dataset.tab || null,
+    modelView: (typeof modelView !== 'undefined') ? modelView : 'preview',   // ws-v2 phase 2: Import Model panel's right-pane view
     file: currentFile ? { name: currentFile.name, size: currentFile.size } : null,
     preflight: {
       typeOverrides: preflightData?.typeOverrides || {},
@@ -2287,6 +2288,10 @@ function displayResults(data) {
   // A10 4f-2: the detected-grid badge in the preflight panel is only known now
   if (typeof refreshModelGridSection === 'function') refreshModelGridSection();
 
+  // ws-v2 phase 2: the Summary now lives in this panel — reveal its Preview/Summary
+  // toggle once there's an analysis (showPanel('summary') below switches the view).
+  if (typeof renderModelView === 'function') renderModelView();
+
   // Show filter section (action bar already visible from handleFile)
   $filterSection.classList.add('active');
   const infoItems = [
@@ -2747,6 +2752,12 @@ function displayResults(data) {
   // Restore active tab
   if (restoredProject && restoredProject.activeTab) {
     showPanel(restoredProject.activeTab);
+  }
+  // ws-v2 phase 2: restore the Import Model panel's Preview/Summary view. Old
+  // projects used activeTab:'summary' (handled by showPanel above); new ones
+  // carry modelView alongside activeTab:'preflight'.
+  if (restoredProject && restoredProject.modelView === 'summary' && typeof setModelView === 'function') {
+    setModelView('summary');
   }
 
   // Auto-save project
