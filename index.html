@@ -6022,7 +6022,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build eee4329 — click to check for updates">eee4329</div>
+<div class="build-badge" id="buildBadge" title="build e02632d — click to check for updates">e02632d</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8901,6 +8901,42 @@ function surfaceTarget(facet, id, opts) {
   }
   return ts.length ? ts[0] : (dsById('model') || datasets[0]);
 }
+
+// ─── C10 P3: shared panel-clone plumbing ───────────────────────────────────
+// The six analysis surfaces (Statistics/Categories/Swath/GT/Export/StatsCat)
+// each grew a cloneable instance arc. The genuinely-duplicated mechanics live
+// here; the surface-specific parts (accessor-proxy field lists, NewInstState,
+// BuildInstancePanel templates, serialize/restore shapes) stay per-surface —
+// they name surface-specific globals/templates, so they're six different things,
+// not duplication. Bit-identical to the prior inline copies.
+
+// A clone's render root carries a data-<x>-inst marker; the singleton root does
+// not. THE definition of "is this root a clone".
+function surfaceIsInst(root, attr) {
+  return !!(root && root.getAttribute && root.getAttribute(attr));
+}
+// Get-or-create the per-instance state object for a clone root (registry
+// `instances`, seeded by `make`). Returns null for the singleton root, so the
+// caller falls back to its module globals / accessor proxy.
+function surfaceInstState(root, attr, instances, make) {
+  if (!surfaceIsInst(root, attr)) return null;
+  var id = root.getAttribute(attr);
+  if (!instances[id]) instances[id] = make();
+  return instances[id];
+}
+// Close each clone's rails tab (when the rails shell is up and the tab exists)
+// and run the surface's optional per-instance teardown — the fiddly wsRails/
+// findTab guard, centralized. The reset sites still clear their own registries
+// (instances/instanceEls/seq are module vars only the caller can reassign).
+function surfaceCloseInstTabs(instances, dispose) {
+  Object.keys(instances).forEach(function(id) {
+    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) {
+      try { wsRails.closeTab(id); } catch (e) {}
+    }
+    if (dispose) dispose(id);
+  });
+}
+
 // C10 P1: the shared "Dataset" picker markup — a title + a <select> of the
 // datasets exposing `facet`, the current one pre-selected. Returns '' below 2
 // targetable datasets (the surface is then implicitly its sole dataset, as
@@ -20441,12 +20477,11 @@ var statsCatInstanceEls = {}; // instId -> cloned DOM element
 var statsCatInstSeq = 0;
 function statsCatNextInstId() { return 'statscat#' + (++statsCatInstSeq); }
 function statsCatNewInstState() { return { targetDsId: 'model' }; }
-function statcatIsInst(root) { return !!(root && root.getAttribute && root.getAttribute('data-statcat-inst')); }
+function statcatIsInst(root) { return surfaceIsInst(root, 'data-statcat-inst'); }
 function statsCatInstTarget(root) {
-  if (!statcatIsInst(root)) return statsCatTargetDsId;
-  var id = root.getAttribute('data-statcat-inst');
-  if (!statsCatInstances[id]) statsCatInstances[id] = statsCatNewInstState();
-  return statsCatInstances[id].targetDsId;
+  // clone target lives in its instance state; singleton in the module global.
+  var st = surfaceInstState(root, 'data-statcat-inst', statsCatInstances, statsCatNewInstState);
+  return st ? st.targetDsId : statsCatTargetDsId;
 }
 // DOM bundle for a panel: singleton → the $statsCat* refs; clone → [data-statcat].
 function statcatEls(root) {
@@ -20663,10 +20698,7 @@ function statsCatRestoreInstances(list) {
   });
 }
 function statsCatResetInstances() {
-  Object.keys(statsCatInstances).forEach(function(id) {
-    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) { try { wsRails.closeTab(id); } catch (e) {} }
-    statsCatDisposeInstance(id);
-  });
+  surfaceCloseInstTabs(statsCatInstances, statsCatDisposeInstance);
   statsCatInstances = {}; statsCatInstanceEls = {};
 }
 
@@ -21606,14 +21638,9 @@ function statNewInstState() {
     cmpSel: {}, cdfCmpSel: {}, dsHidden: new Set(), refDs: null
   };
 }
-function statIsInst(root) { return !!(root && root.getAttribute && root.getAttribute('data-stat-inst')); }
+function statIsInst(root) { return surfaceIsInst(root, 'data-stat-inst'); }
 function statStateForRoot(root) {
-  if (statIsInst(root)) {
-    var id = root.getAttribute('data-stat-inst');
-    if (!statInstances[id]) statInstances[id] = statNewInstState();
-    return statInstances[id];
-  }
-  return _statSingleton;
+  return surfaceInstState(root, 'data-stat-inst', statInstances, statNewInstState) || _statSingleton;
 }
 
 // ─── ws-v2 phase 1: per-panel target dataset ───────────────────────────────
@@ -21817,12 +21844,7 @@ function statSerializeInstances() {
 
 // Drop all clone state (+ tabs) — new file / clear project.
 function statResetInstances() {
-  Object.keys(statInstances).forEach(function(id) {
-    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) {
-      try { wsRails.closeTab(id); } catch (e) {}
-    }
-    statDisposeInstance(id);
-  });
+  surfaceCloseInstTabs(statInstances, statDisposeInstance);
   statInstances = {}; statInstanceEls = {}; statInstSeq = 1;
 }
 
@@ -23224,12 +23246,11 @@ var exportInstanceEls = {}; // instId -> cloned DOM element
 var exportInstSeq = 0;
 function exportNextInstId() { return 'export#' + (++exportInstSeq); }
 function exportNewInstState() { return { targetDsId: 'model' }; }
-function exportIsInst(root) { return !!(root && root.getAttribute && root.getAttribute('data-export-inst')); }
+function exportIsInst(root) { return surfaceIsInst(root, 'data-export-inst'); }
 function exportInstTarget(root) {
-  if (!exportIsInst(root)) return exportTargetDsId;
-  var id = root.getAttribute('data-export-inst');
-  if (!exportInstances[id]) exportInstances[id] = exportNewInstState();
-  return exportInstances[id].targetDsId;
+  // clone target lives in its instance state; singleton in the module global.
+  var st = surfaceInstState(root, 'data-export-inst', exportInstances, exportNewInstState);
+  return st ? st.targetDsId : exportTargetDsId;
 }
 // DOM bundle: singleton → $export* refs; clone → [data-export] within root.
 function exportEls(root) {
@@ -23404,10 +23425,7 @@ function exportRestoreInstances(list) {
   });
 }
 function exportResetInstances() {
-  Object.keys(exportInstances).forEach(function(id) {
-    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) { try { wsRails.closeTab(id); } catch (e) {} }
-    exportDisposeInstance(id);
-  });
+  surfaceCloseInstTabs(exportInstances, exportDisposeInstance);
   exportInstances = {}; exportInstanceEls = {};
 }
 
@@ -24282,7 +24300,7 @@ function resetSwathState(root) {
 // them); the root branch below reads that marker. swQA scopes a querySelectorAll
 // to a swath sub-element (null-safe: [] when the element isn't built yet).
 function swPanelRoot() { return document.getElementById('panelSwath'); }
-function swIsInst(root) { return !!(root && root.getAttribute && root.getAttribute('data-sw-inst')); }
+function swIsInst(root) { return surfaceIsInst(root, 'data-sw-inst'); }
 function swQ(id, root) {
   if (swIsInst(root)) return root.querySelector('[data-sw="' + id + '"]');
   return document.getElementById(id);
@@ -24330,12 +24348,9 @@ function swNewInstState() {
   return { swathTargetDsId: 'model', lastSwathData: null, swathWorker: null, swathCmpWorkers: [], _swathChartParams: null, swathStale: false };
 }
 function swStateForRoot(root) {
-  if (swIsInst(root)) {
-    var id = root.getAttribute('data-sw-inst');
-    if (!swathInstances[id]) swathInstances[id] = swNewInstState();
-    return swathInstances[id];
-  }
-  return _swSingleton;     // singleton — proxies to the module/core globals
+  // singleton (_swSingleton) proxies to the module/core globals; a clone gets its
+  // own swNewInstState() object (C10 P3 surfaceInstState).
+  return surfaceInstState(root, 'data-sw-inst', swathInstances, swNewInstState) || _swSingleton;
 }
 
 // ─── ws-v2 phase 1: per-panel target dataset ───────────────────────────────
@@ -24584,12 +24599,7 @@ function swSerializeInstances() {
 
 // Drop all clone state (+ tabs + workers) — new file / clear project.
 function swResetInstances() {
-  Object.keys(swathInstances).forEach(function(id) {
-    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) {
-      try { wsRails.closeTab(id); } catch (e) {}
-    }
-    swDisposeInstance(id);
-  });
+  surfaceCloseInstTabs(swathInstances, swDisposeInstance);
   swathInstances = {}; swInstanceEls = {}; swInstSeq = 1;
 }
 
@@ -26711,7 +26721,7 @@ let gtTheoDsId = null;            // A10 G2: which dataset supplies theoretical 
 // generated controls by [data-gt="gtX"], and gets a plain gtNewInstState() object
 // in gtInstances. Render/run/helper fns take an optional `root` (null → singleton).
 function gtPanelRoot() { return document.getElementById('panelGt'); }
-function gtIsInst(root) { return !!(root && root.getAttribute && root.getAttribute('data-gt-inst')); }
+function gtIsInst(root) { return surfaceIsInst(root, 'data-gt-inst'); }
 function gtRoot(root) { return root || gtPanelRoot(); }
 // Resolve one generated control: clone → [data-gt="id"] within root; singleton → #id.
 function gtQ(id, root) {
@@ -26753,12 +26763,7 @@ var _gtSingleton = {
   get gtExprController() { return gtExprController; }, set gtExprController(v) { gtExprController = v; }
 };
 function gtStateForRoot(root) {
-  if (gtIsInst(root)) {
-    var id = root.getAttribute('data-gt-inst');
-    if (!gtInstances[id]) gtInstances[id] = gtNewInstState();
-    return gtInstances[id];
-  }
-  return _gtSingleton;
+  return surfaceInstState(root, 'data-gt-inst', gtInstances, gtNewInstState) || _gtSingleton;
 }
 // renderGtConfig emits its generated controls with data-gt="gtX" (so clones carry
 // no duplicate ids). On the SINGLETON, stamp the id back onto each so #gtX
@@ -26949,10 +26954,7 @@ function gtApplyAllInstances() {
   });
 }
 function gtResetInstances() {
-  Object.keys(gtInstances).forEach(function(id) {
-    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) { try { wsRails.closeTab(id); } catch (e) {} }
-    gtDisposeInstance(id);
-  });
+  surfaceCloseInstTabs(gtInstances, gtDisposeInstance);
   gtInstances = {}; gtInstanceEls = {};
 }
 
@@ -32429,11 +32431,8 @@ function serializeCatInstances() {
 // Drop all per-instance state (new file / clear project), closing any live clone
 // tabs first so the rails strip doesn't keep orphaned tabs.
 function catResetInstances() {
-  if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function') {
-    Object.keys(catInstances).forEach(function(id) {
-      if (findTab(wsRails.state, id)) { try { wsRails.closeTab(id); } catch (e) {} }
-    });
-  }
+  // Categories has no per-instance teardown (no workers) — just close the tabs.
+  surfaceCloseInstTabs(catInstances);
   catInstances = {};
   catInstanceEls = {};
   catInstSeq = 1;

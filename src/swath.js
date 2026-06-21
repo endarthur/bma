@@ -29,7 +29,7 @@ function resetSwathState(root) {
 // them); the root branch below reads that marker. swQA scopes a querySelectorAll
 // to a swath sub-element (null-safe: [] when the element isn't built yet).
 function swPanelRoot() { return document.getElementById('panelSwath'); }
-function swIsInst(root) { return !!(root && root.getAttribute && root.getAttribute('data-sw-inst')); }
+function swIsInst(root) { return surfaceIsInst(root, 'data-sw-inst'); }
 function swQ(id, root) {
   if (swIsInst(root)) return root.querySelector('[data-sw="' + id + '"]');
   return document.getElementById(id);
@@ -77,12 +77,9 @@ function swNewInstState() {
   return { swathTargetDsId: 'model', lastSwathData: null, swathWorker: null, swathCmpWorkers: [], _swathChartParams: null, swathStale: false };
 }
 function swStateForRoot(root) {
-  if (swIsInst(root)) {
-    var id = root.getAttribute('data-sw-inst');
-    if (!swathInstances[id]) swathInstances[id] = swNewInstState();
-    return swathInstances[id];
-  }
-  return _swSingleton;     // singleton — proxies to the module/core globals
+  // singleton (_swSingleton) proxies to the module/core globals; a clone gets its
+  // own swNewInstState() object (C10 P3 surfaceInstState).
+  return surfaceInstState(root, 'data-sw-inst', swathInstances, swNewInstState) || _swSingleton;
 }
 
 // ─── ws-v2 phase 1: per-panel target dataset ───────────────────────────────
@@ -331,12 +328,7 @@ function swSerializeInstances() {
 
 // Drop all clone state (+ tabs + workers) — new file / clear project.
 function swResetInstances() {
-  Object.keys(swathInstances).forEach(function(id) {
-    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) {
-      try { wsRails.closeTab(id); } catch (e) {}
-    }
-    swDisposeInstance(id);
-  });
+  surfaceCloseInstTabs(swathInstances, swDisposeInstance);
   swathInstances = {}; swInstanceEls = {}; swInstSeq = 1;
 }
 

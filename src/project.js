@@ -2813,12 +2813,11 @@ var statsCatInstanceEls = {}; // instId -> cloned DOM element
 var statsCatInstSeq = 0;
 function statsCatNextInstId() { return 'statscat#' + (++statsCatInstSeq); }
 function statsCatNewInstState() { return { targetDsId: 'model' }; }
-function statcatIsInst(root) { return !!(root && root.getAttribute && root.getAttribute('data-statcat-inst')); }
+function statcatIsInst(root) { return surfaceIsInst(root, 'data-statcat-inst'); }
 function statsCatInstTarget(root) {
-  if (!statcatIsInst(root)) return statsCatTargetDsId;
-  var id = root.getAttribute('data-statcat-inst');
-  if (!statsCatInstances[id]) statsCatInstances[id] = statsCatNewInstState();
-  return statsCatInstances[id].targetDsId;
+  // clone target lives in its instance state; singleton in the module global.
+  var st = surfaceInstState(root, 'data-statcat-inst', statsCatInstances, statsCatNewInstState);
+  return st ? st.targetDsId : statsCatTargetDsId;
 }
 // DOM bundle for a panel: singleton → the $statsCat* refs; clone → [data-statcat].
 function statcatEls(root) {
@@ -3035,10 +3034,7 @@ function statsCatRestoreInstances(list) {
   });
 }
 function statsCatResetInstances() {
-  Object.keys(statsCatInstances).forEach(function(id) {
-    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) { try { wsRails.closeTab(id); } catch (e) {} }
-    statsCatDisposeInstance(id);
-  });
+  surfaceCloseInstTabs(statsCatInstances, statsCatDisposeInstance);
   statsCatInstances = {}; statsCatInstanceEls = {};
 }
 

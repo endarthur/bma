@@ -965,11 +965,8 @@ function serializeCatInstances() {
 // Drop all per-instance state (new file / clear project), closing any live clone
 // tabs first so the rails strip doesn't keep orphaned tabs.
 function catResetInstances() {
-  if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function') {
-    Object.keys(catInstances).forEach(function(id) {
-      if (findTab(wsRails.state, id)) { try { wsRails.closeTab(id); } catch (e) {} }
-    });
-  }
+  // Categories has no per-instance teardown (no workers) — just close the tabs.
+  surfaceCloseInstTabs(catInstances);
   catInstances = {};
   catInstanceEls = {};
   catInstSeq = 1;

@@ -33,12 +33,11 @@ var exportInstanceEls = {}; // instId -> cloned DOM element
 var exportInstSeq = 0;
 function exportNextInstId() { return 'export#' + (++exportInstSeq); }
 function exportNewInstState() { return { targetDsId: 'model' }; }
-function exportIsInst(root) { return !!(root && root.getAttribute && root.getAttribute('data-export-inst')); }
+function exportIsInst(root) { return surfaceIsInst(root, 'data-export-inst'); }
 function exportInstTarget(root) {
-  if (!exportIsInst(root)) return exportTargetDsId;
-  var id = root.getAttribute('data-export-inst');
-  if (!exportInstances[id]) exportInstances[id] = exportNewInstState();
-  return exportInstances[id].targetDsId;
+  // clone target lives in its instance state; singleton in the module global.
+  var st = surfaceInstState(root, 'data-export-inst', exportInstances, exportNewInstState);
+  return st ? st.targetDsId : exportTargetDsId;
 }
 // DOM bundle: singleton → $export* refs; clone → [data-export] within root.
 function exportEls(root) {
@@ -213,10 +212,7 @@ function exportRestoreInstances(list) {
   });
 }
 function exportResetInstances() {
-  Object.keys(exportInstances).forEach(function(id) {
-    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) { try { wsRails.closeTab(id); } catch (e) {} }
-    exportDisposeInstance(id);
-  });
+  surfaceCloseInstTabs(exportInstances, exportDisposeInstance);
   exportInstances = {}; exportInstanceEls = {};
 }
 

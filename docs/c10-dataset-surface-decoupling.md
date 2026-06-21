@@ -123,8 +123,20 @@ per-surface smokes. No big-bang.
   mapping is genuinely per-surface). StatsCat stays bespoke (its resolver is the
   simpler `dsById(id) || model` with no `.complete` check — routing it would
   change behavior). Bit-identical; targeting + clone smokes green.
-- **Phase 3** — factor the clone-instance StateForRoot + persistence into the
-  framework (the heaviest; the clone arcs converge).
+- **Phase 3** *(done — scoped to genuine duplication)* — three shared helpers in
+  core.js capture the clone plumbing that was copy-pasted: `surfaceIsInst(root,
+  attr)` (the clone-root predicate), `surfaceInstState(root, attr, instances,
+  make)` (get-or-create the per-instance state; null → singleton), and
+  `surfaceCloseInstTabs(instances, dispose?)` (the fiddly `wsRails`/`findTab`-
+  guarded close-tab + teardown loop). Five surfaces route `IsInst` +
+  `StateForRoot`/`InstTarget` through the first two; all six `ResetInstances`
+  through the third. **Deliberately NOT framework-ized:** the `_xSingleton`
+  accessor proxies, `NewInstState()`, `BuildInstancePanel` clone bodies, and the
+  serialize/restore shapes stay per-surface — they name surface-specific globals/
+  templates, so they're six different things, not duplication (hook-callbacks
+  over them would be more code, not less). Categories' `StateForRoot` also stays
+  bespoke (lazy non-creating lookup over `panelState.categories`). Bit-identical;
+  all clone + persist + perds smokes green.
 - **Phase 4** — formalize DatasetSource as the documented interface the registry
   guarantees; A11/A16 build against it.
 

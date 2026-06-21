@@ -42,7 +42,7 @@ let gtTheoDsId = null;            // A10 G2: which dataset supplies theoretical 
 // generated controls by [data-gt="gtX"], and gets a plain gtNewInstState() object
 // in gtInstances. Render/run/helper fns take an optional `root` (null → singleton).
 function gtPanelRoot() { return document.getElementById('panelGt'); }
-function gtIsInst(root) { return !!(root && root.getAttribute && root.getAttribute('data-gt-inst')); }
+function gtIsInst(root) { return surfaceIsInst(root, 'data-gt-inst'); }
 function gtRoot(root) { return root || gtPanelRoot(); }
 // Resolve one generated control: clone → [data-gt="id"] within root; singleton → #id.
 function gtQ(id, root) {
@@ -84,12 +84,7 @@ var _gtSingleton = {
   get gtExprController() { return gtExprController; }, set gtExprController(v) { gtExprController = v; }
 };
 function gtStateForRoot(root) {
-  if (gtIsInst(root)) {
-    var id = root.getAttribute('data-gt-inst');
-    if (!gtInstances[id]) gtInstances[id] = gtNewInstState();
-    return gtInstances[id];
-  }
-  return _gtSingleton;
+  return surfaceInstState(root, 'data-gt-inst', gtInstances, gtNewInstState) || _gtSingleton;
 }
 // renderGtConfig emits its generated controls with data-gt="gtX" (so clones carry
 // no duplicate ids). On the SINGLETON, stamp the id back onto each so #gtX
@@ -280,10 +275,7 @@ function gtApplyAllInstances() {
   });
 }
 function gtResetInstances() {
-  Object.keys(gtInstances).forEach(function(id) {
-    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) { try { wsRails.closeTab(id); } catch (e) {} }
-    gtDisposeInstance(id);
-  });
+  surfaceCloseInstTabs(gtInstances, gtDisposeInstance);
   gtInstances = {}; gtInstanceEls = {};
 }
 

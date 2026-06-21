@@ -72,14 +72,9 @@ function statNewInstState() {
     cmpSel: {}, cdfCmpSel: {}, dsHidden: new Set(), refDs: null
   };
 }
-function statIsInst(root) { return !!(root && root.getAttribute && root.getAttribute('data-stat-inst')); }
+function statIsInst(root) { return surfaceIsInst(root, 'data-stat-inst'); }
 function statStateForRoot(root) {
-  if (statIsInst(root)) {
-    var id = root.getAttribute('data-stat-inst');
-    if (!statInstances[id]) statInstances[id] = statNewInstState();
-    return statInstances[id];
-  }
-  return _statSingleton;
+  return surfaceInstState(root, 'data-stat-inst', statInstances, statNewInstState) || _statSingleton;
 }
 
 // ─── ws-v2 phase 1: per-panel target dataset ───────────────────────────────
@@ -283,12 +278,7 @@ function statSerializeInstances() {
 
 // Drop all clone state (+ tabs) — new file / clear project.
 function statResetInstances() {
-  Object.keys(statInstances).forEach(function(id) {
-    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) {
-      try { wsRails.closeTab(id); } catch (e) {}
-    }
-    statDisposeInstance(id);
-  });
+  surfaceCloseInstTabs(statInstances, statDisposeInstance);
   statInstances = {}; statInstanceEls = {}; statInstSeq = 1;
 }
 

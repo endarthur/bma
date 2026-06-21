@@ -336,6 +336,42 @@ function surfaceTarget(facet, id, opts) {
   }
   return ts.length ? ts[0] : (dsById('model') || datasets[0]);
 }
+
+// ─── C10 P3: shared panel-clone plumbing ───────────────────────────────────
+// The six analysis surfaces (Statistics/Categories/Swath/GT/Export/StatsCat)
+// each grew a cloneable instance arc. The genuinely-duplicated mechanics live
+// here; the surface-specific parts (accessor-proxy field lists, NewInstState,
+// BuildInstancePanel templates, serialize/restore shapes) stay per-surface —
+// they name surface-specific globals/templates, so they're six different things,
+// not duplication. Bit-identical to the prior inline copies.
+
+// A clone's render root carries a data-<x>-inst marker; the singleton root does
+// not. THE definition of "is this root a clone".
+function surfaceIsInst(root, attr) {
+  return !!(root && root.getAttribute && root.getAttribute(attr));
+}
+// Get-or-create the per-instance state object for a clone root (registry
+// `instances`, seeded by `make`). Returns null for the singleton root, so the
+// caller falls back to its module globals / accessor proxy.
+function surfaceInstState(root, attr, instances, make) {
+  if (!surfaceIsInst(root, attr)) return null;
+  var id = root.getAttribute(attr);
+  if (!instances[id]) instances[id] = make();
+  return instances[id];
+}
+// Close each clone's rails tab (when the rails shell is up and the tab exists)
+// and run the surface's optional per-instance teardown — the fiddly wsRails/
+// findTab guard, centralized. The reset sites still clear their own registries
+// (instances/instanceEls/seq are module vars only the caller can reassign).
+function surfaceCloseInstTabs(instances, dispose) {
+  Object.keys(instances).forEach(function(id) {
+    if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) {
+      try { wsRails.closeTab(id); } catch (e) {}
+    }
+    if (dispose) dispose(id);
+  });
+}
+
 // C10 P1: the shared "Dataset" picker markup — a title + a <select> of the
 // datasets exposing `facet`, the current one pre-selected. Returns '' below 2
 // targetable datasets (the surface is then implicitly its sole dataset, as
