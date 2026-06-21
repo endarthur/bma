@@ -42,9 +42,52 @@ function dhStateFor(ds) {
     lastReport: null,               // last Drillhole.process report (for the modal)
     derivedName: null,              // file name of the loaded composite CSV
     provFiles: null,                // [names] for the provenance banner
-    pendingRestore: null            // project recipe awaiting its files
+    pendingRestore: null,           // project recipe awaiting its files
+    intervalTables: []              // A11 P0: the container's interval-tables list (see dhIvtList)
   };
   return dhStates[id];
+}
+
+// ── A11 Phase 0: the DrillholeSet container model (behind the existing card) ──
+// A7 stored a single (collar, survey, intervals) trio that becomes one composite
+// dataset. A11 names the general structure real drillhole tools use — a backbone
+// (collar + survey, one each) plus N INTERVAL TABLES, each with a kind (imported
+// / merged / composite) and its OWN calcols + filter (the home the flat model
+// lacked: calcols had "nowhere to live but the single composite", a11 doc §Why).
+//
+// P0 is INERT: exactly one `imported` interval table — the imported intervals —
+// so behavior is byte-identical (drillhole-smoke). The handle's data
+// (file/parsed/map) is a LIVE VIEW of the existing role-keyed .intervals slot
+// (no duplication); the new per-table fields (filter/calcolCode/calcolMeta)
+// persist ON the handle, ready for Phase 2. Phases 1/2/4/5 (export-any-table /
+// per-table calcols / merge / N tables) build on this list. Design: docs/
+// a11-drillhole-container.md.
+function dhIvtList(D) {
+  if (D.files.intervals && !D.intervalTables.length) {
+    D.intervalTables.push({
+      id: 'intervals', kind: 'imported',
+      filter: null, calcolCode: '', calcolMeta: [],
+      get file()   { return D.files.intervals; },
+      get parsed() { return D.parsed.intervals; },
+      get map()    { return D.map.intervals; }
+    });
+  } else if (!D.files.intervals && D.intervalTables.length) {
+    D.intervalTables.length = 0;
+  }
+  return D.intervalTables;
+}
+// The sole interval table today (null when no intervals staged) — the named seam
+// every "the intervals table" reference migrates to as the list grows (Phase 5).
+function dhPrimaryIvt(D) { var l = dhIvtList(D); return l.length ? l[0] : null; }
+// The design-of-record container shape: collar + survey backbone (one each) and
+// the interval-tables list. A view over the per-dataset state; consumed by the
+// raw-table export (P1) and per-table calcols (P2).
+function dhContainer(D) {
+  return {
+    collar: D.files.collar ? { id: 'collar', kind: 'collar', file: D.files.collar, parsed: D.parsed.collar, map: D.map.collar } : null,
+    survey: D.files.survey ? { id: 'survey', kind: 'survey', file: D.files.survey, parsed: D.parsed.survey, map: D.map.survey } : null,
+    intervalTables: dhIvtList(D)
+  };
 }
 // The dataset config-panel element that hosts this set's card.
 function dhCardRoot(ds) { return (typeof dsConfigRoot === 'function') ? dsConfigRoot(ds || dsById('aux')) : null; }
@@ -207,6 +250,7 @@ function dhClearAll(ds) {
   D.files = { collar: null, survey: null, intervals: null };
   D.parsed = { collar: null, survey: null, intervals: null };
   D.map = { collar: {}, survey: {}, intervals: {} };
+  D.intervalTables.length = 0;   // A11 P0: drop the container's interval tables
   D.dipConvention = null;
   D.lastReport = null;
   var $r = dhQ('[data-dh="reportInline"]', dhCardRoot(ds));
@@ -287,12 +331,13 @@ function dhIntervalDataCols(ds) {
 }
 
 function dhMappingComplete(ds) {
-  var m = dhStateFor(ds).map;
-  var p = dhStateFor(ds).parsed;
-  return p.collar && p.survey && p.intervals &&
+  var D = dhStateFor(ds);
+  var m = D.map, p = D.parsed;
+  var ivt = dhPrimaryIvt(D);   // A11 P0: the intervals table via the container
+  return p.collar && p.survey && ivt && ivt.parsed &&
     m.collar.bhid >= 0 && m.collar.x >= 0 && m.collar.y >= 0 && m.collar.z >= 0 &&
     m.survey.bhid >= 0 && m.survey.at >= 0 && m.survey.az >= 0 && m.survey.dip >= 0 &&
-    m.intervals.bhid >= 0 && m.intervals.from >= 0 && m.intervals.to >= 0;
+    ivt.map.bhid >= 0 && ivt.map.from >= 0 && ivt.map.to >= 0;
 }
 
 function renderDhMapping(ds) {
@@ -570,12 +615,13 @@ function dhMapFromNames(ds, role, saved) {
 // The drillhole recipe for one dataset — null when no complete trio is staged
 function dhSerialize(ds) {
   var D = dhStateFor(ds);
-  if (!D.parsed.collar || !D.parsed.survey || !D.parsed.intervals) return null;
+  var ivt = dhPrimaryIvt(D);   // A11 P0: the intervals table via the container
+  if (!D.parsed.collar || !D.parsed.survey || !ivt || !ivt.parsed) return null;
   return {
     files: {
       collar: { name: D.files.collar.name, size: D.files.collar.size },
       survey: { name: D.files.survey.name, size: D.files.survey.size },
-      intervals: { name: D.files.intervals.name, size: D.files.intervals.size },
+      intervals: { name: ivt.file.name, size: ivt.file.size },
     },
     map: { collar: dhMapToNames(ds, 'collar'), survey: dhMapToNames(ds, 'survey'), intervals: dhMapToNames(ds, 'intervals') },
     dipConvention: D.dipConvention,
