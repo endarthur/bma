@@ -325,11 +325,7 @@ function gtCtx(root) {
 }
 
 // A10 G3: datasets the GT tab can target — any with a completed analysis.
-function gtTargetableDatasets() {
-  var out = [];
-  for (var i = 0; i < datasets.length; i++) { if (datasets[i].complete) out.push(datasets[i]); }
-  return out;
-}
+function gtTargetableDatasets() { return surfaceTargetableDatasets('analyzed'); }  // C10 P0
 // The "Dataset" picker at the top of the GT sidebar — shown only when 2+ datasets
 // are analyzed (with one, GT is implicitly the model, as before).
 function gtDatasetPickerHtml(root) {

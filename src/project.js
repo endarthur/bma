@@ -2890,11 +2890,7 @@ function statsCatMarkTargetStale(C) {
 }
 
 // G4a: datasets the StatsCat tab can target — any with a completed analysis.
-function statsCatTargetableDatasets() {
-  var out = [];
-  for (var i = 0; i < datasets.length; i++) { if (datasets[i].complete) out.push(datasets[i]); }
-  return out;
-}
+function statsCatTargetableDatasets() { return surfaceTargetableDatasets('analyzed'); }  // C10 P0
 // The "Dataset" picker at the top of the StatsCat sidebar — shown only when 2+
 // datasets are analyzed (with one, StatsCat is implicitly the model, as before).
 function statsCatRenderDatasetPicker(root) {

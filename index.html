@@ -6022,7 +6022,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 8e2dcff — click to check for updates">8e2dcff</div>
+<div class="build-badge" id="buildBadge" title="build be8b9e1 — click to check for updates">be8b9e1</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -8852,6 +8852,30 @@ function dsHasXYZ(ds) {
   var q = ds && ds.preflight && ds.preflight.xyz;
   if (ds && ds.id === 'model' && preflightData) q = preflightData.xyz;   // model preflight is the canonical store
   return !!(q && q.x >= 0 && q.y >= 0 && q.z >= 0);
+}
+
+// C10 P0 — a dataset FACET is a capability an analysis surface consumes. This
+// centralizes the per-surface targetability predicates the A10 G-series
+// hand-coded six times (four were "has .complete"; Categories needed category
+// data, Swath needed block geometry). Each case preserves the surface's exact
+// prior predicate, so surfaceTargetableDatasets(facet) is bit-identical.
+// Design: docs/c10-dataset-surface-decoupling.md.
+function dsHasFacet(ds, facet) {
+  if (!ds || !ds.complete) return false;          // every facet presupposes an analysis
+  var c = ds.complete;
+  switch (facet) {
+    case 'categorical': return !!(c.categories && Object.keys(c.categories).length);
+    case 'gridded':     return !!(c.geometry && c.geometry.x && c.geometry.x.blockSize);
+    case 'analyzed':
+    default:            return true;
+  }
+}
+// The datasets a surface can target — those exposing the facet it consumes.
+// Replaces the six <x>TargetableDatasets() copies.
+function surfaceTargetableDatasets(facet) {
+  var out = [];
+  for (var i = 0; i < datasets.length; i++) if (dsHasFacet(datasets[i], facet)) out.push(datasets[i]);
+  return out;
 }
 
 // A10 4f-2: the grid-classification control for a dataset's import panel — the
@@ -20454,11 +20478,7 @@ function statsCatMarkTargetStale(C) {
 }
 
 // G4a: datasets the StatsCat tab can target — any with a completed analysis.
-function statsCatTargetableDatasets() {
-  var out = [];
-  for (var i = 0; i < datasets.length; i++) { if (datasets[i].complete) out.push(datasets[i]); }
-  return out;
-}
+function statsCatTargetableDatasets() { return surfaceTargetableDatasets('analyzed'); }  // C10 P0
 // The "Dataset" picker at the top of the StatsCat sidebar — shown only when 2+
 // datasets are analyzed (with one, StatsCat is implicitly the model, as before).
 function statsCatRenderDatasetPicker(root) {
@@ -21569,11 +21589,7 @@ function statStateForRoot(root) {
 // the pre-targeting code. Every render/event fn reads ctx instead of the
 // _statsNumCols/_statsHeader module globals (which stay the MODEL snapshot for
 // external readers: ctxmenu/cdf/settings). Mirrors gtCtx / statsCatCtx.
-function statsTargetableDatasets() {
-  var out = [];
-  for (var i = 0; i < datasets.length; i++) if (datasets[i].complete) out.push(datasets[i]);
-  return out;
-}
+function statsTargetableDatasets() { return surfaceTargetableDatasets('analyzed'); }  // C10 P0
 function statsTargetDs(root) {
   var id = statStateForRoot(root).statsTargetDsId;
   var ds = dsById(id);
@@ -23245,11 +23261,7 @@ function exportCtx(root) {
 }
 
 // G5a: datasets the Export tab can target — any with a completed analysis.
-function exportTargetableDatasets() {
-  var out = [];
-  for (var i = 0; i < datasets.length; i++) { if (datasets[i].complete) out.push(datasets[i]); }
-  return out;
-}
+function exportTargetableDatasets() { return surfaceTargetableDatasets('analyzed'); }  // C10 P0
 // The "Dataset" picker at the top of the Export sidebar — shown only when 2+
 // datasets are analyzed (with one, Export is implicitly the model, as before).
 function exportRenderDatasetPicker(root) {
@@ -24319,15 +24331,7 @@ function swStateForRoot(root) {
 // inputs for ANY dataset (model = resolved current* globals; comparison =
 // ds.preflight/file). With target 'model' everything resolves to the current*
 // globals → bit-identical. A swath-able dataset needs a gridded geometry.
-function swathTargetableDatasets() {
-  var out = [];
-  for (var i = 0; i < datasets.length; i++) {
-    var d = datasets[i];
-    var geo = d.complete && d.complete.geometry;
-    if (d.complete && geo && geo.x && geo.x.blockSize) out.push(d);
-  }
-  return out;
-}
+function swathTargetableDatasets() { return surfaceTargetableDatasets('gridded'); }  // C10 P0
 function swathTargetDs(root) {
   var id = swStateForRoot(root).swathTargetDsId || 'model';
   var ds = dsById(id);
@@ -26983,11 +26987,7 @@ function gtCtx(root) {
 }
 
 // A10 G3: datasets the GT tab can target — any with a completed analysis.
-function gtTargetableDatasets() {
-  var out = [];
-  for (var i = 0; i < datasets.length; i++) { if (datasets[i].complete) out.push(datasets[i]); }
-  return out;
-}
+function gtTargetableDatasets() { return surfaceTargetableDatasets('analyzed'); }  // C10 P0
 // The "Dataset" picker at the top of the GT sidebar — shown only when 2+ datasets
 // are analyzed (with one, GT is implicitly the model, as before).
 function gtDatasetPickerHtml(root) {
@@ -31474,14 +31474,7 @@ let _catData = null;       // cached { categories, header, origColCount, rowCoun
 // target 'model' (default) catCtx returns the _catData model snapshot verbatim →
 // bit-identical. _catData stays the model snapshot for external readers
 // (project.js focusedCol persistence, clone restore-by-name). Mirrors statsCtx.
-function catTargetableDatasets() {
-  var out = [];
-  for (var i = 0; i < datasets.length; i++) {
-    var d = datasets[i];
-    if (d.complete && d.complete.categories && Object.keys(d.complete.categories).length) out.push(d);
-  }
-  return out;
-}
+function catTargetableDatasets() { return surfaceTargetableDatasets('categorical'); }  // C10 P0
 function catTargetDs(root) {
   var id = (catStateForRoot(root) || {}).catTargetDsId || 'model';
   var ds = dsById(id);

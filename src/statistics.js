@@ -90,11 +90,7 @@ function statStateForRoot(root) {
 // the pre-targeting code. Every render/event fn reads ctx instead of the
 // _statsNumCols/_statsHeader module globals (which stay the MODEL snapshot for
 // external readers: ctxmenu/cdf/settings). Mirrors gtCtx / statsCatCtx.
-function statsTargetableDatasets() {
-  var out = [];
-  for (var i = 0; i < datasets.length; i++) if (datasets[i].complete) out.push(datasets[i]);
-  return out;
-}
+function statsTargetableDatasets() { return surfaceTargetableDatasets('analyzed'); }  // C10 P0
 function statsTargetDs(root) {
   var id = statStateForRoot(root).statsTargetDsId;
   var ds = dsById(id);

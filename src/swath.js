@@ -92,15 +92,7 @@ function swStateForRoot(root) {
 // inputs for ANY dataset (model = resolved current* globals; comparison =
 // ds.preflight/file). With target 'model' everything resolves to the current*
 // globals → bit-identical. A swath-able dataset needs a gridded geometry.
-function swathTargetableDatasets() {
-  var out = [];
-  for (var i = 0; i < datasets.length; i++) {
-    var d = datasets[i];
-    var geo = d.complete && d.complete.geometry;
-    if (d.complete && geo && geo.x && geo.x.blockSize) out.push(d);
-  }
-  return out;
-}
+function swathTargetableDatasets() { return surfaceTargetableDatasets('gridded'); }  // C10 P0
 function swathTargetDs(root) {
   var id = swStateForRoot(root).swathTargetDsId || 'model';
   var ds = dsById(id);

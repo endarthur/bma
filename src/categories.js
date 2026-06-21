@@ -8,14 +8,7 @@ let _catData = null;       // cached { categories, header, origColCount, rowCoun
 // target 'model' (default) catCtx returns the _catData model snapshot verbatim →
 // bit-identical. _catData stays the model snapshot for external readers
 // (project.js focusedCol persistence, clone restore-by-name). Mirrors statsCtx.
-function catTargetableDatasets() {
-  var out = [];
-  for (var i = 0; i < datasets.length; i++) {
-    var d = datasets[i];
-    if (d.complete && d.complete.categories && Object.keys(d.complete.categories).length) out.push(d);
-  }
-  return out;
-}
+function catTargetableDatasets() { return surfaceTargetableDatasets('categorical'); }  // C10 P0
 function catTargetDs(root) {
   var id = (catStateForRoot(root) || {}).catTargetDsId || 'model';
   var ds = dsById(id);

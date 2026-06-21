@@ -96,11 +96,7 @@ function exportCtx(root) {
 }
 
 // G5a: datasets the Export tab can target — any with a completed analysis.
-function exportTargetableDatasets() {
-  var out = [];
-  for (var i = 0; i < datasets.length; i++) { if (datasets[i].complete) out.push(datasets[i]); }
-  return out;
-}
+function exportTargetableDatasets() { return surfaceTargetableDatasets('analyzed'); }  // C10 P0
 // The "Dataset" picker at the top of the Export sidebar — shown only when 2+
 // datasets are analyzed (with one, Export is implicitly the model, as before).
 function exportRenderDatasetPicker(root) {

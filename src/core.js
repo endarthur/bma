@@ -289,6 +289,30 @@ function dsHasXYZ(ds) {
   return !!(q && q.x >= 0 && q.y >= 0 && q.z >= 0);
 }
 
+// C10 P0 — a dataset FACET is a capability an analysis surface consumes. This
+// centralizes the per-surface targetability predicates the A10 G-series
+// hand-coded six times (four were "has .complete"; Categories needed category
+// data, Swath needed block geometry). Each case preserves the surface's exact
+// prior predicate, so surfaceTargetableDatasets(facet) is bit-identical.
+// Design: docs/c10-dataset-surface-decoupling.md.
+function dsHasFacet(ds, facet) {
+  if (!ds || !ds.complete) return false;          // every facet presupposes an analysis
+  var c = ds.complete;
+  switch (facet) {
+    case 'categorical': return !!(c.categories && Object.keys(c.categories).length);
+    case 'gridded':     return !!(c.geometry && c.geometry.x && c.geometry.x.blockSize);
+    case 'analyzed':
+    default:            return true;
+  }
+}
+// The datasets a surface can target — those exposing the facet it consumes.
+// Replaces the six <x>TargetableDatasets() copies.
+function surfaceTargetableDatasets(facet) {
+  var out = [];
+  for (var i = 0; i < datasets.length; i++) if (dsHasFacet(datasets[i], facet)) out.push(datasets[i]);
+  return out;
+}
+
 // A10 4f-2: the grid-classification control for a dataset's import panel — the
 // grid/point/auto override chips + the detected-grid badge. Inferred state stays
 // visible AND overridable (no-magic-only-ui). Shared by the model preflight
