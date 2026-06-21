@@ -828,8 +828,8 @@ let swathWorker = null;
 let lastSwathData = null;
 let swathExprController = null;
 
-function getSwathVarColor(colName, paletteIdx) {
-  return catPropColor('model', colName, paletteIdx);
+function getSwathVarColor(colName, paletteIdx, dsId) {
+  return catPropColor(dsId || 'model', colName, paletteIdx);
 }
 
 // GT state

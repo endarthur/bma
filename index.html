@@ -6010,7 +6010,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 7282668 — click to check for updates">7282668</div>
+<div class="build-badge" id="buildBadge" title="build c962d03 — click to check for updates">c962d03</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -9381,8 +9381,8 @@ let swathWorker = null;
 let lastSwathData = null;
 let swathExprController = null;
 
-function getSwathVarColor(colName, paletteIdx) {
-  return catPropColor('model', colName, paletteIdx);
+function getSwathVarColor(colName, paletteIdx, dsId) {
+  return catPropColor(dsId || 'model', colName, paletteIdx);
 }
 
 // GT state
@@ -15374,6 +15374,7 @@ function runAuxAnalysis(ds, root) {
       if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();
       if (typeof catRenderAllInstances === 'function') catRenderAllInstances();
       if (ds.view === 'summary' && typeof renderAuxSummary === 'function') renderAuxSummary(ds, root);  // A10 per-dataset summary
+      if (typeof swathRefreshDatasetPicker === 'function') swathRefreshDatasetPicker();  // ws-v2 phase 1: now swath-targetable
       if (typeof gtRefreshDatasetPicker === 'function') gtRefreshDatasetPicker();  // G3: this dataset is now GT-targetable
       if (typeof gtApplyAllInstances === 'function') gtApplyAllInstances();  // G3b-4: resolve a restored GT clone that targets this dataset
       if (typeof statsCatRefreshDatasetPicker === 'function') statsCatRefreshDatasetPicker();  // G4a: now StatsCat-targetable
@@ -18119,10 +18120,12 @@ function serializeProject() {
       var $stat = document.getElementById('swathStat');
       var $filter = document.getElementById('swathLocalFilter');
       if (!$dirMode) return null;
+      // ws-v2 phase 1: primary var names resolve against the TARGET header.
+      var swPrimHeader = (typeof swathCtx === 'function' && swathCtx().header) || currentHeader || [];
       var checkedVars = [];
       document.querySelectorAll('#swathVarList input[type="checkbox"]:checked').forEach(function(cb) {
         var colIdx = parseInt(cb.value);
-        var name = currentHeader[colIdx];
+        var name = swPrimHeader[colIdx];
         if (name) checkedVars.push(name);
       });
       var swathAuxChecked = null;
@@ -18142,6 +18145,7 @@ function serializeProject() {
         swathDirs[k] = { on: cb.checked, bin: isFinite(bin) ? bin : null };
       });
       return {
+        targetDsId: (typeof swathTargetDsId !== 'undefined') ? swathTargetDsId : 'model',   // ws-v2 phase 1
         dirMode: $dirMode.value,
         directions: swathDirs,
         dipDir: parseFloat((document.getElementById('swathDipDir') || {}).value) || 0,
@@ -20184,6 +20188,13 @@ function displayResults(data) {
   // Restore Swath sidebar from project or snapshot
   var swp = (restoredProject && restoredProject.swath) ? restoredProject.swath : swathSnapshot;
   if (swp) {
+    // ws-v2 phase 1: restore the per-panel target (the picker/sidebar rebuild for
+    // it when it's analyzed; swathTargetDs falls back if it's gone).
+    if (typeof swathTargetDsId !== 'undefined') swathTargetDsId = swp.targetDsId || 'model';
+    if (typeof swathTargetDsId !== 'undefined' && swathTargetDsId !== 'model'
+        && document.getElementById('swathDirMode') && typeof renderSwathConfig === 'function') {
+      renderSwathConfig(undefined);   // rebuild the singleton sidebar for the target (if analyzed; else falls back)
+    }
     var $sStat = document.getElementById('swathStat');
     var $sFilter = document.getElementById('swathLocalFilter');
     var $sDirMode = document.getElementById('swathDirMode');
@@ -24220,7 +24231,13 @@ function swStampSingletonIds(root, $scope) {
 // identical across instances). Every render/run/wire fn resolves its state with
 // swStateForRoot(root); the bare globals are touched ONLY through it.
 var swathInstances = {};
+// ws-v2 phase 1: which dataset this panel swaths as PRIMARY (its geometry/vars
+// drive the run; every OTHER analyzed+gridded dataset overlays as a comparison).
+// Default 'model' → bit-identical. Singleton in this module global; clone in its
+// swathInstances[id].
+var swathTargetDsId = 'model';
 var _swSingleton = {
+  get swathTargetDsId() { return swathTargetDsId; }, set swathTargetDsId(v) { swathTargetDsId = v; },
   get lastSwathData() { return lastSwathData; }, set lastSwathData(v) { lastSwathData = v; },
   get swathWorker() { return swathWorker; }, set swathWorker(v) { swathWorker = v; },
   get swathCmpWorkers() { return swathCmpWorkers; }, set swathCmpWorkers(v) { swathCmpWorkers = v; },
@@ -24228,7 +24245,7 @@ var _swSingleton = {
   get swathStale() { return swathStale; }, set swathStale(v) { swathStale = v; }
 };
 function swNewInstState() {
-  return { lastSwathData: null, swathWorker: null, swathCmpWorkers: [], _swathChartParams: null, swathStale: false };
+  return { swathTargetDsId: 'model', lastSwathData: null, swathWorker: null, swathCmpWorkers: [], _swathChartParams: null, swathStale: false };
 }
 function swStateForRoot(root) {
   if (swIsInst(root)) {
@@ -24237,6 +24254,122 @@ function swStateForRoot(root) {
     return swathInstances[id];
   }
   return _swSingleton;     // singleton — proxies to the module/core globals
+}
+
+// ─── ws-v2 phase 1: per-panel target dataset ───────────────────────────────
+// Swath runs its OWN worker fan-out (unlike Stats/Cat, which re-read a cached
+// analysis). swathTargetDs(root) is the panel's PRIMARY; swathCtx(root) resolves
+// its analysis header/geometry/xyz; swathRunInputs(ds) builds the worker message
+// inputs for ANY dataset (model = resolved current* globals; comparison =
+// ds.preflight/file). With target 'model' everything resolves to the current*
+// globals → bit-identical. A swath-able dataset needs a gridded geometry.
+function swathTargetableDatasets() {
+  var out = [];
+  for (var i = 0; i < datasets.length; i++) {
+    var d = datasets[i];
+    var geo = d.complete && d.complete.geometry;
+    if (d.complete && geo && geo.x && geo.x.blockSize) out.push(d);
+  }
+  return out;
+}
+function swathTargetDs(root) {
+  var id = swStateForRoot(root).swathTargetDsId || 'model';
+  var ds = dsById(id);
+  if (ds && ds.complete) return ds;
+  var ts = swathTargetableDatasets();
+  return ts.length ? ts[0] : (dsById('model') || datasets[0]);
+}
+function swathCtx(root) {
+  var ds = swathTargetDs(root);
+  var isModel = ds.id === 'model';
+  if (isModel) {
+    var d = _swathData || {};
+    return {
+      ds: ds, id: 'model', isModel: true,
+      header: d.header || currentHeader || [],
+      colTypes: d.colTypes || currentColTypes || [],
+      geometry: d.geometry || (lastCompleteData && lastCompleteData.geometry) || null,
+      xyz: currentXYZ, dxyz: currentDXYZ
+    };
+  }
+  var c = ds.complete || {}, pf = ds.preflight || {};
+  return {
+    ds: ds, id: ds.id, isModel: false,
+    header: c.header || pf.header || [],
+    colTypes: c.colTypes || pf.autoTypes || [],
+    geometry: c.geometry || null,
+    xyz: pf.xyz || { x: -1, y: -1, z: -1 }, dxyz: { dx: -1, dy: -1, dz: -1 }
+  };
+}
+// Worker message inputs (+ resolved weight) for a dataset's swath run. Branches
+// model (resolved globals) vs comparison (preflight) — the model can't go through
+// the raw-preflight path because it uses its RESOLVED xyz/types/calcols.
+function swathRunInputs(ds) {
+  if (ds.id === 'model') {
+    return {
+      file: currentFile,
+      zipEntry: preflightData ? (preflightData.selectedZipEntry || null) : null,
+      globalFilter: currentFilter ? { expression: currentFilter.expression } : null,
+      calcolCode: currentCalcolCode || null,
+      calcolMeta: currentCalcolMeta.length > 0 ? currentCalcolMeta : null,
+      resolvedTypes: currentColTypes.slice(0, currentOrigColCount),
+      xyzCols: [currentXYZ.x, currentXYZ.y, currentXYZ.z],
+      dxyzCols: [currentDXYZ.dx, currentDXYZ.dy, currentDXYZ.dz],
+      rowVarOverride: undefined,
+      dmEndianness: preflightData && preflightData.dmEndianness || null,
+      dmFormat: preflightData && preflightData.dmFormat || null,
+      weight: { weightColName: catRole('model', 'weight'), weightArray: null, blockedError: null }
+    };
+  }
+  var pf = ds.preflight || {};
+  return {
+    file: ds.file,
+    zipEntry: pf.selectedZipEntry || null,
+    globalFilter: ds.filter ? { expression: ds.filter.expression } : null,
+    calcolCode: ds.calcolCode || null,
+    calcolMeta: (ds.calcolMeta && ds.calcolMeta.length > 0) ? ds.calcolMeta : null,
+    resolvedTypes: pf.autoTypes,
+    xyzCols: [pf.xyz.x, pf.xyz.y, pf.xyz.z],
+    dxyzCols: [-1, -1, -1],
+    rowVarOverride: ds.rowVar,
+    dmEndianness: pf.dmEndianness || null,
+    dmFormat: pf.dmFormat || null,
+    weight: resolveSwathCmpWeight(ds)
+  };
+}
+// The "Dataset" picker host at the top of the sidebar — shown at 2+ swath-able
+// datasets. onchange re-wired each render (mirrors statsCat).
+function renderSwathDatasetPicker(root) {
+  var wrap = swQ('swathDatasetWrap', root);
+  if (!wrap) return;
+  var ts = swathTargetableDatasets();
+  if (ts.length < 2) { wrap.innerHTML = ''; return; }
+  var cur = swathTargetDs(root).id;
+  wrap.innerHTML = '<div class="swath-sidebar-title">Dataset</div>' +
+    '<select class="swath-select" data-sw="swathDatasetSel">' +
+    ts.map(function(d) { return '<option value="' + esc(d.id) + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
+    '</select>';
+  var sel = wrap.querySelector('[data-sw="swathDatasetSel"]');
+  if (sel) sel.onchange = function() { setSwathTarget(sel.value, root); };
+}
+// Switch the panel's primary dataset and rebuild its sidebar for that dataset.
+function setSwathTarget(id, root) {
+  var S = swStateForRoot(root);
+  if (id === S.swathTargetDsId) return;
+  S.swathTargetDsId = id;
+  S.lastSwathData = null;
+  renderSwathConfig(undefined, root);
+  renderSwathOutput(undefined, root);
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+// Keep the picker current as datasets analyze/clear; fall back to the model if
+// the target's analysis went away.
+function swathRefreshDatasetPicker(root) {
+  var S = swStateForRoot(root);
+  if (S.swathTargetDsId !== 'model' && !(dsById(S.swathTargetDsId) && dsById(S.swathTargetDsId).complete)) {
+    S.swathTargetDsId = 'model';
+  }
+  renderSwathDatasetPicker(root);
 }
 
 // ─── A10 Swath s-4b: cloneable Swath instances ─────────────────────────────
@@ -24294,9 +24427,10 @@ function swSerializeConfig(root) {
   if (!$dirMode) return null;
   var $stat = swQ('swathStat', root), $filter = swQ('swathLocalFilter', root);
   var $sb = swQ('swathSidebar', root), $vl = swQ('swathVarList', root);
+  var primHeader = swathCtx(root).header || currentHeader || [];   // ws-v2 phase 1: primary var names vs the TARGET header
   var checkedVars = [];
   if ($vl) $vl.querySelectorAll('input[type="checkbox"]:not([data-aux]):checked').forEach(function(cb) {
-    var name = currentHeader[parseInt(cb.value)];
+    var name = primHeader[parseInt(cb.value)];
     if (name) checkedVars.push(name);
   });
   var auxChecked = null;
@@ -24312,6 +24446,7 @@ function swSerializeConfig(root) {
     dirs[cb.dataset.dir] = { on: cb.checked, bin: isFinite(bin) ? bin : null };
   });
   return {
+    targetDsId: swStateForRoot(root).swathTargetDsId || 'model',   // ws-v2 phase 1
     dirMode: $dirMode.value, directions: dirs,
     dipDir: parseFloat((swQ('swathDipDir', root) || {}).value) || 0,
     dip: parseFloat((swQ('swathDip', root) || {}).value) || 0,
@@ -24324,6 +24459,12 @@ function swSerializeConfig(root) {
 
 function swApplyConfig(root, cfg) {
   if (!cfg) return;
+  // ws-v2 phase 1: switch to the saved target FIRST so the sidebar (directions,
+  // primary vars, geometry) is rebuilt for it before we apply the saved controls.
+  if (cfg.targetDsId && cfg.targetDsId !== (swStateForRoot(root).swathTargetDsId || 'model')) {
+    swStateForRoot(root).swathTargetDsId = cfg.targetDsId;
+    renderSwathConfig(undefined, root);
+  }
   var $dirMode = swQ('swathDirMode', root);
   if ($dirMode && cfg.dirMode) { $dirMode.value = cfg.dirMode; $dirMode.dispatchEvent(new Event('change')); }
   var $sb = swQ('swathSidebar', root);
@@ -24444,10 +24585,12 @@ function swApplyAllInstances() {
 // A10 4c-iii-b: every comparison dataset that can overlay a swath — has a file
 // and a preflight (XYZ may still be unassigned; we list it with a note, the
 // same as the legacy aux path). Registry order: aux first, then d2, d3…
-function swathCmpDatasets() {
+function swathCmpDatasets(root) {
+  var tid = swathTargetDs(root).id;
   var out = [];
-  for (var i = 1; i < datasets.length; i++) {
+  for (var i = 0; i < datasets.length; i++) {
     var d = datasets[i];
+    if (d.id === tid) continue;
     if (d && d.file && d.preflight) out.push(d);
   }
   return out;
@@ -24456,8 +24599,8 @@ function swathCmpDatasets() {
 // The comparison datasets actually shown — the chips (4c-iii-c, ≥2 comparison
 // datasets) let the user hide any of them; the sidebar listing, the fan-out
 // run, and the chart all iterate this.
-function swathShownCmpDatasets() {
-  return swathCmpDatasets().filter(function(d) { return !panelState.swath.dsHidden.has(d.id); });
+function swathShownCmpDatasets(root) {
+  return swathCmpDatasets(root).filter(function(d) { return !panelState.swath.dsHidden.has(d.id); });
 }
 
 // A comparison dataset is swath-ready once its X/Y/Z are assigned.
@@ -24600,8 +24743,9 @@ function applySwathColor(colName, color, root) {
   autoSaveProject();
 }
 
-function getSwathUnit(colIdx) {
-  var idx = currentHeader[colIdx] ? catPropUnit('model', currentHeader[colIdx]) : 0;
+function getSwathUnit(colIdx, header, dsId) {
+  header = header || currentHeader; dsId = dsId || 'model';
+  var idx = header[colIdx] ? catPropUnit(dsId, header[colIdx]) : 0;
   var u = GRADE_UNITS[idx] || GRADE_UNITS[0];
   return { unitIdx: idx, symbol: u.symbol };
 }
@@ -24611,14 +24755,15 @@ function getSwathUnit(colIdx) {
 // as "same variable, other dataset") → palette fallback.
 // A10 4c-iii: dsId defaults to 'aux' (the single legacy comparison) but any
 // comparison dataset's series resolves color/unit the same way.
-function getAuxSwathVarColor(baseName, fallbackIdx, dsId) {
+function getAuxSwathVarColor(baseName, fallbackIdx, dsId, targetId) {
   dsId = dsId || 'aux';
+  targetId = targetId || 'model';
   var rec = catVarPeek(dsId, baseName);
   if (rec && rec.color) return rec.color;
-  var p = catModelMember(dsId, baseName);
+  var p = catMemberIn(dsId, baseName, targetId);   // the primary (target) column this comparison shares a property with
   if (p) {
     for (var i = 0; i < swathNumCols.length; i++) {
-      if (swathNumCols[i].name === p) return getSwathVarColor(p, i);
+      if (swathNumCols[i].name === p) return getSwathVarColor(p, i, targetId);
     }
   }
   return STATSCAT_PALETTE[fallbackIdx % STATSCAT_PALETTE.length];
@@ -24696,6 +24841,8 @@ function swathDirView(sd, key) {
     binWidth: d.binWidth,
     vars: (sd.results && sd.results[d.key]) || {},
     varCols: sd.varCols,
+    header: sd.header || null,            // ws-v2 phase 1: the primary (target) header
+    targetDsId: sd.targetDsId || 'model', // and which dataset is primary (cmp pairing anchor)
     // A10 4c-iii: one comparison block per overlaid dataset (aux, d2…), each
     // with this direction's per-variable bins. Chip-hidden datasets (4c-iii-c)
     // drop out of the chart from cache, no re-run.
@@ -24761,22 +24908,32 @@ function renderSwathOutput(stat, root) {
 }
 
 function renderSwathConfig(data, root) {
-  if (data) _swathData = data;   // s-4b: cache the analysis data so clone builds can render their own sidebar
+  if (data) _swathData = data;   // s-4b: cache the MODEL analysis (clone builds + the model ctx)
   const $sidebar = swQ('swathSidebar', root);
   const $content = swQ('swathContent', root);
   if (!$sidebar) return;
-  const { header, colTypes, geometry } = data;
-  const hasXYZ = currentXYZ.x >= 0 && currentXYZ.y >= 0 && currentXYZ.z >= 0;
+  // ws-v2 phase 1: the panel's PRIMARY dataset (model default → resolves to the
+  // current* globals, bit-identical). A picker section lets the user switch.
+  var ctx = swathCtx(root);
+  var dsTag = ctx.id;
+  const header = ctx.header, colTypes = ctx.colTypes, geometry = ctx.geometry;
+  const xyz = ctx.xyz, dxyz = ctx.dxyz;
+  const pickerHtml = '<div class="swath-sidebar-section" data-sw="swathDatasetWrap"></div>';
+  const hasXYZ = xyz.x >= 0 && xyz.y >= 0 && xyz.z >= 0;
   if (!hasXYZ || !geometry || !geometry.x) {
-    $sidebar.innerHTML = '';
-    $content.innerHTML = '<div class="swath-hint">Assign X/Y/Z columns in Import Model and run analysis to enable Swath plots.</div>';
+    $sidebar.innerHTML = pickerHtml;
+    swStampSingletonIds(root, $sidebar);
+    renderSwathDatasetPicker(root);
+    $content.innerHTML = '<div class="swath-hint">Assign X/Y/Z columns for ' + esc(dsLabel(dsTag)) + ' to enable Swath plots.</div>';
     return;
   }
   swathNumCols = header.map((h, i) => ({ name: h, idx: i, type: colTypes[i] }))
-    .filter(c => c.type === 'numeric' && c.idx !== currentXYZ.x && c.idx !== currentXYZ.y && c.idx !== currentXYZ.z
-      && c.idx !== currentDXYZ.dx && c.idx !== currentDXYZ.dy && c.idx !== currentDXYZ.dz);
+    .filter(c => c.type === 'numeric' && c.idx !== xyz.x && c.idx !== xyz.y && c.idx !== xyz.z
+      && c.idx !== dxyz.dx && c.idx !== dxyz.dy && c.idx !== dxyz.dz);
   if (swathNumCols.length === 0) {
-    $sidebar.innerHTML = '';
+    $sidebar.innerHTML = pickerHtml;
+    swStampSingletonIds(root, $sidebar);
+    renderSwathDatasetPicker(root);
     $content.innerHTML = '<div class="swath-hint">No numeric variable columns available for swath analysis.</div>';
     return;
   }
@@ -24789,12 +24946,12 @@ function renderSwathConfig(data, root) {
     '</div>';
   }
   const varItems = swathNumCols.map(function(c, vi) {
-    var defUnit = catPropUnit('model', c.name);
+    var defUnit = catPropUnit(dsTag, c.name);
     var unitOpts = GRADE_UNITS.map(function(u, ui) {
       return '<option value="' + ui + '"' + (ui === defUnit ? ' selected' : '') + '>' + esc(u.label) + '</option>';
     }).join('');
-    var varColor = getSwathVarColor(c.name, vi);
-    var emptyTag = colIsEmpty('model', c.idx) ? '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>' : '';
+    var varColor = getSwathVarColor(c.name, vi, dsTag);
+    var emptyTag = colIsEmpty(dsTag, c.idx) ? '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>' : '';
     return '<label class="swath-var-item"><input type="checkbox" value="' + c.idx + '" checked>' +
       '<div class="swath-color-swatch" data-col="' + c.idx + '" style="background:' + varColor + '"></div>' +
       '<span>' + esc(c.name) + '</span>' + emptyTag +
@@ -24802,6 +24959,7 @@ function renderSwathConfig(data, root) {
   }).join('');
 
   $sidebar.innerHTML =
+    pickerHtml +
     '<div class="swath-sidebar-section" data-sb="dir">' +
       '<div class="swath-sidebar-title">Directions</div>' +
       '<select class="swath-select" data-sw="swathDirMode">' +
@@ -24834,9 +24992,9 @@ function renderSwathConfig(data, root) {
         '<option value="p10_50_90">P10 / P50 / P90</option>' +
       '</select>' +
       '<div style="margin-top:0.3rem">' +
-        '<div class="swath-sidebar-title">Weight (model)</div>' +
+        '<div class="swath-sidebar-title">Weight' + (ctx.isModel ? ' (model)' : '') + '</div>' +
         '<select class="swath-select" data-sw="swathWeight"><option value="">\u2014 none</option>' +
-          swathNumCols.map(function(c) { return '<option value="' + esc(c.name) + '"' + (c.name === catRole('model', 'weight') ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') +
+          swathNumCols.map(function(c) { return '<option value="' + esc(c.name) + '"' + (c.name === catRole(dsTag, 'weight') ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') +
         '</select>' +
       '</div>' +
     '</div>' +
@@ -24887,6 +25045,9 @@ function renderSwathConfig(data, root) {
   // external project.js reads (#swathVarList, getElementById('swathDirMode')\u2026)
   // keep working unchanged; clones stay id-free so the DOM has no duplicate ids.
   swStampSingletonIds(root, $sidebar);
+
+  // ws-v2 phase 1: populate + wire the Dataset picker (shown at 2+ swath-able datasets)
+  renderSwathDatasetPicker(root);
 
   // C6-4b \u2014 promote sections to collapsible; advanced ones collapsed by default
   wsEnhanceSidebar('swath', $sidebar, { stat: 'collapsed', display: 'collapsed', filter: 'collapsed' });
@@ -24943,10 +25104,15 @@ function renderSwathConfig(data, root) {
   // Shared support weight (D3): writing here also re-points the Statistics
   // tab's weight select — one role, two views
   swQ('swathWeight', root).addEventListener('change', function() {
-    catSetRole('model', 'weight', this.value || null);
-    var $ssel = document.getElementById('statsWeightSel');
-    if ($ssel) $ssel.value = this.value || '';
-    markAnalysisStale();
+    var wctx = swathCtx(root);
+    catSetRole(wctx.id, 'weight', this.value || null);
+    if (wctx.isModel) {
+      var $ssel = document.getElementById('statsWeightSel');
+      if ($ssel) $ssel.value = this.value || '';
+      markAnalysisStale();
+    } else if (typeof markAuxStale === 'function') {
+      markAuxStale(wctx.ds, (typeof dsConfigRoot === 'function') ? dsConfigRoot(wctx.ds) : null);
+    }
     autoSaveProject();
   });
 
@@ -24971,8 +25137,9 @@ function renderSwathConfig(data, root) {
       if (e.target.dataset.auxCol != null) {
         if (e.target.dataset.auxName) catSetUnit(e.target.dataset.auxDs || 'aux', e.target.dataset.auxName, uv);
       } else {
-        var un = currentHeader[parseInt(e.target.dataset.col)];
-        if (un) catSetUnit('model', un, uv);
+        var uctx = swathCtx(root);
+        var un = uctx.header[parseInt(e.target.dataset.col)];
+        if (un) catSetUnit(uctx.id, un, uv);
       }
       catRefreshUnitSelects();
       if (swStateForRoot(root).lastSwathData) renderSwathOutput(undefined, root);
@@ -24993,12 +25160,12 @@ function renderSwathConfig(data, root) {
       if (swatch.dataset.colorKey) {
         // Comparison swatch — override key is '<dsId>:NAME' (stable across display-prefix changes)
         var swDsId = swatch.dataset.auxDs || 'aux';
-        var curColor = getAuxSwathVarColor(swatch.dataset.auxName, swathNumCols.length + parseInt(swatch.dataset.auxIdx || 0), swDsId);
+        var curColor = getAuxSwathVarColor(swatch.dataset.auxName, swathNumCols.length + parseInt(swatch.dataset.auxIdx || 0), swDsId, swathTargetDs(root).id);
         showSwathColorPicker(swatch.dataset.colorKey, null, swatch, curColor, root);
         return;
       }
       var colIdx = parseInt(swatch.dataset.col);
-      showSwathColorPicker(currentHeader[colIdx], colIdx, swatch, undefined, root);
+      showSwathColorPicker(swathCtx(root).header[colIdx], colIdx, swatch, undefined, root);
     }
   });
 
@@ -25059,9 +25226,10 @@ function renderSwathConfig(data, root) {
 function renderSwathDatasetChips(root) {
   var section = swQ('swathDatasetsSection', root);
   if (!section) return;
-  var allCmp = swathCmpDatasets();
+  var allCmp = swathCmpDatasets(root);
   if (allCmp.length < 2) { section.style.display = 'none'; return; }
-  var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the model (primary) series">Model</span>';
+  var primaryId = swathTargetDs(root).id;
+  var chips = '<span class="stats-ds-chip stats-ds-chip--model" title="the primary series">' + esc(dsLabel(primaryId)) + '</span>';
   allCmp.forEach(function(ds) {
     var off = panelState.swath.dsHidden.has(ds.id);
     chips += '<button class="stats-ds-chip' + (off ? ' off' : '') + '" data-ds-chip="' + esc(ds.id) +
@@ -25094,8 +25262,9 @@ function renderSwathAuxVars(root) {
   });
 
   renderSwathDatasetChips(root);
-  var cmpDatasets = swathShownCmpDatasets();
-  if (swathCmpDatasets().length === 0) { wrap.innerHTML = ''; return; }
+  var cmpDatasets = swathShownCmpDatasets(root);
+  if (swathCmpDatasets(root).length === 0) { wrap.innerHTML = ''; return; }
+  var primaryId = swathTargetDs(root).id;   // ws-v2 phase 1: pair comparisons to the primary, not always the model
   catEnsureSeeded();
 
   // A pending project restore applies to aux only (persistence covers the
@@ -25128,12 +25297,12 @@ function renderSwathAuxVars(root) {
       var checked;
       if (ds.id === 'aux' && restore && restore.checked) checked = restore.checked.indexOf(c.name) >= 0;
       else if (prevSeen[ds.id]) checked = !!prevChecked[key];   // preserve user toggles
-      else checked = !!catModelMember(ds.id, c.name);            // paired-by-default on first appearance
+      else checked = !!catMemberIn(ds.id, c.name, primaryId);    // paired-to-primary by default on first appearance
       var unitIdx = catPropUnit(ds.id, c.name);
       var unitOpts = GRADE_UNITS.map(function(u, ui) {
         return '<option value="' + ui + '"' + (ui === unitIdx ? ' selected' : '') + '>' + esc(u.label) + '</option>';
       }).join('');
-      var color = getAuxSwathVarColor(c.name, swathNumCols.length + ai, ds.id);
+      var color = getAuxSwathVarColor(c.name, swathNumCols.length + ai, ds.id, primaryId);
       var emptyTag = colIsEmpty(ds.id, c.idx) ? '<span class="empty-tag" title="' + EMPTY_COL_TITLE + '">∅</span>' : '';
       html += '<label class="swath-var-item swath-var-item--aux">' +
         '<input type="checkbox" value="' + c.idx + '" data-aux="1" data-ds="' + esc(ds.id) + '" data-name="' + esc(c.name) + '"' + (checked ? ' checked' : '') + '>' +
@@ -25232,27 +25401,39 @@ function runSwath(root) {
     }
   }
 
-  // Gather selected model variable column indices (the model and each
-  // comparison dataset live in separate index spaces — comparison indices
-  // point into that dataset's own header).
+  // ws-v2 phase 1: the PRIMARY dataset this panel swaths (model default). Its
+  // worker inputs come from swathRunInputs (resolved globals for the model;
+  // preflight for a comparison). The primary and each comparison live in
+  // separate header/index spaces.
+  var ctx = swathCtx(root);
+  var targetDs = swathTargetDs(root);
+  var primIn = swathRunInputs(targetDs);
+
+  // Gather selected PRIMARY variable column indices (into the target's header).
   var varCols = [];
   swQA('swathVarList', 'input[type="checkbox"]:not([data-aux]):checked', root).forEach(function(cb) {
     varCols.push(parseInt(cb.value));
   });
-  // A10 4c-iii-b: build a run per comparison dataset that has selected vars —
-  // one swath worker each, resolving its own weight (the declustering-stale
-  // case soft-fails into a per-dataset error rather than launching a worker).
+  // A10 4c-iii-b: build a run per comparison dataset (every shown dataset EXCEPT
+  // the target) that has selected vars — one swath worker each, resolving its own
+  // weight (declustering-stale soft-fails into a per-dataset error, no worker).
   var cmpRuns = [];
-  swathShownCmpDatasets().forEach(function(ds) {
+  swathShownCmpDatasets(root).forEach(function(ds) {
     if (!swathCmpReady(ds)) return;
     var sel = [];
     swQA('swathVarList', 'input[type="checkbox"][data-aux][data-ds="' + ds.id + '"]:checked', root).forEach(function(cb) {
       sel.push(parseInt(cb.value));
     });
     if (sel.length === 0) return;
-    cmpRuns.push({ ds: ds, varCols: sel, weight: resolveSwathCmpWeight(ds) });
+    cmpRuns.push({ ds: ds, varCols: sel, inputs: swathRunInputs(ds) });
   });
   if (varCols.length === 0 && cmpRuns.length === 0) return;
+  // If the primary itself is weight-blocked (e.g. a comparison target with stale
+  // declustered weights), surface it rather than launching a bad run.
+  if (varCols.length > 0 && primIn.weight.blockedError) {
+    swathConfigError(primIn.weight.blockedError, root);
+    return;
+  }
 
   // Worker payload: direction geometry only (no display fields)
   var workerDirs = dcfg.dirs.map(function(d) {
@@ -25261,9 +25442,9 @@ function runSwath(root) {
 
   if (S.swathWorker) { S.swathWorker.terminate(); S.swathWorker = null; }
   terminateSwathCmpWorkers(S);
-  // The progress bar follows the model worker when present, else the first
+  // The progress bar follows the primary worker when present, else the first
   // comparison worker (so a comparison-only run still animates).
-  var barDriverId = varCols.length > 0 ? 'model' : (cmpRuns[0] ? cmpRuns[0].ds.id : null);
+  var barDriverId = varCols.length > 0 ? targetDs.id : (cmpRuns[0] ? cmpRuns[0].ds.id : null);
 
   var $progress = swQ('swathProgress', root);
   var $fill = swQ('swathProgressFill', root);
@@ -25292,7 +25473,8 @@ function runSwath(root) {
     // dataset), assembled in registry order (aux, d2, d3…) from the per-dataset
     // result slots the fan-out workers wrote.
     var cmp = [];
-    for (var ci = 1; ci < datasets.length; ci++) {
+    for (var ci = 0; ci < datasets.length; ci++) {
+      if (datasets[ci].id === targetDs.id) continue;   // the primary isn't a comparison of itself
       var slot = out.cmp[datasets[ci].id];
       if (slot) cmp.push(slot);
     }
@@ -25300,6 +25482,7 @@ function runSwath(root) {
       directions: dcfg.dirs, mode: dcfg.mode, angles: dcfg.angles,
       results: out.results, varCols: varCols, elapsed: out.elapsed,
       cmp: cmp,
+      targetDsId: targetDs.id, header: ctx.header,   // ws-v2 phase 1: primary var names + cmp pairing anchor
       filterErrors: out.filterErrors || null, calcolErrors: out.calcolErrors || null,
       weightExcluded: out.weightExcluded || 0,
       activeKey: dcfg.dirs.some(function(d) { return d.key === prevKey; }) ? prevKey : dcfg.dirs[0].key
@@ -25345,20 +25528,22 @@ function runSwath(root) {
     S.swathWorker = new Worker(workerUrl);
     S.swathWorker.postMessage({
       mode: 'swath',
-      file: currentFile,
-      zipEntry: preflightData ? (preflightData.selectedZipEntry || null) : null,
-      globalFilter: currentFilter ? { expression: currentFilter.expression } : null,
+      file: primIn.file,
+      zipEntry: primIn.zipEntry,
+      globalFilter: primIn.globalFilter,
       localFilter: localFilter || null,
-      calcolCode: currentCalcolCode || null,
-      calcolMeta: currentCalcolMeta.length > 0 ? currentCalcolMeta : null,
-      resolvedTypes: currentColTypes.slice(0, currentOrigColCount),
-      xyzCols: [currentXYZ.x, currentXYZ.y, currentXYZ.z],
-      dxyzCols: [currentDXYZ.dx, currentDXYZ.dy, currentDXYZ.dz],
+      calcolCode: primIn.calcolCode,
+      calcolMeta: primIn.calcolMeta,
+      resolvedTypes: primIn.resolvedTypes,
+      xyzCols: primIn.xyzCols,
+      dxyzCols: primIn.dxyzCols,
       directions: workerDirs,
       varCols: varCols,
-      weightColName: catRole('model', 'weight'),
-      dmEndianness: preflightData && preflightData.dmEndianness || null,
-      dmFormat: preflightData && preflightData.dmFormat || null
+      rowVarOverride: primIn.rowVarOverride,
+      weightColName: primIn.weight.weightColName,
+      weightArray: primIn.weight.weightArray,
+      dmEndianness: primIn.dmEndianness,
+      dmFormat: primIn.dmFormat
     });
     S.swathWorker.onerror = function(e) {
       abortAll('Worker error: ' + (e.message || 'unknown error'));
@@ -25390,35 +25575,35 @@ function runSwath(root) {
   // surfaces in the warning banner instead of silently rendering unweighted or
   // dropping the series.
   cmpRuns.forEach(function(run) {
-    var ds = run.ds, pf = ds.preflight;
+    var ds = run.ds, inp = run.inputs;
     var slot = {
       dsId: ds.id, results: null, varCols: run.varCols, header: swathCmpHeader(ds),
       error: null, filterErrors: null, calcolErrors: null, weightExcluded: 0
     };
     out.cmp[ds.id] = slot;
-    if (run.weight.blockedError) { slot.error = run.weight.blockedError; return; }  // no worker
+    if (inp.weight.blockedError) { slot.error = inp.weight.blockedError; return; }  // no worker
 
     pending++;
     var w = new Worker(workerUrl);
     S.swathCmpWorkers.push(w);
     w.postMessage({
       mode: 'swath',
-      file: ds.file,
-      zipEntry: pf.selectedZipEntry || null,
-      globalFilter: ds.filter ? { expression: ds.filter.expression } : null,
+      file: inp.file,
+      zipEntry: inp.zipEntry,
+      globalFilter: inp.globalFilter,
       localFilter: null,
-      calcolCode: ds.calcolCode || null,
-      calcolMeta: (ds.calcolMeta && ds.calcolMeta.length > 0) ? ds.calcolMeta : null,
-      resolvedTypes: pf.autoTypes,
-      xyzCols: [pf.xyz.x, pf.xyz.y, pf.xyz.z],
-      dxyzCols: [-1, -1, -1],
+      calcolCode: inp.calcolCode,
+      calcolMeta: inp.calcolMeta,
+      resolvedTypes: inp.resolvedTypes,
+      xyzCols: inp.xyzCols,
+      dxyzCols: inp.dxyzCols,
       directions: workerDirs,
       varCols: run.varCols,
-      rowVarOverride: ds.rowVar,
-      weightColName: run.weight.weightColName,
-      weightArray: run.weight.weightArray,
-      dmEndianness: pf.dmEndianness || null,
-      dmFormat: pf.dmFormat || null
+      rowVarOverride: inp.rowVarOverride,
+      weightColName: inp.weight.weightColName,
+      weightArray: inp.weight.weightArray,
+      dmEndianness: inp.dmEndianness,
+      dmFormat: inp.dmFormat
     });
     w.onerror = function(e) {
       slot.error = e.message || 'unknown error';
@@ -25534,24 +25719,28 @@ function renderSwathCharts(swathData, stat, $target, root) {
   // Build per-variable entries — primary first, then aux. Selected variables
   // with zero surviving bins (empty column, everything filtered) are listed
   // in a note instead of silently vanishing from the chart (A8)
+  // ws-v2 phase 1: primary var names/units/colours resolve through the TARGET
+  // header + dataset (stored on the result), not the model globals.
+  var primHeader = swathData.header || currentHeader || [];
+  var targetId = swathData.targetDsId || 'model';
   var noData = [];
   var varEntries = [];
   for (var vi = 0; vi < varCols.length; vi++) {
     var colIdx = varCols[vi];
     var bins = (swathData.vars[colIdx] || []).filter(function(b) { return b.count > 0; }).sort(function(a, b) { return a.center - b.center; });
-    var name = currentHeader[colIdx] || 'Variable';
+    var name = primHeader[colIdx] || 'Variable';
     if (bins.length === 0) { noData.push(name); continue; }
     var lines = buildSwathStatLines(bins, stat);
     varEntries.push({
       colIdx: colIdx,
       isAux: false,
       name: name,
-      color: getSwathVarColor(name, vi),
+      color: getSwathVarColor(name, vi, targetId),
       bins: bins,
       centerLine: lines.centerLine,
       upperLine: lines.upperLine,
       lowerLine: lines.lowerLine,
-      unit: getSwathUnit(colIdx),
+      unit: getSwathUnit(colIdx, primHeader, targetId),
       scaleKey: name
     });
   }
@@ -25571,7 +25760,7 @@ function renderSwathCharts(swathData, stat, $target, root) {
       var baseName = (c.header && c.header[aIdx]) || 'Variable';
       if (aBins.length === 0) { noData.push(prefixLabel + ':' + baseName); continue; }
       var aLines = buildSwathStatLines(aBins, stat);
-      var aPair = catModelMember(c.dsId, baseName);
+      var aPair = catMemberIn(c.dsId, baseName, targetId);
       var aKey = aPair && primaryKeys[aPair] ? aPair : c.dsId + ':' + baseName;
       varEntries.push({
         colIdx: aIdx,
@@ -25579,7 +25768,7 @@ function renderSwathCharts(swathData, stat, $target, root) {
         dsId: c.dsId,
         baseName: baseName,
         name: prefixLabel + ':' + baseName,
-        color: getAuxSwathVarColor(baseName, varEntries.length, c.dsId),
+        color: getAuxSwathVarColor(baseName, varEntries.length, c.dsId, targetId),
         bins: aBins,
         centerLine: aLines.centerLine,
         upperLine: aLines.upperLine,

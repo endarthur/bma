@@ -227,6 +227,7 @@ function runAuxAnalysis(ds, root) {
       if (typeof renderCatMain === 'function' && panelState.categories.focusedCol !== null) renderCatMain();
       if (typeof catRenderAllInstances === 'function') catRenderAllInstances();
       if (ds.view === 'summary' && typeof renderAuxSummary === 'function') renderAuxSummary(ds, root);  // A10 per-dataset summary
+      if (typeof swathRefreshDatasetPicker === 'function') swathRefreshDatasetPicker();  // ws-v2 phase 1: now swath-targetable
       if (typeof gtRefreshDatasetPicker === 'function') gtRefreshDatasetPicker();  // G3: this dataset is now GT-targetable
       if (typeof gtApplyAllInstances === 'function') gtApplyAllInstances();  // G3b-4: resolve a restored GT clone that targets this dataset
       if (typeof statsCatRefreshDatasetPicker === 'function') statsCatRefreshDatasetPicker();  // G4a: now StatsCat-targetable

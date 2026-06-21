@@ -601,10 +601,12 @@ function serializeProject() {
       var $stat = document.getElementById('swathStat');
       var $filter = document.getElementById('swathLocalFilter');
       if (!$dirMode) return null;
+      // ws-v2 phase 1: primary var names resolve against the TARGET header.
+      var swPrimHeader = (typeof swathCtx === 'function' && swathCtx().header) || currentHeader || [];
       var checkedVars = [];
       document.querySelectorAll('#swathVarList input[type="checkbox"]:checked').forEach(function(cb) {
         var colIdx = parseInt(cb.value);
-        var name = currentHeader[colIdx];
+        var name = swPrimHeader[colIdx];
         if (name) checkedVars.push(name);
       });
       var swathAuxChecked = null;
@@ -624,6 +626,7 @@ function serializeProject() {
         swathDirs[k] = { on: cb.checked, bin: isFinite(bin) ? bin : null };
       });
       return {
+        targetDsId: (typeof swathTargetDsId !== 'undefined') ? swathTargetDsId : 'model',   // ws-v2 phase 1
         dirMode: $dirMode.value,
         directions: swathDirs,
         dipDir: parseFloat((document.getElementById('swathDipDir') || {}).value) || 0,
@@ -2666,6 +2669,13 @@ function displayResults(data) {
   // Restore Swath sidebar from project or snapshot
   var swp = (restoredProject && restoredProject.swath) ? restoredProject.swath : swathSnapshot;
   if (swp) {
+    // ws-v2 phase 1: restore the per-panel target (the picker/sidebar rebuild for
+    // it when it's analyzed; swathTargetDs falls back if it's gone).
+    if (typeof swathTargetDsId !== 'undefined') swathTargetDsId = swp.targetDsId || 'model';
+    if (typeof swathTargetDsId !== 'undefined' && swathTargetDsId !== 'model'
+        && document.getElementById('swathDirMode') && typeof renderSwathConfig === 'function') {
+      renderSwathConfig(undefined);   // rebuild the singleton sidebar for the target (if analyzed; else falls back)
+    }
     var $sStat = document.getElementById('swathStat');
     var $sFilter = document.getElementById('swathLocalFilter');
     var $sDirMode = document.getElementById('swathDirMode');
