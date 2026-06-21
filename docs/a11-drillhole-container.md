@@ -85,6 +85,22 @@ This is the kernel that wants an **oracle harness** (the DECLUS/A7 playbook):
 hand-built tiny fixtures with known correct joins, diffed against the
 implementation.
 
+**Implemented (P4, `Drillhole.mergeIntervals(A, B, opts)`):** the decisions
+above resolved to **union re-segment + carry**. Per hole the merged breaks are
+the sorted union of both tables' FROM/TO, so every output segment lies within at
+most one interval of each table — columns are **carried verbatim, no
+aggregation** (union re-segment dissolves the carry-vs-aggregate question for the
+default; length-weighting would only matter under a primary-breaks mode, deferred).
+A segment with no counterpart on one side **null-fills + counts** it (`gap-a` /
+`gap-b`); a segment covered by neither is skipped (not a real interval). Overlaps
+within one table over a segment are flagged (`overlap-a/-b`, first wins); holes
+present in only one table are filled + counted (`hole-only-a/-b`); column-name
+clashes are renamed (suffix `tagB`) + counted (`column-collision`). Pairwise-in-
+order for 3+ (fold A⊕B, then ⊕C…). The merged table is the columnar interval
+shape, so it **composites cleanly through the existing pipeline** (proven in the
+oracle). Pure function, no DOM; the "merge intervals" UI + the 2nd interval table
+that feeds it land with the multi-table container (P5).
+
 ## The compositing surface
 
 Today's fixed card → an interactive panel acting on **one source interval table**
