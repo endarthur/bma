@@ -27,13 +27,18 @@ var wsRails = null;      // rails instance when the rails shell is up, else null
 var wsLastLayout = null; // serialized rails layout — survives shell exits, rides projects
 var wsMenuBar = null;    // C6-2 desktop menubar (rails shell only); null on legacy
 
+// ws-v2 phase 6: `defaultOpen` panels populate a fresh workspace's main stack
+// (the "trimmed default layout" — Import Model + the two core summaries). The
+// rest stay REGISTERED (renderPanel resolves them, the Panels menu lists them,
+// the tree opens them) and appear on demand — only the initial/Reset layout is
+// leaner. Existing projects keep their saved layout. (Arthur 2026-06-20: Minimal.)
 var WS_PANELS = [
-  { id: 'preflight',  title: 'Import Model',  el: 'panelPreflight' },
+  { id: 'preflight',  title: 'Import Model',  el: 'panelPreflight', defaultOpen: true },
   { id: 'aux',        title: 'Aux',        el: 'panelAux' },
   // ws-v2 phase 2: Summary folded into the Import Model panel (no standalone tab).
   { id: 'calcols',    title: 'Calc',       el: 'panelCalcols' },
-  { id: 'statistics', title: 'Statistics', el: 'panelStatistics' },
-  { id: 'categories', title: 'Categories', el: 'panelCategories' },
+  { id: 'statistics', title: 'Statistics', el: 'panelStatistics', defaultOpen: true },
+  { id: 'categories', title: 'Categories', el: 'panelCategories', defaultOpen: true },
   { id: 'statscat',   title: 'StatsCat',   el: 'panelStatsCat' },
   { id: 'gt',         title: 'GT',         el: 'panelGt' },
   { id: 'swath',      title: 'Swath',      el: 'panelSwath' },
@@ -121,7 +126,14 @@ function wsPanelById(id) {
 
 // Default layout = familiar (C1b D3): tree rail + single main stack
 function wsDefaultLayout(activeId) {
-  if (!wsPanelById(activeId) || activeId === 'aux') activeId = 'preflight';   // aux isn't in the default layout
+  // ws-v2 phase 6: only `defaultOpen` panels populate the fresh main stack. The
+  // current active tab is honored if it's one of them, else we land on Import
+  // Model. (A non-default active panel — e.g. opened-then-Reset — is closed by the
+  // reset, as expected; showPanel re-adds any registered panel on demand.) aux is
+  // never in the default layout (it opens like d2+ via Add comparison dataset).
+  var open = WS_PANELS.filter(function(p) { return p.defaultOpen; });
+  var isOpen = open.some(function(p) { return p.id === activeId; });
+  if (!isOpen) activeId = 'preflight';
   return {
     rails: [
       { id: WS_TREE_RAIL, flex: 0, width: 250, collapsible: true,
@@ -130,12 +142,7 @@ function wsDefaultLayout(activeId) {
           tabs: [{ id: 'data', title: 'Data', closeable: false, draggable: false }] }] },
       { id: WS_MAIN_RAIL, flex: 1,
         stacks: [{ id: WS_MAIN_STACK, flex: 1, active: activeId,
-          // 'aux' (the first comparison) is no longer always-present — it opens on
-          // demand via Add comparison dataset, like d2+. So it's omitted from the
-          // default layout (an empty "Aux" tab was clutter + a privileged holdover).
-          tabs: WS_PANELS.filter(function(p) { return p.id !== 'aux'; }).map(function(p) {
-            return { id: p.id, title: p.title };
-          }) }] }
+          tabs: open.map(function(p) { return { id: p.id, title: p.title }; }) }] }
     ],
     floats: []
   };
