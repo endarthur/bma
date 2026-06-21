@@ -43,7 +43,8 @@ function dhStateFor(ds) {
     derivedName: null,              // file name of the loaded composite CSV
     provFiles: null,                // [names] for the provenance banner
     pendingRestore: null,           // project recipe awaiting its files
-    intervalTables: []              // A11 P0: the container's interval-tables list (see dhIvtList)
+    intervalTables: [],             // A11 P0: the container's interval-tables list (see dhIvtList)
+    secondary: null                 // A11 P5: a 2nd interval table {file,parsed,map} merged into the source
   };
   return dhStates[id];
 }
@@ -350,6 +351,12 @@ async function dhAssignOne(ds, file) {
     }
     if (!role) role = 'intervals';
   }
+  // A11 P5: a second interval-role table (the primary intervals slot is taken) is
+  // staged as the MERGE secondary, not an overwrite (assays + lithology → both).
+  if (role === 'intervals' && D.files.intervals) {
+    D.secondary = { file: file, parsed: parsed, map: dhAutoMap('intervals', parsed.header) };
+    return;
+  }
   D.files[role] = file;
   D.parsed[role] = parsed;
   D.map[role] = dhAutoMap(role, parsed.header);
@@ -375,6 +382,7 @@ function dhClearAll(ds) {
   D.parsed = { collar: null, survey: null, intervals: null };
   D.map = { collar: {}, survey: {}, intervals: {} };
   D.intervalTables.length = 0;   // A11 P0: drop the container's interval tables
+  D.secondary = null;            // A11 P5: drop the merge table
   D.dipConvention = null;
   D.lastReport = null;
   var $r = dhQ('[data-dh="reportInline"]', dhCardRoot(ds));
@@ -423,35 +431,82 @@ function renderDhCard(ds) {
 }
 
 function dhColSelect(ds, role, field, sel, optionalLabel) {
-  var p = dhStateFor(ds).parsed[role];
+  return dhColSelectParsed(dhStateFor(ds).parsed[role], role, field, sel, optionalLabel);
+}
+// A11 P5: select over an explicit parsed header (so the secondary table, whose
+// parsed/map live off the role slots, can render its own mapping).
+function dhColSelectParsed(parsed, mapKey, field, sel, optionalLabel) {
   var opts = optionalLabel ? '<option value="-1">— ' + optionalLabel + '</option>' : '<option value="-1">— pick —</option>';
-  for (var i = 0; i < p.header.length; i++) {
-    opts += '<option value="' + i + '"' + (i === sel ? ' selected' : '') + '>' + esc(p.header[i]) + '</option>';
+  for (var i = 0; i < parsed.header.length; i++) {
+    opts += '<option value="' + i + '"' + (i === sel ? ' selected' : '') + '>' + esc(parsed.header[i]) + '</option>';
   }
-  return '<select data-dhmap="' + role + ':' + field + '">' + opts + '</select>';
+  return '<select data-dhmap="' + mapKey + ':' + field + '">' + opts + '</select>';
+}
+// The merge (2nd interval table) panel — its BHID/FROM/TO mapping + a note on
+// what it adds. Visible + removable (no-magic-only-ui).
+function dhSecondaryPanelHtml(ds) {
+  var D = dhStateFor(ds), sx = D.secondary;
+  if (!sx || !sx.parsed) return '';
+  var cols = dhDataCols(sx.parsed, sx.map).map(function(c) { return c.name; });
+  return '<div class="dh-merge-panel">' +
+    '<div class="dh-merge-head">⋈ Merge a 2nd interval table' +
+      '<button type="button" class="dh-merge-remove" data-dh="removeSecondary" title="Remove the merge table">✕</button></div>' +
+    '<div class="dh-map-table"><div class="dh-map-title">' + esc(sx.file.name) + '</div>' +
+      '<div class="dh-map-row"><label>BHID</label>' + dhColSelectParsed(sx.parsed, 'secondary', 'bhid', sx.map.bhid) + '</div>' +
+      '<div class="dh-map-row"><label>From</label>' + dhColSelectParsed(sx.parsed, 'secondary', 'from', sx.map.from) + '</div>' +
+      '<div class="dh-map-row"><label>To</label>' + dhColSelectParsed(sx.parsed, 'secondary', 'to', sx.map.to) + '</div></div>' +
+    '<div class="dh-merge-note">union re-segment + carry — adds <b>' + cols.length + '</b> column' + (cols.length !== 1 ? 's' : '') +
+      ' to the composite' + (cols.length ? ' (' + cols.map(esc).join(', ') + ')' : '') + '; gaps are null-filled and counted</div>' +
+    '</div>';
 }
 
-function dhIntervalDataCols(ds) {
-  // interval columns other than the mapped BHID/FROM/TO, with a sampled type
-  var D = dhStateFor(ds);
-  var p = D.parsed.intervals;
-  if (!p) return [];
-  var m = D.map.intervals;
-  var used = [m.bhid, m.from, m.to];
+// interval data columns of a parsed table other than the mapped BHID/FROM/TO,
+// with a sampled type. A11 P5: generic over (parsed, map) so primary + secondary
+// interval tables share it.
+function dhDataCols(parsed, map) {
+  if (!parsed) return [];
+  var used = [map.bhid, map.from, map.to];
   var out = [];
-  for (var c = 0; c < p.header.length; c++) {
+  for (var c = 0; c < parsed.header.length; c++) {
     if (used.indexOf(c) >= 0) continue;
     var num = 0, nonEmpty = 0;
-    var step = Math.max(1, Math.floor(p.rows.length / 200));
-    for (var i = 0; i < p.rows.length; i += step) {
-      var v = (p.rows[i][c] || '').trim();
+    var step = Math.max(1, Math.floor(parsed.rows.length / 200));
+    for (var i = 0; i < parsed.rows.length; i += step) {
+      var v = (parsed.rows[i][c] || '').trim();
       if (v === '') continue;
       nonEmpty++;
       if (isFinite(parseFloat(v)) && /^[-+0-9.eE]+$/.test(v)) num++;
     }
-    out.push({ idx: c, name: p.header[c], type: (nonEmpty > 0 && num / nonEmpty >= 0.7) ? 'num' : 'cat' });
+    out.push({ idx: c, name: parsed.header[c], type: (nonEmpty > 0 && num / nonEmpty >= 0.7) ? 'num' : 'cat' });
   }
   return out;
+}
+function dhIntervalDataCols(ds) {
+  var D = dhStateFor(ds);
+  return dhDataCols(D.parsed.intervals, D.map.intervals);
+}
+// The columnar interval shape { bhid, from, to, cols:[{name,type,values}] } that
+// the compositing + merge engines consume, built from a parsed table + its map.
+function dhColumnar(parsed, map) {
+  var dataCols = dhDataCols(parsed, map);
+  var iv = { bhid: [], from: [], to: [], cols: [] };
+  for (var c = 0; c < dataCols.length; c++) iv.cols.push({ name: dataCols[c].name, type: dataCols[c].type, values: [] });
+  for (var k = 0; k < parsed.rows.length; k++) {
+    var rk = parsed.rows[k];
+    iv.bhid.push((rk[map.bhid] || '').trim());
+    iv.from.push(parseFloat(rk[map.from]));
+    iv.to.push(parseFloat(rk[map.to]));
+    for (var c2 = 0; c2 < dataCols.length; c2++) {
+      var raw = (rk[dataCols[c2].idx] || '').trim();
+      iv.cols[c2].values.push(dataCols[c2].type === 'num' ? (raw === '' ? NaN : parseFloat(raw)) : (raw === '' ? null : raw));
+    }
+  }
+  return iv;
+}
+// True when a complete second interval table is staged (BHID/FROM/TO mapped).
+function dhHasSecondary(D) {
+  var sx = D.secondary;
+  return !!(sx && sx.parsed && sx.map && sx.map.bhid >= 0 && sx.map.from >= 0 && sx.map.to >= 0);
 }
 
 function dhMappingComplete(ds) {
@@ -461,7 +516,8 @@ function dhMappingComplete(ds) {
   return p.collar && p.survey && ivt && ivt.parsed &&
     m.collar.bhid >= 0 && m.collar.x >= 0 && m.collar.y >= 0 && m.collar.z >= 0 &&
     m.survey.bhid >= 0 && m.survey.at >= 0 && m.survey.az >= 0 && m.survey.dip >= 0 &&
-    ivt.map.bhid >= 0 && ivt.map.from >= 0 && ivt.map.to >= 0;
+    ivt.map.bhid >= 0 && ivt.map.from >= 0 && ivt.map.to >= 0 &&
+    (!D.secondary || dhHasSecondary(D));   // A11 P5: a staged merge table must be mapped too
 }
 
 function renderDhMapping(ds) {
@@ -493,6 +549,8 @@ function renderDhMapping(ds) {
     '<div class="dh-map-row"><label>To</label>' + dhColSelect(ds, 'intervals', 'to', D.map.intervals.to) + '</div>' +
     '<div class="dh-map-row" style="color:var(--fg-dim);font-size:0.65rem">every other column rides along (composited)</div></div>';
   html += '</div>';
+
+  html += dhSecondaryPanelHtml(ds);   // A11 P5: the merge (2nd interval table) panel
 
   // A11 P2: per-interval-table calcols + filter (applied on export)
   html += dhIvtEditorHtml(ds);
@@ -655,25 +713,14 @@ function dhBuildTables(ds) {
       depth: parseFloat(rs[ms.at]), az: parseFloat(rs[ms.az]), dip: parseFloat(rs[ms.dip]),
     });
   }
-  var pi = D.parsed.intervals, mi = D.map.intervals;
-  var dataCols = dhIntervalDataCols(ds);
-  var iv = { bhid: [], from: [], to: [], cols: [] };
-  for (var c = 0; c < dataCols.length; c++) {
-    iv.cols.push({ name: dataCols[c].name, type: dataCols[c].type, values: [] });
-  }
-  for (var k = 0; k < pi.rows.length; k++) {
-    var rk = pi.rows[k];
-    iv.bhid.push((rk[mi.bhid] || '').trim());
-    iv.from.push(parseFloat(rk[mi.from]));
-    iv.to.push(parseFloat(rk[mi.to]));
-    for (var c2 = 0; c2 < dataCols.length; c2++) {
-      var raw = (rk[dataCols[c2].idx] || '').trim();
-      if (dataCols[c2].type === 'num') {
-        iv.cols[c2].values.push(raw === '' ? NaN : parseFloat(raw));
-      } else {
-        iv.cols[c2].values.push(raw === '' ? null : raw);
-      }
-    }
+  var iv = dhColumnar(D.parsed.intervals, D.map.intervals);
+  // A11 P5: a second interval table merges into the source (the P4 kernel) so the
+  // composite carries columns from both; its merge report rides alongside.
+  D._mergeReport = null;
+  if (dhHasSecondary(D)) {
+    var merged = Drillhole.mergeIntervals(iv, dhColumnar(D.secondary.parsed, D.secondary.map));
+    iv = { bhid: merged.bhid, from: merged.from, to: merged.to, cols: merged.cols };
+    D._mergeReport = merged.report;
   }
   return { collars: collars, surveys: surveys, intervals: iv };
 }
@@ -709,6 +756,12 @@ function dhCompositeAndLoad(ds) {
     return;
   }
   D.lastReport = result.report;
+  // A11 P5: fold the merge consistency checks (gaps/collisions/overlaps) into the
+  // composite report so they surface alongside the compositing ones.
+  if (D._mergeReport && D._mergeReport.checks.length) {
+    D.lastReport.checks = D.lastReport.checks.concat(D._mergeReport.checks);
+    D.lastReport.merged = true;
+  }
   renderDhReport(ds, dhQ('[data-dh="reportInline"]', root));
   if (result.rows.length === 0) {
     dhSetStatus(ds, 'No composites produced — check the report above.', true);
@@ -811,13 +864,22 @@ function dhMapToNames(ds, role) {
 }
 
 function dhMapFromNames(ds, role, saved) {
-  var p = dhStateFor(ds).parsed[role];
+  return dhMapIdxFromParsed(dhStateFor(ds).parsed[role], saved);
+}
+// A11 P5: parsed-based variants (the secondary table's parsed/map live off the
+// role slots, so the ds/role helpers above don't reach it).
+function dhMapNamesFromParsed(parsed, map) {
+  var out = {};
+  for (var f in map) { var idx = map[f]; out[f] = (idx != null && idx >= 0) ? { name: parsed.header[idx], idx: idx } : null; }
+  return out;
+}
+function dhMapIdxFromParsed(parsed, saved) {
   var out = {};
   for (var f in saved) {
     var s = saved[f];
     if (!s) { out[f] = -1; continue; }
-    var idx = p.header.indexOf(s.name);
-    if (idx < 0 && s.idx != null && s.idx < p.header.length) idx = s.idx;
+    var idx = parsed.header.indexOf(s.name);
+    if (idx < 0 && s.idx != null && s.idx < parsed.header.length) idx = s.idx;
     out[f] = idx;
   }
   return out;
@@ -828,13 +890,19 @@ function dhSerialize(ds) {
   var D = dhStateFor(ds);
   var ivt = dhPrimaryIvt(D);   // A11 P0: the intervals table via the container
   if (!D.parsed.collar || !D.parsed.survey || !ivt || !ivt.parsed) return null;
+  var files = {
+    collar: { name: D.files.collar.name, size: D.files.collar.size },
+    survey: { name: D.files.survey.name, size: D.files.survey.size },
+    intervals: { name: ivt.file.name, size: ivt.file.size },
+  };
+  var map = { collar: dhMapToNames(ds, 'collar'), survey: dhMapToNames(ds, 'survey'), intervals: dhMapToNames(ds, 'intervals') };
+  if (dhHasSecondary(D)) {   // A11 P5: the merge table rides as a 4th "role" (files+map) for pack extraction
+    files.secondary = { name: D.secondary.file.name, size: D.secondary.file.size };
+    map.secondary = dhMapNamesFromParsed(D.secondary.parsed, D.secondary.map);
+  }
   return {
-    files: {
-      collar: { name: D.files.collar.name, size: D.files.collar.size },
-      survey: { name: D.files.survey.name, size: D.files.survey.size },
-      intervals: { name: ivt.file.name, size: ivt.file.size },
-    },
-    map: { collar: dhMapToNames(ds, 'collar'), survey: dhMapToNames(ds, 'survey'), intervals: dhMapToNames(ds, 'intervals') },
+    files: files,
+    map: map,
     dipConvention: D.dipConvention,
     opts: { method: D.opts.method, length: D.opts.length, splitCols: dhSplitCols(D).length ? dhSplitCols(D) : null, densityCol: D.opts.densityCol, combine: D.opts.combine || null, minCov: D.opts.minCov },
     // A11 P2: the interval table's per-table calcols + filter (omitted when empty)
@@ -884,6 +952,11 @@ function dhTryApplyPendingRestore(ds) {
     if (!D.files[role] || D.files[role].name !== pr.files[role].name) { allMatch = false; continue; }
     D.map[role] = dhMapFromNames(ds, role, pr.map[role]);
   }
+  if (pr.files && pr.files.secondary) {   // A11 P5: restore the merge table when its file lands
+    if (D.secondary && D.secondary.file.name === pr.files.secondary.name) {
+      D.secondary.map = dhMapIdxFromParsed(D.secondary.parsed, (pr.map && pr.map.secondary) || {});
+    } else allMatch = false;
+  }
   if (pr.dipConvention) D.dipConvention = pr.dipConvention;
   if (pr.opts) {
     D.opts.method = pr.opts.method || 'minimumCurvature';
@@ -918,6 +991,10 @@ async function dhLoadTrio(ds, trio) {
       D.map[DH_ROLES[r]] = dhAutoMap(DH_ROLES[r], D.parsed[DH_ROLES[r]].header);
     }
   }
+  if (trio.secondary) {   // A11 P5: the packed merge table re-derives like the trio
+    D.secondary = { file: trio.secondary, parsed: await dhParseFile(trio.secondary), map: {} };
+    D.secondary.map = dhAutoMap('intervals', D.secondary.parsed.header);
+  }
   D.dipConvention = dhDetectConventionFromParsed(ds);
   renderDhCard(ds);
   dhTryApplyPendingRestore(ds);
@@ -932,7 +1009,9 @@ function dhIsDerivedAux(ds) {
 }
 function dhPackFiles(ds) {
   var D = dhStateFor(ds);
-  return [D.files.collar, D.files.survey, D.files.intervals];
+  var fs = [D.files.collar, D.files.survey, D.files.intervals];
+  if (dhHasSecondary(D)) fs.push(D.secondary.file);   // A11 P5: bundle the merge table
+  return fs;
 }
 
 // New file / Clear project: drillhole state starts fresh
@@ -987,8 +1066,12 @@ function wireDhCard(root, ds) {
     var map = e.target.dataset && e.target.dataset.dhmap;
     if (map) {
       var parts = map.split(':');
-      D.map[parts[0]][parts[1]] = parseInt(e.target.value);
-      if (parts[0] === 'survey' && parts[1] === 'dip') D.dipConvention = dhDetectConventionFromParsed(ds);
+      if (parts[0] === 'secondary') {            // A11 P5: the merge table's own map
+        if (D.secondary) D.secondary.map[parts[1]] = parseInt(e.target.value);
+      } else {
+        D.map[parts[0]][parts[1]] = parseInt(e.target.value);
+        if (parts[0] === 'survey' && parts[1] === 'dip') D.dipConvention = dhDetectConventionFromParsed(ds);
+      }
       renderDhMapping(ds);
       dhAutoSave();
       return;
@@ -1031,6 +1114,7 @@ function wireDhCard(root, ds) {
     if (dk === 'exportZip') { dhExportTablesZip(ds); return; }                     // A11 P1
     if (e.target.dataset && e.target.dataset.dh === 'go') { dhCompositeAndLoad(ds); return; }
     if (e.target.dataset && e.target.dataset.dh === 'clearBtn') { dhClearAll(ds); return; }
+    if (e.target.dataset && e.target.dataset.dh === 'removeSecondary') { dhStateFor(ds).secondary = null; renderDhMapping(ds); dhAutoSave(); return; }   // A11 P5
     var conv = e.target.dataset && e.target.dataset.dhconv;
     if (conv) {
       dhStateFor(ds).dipConvention = conv;

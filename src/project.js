@@ -1376,7 +1376,7 @@ async function tryPackedProject(file) {
   if (dhAuxRecipe && dhAuxRecipe.files) {
     dhTrio = {};
     let found = 0;
-    for (const role of ['collar', 'survey', 'intervals']) {
+    for (const role of ['collar', 'survey', 'intervals', 'secondary']) {   // A11 P5: secondary merge table
       const want = dhAuxRecipe.files[role];
       const fe = want && entries.find(e => e.name === want.name);
       if (fe) { try { dhTrio[role] = await zipEntryToFile(file, fe); found++; } catch (e) {} }
@@ -1406,7 +1406,7 @@ async function tryPackedProject(file) {
       const rec = dhMapPacked[dsId];
       if (!rec || !rec.files) continue;
       const trio = {}; let n = 0;
-      for (const role of ['collar', 'survey', 'intervals']) {
+      for (const role of ['collar', 'survey', 'intervals', 'secondary']) {   // A11 P5: secondary merge table
         const want = rec.files[role];
         const fe = want && entries.find(e => e.name === want.name);
         if (fe) { try { trio[role] = await zipEntryToFile(file, fe); n++; } catch (e) {} }
