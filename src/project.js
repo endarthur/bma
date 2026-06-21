@@ -2897,13 +2897,8 @@ function statsCatRenderDatasetPicker(root) {
   var els = statcatEls(root);
   var wrap = els.datasetWrap;
   if (!wrap) return;
-  var ts = statsCatTargetableDatasets();
-  if (ts.length < 2) { wrap.innerHTML = ''; return; }
-  var cur = (dsById(statsCatInstTarget(root)) || dsById('model')).id;
-  wrap.innerHTML = '<div class="statscat-sidebar-title">Dataset</div>' +
-    '<select class="statscat-select" data-statcat-ds="1">' +
-    ts.map(function(d) { return '<option value="' + d.id + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
-    '</select>';
+  wrap.innerHTML = dsPickerHtml({ facet: 'analyzed', current: (dsById(statsCatInstTarget(root)) || dsById('model')).id,
+    titleClass: 'statscat-sidebar-title', selectClass: 'statscat-select', selAttr: 'data-statcat-ds="1"' });
   var sel = wrap.querySelector('[data-statcat-ds]');
   if (sel) sel.onchange = function() { setStatsCatTarget(sel.value, root); };
 }

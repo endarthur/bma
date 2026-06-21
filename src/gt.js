@@ -329,14 +329,13 @@ function gtTargetableDatasets() { return surfaceTargetableDatasets('analyzed'); 
 // The "Dataset" picker at the top of the GT sidebar — shown only when 2+ datasets
 // are analyzed (with one, GT is implicitly the model, as before).
 function gtDatasetPickerHtml(root) {
-  var ts = gtTargetableDatasets();
-  if (ts.length < 2) return '';
-  var cur = gtTargetDs(root).id;
-  return '<div class="gt-sidebar-section" data-sb="dataset">' +
-    '<div class="gt-sidebar-title">Dataset</div>' +
-    '<select class="gt-select" data-gt="gtDataset">' +
-    ts.map(function(d) { return '<option value="' + d.id + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
-    '</select></div>';
+  // GT generates its whole sidebar via innerHTML and wires onchange through the
+  // sidebar's event delegation (data-gt="gtDataset"), so it consumes the shared
+  // markup but wraps it in its own section — no querySelector wiring here.
+  var inner = dsPickerHtml({ facet: 'analyzed', current: gtTargetDs(root).id,
+    titleClass: 'gt-sidebar-title', selectClass: 'gt-select', selAttr: 'data-gt="gtDataset"' });
+  if (!inner) return '';
+  return '<div class="gt-sidebar-section" data-sb="dataset">' + inner + '</div>';
 }
 // Switch the GT target dataset and rebuild the sidebar for it.
 function setGtTarget(id, root) {

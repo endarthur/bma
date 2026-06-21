@@ -163,13 +163,8 @@ function swathRunInputs(ds) {
 function renderSwathDatasetPicker(root) {
   var wrap = swQ('swathDatasetWrap', root);
   if (!wrap) return;
-  var ts = swathTargetableDatasets();
-  if (ts.length < 2) { wrap.innerHTML = ''; return; }
-  var cur = swathTargetDs(root).id;
-  wrap.innerHTML = '<div class="swath-sidebar-title">Dataset</div>' +
-    '<select class="swath-select" data-sw="swathDatasetSel">' +
-    ts.map(function(d) { return '<option value="' + esc(d.id) + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
-    '</select>';
+  wrap.innerHTML = dsPickerHtml({ facet: 'gridded', current: swathTargetDs(root).id,
+    titleClass: 'swath-sidebar-title', selectClass: 'swath-select', selAttr: 'data-sw="swathDatasetSel"' });
   var sel = wrap.querySelector('[data-sw="swathDatasetSel"]');
   if (sel) sel.onchange = function() { setSwathTarget(sel.value, root); };
 }

@@ -129,13 +129,8 @@ function statsCtx(root) {
 function renderStatsDatasetPicker(root) {
   var wrap = statEls(root).datasetWrap;
   if (!wrap) return;
-  var ts = statsTargetableDatasets();
-  if (ts.length < 2) { wrap.innerHTML = ''; return; }
-  var cur = statsTargetDs(root).id;
-  wrap.innerHTML = '<div class="stats-sidebar-title">Dataset</div>' +
-    '<select class="stats-select" data-stat="datasetSel">' +
-    ts.map(function(d) { return '<option value="' + esc(d.id) + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
-    '</select>';
+  wrap.innerHTML = dsPickerHtml({ facet: 'analyzed', current: statsTargetDs(root).id,
+    titleClass: 'stats-sidebar-title', selectClass: 'stats-select', selAttr: 'data-stat="datasetSel"' });
   var sel = wrap.querySelector('[data-stat="datasetSel"]');
   if (sel) sel.onchange = function() { setStatsTarget(sel.value, root); };
 }

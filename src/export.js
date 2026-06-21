@@ -102,13 +102,8 @@ function exportTargetableDatasets() { return surfaceTargetableDatasets('analyzed
 function exportRenderDatasetPicker(root) {
   var wrap = exportEls(root).datasetWrap;
   if (!wrap) return;
-  var ts = exportTargetableDatasets();
-  if (ts.length < 2) { wrap.innerHTML = ''; return; }
-  var cur = exportTargetDs(root).id;
-  wrap.innerHTML = '<div class="export-sidebar-title">Dataset</div>' +
-    '<select class="export-select" data-export-ds="1">' +
-    ts.map(function(d) { return '<option value="' + d.id + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
-    '</select>';
+  wrap.innerHTML = dsPickerHtml({ facet: 'analyzed', current: exportTargetDs(root).id,
+    titleClass: 'export-sidebar-title', selectClass: 'export-select', selAttr: 'data-export-ds="1"' });
   var sel = wrap.querySelector('[data-export-ds]');
   if (sel) sel.onchange = function() { setExportTarget(sel.value, root); };
 }

@@ -312,6 +312,22 @@ function surfaceTargetableDatasets(facet) {
   for (var i = 0; i < datasets.length; i++) if (dsHasFacet(datasets[i], facet)) out.push(datasets[i]);
   return out;
 }
+// C10 P1: the shared "Dataset" picker markup — a title + a <select> of the
+// datasets exposing `facet`, the current one pre-selected. Returns '' below 2
+// targetable datasets (the surface is then implicitly its sole dataset, as
+// before). Replaces the six near-identical RenderDatasetPicker option-builders;
+// the only per-surface variation is CSS classes + the data-* marker the surface
+// re-finds for wiring (cfg: {facet, current, titleClass, selectClass, selAttr}).
+// esc() is a no-op on dataset ids (model/aux/d2…) so output stays byte-identical.
+function dsPickerHtml(cfg) {
+  var ts = surfaceTargetableDatasets(cfg.facet);
+  if (ts.length < 2) return '';
+  var cur = cfg.current;
+  return '<div class="' + cfg.titleClass + '">Dataset</div>' +
+    '<select class="' + cfg.selectClass + '" ' + cfg.selAttr + '>' +
+    ts.map(function(d) { return '<option value="' + esc(d.id) + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
+    '</select>';
+}
 
 // A10 4f-2: the grid-classification control for a dataset's import panel — the
 // grid/point/auto override chips + the detected-grid badge. Inferred state stays

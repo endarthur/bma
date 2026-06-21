@@ -108,8 +108,12 @@ per-surface smokes. No big-bang.
   repoint all six `<x>TargetableDatasets()` (4 → `analyzed`, Categories →
   `categorical`, Swath → `gridded`). Smallest, safest, today-doable; proves the
   facet model. (The two capability predicates move into the facet table verbatim.)
-- **Phase 1** — shared dataset-picker component; the six `RenderDatasetPicker`
-  call it.
+- **Phase 1** *(done)* — shared dataset-picker component (`dsPickerHtml(cfg)` in
+  core.js): the six `RenderDatasetPicker` now build their markup through it,
+  passing only their facet + CSS classes + `data-*` marker. GT wraps the shared
+  inner markup in its own section (it wires onchange via sidebar delegation, not
+  a per-picker querySelector). Bit-identical (`esc()` is a no-op on dataset ids);
+  proven by the six `*-perds` smokes + the clone smokes.
 - **Phase 2** — `surfaceTarget` / `surfaceCtx` unification (the per-surface
   TargetDs/Ctx keep their thin schema resolver, route through the shared core).
 - **Phase 3** — factor the clone-instance StateForRoot + persistence into the

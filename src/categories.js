@@ -41,13 +41,8 @@ function catCtx(root) {
 function renderCatDatasetPicker(root) {
   var wrap = catEls(root).datasetWrap;
   if (!wrap) return;
-  var ts = catTargetableDatasets();
-  if (ts.length < 2) { wrap.innerHTML = ''; return; }
-  var cur = catTargetDs(root).id;
-  wrap.innerHTML = '<div class="cat-sidebar-title">Dataset</div>' +
-    '<select class="stats-select" data-cat="datasetSel">' +
-    ts.map(function(d) { return '<option value="' + esc(d.id) + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
-    '</select>';
+  wrap.innerHTML = dsPickerHtml({ facet: 'categorical', current: catTargetDs(root).id,
+    titleClass: 'cat-sidebar-title', selectClass: 'stats-select', selAttr: 'data-cat="datasetSel"' });
   var sel = wrap.querySelector('[data-cat="datasetSel"]');
   if (sel) sel.onchange = function() { setCatTarget(sel.value, root); };
 }
