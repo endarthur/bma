@@ -324,9 +324,13 @@ function dhComposite(validated, opts) {
   var ivt = validated.intervals;
   var cols = ivt.cols || [];
   var L = opts.length;
-  var domainIdx = -1;
+  var domainIdx = -1, densityIdx = -1;
   for (var dci = 0; dci < cols.length; dci++) {
-    if (opts.domainColName && cols[dci].name === opts.domainColName) { domainIdx = dci; break; }
+    if (opts.domainColName && cols[dci].name === opts.domainColName) domainIdx = dci;
+    // A11 P3: optional mass weighting — numeric means weight by length × density
+    // (the density column itself stays length-weighted). Missing density on an
+    // interval excludes it from mass-weighting and is counted (never silent).
+    if (opts.densityColName && cols[dci].name === opts.densityColName && cols[dci].type === 'num') densityIdx = dci;
   }
   var checks = validated.checks;
   function hit(id, label, bhid) {
@@ -376,7 +380,7 @@ function dhComposite(validated, opts) {
       for (var wI = 0; wI < nWin; wI++) {
         var w0 = run.from + wI * L; // index-stepped: no float drift over long holes
         var w1 = Math.min(w0 + L, run.to);
-        var covered = 0, centroidW = 0;
+        var covered = 0, centroidW = 0, hadMissingDensity = false;
         var numW = new Float64Array(cols.length);
         var numSum = new Float64Array(cols.length);
         var catW = []; // per col: {value → weight}
@@ -390,10 +394,19 @@ function dhComposite(validated, opts) {
           if (ov <= 1e-12) continue;
           covered += ov;
           centroidW += ov * (ovFrom + ovTo) / 2;
+          // mass weight for numeric grades when a density column is set; the
+          // density column itself stays length-weighted (no self-reference).
+          var massW = ov;
+          if (densityIdx >= 0) {
+            var dval = cols[densityIdx].values[r];
+            if (typeof dval === 'number' && isFinite(dval) && dval > 0) massW = ov * dval;
+            else { massW = 0; hadMissingDensity = true; }
+          }
           for (var c3 = 0; c3 < cols.length; c3++) {
             var v = cols[c3].values[r];
             if (cols[c3].type === 'num') {
-              if (typeof v === 'number' && isFinite(v)) { numW[c3] += ov; numSum[c3] += ov * v; }
+              var nw = (c3 === densityIdx) ? ov : massW;   // density col: length-weighted
+              if (typeof v === 'number' && isFinite(v)) { numW[c3] += nw; numSum[c3] += nw * v; }
             } else {
               if (v != null && v !== '') {
                 if (!catW[c3]) catW[c3] = {};
@@ -409,6 +422,7 @@ function dhComposite(validated, opts) {
           hit('low-coverage-filtered', 'Composites below the min-coverage filter (dropped — filter is user-set)', hole.bhid);
           continue;
         }
+        if (hadMissingDensity) hit('missing-density', 'Composites with intervals lacking usable density (excluded from mass-weighting)', hole.bhid);
 
         var midDepth = centroidW / covered;
         var pos = dhPositionAt(path, midDepth);
@@ -448,6 +462,7 @@ function dhProcess(tables, opts) {
     length: length,
     method: opts.method || 'minimumCurvature',
     domainColName: opts.domainCol || null,
+    densityColName: opts.densityCol || null,
     minCoverage: opts.minCoverage || null,
   });
   var checkList = [];

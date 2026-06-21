@@ -6056,7 +6056,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build c3e44ea — click to check for updates">c3e44ea</div>
+<div class="build-badge" id="buildBadge" title="build 1ba54f2 — click to check for updates">1ba54f2</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -13910,9 +13910,13 @@ function dhComposite(validated, opts) {
   var ivt = validated.intervals;
   var cols = ivt.cols || [];
   var L = opts.length;
-  var domainIdx = -1;
+  var domainIdx = -1, densityIdx = -1;
   for (var dci = 0; dci < cols.length; dci++) {
-    if (opts.domainColName && cols[dci].name === opts.domainColName) { domainIdx = dci; break; }
+    if (opts.domainColName && cols[dci].name === opts.domainColName) domainIdx = dci;
+    // A11 P3: optional mass weighting — numeric means weight by length × density
+    // (the density column itself stays length-weighted). Missing density on an
+    // interval excludes it from mass-weighting and is counted (never silent).
+    if (opts.densityColName && cols[dci].name === opts.densityColName && cols[dci].type === 'num') densityIdx = dci;
   }
   var checks = validated.checks;
   function hit(id, label, bhid) {
@@ -13962,7 +13966,7 @@ function dhComposite(validated, opts) {
       for (var wI = 0; wI < nWin; wI++) {
         var w0 = run.from + wI * L; // index-stepped: no float drift over long holes
         var w1 = Math.min(w0 + L, run.to);
-        var covered = 0, centroidW = 0;
+        var covered = 0, centroidW = 0, hadMissingDensity = false;
         var numW = new Float64Array(cols.length);
         var numSum = new Float64Array(cols.length);
         var catW = []; // per col: {value → weight}
@@ -13976,10 +13980,19 @@ function dhComposite(validated, opts) {
           if (ov <= 1e-12) continue;
           covered += ov;
           centroidW += ov * (ovFrom + ovTo) / 2;
+          // mass weight for numeric grades when a density column is set; the
+          // density column itself stays length-weighted (no self-reference).
+          var massW = ov;
+          if (densityIdx >= 0) {
+            var dval = cols[densityIdx].values[r];
+            if (typeof dval === 'number' && isFinite(dval) && dval > 0) massW = ov * dval;
+            else { massW = 0; hadMissingDensity = true; }
+          }
           for (var c3 = 0; c3 < cols.length; c3++) {
             var v = cols[c3].values[r];
             if (cols[c3].type === 'num') {
-              if (typeof v === 'number' && isFinite(v)) { numW[c3] += ov; numSum[c3] += ov * v; }
+              var nw = (c3 === densityIdx) ? ov : massW;   // density col: length-weighted
+              if (typeof v === 'number' && isFinite(v)) { numW[c3] += nw; numSum[c3] += nw * v; }
             } else {
               if (v != null && v !== '') {
                 if (!catW[c3]) catW[c3] = {};
@@ -13995,6 +14008,7 @@ function dhComposite(validated, opts) {
           hit('low-coverage-filtered', 'Composites below the min-coverage filter (dropped — filter is user-set)', hole.bhid);
           continue;
         }
+        if (hadMissingDensity) hit('missing-density', 'Composites with intervals lacking usable density (excluded from mass-weighting)', hole.bhid);
 
         var midDepth = centroidW / covered;
         var pos = dhPositionAt(path, midDepth);
@@ -14034,6 +14048,7 @@ function dhProcess(tables, opts) {
     length: length,
     method: opts.method || 'minimumCurvature',
     domainColName: opts.domainCol || null,
+    densityColName: opts.densityCol || null,
     minCoverage: opts.minCoverage || null,
   });
   var checkList = [];
@@ -16400,7 +16415,7 @@ function dhStateFor(ds) {
     parsed: { collar: null, survey: null, intervals: null },  // {header, rows}
     map: { collar: {}, survey: {}, intervals: {} },           // field → col idx
     dipConvention: null,            // 'pos-down' | 'neg-down' (null = undetected)
-    opts: { method: 'minimumCurvature', length: '', domainCol: '', minCov: '' }, // serializable
+    opts: { method: 'minimumCurvature', length: '', domainCol: '', densityCol: '', minCov: '' }, // serializable
     lastReport: null,               // last Drillhole.process report (for the modal)
     derivedName: null,              // file name of the loaded composite CSV
     provFiles: null,                // [names] for the provenance banner
@@ -16879,8 +16894,10 @@ function renderDhMapping(ds) {
   // options row
   var dataCols = dhIntervalDataCols(ds);
   var catOpts = '<option value="">— none</option>';
+  var densOpts = '<option value="">— none (length only)</option>';   // A11 P3
   for (var dc = 0; dc < dataCols.length; dc++) {
     if (dataCols[dc].type === 'cat') catOpts += '<option value="' + esc(dataCols[dc].name) + '">' + esc(dataCols[dc].name) + '</option>';
+    else if (dataCols[dc].type === 'num') densOpts += '<option value="' + esc(dataCols[dc].name) + '">' + esc(dataCols[dc].name) + '</option>';
   }
   var autoLen = dhAutoLength(ds);
   function mOpt(v, label) {
@@ -16893,6 +16910,7 @@ function renderDhMapping(ds) {
       mOpt('tangential', 'Tangential') + '</select></div>' +
     '<div class="dh-opt"><label>Composite length</label><input type="number" data-dh="length" class="dh-narrow" min="0" step="any" value="' + esc(D.opts.length) + '" placeholder="' + (autoLen != null ? autoLen : 'auto') + '"></div>' +
     '<div class="dh-opt"><label>Break on (domain)</label><select data-dh="domain">' + catOpts + '</select></div>' +
+    '<div class="dh-opt"><label>Density (mass-weight)</label><select data-dh="density">' + densOpts + '</select></div>' +
     '<div class="dh-opt"><label>Min coverage %</label><input type="number" data-dh="minCov" class="dh-narrow" min="0" max="100" step="any" value="' + esc(D.opts.minCov) + '" placeholder="off"></div>' +
     '</div>';
 
@@ -16901,9 +16919,11 @@ function renderDhMapping(ds) {
     '<span class="dh-status" data-dh="status"></span></div>';
 
   $m.innerHTML = html;
-  // domain select value applied after render (option list is data-driven)
+  // domain + density selects applied after render (option lists are data-driven)
   var $dom = dhQ('[data-dh="domain"]', root);
   if ($dom && D.opts.domainCol) $dom.value = D.opts.domainCol;
+  var $dens = dhQ('[data-dh="density"]', root);
+  if ($dens && D.opts.densityCol) $dens.value = D.opts.densityCol;
   dhRenderIvtStatus(ds);   // A11 P2: calc-column / kept-row / error summary
 }
 
@@ -17016,6 +17036,7 @@ function dhCompositeAndLoad(ds) {
     dipConvention: D.dipConvention || 'pos-down',
     compositeLength: isFinite(lenInput) && lenInput > 0 ? lenInput : null,
     domainCol: D.opts.domainCol || null,
+    densityCol: D.opts.densityCol || null,   // A11 P3: mass weighting
     minCoverage: isFinite(covInput) && covInput > 0 ? covInput / 100 : null,
   };
   var result;
@@ -17153,7 +17174,7 @@ function dhSerialize(ds) {
     },
     map: { collar: dhMapToNames(ds, 'collar'), survey: dhMapToNames(ds, 'survey'), intervals: dhMapToNames(ds, 'intervals') },
     dipConvention: D.dipConvention,
-    opts: { method: D.opts.method, length: D.opts.length, domainCol: D.opts.domainCol, minCov: D.opts.minCov },
+    opts: { method: D.opts.method, length: D.opts.length, domainCol: D.opts.domainCol, densityCol: D.opts.densityCol, minCov: D.opts.minCov },
     // A11 P2: the interval table's per-table calcols + filter (omitted when empty)
     intervalCalcols: (ivt.calcolCode || ivt.filter) ? { calcolCode: ivt.calcolCode || '', filter: ivt.filter || '' } : null,
     loaded: !!(ds.file && D.derivedName && ds.file.name === D.derivedName),
@@ -17206,6 +17227,7 @@ function dhTryApplyPendingRestore(ds) {
     D.opts.method = pr.opts.method || 'minimumCurvature';
     D.opts.length = pr.opts.length || '';
     D.opts.domainCol = pr.opts.domainCol || '';
+    D.opts.densityCol = pr.opts.densityCol || '';   // A11 P3
     D.opts.minCov = pr.opts.minCov || '';
   }
   if (pr.intervalCalcols) {   // A11 P2: per-table calcols/filter (once the intervals table exists)
@@ -17310,6 +17332,7 @@ function wireDhCard(root, ds) {
     if (k === 'method') { D.opts.method = e.target.value; dhAutoSave(); }
     else if (k === 'length') { D.opts.length = e.target.value; dhAutoSave(); }
     else if (k === 'domain') { D.opts.domainCol = e.target.value; dhAutoSave(); }
+    else if (k === 'density') { D.opts.densityCol = e.target.value; dhAutoSave(); }   // A11 P3
     else if (k === 'minCov') { D.opts.minCov = e.target.value; dhAutoSave(); }
     else if (k === 'ivtCalc' || k === 'ivtFilter') {   // A11 P2: per-table calcols/filter
       var ivt = dhPrimaryIvt(D);
