@@ -72,6 +72,39 @@ scale wants the folder.**
 - **P3** — folder-as-project-home: open-folder = open-project; list/switch
   projects in a folder; reconcile external edits (file changed on disk).
 
+## Parquet — the keystone (the folder pays off *because of* it)
+
+A folder of CSVs is just re-drop convenience. A folder of **parquet** is the whole
+platform — and the two ideas were designed for each other (Arthur, 2026-06-21):
+
+- **Parquet subsumes most of the planned sidecar-index work.**
+  `docs/io-architecture.md` §2 sketches a `.bmaidx` sidecar that re-implements
+  *"parquet-style chunk metadata"* — per-row-group zone maps (min/max), predicate
+  pushdown, seekable chunk offsets for parallel scans. If the data simply **is**
+  parquet, you get all of that for free: row-group statistics ⇒ skip groups a
+  filter provably can't match; columnar ⇒ read only the columns a pass needs;
+  row-group boundaries ⇒ fan out N workers (B4 parallel scans). The custom sidecar
+  largely evaporates.
+- **Parquet supersedes the §3 fixed-width tool too** — same goal ("make my file
+  seekable/ideal"), but columnar + compressed + self-describing + standard.
+- **The row-source split (§1, DONE) already left the seam.** `makeRowSource()`
+  separated *format decoding* from *statistics*; a `ParquetRowSource` (hyparquet,
+  B2) drops in exactly where `DmRowSource` / `FixedWidthRowSource` were planned —
+  no pass rewrites. The surviving contract ("row objects with named properties",
+  because filters/calcols are user JS `r.Fe > 30`) is unaffected: stay columnar
+  for projection + row-group skipping, reconstruct row objects only for the
+  surviving rows where user JS actually runs.
+- **The folder is where parquet lives, both ways.** Import: drop a CSV → convert
+  to parquet in the folder once → every later open reads parquet directly (fast
+  columnar, no re-parse, pushdown). Materialize: composites / merged / emitted
+  datasets write as **parquet** into the folder (A11), keeping their recipe link.
+
+So the convergence is: **parquet (format) + FSAA folder (home) + the row-source
+seam (already built) + row-group parallelism (B4) = the persistence *and*
+performance thesis in one.** Sequence C11 with **B2** (hyparquet everywhere); the
+sidecar-index / fixed-width rows in `io-architecture.md` get reframed as "parquet
+gives this for free" rather than separately built.
+
 ## Decisions / open
 
 - **Reference vs copy** source files: reference in place (the folder already holds

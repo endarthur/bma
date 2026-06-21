@@ -96,6 +96,17 @@ bit-identical outputs per pass.
 
 ## 2. Sidecar index (`<name>.bmaidx`)
 
+> **Reframed 2026-06-21 (Arthur):** §2 + §3 are largely **superseded by adopting
+> parquet** (B2) as the on-disk format inside an FSAA-mounted project folder
+> (`docs/fsaa-project-folders.md`). Parquet files already carry per-row-group
+> zone maps (min/max), are columnar (column projection), and are seekable by row
+> group (parallel scans) — i.e. *the metadata this sidecar would hand-build for
+> CSV comes for free when the data is parquet.* The `ParquetRowSource` drops into
+> the §1 seam where `DmRowSource`/`FixedWidthRowSource` were planned. Keep §2/§3
+> only for the case of plain CSVs the user won't convert; the primary path is
+> convert-to-parquet-in-the-folder-on-import. The pieces below still describe the
+> shape of the metadata (now parquet's, not ours).
+
 Parquet-style chunk metadata for files people already have, generated on
 first analysis. No second copy of multi-GB data, works for plain CSV.
 
