@@ -63,6 +63,33 @@ domain composites, the collar table, the survey/orientation table — each
 independently analyzable and comparable to the model. (Emit on demand, not
 eagerly — see Decisions.)
 
+### Emit model — derived, with a kept connection (Arthur, 2026-06-21)
+
+An emitted dataset is **derived**, carrying a **source link** `{set, role}` (the
+parent drillhole set + the table it came from). It is one of two modes — and
+**both keep the link** (provenance + re-derive-on-demand never lost):
+
+- **linked** (default) — store only the recipe; the dataset **re-derives from the
+  source on open**. Loss-safe via the source's own persistence (the drillhole
+  recipe). No snapshot stored; always fresh. This is the first emit slice to
+  ship — it reuses the existing drillhole re-derive machinery (the composite
+  already does exactly this, 1:1; emit generalizes it to N outputs per set).
+- **materialized** (opt-in) — freeze the current derived data **while keeping the
+  link**, so it persists independently and you can still see where it came from /
+  re-derive on demand. *Where the snapshot lives* is the question
+  [`docs/fsaa-project-folders.md`](fsaa-project-folders.md) (C11) answers: write
+  the CSV into a mounted project folder (cheap, scales to big tables) rather than
+  embedding it in the project JSON. **So materialize-at-scale wants the folder;
+  linked-emit lands first.**
+
+Restore ordering (linked): the emitted instance is recreated from `datasets[]`
+marked derived-from `{set, role}` (not awaiting a re-droppable file); after the
+parent set is ready (trio re-dropped / packed → re-derived), each linked emit is
+re-emitted into its pending instance. The cross-dataset dependency is the work.
+
+`collar` is the clean first target (it already carries XYZ → a point dataset with
+no desurvey); `survey` and raw `interval` emits need the desurvey path.
+
 ## The merge kernel (the crux)
 
 The one genuinely hard piece is the **down-hole interval join**: combine two
