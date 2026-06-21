@@ -45,11 +45,23 @@ The interval tables form a small **DAG**: `imported → (merge) → (composite) 
 output`. collar + survey are shared backbone for all of them (one desurvey,
 reused).
 
-Each interval table can **emit a point dataset** into the registry (A10):
-desurvey to a representative XYZ per row, carry its columns, feed everything
-(Statistics, Swath, GT, declustering, top-cut, Δ%…). So one container may
-produce **several** datasets — e.g. raw samples, 2 m composites, domain
-composites — each independently analyzable and comparable to the model.
+**Any table in the container can emit a dataset** into the registry (A10) and be
+analyzed — not just interval/composite tables:
+
+- **interval / composite** → desurvey to a representative XYZ per row, carry its
+  columns, feed everything (Statistics, Swath, GT, declustering, top-cut, Δ%…).
+- **collar** → a hole-level dataset (one row per hole): collar XYZ + EOH + any
+  hole attributes. Stats on collar = the campaign's collar elevations, hole
+  depths, per-hole attributes — useful QA in its own right.
+- **survey** → a per-station dataset of orientations (depth, azimuth, dip). Stats
+  here are *orientation* stats, which is the natural feed for a **stereonet
+  surface** (roadmap A16, `bearing.js`) — and the same is true of any oriented-
+  core structural interval table (α/β → planes/lines).
+
+So one container may produce **several** datasets — raw samples, 2 m composites,
+domain composites, the collar table, the survey/orientation table — each
+independently analyzable and comparable to the model. (Emit on demand, not
+eagerly — see Decisions.)
 
 ## The merge kernel (the crux)
 
