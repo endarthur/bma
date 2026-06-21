@@ -332,6 +332,11 @@ function dhComposite(validated, opts) {
     // interval excludes it from mass-weighting and is counted (never silent).
     if (opts.densityColName && cols[dci].name === opts.densityColName && cols[dci].type === 'num') densityIdx = dci;
   }
+  // A11 P3: per-column combine rules keyed by column name. Numeric: 'mean'
+  // (default, length/mass-weighted), 'sum' (Σ length×value), 'min', 'max'.
+  // Categorical: 'majority' (default, by covered length), 'first' (shallowest).
+  // An unknown rule for a column's type falls back to that type's default.
+  var combineMap = opts.combine || {};
   var checks = validated.checks;
   function hit(id, label, bhid) {
     var c = checks[id];
@@ -383,8 +388,12 @@ function dhComposite(validated, opts) {
         var covered = 0, centroidW = 0, hadMissingDensity = false;
         var numW = new Float64Array(cols.length);
         var numSum = new Float64Array(cols.length);
-        var catW = []; // per col: {value → weight}
-        for (var ci2 = 0; ci2 < cols.length; ci2++) catW.push(null);
+        var numLSum = new Float64Array(cols.length);     // Σ length×value (for 'sum')
+        var numMin = new Float64Array(cols.length);
+        var numMax = new Float64Array(cols.length);
+        var seenNum = new Uint8Array(cols.length);
+        var catW = [], catFirst = []; // per col: {value → weight}, and first value by depth
+        for (var ci2 = 0; ci2 < cols.length; ci2++) { catW.push(null); catFirst.push(undefined); numMin[ci2] = Infinity; numMax[ci2] = -Infinity; }
 
         for (var k2 = 0; k2 < run.idx.length; k2++) {
           var r = run.idx[k2];
@@ -406,12 +415,19 @@ function dhComposite(validated, opts) {
             var v = cols[c3].values[r];
             if (cols[c3].type === 'num') {
               var nw = (c3 === densityIdx) ? ov : massW;   // density col: length-weighted
-              if (typeof v === 'number' && isFinite(v)) { numW[c3] += nw; numSum[c3] += nw * v; }
+              if (typeof v === 'number' && isFinite(v)) {
+                numW[c3] += nw; numSum[c3] += nw * v;       // weighted mean
+                numLSum[c3] += ov * v;                       // length integral (sum)
+                if (v < numMin[c3]) numMin[c3] = v;
+                if (v > numMax[c3]) numMax[c3] = v;
+                seenNum[c3] = 1;
+              }
             } else {
               if (v != null && v !== '') {
                 if (!catW[c3]) catW[c3] = {};
                 var sk = String(v);
                 catW[c3][sk] = (catW[c3][sk] || 0) + ov;
+                if (catFirst[c3] === undefined) catFirst[c3] = sk;   // run is FROM-sorted → shallowest first
               }
             }
           }
@@ -429,8 +445,13 @@ function dhComposite(validated, opts) {
         var row = [hole.bhid, pos[0], pos[1], pos[2], w0, w1, covered];
         for (var c4 = 0; c4 < cols.length; c4++) {
           if (cols[c4].type === 'num') {
-            row.push(numW[c4] > 0 ? numSum[c4] / numW[c4] : null);
+            var nrule = combineMap[cols[c4].name];
+            if (nrule === 'sum') row.push(seenNum[c4] ? numLSum[c4] : null);
+            else if (nrule === 'min') row.push(seenNum[c4] ? numMin[c4] : null);
+            else if (nrule === 'max') row.push(seenNum[c4] ? numMax[c4] : null);
+            else row.push(numW[c4] > 0 ? numSum[c4] / numW[c4] : null);   // 'mean' (default)
           } else {
+            if (combineMap[cols[c4].name] === 'first') { row.push(catFirst[c4] !== undefined ? catFirst[c4] : null); continue; }
             var bag = catW[c4];
             if (!bag) { row.push(null); continue; }
             var bestV = null, bestW = -1, total = 0;
@@ -463,6 +484,7 @@ function dhProcess(tables, opts) {
     method: opts.method || 'minimumCurvature',
     domainColName: opts.domainCol || null,
     densityColName: opts.densityCol || null,
+    combine: opts.combine || null,
     minCoverage: opts.minCoverage || null,
   });
   var checkList = [];

@@ -38,7 +38,7 @@ function dhStateFor(ds) {
     parsed: { collar: null, survey: null, intervals: null },  // {header, rows}
     map: { collar: {}, survey: {}, intervals: {} },           // field → col idx
     dipConvention: null,            // 'pos-down' | 'neg-down' (null = undetected)
-    opts: { method: 'minimumCurvature', length: '', domainCol: '', densityCol: '', minCov: '' }, // serializable
+    opts: { method: 'minimumCurvature', length: '', domainCol: '', densityCol: '', minCov: '', combine: null }, // serializable
     lastReport: null,               // last Drillhole.process report (for the modal)
     derivedName: null,              // file name of the loaded composite CSV
     provFiles: null,                // [names] for the provenance banner
@@ -537,6 +537,8 @@ function renderDhMapping(ds) {
     '<div class="dh-opt"><label>Min coverage %</label><input type="number" data-dh="minCov" class="dh-narrow" min="0" max="100" step="any" value="' + esc(D.opts.minCov) + '" placeholder="off"></div>' +
     '</div>';
 
+  html += dhCombineEditorHtml(ds);   // A11 P3: per-column combine rules
+
   html += '<div class="dh-actions">' +
     '<button class="dh-go" data-dh="go"' + (dhMappingComplete(ds) ? '' : ' disabled') + '>Composite &amp; load ▶</button>' +
     '<span class="dh-status" data-dh="status"></span></div>';
@@ -548,6 +550,33 @@ function renderDhMapping(ds) {
   var $dens = dhQ('[data-dh="density"]', root);
   if ($dens && D.opts.densityCol) $dens.value = D.opts.densityCol;
   dhRenderIvtStatus(ds);   // A11 P2: calc-column / kept-row / error summary
+}
+
+// A11 P3: per-column combine rules — how each interval data column aggregates
+// over a composite (numeric: mean/sum/min/max; categorical: majority/first).
+// Stored as D.opts.combine {colName: rule}; only non-default entries are kept.
+var DH_COMBINE_NUM = [['mean', 'Mean'], ['sum', 'Sum'], ['min', 'Min'], ['max', 'Max']];
+var DH_COMBINE_CAT = [['majority', 'Majority'], ['first', 'First']];
+function dhCombineDefault(type) { return type === 'num' ? 'mean' : 'majority'; }
+function dhCombineEditorHtml(ds) {
+  var D = dhStateFor(ds);
+  var cols = dhIntervalDataCols(ds);
+  if (!cols.length) return '';
+  var combine = D.opts.combine || {};
+  var anySet = Object.keys(combine).length > 0;
+  var rows = '';
+  for (var i = 0; i < cols.length; i++) {
+    var col = cols[i];
+    var cur = combine[col.name] || dhCombineDefault(col.type);
+    var opts = col.type === 'num' ? DH_COMBINE_NUM : DH_COMBINE_CAT;
+    var sel = '<select data-dh="combine" data-dh-col="' + esc(col.name) + '" data-dh-type="' + col.type + '">';
+    for (var o = 0; o < opts.length; o++) sel += '<option value="' + opts[o][0] + '"' + (cur === opts[o][0] ? ' selected' : '') + '>' + opts[o][1] + '</option>';
+    sel += '</select>';
+    rows += '<div class="dh-map-row"><label title="' + esc(col.name) + '">' + esc(col.name) + '</label>' + sel + '</div>';
+  }
+  return '<details class="dh-ivt-edit dh-combine-edit"' + (anySet ? ' open' : '') + '>' +
+    '<summary class="dh-ivt-edit-title">Combine rules<span class="dh-ivt-edit-hint"> — how each column aggregates over a composite</span></summary>' +
+    rows + '</details>';
 }
 
 // A11 P2: the interval table's calcols + filter editor (applied on export).
@@ -660,6 +689,7 @@ function dhCompositeAndLoad(ds) {
     compositeLength: isFinite(lenInput) && lenInput > 0 ? lenInput : null,
     domainCol: D.opts.domainCol || null,
     densityCol: D.opts.densityCol || null,   // A11 P3: mass weighting
+    combine: D.opts.combine || null,         // A11 P3: per-column combine rules
     minCoverage: isFinite(covInput) && covInput > 0 ? covInput / 100 : null,
   };
   var result;
@@ -797,7 +827,7 @@ function dhSerialize(ds) {
     },
     map: { collar: dhMapToNames(ds, 'collar'), survey: dhMapToNames(ds, 'survey'), intervals: dhMapToNames(ds, 'intervals') },
     dipConvention: D.dipConvention,
-    opts: { method: D.opts.method, length: D.opts.length, domainCol: D.opts.domainCol, densityCol: D.opts.densityCol, minCov: D.opts.minCov },
+    opts: { method: D.opts.method, length: D.opts.length, domainCol: D.opts.domainCol, densityCol: D.opts.densityCol, combine: D.opts.combine || null, minCov: D.opts.minCov },
     // A11 P2: the interval table's per-table calcols + filter (omitted when empty)
     intervalCalcols: (ivt.calcolCode || ivt.filter) ? { calcolCode: ivt.calcolCode || '', filter: ivt.filter || '' } : null,
     loaded: !!(ds.file && D.derivedName && ds.file.name === D.derivedName),
@@ -851,6 +881,7 @@ function dhTryApplyPendingRestore(ds) {
     D.opts.length = pr.opts.length || '';
     D.opts.domainCol = pr.opts.domainCol || '';
     D.opts.densityCol = pr.opts.densityCol || '';   // A11 P3
+    D.opts.combine = pr.opts.combine || null;       // A11 P3
     D.opts.minCov = pr.opts.minCov || '';
   }
   if (pr.intervalCalcols) {   // A11 P2: per-table calcols/filter (once the intervals table exists)
@@ -956,6 +987,14 @@ function wireDhCard(root, ds) {
     else if (k === 'length') { D.opts.length = e.target.value; dhAutoSave(); }
     else if (k === 'domain') { D.opts.domainCol = e.target.value; dhAutoSave(); }
     else if (k === 'density') { D.opts.densityCol = e.target.value; dhAutoSave(); }   // A11 P3
+    else if (k === 'combine') {   // A11 P3: per-column combine rule
+      var col = e.target.dataset.dhCol, rule = e.target.value;
+      var def = dhCombineDefault(e.target.dataset.dhType);
+      if (!D.opts.combine) D.opts.combine = {};
+      if (rule === def) delete D.opts.combine[col]; else D.opts.combine[col] = rule;
+      if (!Object.keys(D.opts.combine).length) D.opts.combine = null;
+      dhAutoSave();
+    }
     else if (k === 'minCov') { D.opts.minCov = e.target.value; dhAutoSave(); }
     else if (k === 'ivtCalc' || k === 'ivtFilter') {   // A11 P2: per-table calcols/filter
       var ivt = dhPrimaryIvt(D);

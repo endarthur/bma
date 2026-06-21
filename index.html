@@ -6056,7 +6056,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 1ba54f2 — click to check for updates">1ba54f2</div>
+<div class="build-badge" id="buildBadge" title="build 39fd1bb — click to check for updates">39fd1bb</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -13918,6 +13918,11 @@ function dhComposite(validated, opts) {
     // interval excludes it from mass-weighting and is counted (never silent).
     if (opts.densityColName && cols[dci].name === opts.densityColName && cols[dci].type === 'num') densityIdx = dci;
   }
+  // A11 P3: per-column combine rules keyed by column name. Numeric: 'mean'
+  // (default, length/mass-weighted), 'sum' (Σ length×value), 'min', 'max'.
+  // Categorical: 'majority' (default, by covered length), 'first' (shallowest).
+  // An unknown rule for a column's type falls back to that type's default.
+  var combineMap = opts.combine || {};
   var checks = validated.checks;
   function hit(id, label, bhid) {
     var c = checks[id];
@@ -13969,8 +13974,12 @@ function dhComposite(validated, opts) {
         var covered = 0, centroidW = 0, hadMissingDensity = false;
         var numW = new Float64Array(cols.length);
         var numSum = new Float64Array(cols.length);
-        var catW = []; // per col: {value → weight}
-        for (var ci2 = 0; ci2 < cols.length; ci2++) catW.push(null);
+        var numLSum = new Float64Array(cols.length);     // Σ length×value (for 'sum')
+        var numMin = new Float64Array(cols.length);
+        var numMax = new Float64Array(cols.length);
+        var seenNum = new Uint8Array(cols.length);
+        var catW = [], catFirst = []; // per col: {value → weight}, and first value by depth
+        for (var ci2 = 0; ci2 < cols.length; ci2++) { catW.push(null); catFirst.push(undefined); numMin[ci2] = Infinity; numMax[ci2] = -Infinity; }
 
         for (var k2 = 0; k2 < run.idx.length; k2++) {
           var r = run.idx[k2];
@@ -13992,12 +14001,19 @@ function dhComposite(validated, opts) {
             var v = cols[c3].values[r];
             if (cols[c3].type === 'num') {
               var nw = (c3 === densityIdx) ? ov : massW;   // density col: length-weighted
-              if (typeof v === 'number' && isFinite(v)) { numW[c3] += nw; numSum[c3] += nw * v; }
+              if (typeof v === 'number' && isFinite(v)) {
+                numW[c3] += nw; numSum[c3] += nw * v;       // weighted mean
+                numLSum[c3] += ov * v;                       // length integral (sum)
+                if (v < numMin[c3]) numMin[c3] = v;
+                if (v > numMax[c3]) numMax[c3] = v;
+                seenNum[c3] = 1;
+              }
             } else {
               if (v != null && v !== '') {
                 if (!catW[c3]) catW[c3] = {};
                 var sk = String(v);
                 catW[c3][sk] = (catW[c3][sk] || 0) + ov;
+                if (catFirst[c3] === undefined) catFirst[c3] = sk;   // run is FROM-sorted → shallowest first
               }
             }
           }
@@ -14015,8 +14031,13 @@ function dhComposite(validated, opts) {
         var row = [hole.bhid, pos[0], pos[1], pos[2], w0, w1, covered];
         for (var c4 = 0; c4 < cols.length; c4++) {
           if (cols[c4].type === 'num') {
-            row.push(numW[c4] > 0 ? numSum[c4] / numW[c4] : null);
+            var nrule = combineMap[cols[c4].name];
+            if (nrule === 'sum') row.push(seenNum[c4] ? numLSum[c4] : null);
+            else if (nrule === 'min') row.push(seenNum[c4] ? numMin[c4] : null);
+            else if (nrule === 'max') row.push(seenNum[c4] ? numMax[c4] : null);
+            else row.push(numW[c4] > 0 ? numSum[c4] / numW[c4] : null);   // 'mean' (default)
           } else {
+            if (combineMap[cols[c4].name] === 'first') { row.push(catFirst[c4] !== undefined ? catFirst[c4] : null); continue; }
             var bag = catW[c4];
             if (!bag) { row.push(null); continue; }
             var bestV = null, bestW = -1, total = 0;
@@ -14049,6 +14070,7 @@ function dhProcess(tables, opts) {
     method: opts.method || 'minimumCurvature',
     domainColName: opts.domainCol || null,
     densityColName: opts.densityCol || null,
+    combine: opts.combine || null,
     minCoverage: opts.minCoverage || null,
   });
   var checkList = [];
@@ -16415,7 +16437,7 @@ function dhStateFor(ds) {
     parsed: { collar: null, survey: null, intervals: null },  // {header, rows}
     map: { collar: {}, survey: {}, intervals: {} },           // field → col idx
     dipConvention: null,            // 'pos-down' | 'neg-down' (null = undetected)
-    opts: { method: 'minimumCurvature', length: '', domainCol: '', densityCol: '', minCov: '' }, // serializable
+    opts: { method: 'minimumCurvature', length: '', domainCol: '', densityCol: '', minCov: '', combine: null }, // serializable
     lastReport: null,               // last Drillhole.process report (for the modal)
     derivedName: null,              // file name of the loaded composite CSV
     provFiles: null,                // [names] for the provenance banner
@@ -16914,6 +16936,8 @@ function renderDhMapping(ds) {
     '<div class="dh-opt"><label>Min coverage %</label><input type="number" data-dh="minCov" class="dh-narrow" min="0" max="100" step="any" value="' + esc(D.opts.minCov) + '" placeholder="off"></div>' +
     '</div>';
 
+  html += dhCombineEditorHtml(ds);   // A11 P3: per-column combine rules
+
   html += '<div class="dh-actions">' +
     '<button class="dh-go" data-dh="go"' + (dhMappingComplete(ds) ? '' : ' disabled') + '>Composite &amp; load ▶</button>' +
     '<span class="dh-status" data-dh="status"></span></div>';
@@ -16925,6 +16949,33 @@ function renderDhMapping(ds) {
   var $dens = dhQ('[data-dh="density"]', root);
   if ($dens && D.opts.densityCol) $dens.value = D.opts.densityCol;
   dhRenderIvtStatus(ds);   // A11 P2: calc-column / kept-row / error summary
+}
+
+// A11 P3: per-column combine rules — how each interval data column aggregates
+// over a composite (numeric: mean/sum/min/max; categorical: majority/first).
+// Stored as D.opts.combine {colName: rule}; only non-default entries are kept.
+var DH_COMBINE_NUM = [['mean', 'Mean'], ['sum', 'Sum'], ['min', 'Min'], ['max', 'Max']];
+var DH_COMBINE_CAT = [['majority', 'Majority'], ['first', 'First']];
+function dhCombineDefault(type) { return type === 'num' ? 'mean' : 'majority'; }
+function dhCombineEditorHtml(ds) {
+  var D = dhStateFor(ds);
+  var cols = dhIntervalDataCols(ds);
+  if (!cols.length) return '';
+  var combine = D.opts.combine || {};
+  var anySet = Object.keys(combine).length > 0;
+  var rows = '';
+  for (var i = 0; i < cols.length; i++) {
+    var col = cols[i];
+    var cur = combine[col.name] || dhCombineDefault(col.type);
+    var opts = col.type === 'num' ? DH_COMBINE_NUM : DH_COMBINE_CAT;
+    var sel = '<select data-dh="combine" data-dh-col="' + esc(col.name) + '" data-dh-type="' + col.type + '">';
+    for (var o = 0; o < opts.length; o++) sel += '<option value="' + opts[o][0] + '"' + (cur === opts[o][0] ? ' selected' : '') + '>' + opts[o][1] + '</option>';
+    sel += '</select>';
+    rows += '<div class="dh-map-row"><label title="' + esc(col.name) + '">' + esc(col.name) + '</label>' + sel + '</div>';
+  }
+  return '<details class="dh-ivt-edit dh-combine-edit"' + (anySet ? ' open' : '') + '>' +
+    '<summary class="dh-ivt-edit-title">Combine rules<span class="dh-ivt-edit-hint"> — how each column aggregates over a composite</span></summary>' +
+    rows + '</details>';
 }
 
 // A11 P2: the interval table's calcols + filter editor (applied on export).
@@ -17037,6 +17088,7 @@ function dhCompositeAndLoad(ds) {
     compositeLength: isFinite(lenInput) && lenInput > 0 ? lenInput : null,
     domainCol: D.opts.domainCol || null,
     densityCol: D.opts.densityCol || null,   // A11 P3: mass weighting
+    combine: D.opts.combine || null,         // A11 P3: per-column combine rules
     minCoverage: isFinite(covInput) && covInput > 0 ? covInput / 100 : null,
   };
   var result;
@@ -17174,7 +17226,7 @@ function dhSerialize(ds) {
     },
     map: { collar: dhMapToNames(ds, 'collar'), survey: dhMapToNames(ds, 'survey'), intervals: dhMapToNames(ds, 'intervals') },
     dipConvention: D.dipConvention,
-    opts: { method: D.opts.method, length: D.opts.length, domainCol: D.opts.domainCol, densityCol: D.opts.densityCol, minCov: D.opts.minCov },
+    opts: { method: D.opts.method, length: D.opts.length, domainCol: D.opts.domainCol, densityCol: D.opts.densityCol, combine: D.opts.combine || null, minCov: D.opts.minCov },
     // A11 P2: the interval table's per-table calcols + filter (omitted when empty)
     intervalCalcols: (ivt.calcolCode || ivt.filter) ? { calcolCode: ivt.calcolCode || '', filter: ivt.filter || '' } : null,
     loaded: !!(ds.file && D.derivedName && ds.file.name === D.derivedName),
@@ -17228,6 +17280,7 @@ function dhTryApplyPendingRestore(ds) {
     D.opts.length = pr.opts.length || '';
     D.opts.domainCol = pr.opts.domainCol || '';
     D.opts.densityCol = pr.opts.densityCol || '';   // A11 P3
+    D.opts.combine = pr.opts.combine || null;       // A11 P3
     D.opts.minCov = pr.opts.minCov || '';
   }
   if (pr.intervalCalcols) {   // A11 P2: per-table calcols/filter (once the intervals table exists)
@@ -17333,6 +17386,14 @@ function wireDhCard(root, ds) {
     else if (k === 'length') { D.opts.length = e.target.value; dhAutoSave(); }
     else if (k === 'domain') { D.opts.domainCol = e.target.value; dhAutoSave(); }
     else if (k === 'density') { D.opts.densityCol = e.target.value; dhAutoSave(); }   // A11 P3
+    else if (k === 'combine') {   // A11 P3: per-column combine rule
+      var col = e.target.dataset.dhCol, rule = e.target.value;
+      var def = dhCombineDefault(e.target.dataset.dhType);
+      if (!D.opts.combine) D.opts.combine = {};
+      if (rule === def) delete D.opts.combine[col]; else D.opts.combine[col] = rule;
+      if (!Object.keys(D.opts.combine).length) D.opts.combine = null;
+      dhAutoSave();
+    }
     else if (k === 'minCov') { D.opts.minCov = e.target.value; dhAutoSave(); }
     else if (k === 'ivtCalc' || k === 'ivtFilter') {   // A11 P2: per-table calcols/filter
       var ivt = dhPrimaryIvt(D);
