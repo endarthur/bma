@@ -589,7 +589,7 @@ function renderGtConfig(data, root) {
       '<div class="gt-sidebar-title">Local Filter</div>' +
       '<input type="text" class="gt-input" id="gtLocalFilter" placeholder="e.g. r.zone == 1" autocomplete="off" spellcheck="false">' +
     '</div>' +
-    (ctx.isModel ?   // A10 G3: theoretical overlay is model-vs-samples — model GT only
+    (dsHasGrid(ctx.ds) ?   // WS v2 phase 3: theoretical overlay validates a block-support estimate vs samples — ANY gridded target (model by default, or a gridded comparison estimate), not just the model. Hidden when the target is point-classified (no block support to correct to).
     '<div class="gt-sidebar-section" data-sb="theo">' +
       '<div class="gt-sidebar-title">Theoretical (samples)</div>' +
       '<label class="gt-radio-label" style="display:block"><input type="checkbox" id="gtTheoEnabled"> Overlay theoretical GT</label>' +
@@ -599,7 +599,7 @@ function renderGtConfig(data, root) {
       '</select>' +
       gtTheoSourceSelectHtml(root) +
       '<div style="display:flex;gap:0.3rem;align-items:center;margin-top:0.3rem">' +
-        '<span style="font-size:0.62rem;color:var(--fg-dim);white-space:nowrap" title="variance reduction factor: Var(blocks)/Var(samples). From your estimation work, or explore — never derived from the model (circular)">f</span>' +
+        '<span style="font-size:0.62rem;color:var(--fg-dim);white-space:nowrap" title="variance reduction factor: Var(blocks)/Var(samples). From your estimation work, or explore — never derived from the estimate being validated (circular)">f</span>' +
         '<input type="range" id="gtTheoF" min="0.05" max="1" step="0.01" value="0.6" style="flex:1">' +
         '<input type="number" class="gt-input" id="gtTheoFNum" value="0.6" min="0.05" max="1" step="0.01" style="width:52px">' +
       '</div>' +
@@ -813,7 +813,7 @@ function updateGroupByValues(root) {
   var colName = gbctx.header[colIdx] || '';
   var values = Object.keys(cats);
   // Use custom order if available
-  var gtGrpOrder = (catVarPeek('model', colName) || {}).valueOrder;
+  var gtGrpOrder = (catVarPeek(gtTargetDs(root).id, colName) || {}).valueOrder;
   if (gtGrpOrder) {
     var orderedSet = new Set(gtGrpOrder);
     var ordered = gtGrpOrder.filter(function(v) { return cats[v] != null; });
@@ -1208,9 +1208,9 @@ function renderGtOutput(root) {
 // ─── Theoretical GT from the aux samples ────────────────────────────────
 // Change-of-support overlay: the sample distribution (weighted as the aux
 // stats are — declustering/length weights included) corrected to block
-// support and drawn against the model's actual GT curve. The variance
+// support and drawn against the target estimate's actual GT curve. The variance
 // reduction factor f = Var(blocks)/Var(samples) is USER INPUT — never
-// derived from the model being validated (that would be circular).
+// derived from the estimate being validated (that would be circular).
 // v0 engine: affine correction Z_v = m + √f·(Z − m). Honest about its
 // crudeness (shape is preserved exactly); the DGM (Hermite) engine slots
 // in here next.
@@ -1219,9 +1219,10 @@ function renderGtOutput(root) {
 // The comparison dataset the theoretical curve is drawn from (any d2+, not just
 // the singleton aux). Defaults to the first comparison dataset with a file.
 function gtTheoSourceDs(root) {
+  var targetId = gtTargetDs(root).id;   // the estimate being validated is never its own sample source (circular)
   var tid = gtStateForRoot(root).gtTheoDsId;
-  if (tid) { var d = dsById(tid); if (d && d.id !== 'model' && d.file) return d; }
-  for (var i = 1; i < datasets.length; i++) { if (datasets[i].file) return datasets[i]; }
+  if (tid) { var d = dsById(tid); if (d && d.id !== targetId && d.file) return d; }
+  for (var i = 0; i < datasets.length; i++) { if (datasets[i].id !== targetId && datasets[i].file) return datasets[i]; }
   return null;
 }
 
@@ -1276,8 +1277,9 @@ function gtTheoSetStatus(msg, isErr, root) {
 // picker lives in a stable wrapper so it can be refreshed in place as datasets
 // load/clear (the GT sidebar itself is built once, on the model analysis).
 function gtTheoSourceInnerHtml(root) {
+  var targetId = gtTargetDs(root).id;
   var srcs = [];
-  for (var i = 1; i < datasets.length; i++) { if (datasets[i].file) srcs.push(datasets[i]); }
+  for (var i = 0; i < datasets.length; i++) { if (datasets[i].id !== targetId && datasets[i].file) srcs.push(datasets[i]); }
   if (srcs.length < 2) return '';
   var cur = (gtTheoSourceDs(root) || {}).id;
   return '<div style="display:flex;gap:0.3rem;align-items:center;margin-top:0.3rem">' +
@@ -1387,7 +1389,7 @@ function runGtTheoLoad(root) {
   next();
 }
 
-// Affine theoretical GT at the model's cutoffs: tonnage FRACTION above
+// Affine theoretical GT at the target's cutoffs: tonnage FRACTION above
 // cutoff and mean grade above, on the support-corrected distribution.
 // Monotone transform ⇒ evaluate on raw values at x = m + (c−m)/√f.
 function gtTheoCurve(dist, cutoffs, f) {
@@ -1589,7 +1591,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
     }
     svg += '<path d="' + mPath + '" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-dasharray="4,3"/>';
 
-    // Theoretical GT (samples at block support, scaled to model total tonnage)
+    // Theoretical GT (samples at block support, scaled to the target estimate's total tonnage)
     if (theo) {
       var thT = '', thG = '';
       for (var th = 0; th < theo.points.length; th++) {
@@ -1638,7 +1640,7 @@ function renderGtChart(grData, cutoffs, units, isGrouped, chartIdx, selectedGrou
     if (theo) {
       svg += '<line x1="' + (pad.left + 10) + '" y1="' + (pad.top + 43.5) + '" x2="' + (pad.left + 20) + '" y2="' + (pad.top + 43.5) + '" stroke="var(--action)" stroke-width="1.3" stroke-dasharray="5,3"/>';
       svg += '<line x1="' + (pad.left + 10) + '" y1="' + (pad.top + 47.5) + '" x2="' + (pad.left + 20) + '" y2="' + (pad.top + 47.5) + '" stroke="var(--blue)" stroke-width="1.3" stroke-dasharray="5,3"/>';
-      svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 48) + '" fill="var(--fg-dim)" font-size="8">Theoretical (samples, affine f=' + theo.f.toFixed(2) + ', scaled to model total)</text>';
+      svg += '<text x="' + (pad.left + 24) + '" y="' + (pad.top + 48) + '" fill="var(--fg-dim)" font-size="8">Theoretical (samples, affine f=' + theo.f.toFixed(2) + ', scaled to estimate total)</text>';
     }
   }
 
