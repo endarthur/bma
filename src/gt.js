@@ -794,7 +794,7 @@ function renderGtConfig(data, root) {
 
   // Local filter autocomplete
   if (S.gtExprController) S.gtExprController.destroy();
-  S.gtExprController = createExprInput(gtQ('gtLocalFilter', root), { mode: 'filter' });
+  S.gtExprController = createExprInput(gtQ('gtLocalFilter', root), { mode: 'filter', getDsId: function() { return gtTargetDs(root).id; } });
 }
 
 function updateGroupByValues(root) {

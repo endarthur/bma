@@ -978,7 +978,7 @@ function renderSwathConfig(data, root) {
 
   // Local filter autocomplete
   if (swathExprController) swathExprController.destroy();
-  swathExprController = createExprInput(swQ('swathLocalFilter', root), { mode: 'filter' });
+  swathExprController = createExprInput(swQ('swathLocalFilter', root), { mode: 'filter', getDsId: function() { return swathTargetDs(root).id; } });
 
   // Color swatch click handler
   swQ('swathVarList', root).addEventListener('click', function(e) {

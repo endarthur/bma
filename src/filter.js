@@ -470,10 +470,10 @@ function openDatasetFilterModal(ds) {
   $expr.value = ds.filter ? ds.filter.expression : '';
   $expr.placeholder = ds.rowVar + '.Fe > 30';
   if (_dsFilterController) { try { _dsFilterController.destroy(); } catch (e) {} }
-  // Filter autocomplete scoped to this dataset's columns (createExprInput reads
-  // the active dataset via its mode; default 'filter' targets the model — for
-  // comparison datasets the estimate/exact count still validate by evaluation)
-  _dsFilterController = createExprInput($expr, { mode: 'filter' });
+  // WS v2 phase 5 — autocomplete + validation scoped to THIS dataset's columns
+  // and row handle (dsId), so filtering a comparison completes aux./d2. columns,
+  // not the model's. Recreated per open, so the static dsId always matches target.
+  _dsFilterController = createExprInput($expr, { mode: 'filter', dsId: ds.id });
   $m.classList.add('active');
   dsFilterRenderEstimate();
   $expr.focus();

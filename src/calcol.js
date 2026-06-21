@@ -297,7 +297,7 @@ function calcolAcShow() {
   var tok = getEditorTokenAtCursor();
   if (!tok.token || tok.token.length < 1) { calcolAcHide(); return; }
   var lc = tok.token.toLowerCase();
-  calcolAcItems = buildExprAcItems().filter(function(it) {
+  calcolAcItems = buildExprAcItems({ dsId: calcolMode }).filter(function(it) {
     var target = it.kind === 'col' || it.kind === 'calc' ? it.label : it.insert;
     return target.toLowerCase().indexOf(lc) === 0 || it.label.toLowerCase().indexOf(lc) === 0;
   }).slice(0, 10);
@@ -806,18 +806,30 @@ function getTokenAtCursor(el) {
 function buildExprAcItems(opts) {
   if (!opts) opts = {};
   var items = [];
-  // Editor context: aux mode completes aux columns/calcols with the aux. handle.
-  // Filter inputs etc. (separate createExprInput instances) stay primary.
-  var forAux = !opts.forceMode && calcolIsAux();
-  var hdr = forAux ? (auxPreflightData ? auxPreflightData.header : null)
-    : (preflightData ? preflightData.header : currentHeader);
-  var rvp = forAux ? AUX_ROW_VAR : (currentRowVar || 'r');
+  // WS v2 phase 5 — dataset-aware completion. opts.dsId resolves the dataset's
+  // schema through its registry view (preflight/calcolMeta/rowVar), so a filter
+  // box or calcol editor targeting d2/d3 completes THAT dataset's columns, not
+  // the model's (or the singleton aux's). For 'model'/'aux' the views map to the
+  // legacy globals → bit-identical to the old primary/forAux paths below.
+  var hdr, rvp, metaSrc;
+  if (opts.dsId) {
+    var tds = (typeof dsById === 'function' && dsById(opts.dsId)) || dsById('model');
+    hdr = tds.preflight ? tds.preflight.header : (tds.id === 'model' ? currentHeader : null);
+    rvp = tds.rowVar || (currentRowVar || 'r');
+    metaSrc = tds.calcolMeta || [];
+  } else {
+    // Legacy no-dsId fallback: aux mode completes aux columns; else primary (model).
+    var forAux = !opts.forceMode && calcolIsAux();
+    hdr = forAux ? (auxPreflightData ? auxPreflightData.header : null)
+      : (preflightData ? preflightData.header : currentHeader);
+    rvp = forAux ? AUX_ROW_VAR : (currentRowVar || 'r');
+    metaSrc = forAux ? auxCalcolMeta : currentCalcolMeta;
+  }
   if (hdr) {
     for (var i = 0; i < hdr.length; i++) {
       items.push({ label: hdr[i], insert: rvp + '.' + hdr[i], kind: 'col' });
     }
   }
-  var metaSrc = forAux ? auxCalcolMeta : currentCalcolMeta;
   for (var ci = 0; ci < metaSrc.length; ci++) {
     var cc = metaSrc[ci];
     items.push({ label: cc.name, insert: rvp + '.' + cc.name, kind: 'calc' });
@@ -829,8 +841,14 @@ function buildExprAcItems(opts) {
   return items;
 }
 
-function validateExpression(expr, mode) {
-  var rv = currentRowVar || 'r';
+function validateExpression(expr, mode, dsId) {
+  // WS v2 phase 5 — validate against the TARGET dataset's row var + columns. With
+  // no dsId (or 'model') this resolves to the model globals → bit-identical; a
+  // comparison dataset now validates its own handle (aux./d2.) and surfaces typos
+  // in ITS columns instead of silently matching nothing (the patterns used to be
+  // hardwired to r.).
+  var tds = dsId ? ((typeof dsById === 'function' && dsById(dsId)) || dsById('model')) : null;
+  var rv = (tds ? tds.rowVar : currentRowVar) || 'r';
   var wrapped = mode === 'filter' ? '!!(' + expr + ')' : '(' + expr + ')';
   try {
     new Function(rv, MATH_PREAMBLE_MAIN + 'return ' + wrapped);
@@ -839,11 +857,16 @@ function validateExpression(expr, mode) {
   }
   var warnings = [];
   var knownNames = new Set();
-  var hdr = preflightData ? preflightData.header : currentHeader;
+  var hdr = tds ? (tds.preflight ? tds.preflight.header : (tds.id === 'model' ? currentHeader : null))
+                : (preflightData ? preflightData.header : currentHeader);
   if (hdr) hdr.forEach(function(n) { knownNames.add(n); });
-  currentCalcolMeta.forEach(function(c) { knownNames.add(c.name); });
+  var metaSrc = tds ? (tds.calcolMeta || []) : currentCalcolMeta;
+  metaSrc.forEach(function(c) { knownNames.add(c.name); });
   var checked = new Set();
-  var patterns = [/\br\.([a-zA-Z_]\w*)/g, /\br\["([^"]+)"\]/g, /\br\['([^']+)'\]/g];
+  var rvEsc = rv.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  var patterns = [new RegExp('\\b' + rvEsc + '\\.([a-zA-Z_]\\w*)', 'g'),
+                  new RegExp('\\b' + rvEsc + '\\["([^"]+)"\\]', 'g'),
+                  new RegExp('\\b' + rvEsc + "\\['([^']+)'\\]", 'g')];
   for (var pi = 0; pi < patterns.length; pi++) {
     for (var m of expr.matchAll(patterns[pi])) {
       if (!checked.has(m[1])) {
@@ -859,8 +882,13 @@ function createExprInput(element, options) {
   var opts = Object.assign({
     dropdownElement: null, errorElement: null,
     onInput: null, onAccept: null, onEnter: null,
-    mode: 'filter', validateOnBlur: true
+    mode: 'filter', validateOnBlur: true,
+    // WS v2 phase 5 — which dataset's schema drives completion/validation.
+    // Static dsId, or getDsId() for inputs whose target can change (GT/Swath
+    // per-panel local filters). Defaults to the model → bit-identical.
+    dsId: null, getDsId: null
   }, options);
+  function curExprDsId() { return opts.getDsId ? opts.getDsId() : (opts.dsId || 'model'); }
 
   var items = [], selected = -1, lastResult = null, debounceTimer = null;
   var createdWrapper = null, createdDropdown = null, createdError = null;
@@ -908,9 +936,9 @@ function createExprInput(element, options) {
     var tok = getTokenAtCursor(element);
     if (!tok.token || tok.token.length < 1) { hideAc(); return; }
     var lc = tok.token.toLowerCase();
-    // Filter/expression inputs are always primary-context, regardless of
-    // which dataset the Calc editor is currently pointed at
-    items = buildExprAcItems({ forceMode: 'primary' }).filter(function(it) {
+    // WS v2 phase 5 — complete against this input's target dataset (model by
+    // default), independent of which dataset the Calc editor is pointed at.
+    items = buildExprAcItems({ dsId: curExprDsId() }).filter(function(it) {
       var target = it.kind === 'col' || it.kind === 'calc' ? it.label : it.insert;
       return fuzzyMatch(lc, target.toLowerCase()) || fuzzyMatch(lc, it.label.toLowerCase());
     }).slice(0, 10);
@@ -980,7 +1008,7 @@ function createExprInput(element, options) {
       showValidation(lastResult);
       return lastResult;
     }
-    lastResult = validateExpression(expr, opts.mode);
+    lastResult = validateExpression(expr, opts.mode, curExprDsId());
     showValidation(lastResult);
     return lastResult;
   }
