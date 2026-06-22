@@ -579,6 +579,7 @@ function serializeProject() {
         targetDsId: tid,
         colA: (crosstabColA != null && hdr && hdr[crosstabColA]) ? hdr[crosstabColA] : null,
         colB: (crosstabColB != null && hdr && hdr[crosstabColB]) ? hdr[crosstabColB] : null,
+        weightCol: (typeof crosstabWeightCol !== 'undefined' && crosstabWeightCol != null && hdr && hdr[crosstabWeightCol]) ? hdr[crosstabWeightCol] : null,
         view: (typeof crosstabView !== 'undefined') ? crosstabView : 'table',
         barMode: (typeof crosstabBarMode !== 'undefined') ? crosstabBarMode : 'stacked',
         cellMode: (typeof crosstabCellMode !== 'undefined') ? crosstabCellMode : 'count'
@@ -2549,8 +2550,10 @@ function displayResults(data) {
       const xhdr = (xtid === 'model') ? header : (((dsById(xtid) || {}).complete || {}).header || null);
       const ia = (xtP.colA && xhdr) ? xhdr.indexOf(xtP.colA) : -1;
       const ib = (xtP.colB && xhdr) ? xhdr.indexOf(xtP.colB) : -1;
+      const iw = (xtP.weightCol && xhdr) ? xhdr.indexOf(xtP.weightCol) : -1;
       crosstabColA = ia >= 0 ? ia : null;
       crosstabColB = ib >= 0 ? ib : null;
+      crosstabWeightCol = iw >= 0 ? iw : null;
     }
   }
 

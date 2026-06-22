@@ -6157,7 +6157,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 74acf6e — click to check for updates">74acf6e</div>
+<div class="build-badge" id="buildBadge" title="build c6c844f — click to check for updates">c6c844f</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -19326,6 +19326,7 @@ function serializeProject() {
         targetDsId: tid,
         colA: (crosstabColA != null && hdr && hdr[crosstabColA]) ? hdr[crosstabColA] : null,
         colB: (crosstabColB != null && hdr && hdr[crosstabColB]) ? hdr[crosstabColB] : null,
+        weightCol: (typeof crosstabWeightCol !== 'undefined' && crosstabWeightCol != null && hdr && hdr[crosstabWeightCol]) ? hdr[crosstabWeightCol] : null,
         view: (typeof crosstabView !== 'undefined') ? crosstabView : 'table',
         barMode: (typeof crosstabBarMode !== 'undefined') ? crosstabBarMode : 'stacked',
         cellMode: (typeof crosstabCellMode !== 'undefined') ? crosstabCellMode : 'count'
@@ -21296,8 +21297,10 @@ function displayResults(data) {
       const xhdr = (xtid === 'model') ? header : (((dsById(xtid) || {}).complete || {}).header || null);
       const ia = (xtP.colA && xhdr) ? xhdr.indexOf(xtP.colA) : -1;
       const ib = (xtP.colB && xhdr) ? xhdr.indexOf(xtP.colB) : -1;
+      const iw = (xtP.weightCol && xhdr) ? xhdr.indexOf(xtP.weightCol) : -1;
       crosstabColA = ia >= 0 ? ia : null;
       crosstabColB = ib >= 0 ? ib : null;
+      crosstabWeightCol = iw >= 0 ? iw : null;
     }
   }
 
@@ -27802,6 +27805,7 @@ function wireSwathTableEvents($scope) {
 var crosstabTargetDsId = 'model';
 var crosstabColA = null;          // column index into the target's header (or a calcol idx)
 var crosstabColB = null;
+var crosstabWeightCol = null;     // numeric column index to weight cells by (tonnage/volume), or null
 var crosstabView = 'table';       // table | heatmap | sankey | bars
 var crosstabBarMode = 'stacked';  // stacked | grouped (bars view)
 var crosstabCellMode = 'count';   // count | rowpct | colpct | totalpct
@@ -27849,6 +27853,24 @@ function crosstabCatCols(ctx) {
   return out;
 }
 
+// The target's numeric columns ({idx, name}) — candidate weights (tonnage /
+// volume / density), incl. numeric calcols.
+function crosstabNumCols(ctx) {
+  var out = [];
+  if (!ctx) return out;
+  var hdr = ctx.header, ct = ctx.colTypes || [];
+  for (var i = 0; i < hdr.length; i++) if (ct[i] === 'numeric' && hdr[i]) out.push({ idx: i, name: hdr[i] });
+  return out;
+}
+
+// The active matrix: the weighted sums when a weight is set, else raw counts.
+function crosstabMatrix(data) { return data.weightName ? data.weights : data.counts; }
+// Format a raw value (count = integer; weighted sum = float).
+function crosstabFmtNum(v) {
+  if (!v) return '0';
+  return Number.isInteger(v) ? v.toLocaleString() : v.toLocaleString(undefined, { maximumFractionDigits: 1 });
+}
+
 function crosstabSetStatus(msg, isErr) {
   var el = document.querySelector('#crosstabSidebar [data-xt="status"]');
   if (el) { el.textContent = msg || ''; el.style.color = isErr ? 'var(--red)' : ''; }
@@ -27874,6 +27896,11 @@ function renderCrosstab() {
       return '<option value="' + c.idx + '"' + (c.idx === sel ? ' selected' : '') + '>' + esc(c.name) + '</option>';
     }).join('');
   }
+  var numCols = crosstabNumCols(ctx);
+  if (crosstabWeightCol != null && !numCols.some(function (c) { return c.idx === crosstabWeightCol; })) crosstabWeightCol = null;
+  var weightOptions = '<option value="">— none (count)</option>' + numCols.map(function (c) {
+    return '<option value="' + c.idx + '"' + (c.idx === crosstabWeightCol ? ' selected' : '') + '>' + esc(c.name) + '</option>';
+  }).join('');
   var picker = (typeof dsPickerHtml === 'function') ? dsPickerHtml({
     facet: 'categorical', current: ctx.ds.id,
     titleClass: 'crosstab-sidebar-title', selectClass: 'stats-select', selAttr: 'data-xt="datasetSel"'
@@ -27885,6 +27912,8 @@ function renderCrosstab() {
       '<select class="stats-select" data-xt="colA">' + colOptions(crosstabColA) + '</select></div>' +
     '<div class="crosstab-section"><div class="crosstab-sidebar-title">Columns (B)</div>' +
       '<select class="stats-select" data-xt="colB">' + colOptions(crosstabColB) + '</select></div>' +
+    '<div class="crosstab-section"><div class="crosstab-sidebar-title">Weight (tonnage)</div>' +
+      '<select class="stats-select" data-xt="weight">' + weightOptions + '</select></div>' +
     '<div class="crosstab-section"><div class="crosstab-sidebar-title">View</div>' +
       '<select class="stats-select" data-xt="view">' +
         ['table:Cross-table', 'heatmap:Confusion matrix', 'sankey:Sankey', 'bars:Bars'].map(function (o) {
@@ -27918,6 +27947,7 @@ function wireCrosstab() {
   };
   var a = sb.querySelector('[data-xt="colA"]'); if (a) a.onchange = function () { crosstabColA = parseInt(a.value); autoSaveProject && autoSaveProject(); };
   var b = sb.querySelector('[data-xt="colB"]'); if (b) b.onchange = function () { crosstabColB = parseInt(b.value); autoSaveProject && autoSaveProject(); };
+  var wt = sb.querySelector('[data-xt="weight"]'); if (wt) wt.onchange = function () { crosstabWeightCol = wt.value === '' ? null : parseInt(wt.value); autoSaveProject && autoSaveProject(); };
   var vw = sb.querySelector('[data-xt="view"]'); if (vw) vw.onchange = function () {
     crosstabView = vw.value;
     if (lastCrosstabData) renderCrosstabResult(lastCrosstabData);   // re-render from cache (no re-run)
@@ -27958,7 +27988,7 @@ function runCrosstab() {
     resolvedTypes: ctx.resolvedTypes,
     rowVarOverride: ctx.rowVar,
     colA: crosstabColA, colB: crosstabColB,
-    weightCol: null,   // A19-5: tonnage weighting
+    weightCol: crosstabWeightCol,   // A19-5: tonnage/volume weighting (null = count)
     dmEndianness: (ctx.preflight && ctx.preflight.dmEndianness) || null,
     dmFormat: (ctx.preflight && ctx.preflight.dmFormat) || null
   });
@@ -27990,9 +28020,9 @@ function runCrosstab() {
   };
 }
 
-// Row / column / grand margins for a counts matrix.
+// Row / column / grand margins for the active (count or weighted) matrix.
 function crosstabMargins(data) {
-  var aL = data.aLabels, bL = data.bLabels, M = data.counts;
+  var aL = data.aLabels, bL = data.bLabels, M = crosstabMatrix(data);
   var rowTot = aL.map(function (_, i) { return M[i].reduce(function (s, v) { return s + v; }, 0); });
   var colTot = bL.map(function (_, j) { return aL.reduce(function (s, _2, i) { return s + M[i][j]; }, 0); });
   var grand = rowTot.reduce(function (s, v) { return s + v; }, 0);
@@ -28005,7 +28035,7 @@ function crosstabMargins(data) {
 // unrelated categoricals κ ≈ 0 (no systematic agreement), which is itself the
 // signal. po = Σ n_kk / N; pe = Σ (n_k+/N)(n_+k/N); κ = (po−pe)/(1−pe).
 function crosstabAgreement(data) {
-  var aL = data.aLabels, bL = data.bLabels, M = data.counts;
+  var aL = data.aLabels, bL = data.bLabels, M = crosstabMatrix(data);
   var m = crosstabMargins(data), N = m.grand;
   if (!N) return null;
   var aIdx = {}, bIdx = {}, set = {};
@@ -28046,7 +28076,7 @@ function crosstabHue(i) { return (i * 53) % 360; }
 
 // Cell display per the Show selector — shared by table + heatmap.
 function crosstabFmtCell(v, rowTot, colTot, grand) {
-  if (crosstabCellMode === 'count') return v ? v.toLocaleString() : '·';
+  if (crosstabCellMode === 'count') return v ? crosstabFmtNum(v) : '·';
   var den = crosstabCellMode === 'rowpct' ? rowTot : crosstabCellMode === 'colpct' ? colTot : grand;
   if (!den) return '·';
   var pct = (v / den) * 100;
@@ -28064,15 +28094,17 @@ function crosstabNotesHtml(data) {
   return notes.length ? '<div class="crosstab-notes">⚠ ' + notes.join(' · ') + '</div>' : '';
 }
 function crosstabCaptionHtml(data, grand) {
+  var rows = (data.kept != null ? data.kept : grand);
   return '<div class="crosstab-caption"><b>' + esc(data.aName) + '</b> (rows) × <b>' + esc(data.bName) + '</b> (columns)' +
-    ' · ' + grand.toLocaleString() + ' rows' + (data.weightName ? ' · weighted by ' + esc(data.weightName) : '') + '</div>';
+    ' · ' + rows.toLocaleString() + ' rows' +
+    (data.weightName ? ' · Σ ' + esc(data.weightName) + ' = ' + crosstabFmtNum(grand) : '') + '</div>';
 }
 
 // Render the cross-table (counts + row/col/total margins; cell mode = the
 // sidebar's Show selector). ∅ = a missing value on that axis (surfaced, A9).
 function renderCrosstabTable(data) {
   var content = crosstabContentEl();
-  var aL = data.aLabels, bL = data.bLabels, M = data.counts;
+  var aL = data.aLabels, bL = data.bLabels, M = crosstabMatrix(data);
   var m = crosstabMargins(data), rowTot = m.rowTot, colTot = m.colTot, grand = m.grand;
 
   var maxCount = 1;
@@ -28091,11 +28123,11 @@ function renderCrosstabTable(data) {
       var diag = (aL[i2] === bL[j3]) ? ' crosstab-diag' : '';
       html += '<td class="crosstab-cell' + diag + '" style="background:rgba(127,127,127,' + alpha + ')">' + crosstabFmtCell(v, rowTot[i2], colTot[j3], grand) + '</td>';
     }
-    html += '<td class="crosstab-total">' + rowTot[i2].toLocaleString() + '</td></tr>';
+    html += '<td class="crosstab-total">' + crosstabFmtNum(rowTot[i2]) + '</td></tr>';
   }
   html += '<tr class="crosstab-totrow"><th class="crosstab-rowhead">Total</th>';
-  for (var j4 = 0; j4 < bL.length; j4++) html += '<td class="crosstab-total">' + colTot[j4].toLocaleString() + '</td>';
-  html += '<td class="crosstab-total crosstab-grand">' + grand.toLocaleString() + '</td></tr>';
+  for (var j4 = 0; j4 < bL.length; j4++) html += '<td class="crosstab-total">' + crosstabFmtNum(colTot[j4]) + '</td>';
+  html += '<td class="crosstab-total crosstab-grand">' + crosstabFmtNum(grand) + '</td></tr>';
   html += '</tbody></table></div>';
 
   content.innerHTML = html;
@@ -28108,7 +28140,7 @@ function renderCrosstabTable(data) {
 // missing = agreement), surfaced by the notes.
 function renderCrosstabHeatmap(data) {
   var content = crosstabContentEl();
-  var aL = data.aLabels, bL = data.bLabels, M = data.counts;
+  var aL = data.aLabels, bL = data.bLabels, M = crosstabMatrix(data);
   var m = crosstabMargins(data), rowTot = m.rowTot, colTot = m.colTot, grand = m.grand;
   var maxCount = 1;
   for (var i = 0; i < aL.length; i++) for (var j = 0; j < bL.length; j++) if (M[i][j] > maxCount) maxCount = M[i][j];
@@ -28120,7 +28152,7 @@ function renderCrosstabHeatmap(data) {
     var kLbl = crosstabKappaLabel(ag.kappa);
     html += '<div class="crosstab-stats">' +
       '<span class="crosstab-stat"><b>' + (ag.agreement * 100).toFixed(1) + '%</b> agreement' +
-        ' <span class="crosstab-stat-sub">(' + ag.nAgree.toLocaleString() + ' on the diagonal)</span></span>' +
+        ' <span class="crosstab-stat-sub">(' + crosstabFmtNum(ag.nAgree) + ' on the diagonal)</span></span>' +
       '<span class="crosstab-stat">Cohen’s κ <b>' + kTxt + '</b>' + (kLbl ? ' <span class="crosstab-stat-sub">(' + kLbl + ')</span>' : '') + '</span>' +
       '</div>' +
       '<div class="crosstab-stat-note">Agreement &amp; κ treat matching labels as agreement — most meaningful when both columns are the same classification.</div>';
@@ -28157,7 +28189,7 @@ function renderCrosstabHeatmap(data) {
 // reserve). Hand-rolled SVG (no deps), node heights ∝ row/column totals.
 function renderCrosstabSankey(data) {
   var content = crosstabContentEl();
-  var aL = data.aLabels, bL = data.bLabels, M = data.counts;
+  var aL = data.aLabels, bL = data.bLabels, M = crosstabMatrix(data);
   var m = crosstabMargins(data), rowTot = m.rowTot, colTot = m.colTot, grand = m.grand;
   if (!grand) { content.innerHTML = crosstabCaptionHtml(data, grand) + '<div class="crosstab-hint">No flows to draw.</div>'; return; }
 
@@ -28188,18 +28220,18 @@ function renderCrosstabSankey(data) {
       var path = 'M' + x0 + ',' + ly + ' C' + cx + ',' + ly + ' ' + cx + ',' + ry + ' ' + x1 + ',' + ry +
         ' L' + x1 + ',' + (ry + h) + ' C' + cx + ',' + (ry + h) + ' ' + cx + ',' + (ly + h) + ' ' + x0 + ',' + (ly + h) + ' Z';
       svg += '<path class="crosstab-flow" d="' + path + '" fill="hsl(' + crosstabHue(i2) + ',55%,55%)" fill-opacity="0.34">' +
-        '<title>' + esc(aL[i2]) + ' → ' + esc(bL[j2]) + ': ' + v.toLocaleString() + '</title></path>';
+        '<title>' + esc(aL[i2]) + ' → ' + esc(bL[j2]) + ': ' + crosstabFmtNum(v) + '</title></path>';
     }
   }
   // nodes + labels
   for (var i3 = 0; i3 < nA; i3++) {
     var nh = Math.max(rowTot[i3] * scale, 1);
-    svg += '<rect class="crosstab-node" x="' + lx + '" y="' + aY[i3] + '" width="' + nodeW + '" height="' + nh + '" fill="hsl(' + crosstabHue(i3) + ',55%,50%)"><title>' + esc(aL[i3]) + ': ' + rowTot[i3].toLocaleString() + '</title></rect>';
+    svg += '<rect class="crosstab-node" x="' + lx + '" y="' + aY[i3] + '" width="' + nodeW + '" height="' + nh + '" fill="hsl(' + crosstabHue(i3) + ',55%,50%)"><title>' + esc(aL[i3]) + ': ' + crosstabFmtNum(rowTot[i3]) + '</title></rect>';
     svg += '<text class="crosstab-sankey-lbl" x="' + (lx - labelPad) + '" y="' + (aY[i3] + nh / 2) + '" text-anchor="end" dominant-baseline="middle">' + esc(aL[i3]) + '</text>';
   }
   for (var j3 = 0; j3 < nB; j3++) {
     var nh2 = Math.max(colTot[j3] * scale, 1);
-    svg += '<rect class="crosstab-node" x="' + rx + '" y="' + bY[j3] + '" width="' + nodeW + '" height="' + nh2 + '" fill="hsl(' + crosstabHue(j3) + ',30%,50%)"><title>' + esc(bL[j3]) + ': ' + colTot[j3].toLocaleString() + '</title></rect>';
+    svg += '<rect class="crosstab-node" x="' + rx + '" y="' + bY[j3] + '" width="' + nodeW + '" height="' + nh2 + '" fill="hsl(' + crosstabHue(j3) + ',30%,50%)"><title>' + esc(bL[j3]) + ': ' + crosstabFmtNum(colTot[j3]) + '</title></rect>';
     svg += '<text class="crosstab-sankey-lbl" x="' + (rx + nodeW + labelPad) + '" y="' + (bY[j3] + nh2 / 2) + '" text-anchor="start" dominant-baseline="middle">' + esc(bL[j3]) + '</text>';
   }
   svg += '</svg>';
@@ -28212,7 +28244,7 @@ function renderCrosstabSankey(data) {
 // (a pct mode → 100%-stacked / share-grouped, normalized within each A bar).
 function renderCrosstabBars(data) {
   var content = crosstabContentEl();
-  var aL = data.aLabels, bL = data.bLabels, M = data.counts;
+  var aL = data.aLabels, bL = data.bLabels, M = crosstabMatrix(data);
   var m = crosstabMargins(data), rowTot = m.rowTot, grand = m.grand;
   if (!grand) { content.innerHTML = crosstabCaptionHtml(data, grand) + '<div class="crosstab-hint">No data to plot.</div>'; return; }
   var nA = aL.length, nB = bL.length;
@@ -28247,13 +28279,13 @@ function renderCrosstabBars(data) {
       var sw = cw / nB;
       for (var j = 0; j < nB; j++) {
         var v2 = val(i2, j), h2 = (v2 / maxVal) * plotH;
-        svg += '<rect class="crosstab-bar" x="' + (cx0 + j * sw) + '" y="' + (mT + plotH - h2) + '" width="' + (sw * 0.86) + '" height="' + h2 + '" fill="hsl(' + crosstabHue(j) + ',55%,52%)"><title>' + esc(aL[i2]) + ' · ' + esc(bL[j]) + ': ' + M[i2][j].toLocaleString() + '</title></rect>';
+        svg += '<rect class="crosstab-bar" x="' + (cx0 + j * sw) + '" y="' + (mT + plotH - h2) + '" width="' + (sw * 0.86) + '" height="' + h2 + '" fill="hsl(' + crosstabHue(j) + ',55%,52%)"><title>' + esc(aL[i2]) + ' · ' + esc(bL[j]) + ': ' + crosstabFmtNum(M[i2][j]) + '</title></rect>';
       }
     } else {
       var yacc = mT + plotH;
       for (var j2 = 0; j2 < nB; j2++) {
         var v3 = val(i2, j2), h3 = (v3 / maxVal) * plotH;
-        svg += '<rect class="crosstab-bar" x="' + cx0 + '" y="' + (yacc - h3) + '" width="' + cw + '" height="' + h3 + '" fill="hsl(' + crosstabHue(j2) + ',55%,52%)"><title>' + esc(aL[i2]) + ' · ' + esc(bL[j2]) + ': ' + M[i2][j2].toLocaleString() + '</title></rect>';
+        svg += '<rect class="crosstab-bar" x="' + cx0 + '" y="' + (yacc - h3) + '" width="' + cw + '" height="' + h3 + '" fill="hsl(' + crosstabHue(j2) + ',55%,52%)"><title>' + esc(aL[i2]) + ' · ' + esc(bL[j2]) + ': ' + crosstabFmtNum(M[i2][j2]) + '</title></rect>';
         yacc -= h3;
       }
     }
