@@ -243,5 +243,17 @@ function fsaaAfterMountChange() {
   if (mountedFolder && typeof autoSaveProject === 'function') autoSaveProject();
 }
 
-// Silent restore on startup (no-op where unsupported / no saved handle).
+// Show + wire the landing "Open project folder" button (the only mount affordance
+// on the starting screen — the File-menu one needs a loaded file to exist).
+function fsaaInitLanding() {
+  var btn = document.getElementById('landingMountBtn');
+  if (!btn) return;
+  if (!fsaaSupported()) { btn.style.display = 'none'; return; }
+  btn.style.display = '';
+  btn.onclick = function () { fsaaMountFolder(); };   // a click is the user gesture showDirectoryPicker needs
+}
+
+// Startup: wire the landing button + silently restore a persisted folder (which
+// reopens its project). No-op where unsupported / no saved handle.
+if (typeof document !== 'undefined') { try { fsaaInitLanding(); } catch (e) {} }
 if (typeof indexedDB !== 'undefined') { try { fsaaTryRestoreOnLoad(); } catch (e) {} }

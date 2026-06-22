@@ -4153,6 +4153,9 @@ table.cat-values tr.cat-aux-only td { background: color-mix(in srgb, var(--brand
   transition: background 0.12s, color 0.12s;
 }
 .landing-newproj-btn:hover { background: var(--action); color: var(--bg); }
+/* C11: the "Open project folder" button is secondary (neutral) next to "start empty" */
+.landing-mount-btn { border-color: var(--border); color: var(--fg-dim); }
+.landing-mount-btn:hover { background: var(--bg2); color: var(--fg); border-color: var(--fg-dim); }
 .landing-newproj-hint { color: var(--fg-dim); font-family: var(--sans); font-size: 0.72rem; opacity: 0.7; }
 
 /* Model-optional: the Import-Model tab's empty state when a project has no model */
@@ -5546,6 +5549,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
 
   <div class="landing-actions">
     <button class="landing-newproj-btn" id="newProjectBtn">+ Start an empty project</button>
+    <button class="landing-newproj-btn landing-mount-btn" id="landingMountBtn" style="display:none" title="Open a BMA project folder — its files resolve from disk, no re-drop">📁 Open project folder</button>
     <span class="landing-newproj-hint">no block model needed — add drillholes or point data, then go</span>
   </div>
 
@@ -6203,7 +6207,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 94b6987 — click to check for updates">94b6987</div>
+<div class="build-badge" id="buildBadge" title="build e3288e7 — click to check for updates">e3288e7</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -23294,7 +23298,19 @@ function fsaaAfterMountChange() {
   if (mountedFolder && typeof autoSaveProject === 'function') autoSaveProject();
 }
 
-// Silent restore on startup (no-op where unsupported / no saved handle).
+// Show + wire the landing "Open project folder" button (the only mount affordance
+// on the starting screen — the File-menu one needs a loaded file to exist).
+function fsaaInitLanding() {
+  var btn = document.getElementById('landingMountBtn');
+  if (!btn) return;
+  if (!fsaaSupported()) { btn.style.display = 'none'; return; }
+  btn.style.display = '';
+  btn.onclick = function () { fsaaMountFolder(); };   // a click is the user gesture showDirectoryPicker needs
+}
+
+// Startup: wire the landing button + silently restore a persisted folder (which
+// reopens its project). No-op where unsupported / no saved handle.
+if (typeof document !== 'undefined') { try { fsaaInitLanding(); } catch (e) {} }
 if (typeof indexedDB !== 'undefined') { try { fsaaTryRestoreOnLoad(); } catch (e) {} }
 
 // ─── Statistics Tab ───────────────────────────────────────────────────

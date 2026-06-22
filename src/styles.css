@@ -4138,6 +4138,9 @@ table.cat-values tr.cat-aux-only td { background: color-mix(in srgb, var(--brand
   transition: background 0.12s, color 0.12s;
 }
 .landing-newproj-btn:hover { background: var(--action); color: var(--bg); }
+/* C11: the "Open project folder" button is secondary (neutral) next to "start empty" */
+.landing-mount-btn { border-color: var(--border); color: var(--fg-dim); }
+.landing-mount-btn:hover { background: var(--bg2); color: var(--fg); border-color: var(--fg-dim); }
 .landing-newproj-hint { color: var(--fg-dim); font-family: var(--sans); font-size: 0.72rem; opacity: 0.7; }
 
 /* Model-optional: the Import-Model tab's empty state when a project has no model */
