@@ -6193,7 +6193,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 60ca47e — click to check for updates">60ca47e</div>
+<div class="build-badge" id="buildBadge" title="build d9534bf — click to check for updates">d9534bf</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -17826,6 +17826,11 @@ function dhCompositeAndLoad(ds) {
   if (!dhMappingComplete(ds)) return;
   dhSetStatus(ds, 'Compositing…');
   var opts = dhCompositeOpts(D);
+  // Capture the length the HOST was actually composited at, separate from the live
+  // length field (which the toolbar also drives for emitting other-length
+  // composites). The recipe persists THIS, so emitting a 5 m composite never
+  // rewrites the host's length.
+  D._hostLength = String(opts.compositeLength != null ? opts.compositeLength : '');
   var result;
   try {
     result = Drillhole.process(dhBuildTables(ds), opts);
@@ -18123,7 +18128,7 @@ function dhSerialize(ds) {
     files: files,
     map: map,
     dipConvention: D.dipConvention,
-    opts: { method: D.opts.method, length: D.opts.length, splitCols: dhSplitCols(D).length ? dhSplitCols(D) : null, densityCol: D.opts.densityCol, combine: D.opts.combine || null, minCov: D.opts.minCov },
+    opts: { method: D.opts.method, length: (D._hostLength != null ? D._hostLength : D.opts.length), splitCols: dhSplitCols(D).length ? dhSplitCols(D) : null, densityCol: D.opts.densityCol, combine: D.opts.combine || null, minCov: D.opts.minCov },
     // A11 P2: the interval table's per-table calcols + filter (omitted when empty)
     intervalCalcols: (ivt.calcolCode || ivt.filter) ? { calcolCode: ivt.calcolCode || '', filter: ivt.filter || '' } : null,
     secondaryCalcols: secondaryCalcols,   // A11 P5: the merge table's pre-merge calcols/filter

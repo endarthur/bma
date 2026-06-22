@@ -872,6 +872,11 @@ function dhCompositeAndLoad(ds) {
   if (!dhMappingComplete(ds)) return;
   dhSetStatus(ds, 'Compositing…');
   var opts = dhCompositeOpts(D);
+  // Capture the length the HOST was actually composited at, separate from the live
+  // length field (which the toolbar also drives for emitting other-length
+  // composites). The recipe persists THIS, so emitting a 5 m composite never
+  // rewrites the host's length.
+  D._hostLength = String(opts.compositeLength != null ? opts.compositeLength : '');
   var result;
   try {
     result = Drillhole.process(dhBuildTables(ds), opts);
@@ -1169,7 +1174,7 @@ function dhSerialize(ds) {
     files: files,
     map: map,
     dipConvention: D.dipConvention,
-    opts: { method: D.opts.method, length: D.opts.length, splitCols: dhSplitCols(D).length ? dhSplitCols(D) : null, densityCol: D.opts.densityCol, combine: D.opts.combine || null, minCov: D.opts.minCov },
+    opts: { method: D.opts.method, length: (D._hostLength != null ? D._hostLength : D.opts.length), splitCols: dhSplitCols(D).length ? dhSplitCols(D) : null, densityCol: D.opts.densityCol, combine: D.opts.combine || null, minCov: D.opts.minCov },
     // A11 P2: the interval table's per-table calcols + filter (omitted when empty)
     intervalCalcols: (ivt.calcolCode || ivt.filter) ? { calcolCode: ivt.calcolCode || '', filter: ivt.filter || '' } : null,
     secondaryCalcols: secondaryCalcols,   // A11 P5: the merge table's pre-merge calcols/filter
