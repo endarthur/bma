@@ -2,13 +2,15 @@
 
 function openCacheDB() {
   return new Promise(function(resolve, reject) {
-    var req = indexedDB.open('bma-cache', 2);
+    var req = indexedDB.open('bma-cache', 3);
     req.onupgradeneeded = function(e) {
       var db = req.result;
       if (!db.objectStoreNames.contains('results'))
         db.createObjectStore('results');
       if (!db.objectStoreNames.contains('recents'))
         db.createObjectStore('recents');
+      if (!db.objectStoreNames.contains('handles'))   // C11: FSAA directory handles
+        db.createObjectStore('handles');
     };
     req.onsuccess = function() { resolve(req.result); };
     req.onerror = function() { reject(req.error); };

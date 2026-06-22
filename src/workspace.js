@@ -622,7 +622,16 @@ function wsRecentMenuItems() {
   });
 }
 function wsFileMenuItems() {
-  return [
+  // C11: a mounted project folder (when FSAA is supported). Live factory → the
+  // label tracks the mounted state.
+  var folderItems = [];
+  if (typeof fsaaSupported === 'function' && fsaaSupported()) {
+    folderItems = (typeof mountedFolder !== 'undefined' && mountedFolder)
+      ? [{ label: '📁 ' + fsaaFolderName() + ' — unmount', action: 'fsaaUnmount' }]
+      : [{ label: 'Mount project folder…', action: 'fsaaMount' }];
+    folderItems.push('---');
+  }
+  return folderItems.concat([
     { label: 'New project', action: 'newProject' },
     { label: 'Open…', action: 'open' },
     { label: 'Open recent', children: wsRecentMenuItems },
@@ -637,7 +646,7 @@ function wsFileMenuItems() {
     '---',
     { label: 'Close file', action: 'closeFile' },
     { label: 'Settings…', action: 'settings' },
-  ];
+  ]);
 }
 function wsViewMenuItems() {
   return [
@@ -705,6 +714,8 @@ function wsMenuAction(a) {
     case 'export': saveProjectFile(); break;
     case 'import': $projectFileInput.click(); break;
     case 'pack': openPackModal(); break;
+    case 'fsaaMount': if (typeof fsaaMountFolder === 'function') fsaaMountFolder(); break;       // C11
+    case 'fsaaUnmount': if (typeof fsaaUnmount === 'function') fsaaUnmount(); break;             // C11
     case 'clear': clearProject(); break;
     case 'closeFile': $backToPreflight.click(); break;
     case 'settings': openSettings(); break;

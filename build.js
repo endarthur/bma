@@ -38,6 +38,7 @@ const APP_MODULES = [
   'drillhole.js',      // A7 drillhole ingestion UI (uses vendor-drillhole.js + auxtab's loadAuxFile)
   'topcut.js',
   'project.js',
+  'fsaa.js',            // C11 FSAA-mounted project folder (mount/persist handle; uses openCacheDB)
   'statistics.js',
   'export.js',
   'swath.js',
