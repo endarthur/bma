@@ -167,6 +167,7 @@ body {
 .app.has-results > .recent-files,
 .app.has-results > .project-list,
 .app.has-results > .landing-actions,
+.app.has-results > .landing-fsaa,
 .app.has-results > .example-download,
 .app.has-results > .landing-footer { display: none; }
 .app.has-results > .error-msg { display: none; }
