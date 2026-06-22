@@ -579,6 +579,7 @@ function serializeProject() {
         targetDsId: tid,
         colA: (crosstabColA != null && hdr && hdr[crosstabColA]) ? hdr[crosstabColA] : null,
         colB: (crosstabColB != null && hdr && hdr[crosstabColB]) ? hdr[crosstabColB] : null,
+        view: (typeof crosstabView !== 'undefined') ? crosstabView : 'table',
         cellMode: (typeof crosstabCellMode !== 'undefined') ? crosstabCellMode : 'count'
       };
     })(),
@@ -2540,6 +2541,7 @@ function displayResults(data) {
     if (typeof crosstabTargetDsId !== 'undefined') {
       const xtP = restoredProject.crosstab || {};
       crosstabTargetDsId = xtP.targetDsId || 'model';
+      crosstabView = xtP.view || 'table';
       crosstabCellMode = xtP.cellMode || 'count';
       const xtid = crosstabTargetDsId;
       const xhdr = (xtid === 'model') ? header : (((dsById(xtid) || {}).complete || {}).header || null);

@@ -3546,6 +3546,13 @@ table.cat-values td.cat-pct-cell {
 .crosstab-total { background: var(--bg1); color: var(--fg-dim); font-weight: 600; }
 .crosstab-grand { color: var(--fg); }
 .crosstab-null { color: var(--warn); }
+/* A19-2 confusion matrix: agreement + κ readout, square shaded cells */
+.crosstab-stats { display: flex; gap: 1.4rem; font-family: var(--sans); font-size: 0.95rem; color: var(--fg); margin-bottom: 0.2rem; }
+.crosstab-stat b { font-family: var(--mono); color: var(--fg-bright, var(--fg)); }
+.crosstab-stat-sub { color: var(--fg-dim); font-size: 0.78rem; }
+.crosstab-stat-note { font-family: var(--sans); font-size: 0.68rem; color: var(--fg-dim); margin-bottom: 0.6rem; }
+.crosstab-heatmap td.crosstab-hcell { text-align: center; min-width: 3rem; height: 2.2rem; color: var(--fg); }
+.crosstab-heatmap .crosstab-diag { outline: 2px solid var(--green); outline-offset: -2px; }
 @media (max-width: 700px) {
   .crosstab-body { flex-direction: column; }
   .crosstab-sidebar { width: 100%; flex-shrink: 0; border-right: none; border-bottom: 1px solid var(--border); }

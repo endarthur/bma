@@ -3561,6 +3561,13 @@ table.cat-values td.cat-pct-cell {
 .crosstab-total { background: var(--bg1); color: var(--fg-dim); font-weight: 600; }
 .crosstab-grand { color: var(--fg); }
 .crosstab-null { color: var(--warn); }
+/* A19-2 confusion matrix: agreement + κ readout, square shaded cells */
+.crosstab-stats { display: flex; gap: 1.4rem; font-family: var(--sans); font-size: 0.95rem; color: var(--fg); margin-bottom: 0.2rem; }
+.crosstab-stat b { font-family: var(--mono); color: var(--fg-bright, var(--fg)); }
+.crosstab-stat-sub { color: var(--fg-dim); font-size: 0.78rem; }
+.crosstab-stat-note { font-family: var(--sans); font-size: 0.68rem; color: var(--fg-dim); margin-bottom: 0.6rem; }
+.crosstab-heatmap td.crosstab-hcell { text-align: center; min-width: 3rem; height: 2.2rem; color: var(--fg); }
+.crosstab-heatmap .crosstab-diag { outline: 2px solid var(--green); outline-offset: -2px; }
 @media (max-width: 700px) {
   .crosstab-body { flex-direction: column; }
   .crosstab-sidebar { width: 100%; flex-shrink: 0; border-right: none; border-bottom: 1px solid var(--border); }
@@ -6130,7 +6137,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build de61e7c — click to check for updates">de61e7c</div>
+<div class="build-badge" id="buildBadge" title="build 4994d65 — click to check for updates">4994d65</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -19299,6 +19306,7 @@ function serializeProject() {
         targetDsId: tid,
         colA: (crosstabColA != null && hdr && hdr[crosstabColA]) ? hdr[crosstabColA] : null,
         colB: (crosstabColB != null && hdr && hdr[crosstabColB]) ? hdr[crosstabColB] : null,
+        view: (typeof crosstabView !== 'undefined') ? crosstabView : 'table',
         cellMode: (typeof crosstabCellMode !== 'undefined') ? crosstabCellMode : 'count'
       };
     })(),
@@ -21260,6 +21268,7 @@ function displayResults(data) {
     if (typeof crosstabTargetDsId !== 'undefined') {
       const xtP = restoredProject.crosstab || {};
       crosstabTargetDsId = xtP.targetDsId || 'model';
+      crosstabView = xtP.view || 'table';
       crosstabCellMode = xtP.cellMode || 'count';
       const xtid = crosstabTargetDsId;
       const xhdr = (xtid === 'model') ? header : (((dsById(xtid) || {}).complete || {}).header || null);
@@ -27771,6 +27780,7 @@ function wireSwathTableEvents($scope) {
 var crosstabTargetDsId = 'model';
 var crosstabColA = null;          // column index into the target's header (or a calcol idx)
 var crosstabColB = null;
+var crosstabView = 'table';       // table | heatmap (Sankey, bars later)
 var crosstabCellMode = 'count';   // count | rowpct | colpct | totalpct
 var crosstabWorker = null;
 var lastCrosstabData = null;      // the last 'crosstab-complete' message
@@ -27852,6 +27862,12 @@ function renderCrosstab() {
       '<select class="stats-select" data-xt="colA">' + colOptions(crosstabColA) + '</select></div>' +
     '<div class="crosstab-section"><div class="crosstab-sidebar-title">Columns (B)</div>' +
       '<select class="stats-select" data-xt="colB">' + colOptions(crosstabColB) + '</select></div>' +
+    '<div class="crosstab-section"><div class="crosstab-sidebar-title">View</div>' +
+      '<select class="stats-select" data-xt="view">' +
+        ['table:Cross-table', 'heatmap:Confusion matrix'].map(function (o) {
+          var p = o.split(':'); return '<option value="' + p[0] + '"' + (p[0] === crosstabView ? ' selected' : '') + '>' + p[1] + '</option>';
+        }).join('') +
+      '</select></div>' +
     '<div class="crosstab-section"><div class="crosstab-sidebar-title">Show</div>' +
       '<select class="stats-select" data-xt="cellMode">' +
         ['count:Counts', 'rowpct:Row %', 'colpct:Column %', 'totalpct:Total %'].map(function (o) {
@@ -27879,6 +27895,11 @@ function wireCrosstab() {
   };
   var a = sb.querySelector('[data-xt="colA"]'); if (a) a.onchange = function () { crosstabColA = parseInt(a.value); autoSaveProject && autoSaveProject(); };
   var b = sb.querySelector('[data-xt="colB"]'); if (b) b.onchange = function () { crosstabColB = parseInt(b.value); autoSaveProject && autoSaveProject(); };
+  var vw = sb.querySelector('[data-xt="view"]'); if (vw) vw.onchange = function () {
+    crosstabView = vw.value;
+    if (lastCrosstabData) renderCrosstabResult(lastCrosstabData);   // re-render from cache (no re-run)
+    autoSaveProject && autoSaveProject();
+  };
   var cm = sb.querySelector('[data-xt="cellMode"]'); if (cm) cm.onchange = function () {
     crosstabCellMode = cm.value;
     if (lastCrosstabData) renderCrosstabResult(lastCrosstabData);   // re-render from cache (no re-run)
@@ -27946,8 +27967,44 @@ function runCrosstab() {
   };
 }
 
-// Render the cross-table (counts + row/col/total margins; cell mode = the
-// sidebar's Show selector). ∅ = a missing value on that axis (surfaced, A9).
+// Row / column / grand margins for a counts matrix.
+function crosstabMargins(data) {
+  var aL = data.aLabels, bL = data.bLabels, M = data.counts;
+  var rowTot = aL.map(function (_, i) { return M[i].reduce(function (s, v) { return s + v; }, 0); });
+  var colTot = bL.map(function (_, j) { return aL.reduce(function (s, _2, i) { return s + M[i][j]; }, 0); });
+  var grand = rowTot.reduce(function (s, v) { return s + v; }, 0);
+  return { rowTot: rowTot, colTot: colTot, grand: grand };
+}
+
+// Observed agreement + Cohen's κ over the UNION of the two columns' category
+// labels (a cell on the diagonal = matching labels = agreement). Meaningful when
+// the two columns are the same classification (CLASS_2024 × CLASS_2025); for
+// unrelated categoricals κ ≈ 0 (no systematic agreement), which is itself the
+// signal. po = Σ n_kk / N; pe = Σ (n_k+/N)(n_+k/N); κ = (po−pe)/(1−pe).
+function crosstabAgreement(data) {
+  var aL = data.aLabels, bL = data.bLabels, M = data.counts;
+  var m = crosstabMargins(data), N = m.grand;
+  if (!N) return null;
+  var aIdx = {}, bIdx = {}, set = {};
+  aL.forEach(function (l, i) { aIdx[l] = i; set[l] = 1; });
+  bL.forEach(function (l, j) { bIdx[l] = j; set[l] = 1; });
+  var po = 0, pe = 0;
+  Object.keys(set).forEach(function (k) {
+    var i = aIdx[k], j = bIdx[k];
+    if (i != null && j != null) po += M[i][j];
+    var rk = (i != null) ? m.rowTot[i] : 0, ck = (j != null) ? m.colTot[j] : 0;
+    pe += (rk / N) * (ck / N);
+  });
+  var poFrac = po / N;
+  return { agreement: poFrac, nAgree: po, N: N, kappa: (1 - pe) > 1e-12 ? (poFrac - pe) / (1 - pe) : null };
+}
+// Landis & Koch (1977) strength-of-agreement bands.
+function crosstabKappaLabel(k) {
+  if (k == null) return '';
+  if (k < 0) return 'poor'; if (k < 0.2) return 'slight'; if (k < 0.4) return 'fair';
+  if (k < 0.6) return 'moderate'; if (k < 0.8) return 'substantial'; return 'almost perfect';
+}
+
 function renderCrosstabResult(data) {
   var content = crosstabContentEl();
   if (!content) return;
@@ -27955,51 +28012,112 @@ function renderCrosstabResult(data) {
     content.innerHTML = '<div class="crosstab-hint">No rows to cross-tabulate (everything filtered out?).</div>';
     return;
   }
-  var aL = data.aLabels, bL = data.bLabels, M = data.counts;
-  var rowTot = aL.map(function (_, i) { return M[i].reduce(function (s, v) { return s + v; }, 0); });
-  var colTot = bL.map(function (_, j) { return aL.reduce(function (s, _2, i) { return s + M[i][j]; }, 0); });
-  var grand = rowTot.reduce(function (s, v) { return s + v; }, 0);
+  if (crosstabView === 'heatmap') return renderCrosstabHeatmap(data);
+  return renderCrosstabTable(data);
+}
 
-  function fmt(v, i, j) {
-    if (crosstabCellMode === 'count') return v ? v.toLocaleString() : '·';
-    var den = crosstabCellMode === 'rowpct' ? rowTot[i] : crosstabCellMode === 'colpct' ? colTot[j] : grand;
-    if (!den) return '·';
-    var pct = (v / den) * 100;
-    return v ? (pct >= 10 ? pct.toFixed(0) : pct.toFixed(1)) + '%' : '·';
-  }
-  function lbl(s) { return s === '∅' ? '<span class="crosstab-null" title="missing value">∅</span>' : esc(s); }
+// Cell display per the Show selector — shared by table + heatmap.
+function crosstabFmtCell(v, rowTot, colTot, grand) {
+  if (crosstabCellMode === 'count') return v ? v.toLocaleString() : '·';
+  var den = crosstabCellMode === 'rowpct' ? rowTot : crosstabCellMode === 'colpct' ? colTot : grand;
+  if (!den) return '·';
+  var pct = (v / den) * 100;
+  return v ? (pct >= 10 ? pct.toFixed(0) : pct.toFixed(1)) + '%' : '·';
+}
+function crosstabLbl(s) { return s === '∅' ? '<span class="crosstab-null" title="missing value">∅</span>' : esc(s); }
 
-  var maxCount = 1;
-  for (var i = 0; i < aL.length; i++) for (var j = 0; j < bL.length; j++) if (M[i][j] > maxCount) maxCount = M[i][j];
-
-  var html = '<div class="crosstab-caption"><b>' + esc(data.aName) + '</b> (rows) × <b>' + esc(data.bName) + '</b> (columns)' +
-    ' · ' + grand.toLocaleString() + ' rows' + (data.weightName ? ' · weighted by ' + esc(data.weightName) : '') + '</div>';
-
-  // no-silent-loss notes
+// no-silent-loss notes (missing / overflow / weight-excluded) — shared.
+function crosstabNotesHtml(data) {
   var notes = [];
   if (data.aMissing) notes.push(esc(data.aName) + ': ' + data.aMissing.toLocaleString() + ' missing (∅)');
   if (data.bMissing) notes.push(esc(data.bName) + ': ' + data.bMissing.toLocaleString() + ' missing (∅)');
   if (data.weightExcluded) notes.push(data.weightExcluded.toLocaleString() + ' rows excluded (invalid weight)');
   if (data.aOverflow || data.bOverflow) notes.push('truncated to 200 categories per axis');
-  if (notes.length) html += '<div class="crosstab-notes">⚠ ' + notes.join(' · ') + '</div>';
+  return notes.length ? '<div class="crosstab-notes">⚠ ' + notes.join(' · ') + '</div>' : '';
+}
+function crosstabCaptionHtml(data, grand) {
+  return '<div class="crosstab-caption"><b>' + esc(data.aName) + '</b> (rows) × <b>' + esc(data.bName) + '</b> (columns)' +
+    ' · ' + grand.toLocaleString() + ' rows' + (data.weightName ? ' · weighted by ' + esc(data.weightName) : '') + '</div>';
+}
 
+// Render the cross-table (counts + row/col/total margins; cell mode = the
+// sidebar's Show selector). ∅ = a missing value on that axis (surfaced, A9).
+function renderCrosstabTable(data) {
+  var content = crosstabContentEl();
+  var aL = data.aLabels, bL = data.bLabels, M = data.counts;
+  var m = crosstabMargins(data), rowTot = m.rowTot, colTot = m.colTot, grand = m.grand;
+
+  var maxCount = 1;
+  for (var i = 0; i < aL.length; i++) for (var j = 0; j < bL.length; j++) if (M[i][j] > maxCount) maxCount = M[i][j];
+
+  var html = crosstabCaptionHtml(data, grand) + crosstabNotesHtml(data);
   html += '<div class="crosstab-table-wrap"><table class="crosstab-table"><thead><tr>' +
     '<th class="crosstab-corner">' + esc(data.aName) + ' \\ ' + esc(data.bName) + '</th>';
-  for (var j2 = 0; j2 < bL.length; j2++) html += '<th>' + lbl(bL[j2]) + '</th>';
+  for (var j2 = 0; j2 < bL.length; j2++) html += '<th>' + crosstabLbl(bL[j2]) + '</th>';
   html += '<th class="crosstab-total">Total</th></tr></thead><tbody>';
   for (var i2 = 0; i2 < aL.length; i2++) {
-    html += '<tr><th class="crosstab-rowhead">' + lbl(aL[i2]) + '</th>';
+    html += '<tr><th class="crosstab-rowhead">' + crosstabLbl(aL[i2]) + '</th>';
     for (var j3 = 0; j3 < bL.length; j3++) {
       var v = M[i2][j3];
       var alpha = v ? (0.08 + 0.5 * (v / maxCount)).toFixed(3) : 0;
       var diag = (aL[i2] === bL[j3]) ? ' crosstab-diag' : '';
-      html += '<td class="crosstab-cell' + diag + '" style="background:rgba(127,127,127,' + alpha + ')">' + fmt(v, i2, j3) + '</td>';
+      html += '<td class="crosstab-cell' + diag + '" style="background:rgba(127,127,127,' + alpha + ')">' + crosstabFmtCell(v, rowTot[i2], colTot[j3], grand) + '</td>';
     }
     html += '<td class="crosstab-total">' + rowTot[i2].toLocaleString() + '</td></tr>';
   }
   html += '<tr class="crosstab-totrow"><th class="crosstab-rowhead">Total</th>';
   for (var j4 = 0; j4 < bL.length; j4++) html += '<td class="crosstab-total">' + colTot[j4].toLocaleString() + '</td>';
   html += '<td class="crosstab-total crosstab-grand">' + grand.toLocaleString() + '</td></tr>';
+  html += '</tbody></table></div>';
+
+  content.innerHTML = html;
+}
+
+// Confusion-matrix heatmap: the same matrix with magnitude-shaded square cells,
+// the matching-label diagonal outlined, and an agreement / Cohen's κ readout.
+// κ is most meaningful when the two columns are the same classification (e.g.
+// CLASS_2024 × CLASS_2025) — the caveat is shown. ∅ rows/cols participate (both
+// missing = agreement), surfaced by the notes.
+function renderCrosstabHeatmap(data) {
+  var content = crosstabContentEl();
+  var aL = data.aLabels, bL = data.bLabels, M = data.counts;
+  var m = crosstabMargins(data), rowTot = m.rowTot, colTot = m.colTot, grand = m.grand;
+  var maxCount = 1;
+  for (var i = 0; i < aL.length; i++) for (var j = 0; j < bL.length; j++) if (M[i][j] > maxCount) maxCount = M[i][j];
+
+  var ag = crosstabAgreement(data);
+  var html = crosstabCaptionHtml(data, grand);
+  if (ag) {
+    var kTxt = ag.kappa == null ? '—' : ag.kappa.toFixed(3);
+    var kLbl = crosstabKappaLabel(ag.kappa);
+    html += '<div class="crosstab-stats">' +
+      '<span class="crosstab-stat"><b>' + (ag.agreement * 100).toFixed(1) + '%</b> agreement' +
+        ' <span class="crosstab-stat-sub">(' + ag.nAgree.toLocaleString() + ' on the diagonal)</span></span>' +
+      '<span class="crosstab-stat">Cohen’s κ <b>' + kTxt + '</b>' + (kLbl ? ' <span class="crosstab-stat-sub">(' + kLbl + ')</span>' : '') + '</span>' +
+      '</div>' +
+      '<div class="crosstab-stat-note">Agreement &amp; κ treat matching labels as agreement — most meaningful when both columns are the same classification.</div>';
+  }
+  html += crosstabNotesHtml(data);
+
+  html += '<div class="crosstab-table-wrap"><table class="crosstab-table crosstab-heatmap"><thead><tr>' +
+    '<th class="crosstab-corner">' + esc(data.aName) + ' \\ ' + esc(data.bName) + '</th>';
+  for (var j2 = 0; j2 < bL.length; j2++) html += '<th>' + crosstabLbl(bL[j2]) + '</th>';
+  html += '</tr></thead><tbody>';
+  for (var i2 = 0; i2 < aL.length; i2++) {
+    html += '<tr><th class="crosstab-rowhead">' + crosstabLbl(aL[i2]) + '</th>';
+    for (var j3 = 0; j3 < bL.length; j3++) {
+      var v = M[i2][j3];
+      var diag = (aL[i2] === bL[j3]);
+      var frac = v ? (v / maxCount) : 0;
+      // diagonal (agreement) shaded green, off-diagonal neutral gray
+      var bg = diag
+        ? 'rgba(76,175,80,' + (v ? (0.12 + 0.6 * frac).toFixed(3) : 0) + ')'
+        : 'rgba(127,127,127,' + (v ? (0.08 + 0.5 * frac).toFixed(3) : 0) + ')';
+      html += '<td class="crosstab-hcell' + (diag ? ' crosstab-diag' : '') + '" style="background:' + bg + '">' +
+        crosstabFmtCell(v, rowTot[i2], colTot[j3], grand) + '</td>';
+    }
+    html += '</tr>';
+  }
   html += '</tbody></table></div>';
 
   content.innerHTML = html;
