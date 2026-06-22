@@ -629,10 +629,16 @@ function renderDhMapping(ds) {
     // C12-P1: revealed by setGenStale when the recipe/sources change after a composite (no-silent-stale)
     '<span class="gen-stale-note" style="display:none">↻ recipe changed — re-composite</span></div>';
 
-  // A11 emit-as-dataset: emit a table as its own derived dataset (no compositing)
+  // A11 emit-as-dataset: emit a table as its own derived dataset. Composite uses
+  // the length above, so emitting again at a different length gives N composites.
   if (D.parsed.collar) {
+    var elen = parseFloat(D.opts.length);
+    var lenTxt = (isFinite(elen) && elen > 0) ? (elen + 'm') : (autoLen != null ? autoLen + 'm' : 'auto');
     html += '<div class="dh-emit-row"><span class="dh-emit-label">Emit as dataset:</span>' +
       '<button class="dh-emit-btn" data-dh="emitCollar" title="Load the collar table as a point dataset, derived from this set">⬡ Collar (points)</button>' +
+      (dhMappingComplete(ds)
+        ? '<button class="dh-emit-btn" data-dh="emitComposite" title="Composite the intervals at the length above into a NEW dataset — emit again at another length for multiple composites">⬡ Composite (' + esc(lenTxt) + ')</button>'
+        : '') +
       '</div>';
   }
 
@@ -838,14 +844,13 @@ function dhLengthHistHtml(h) {
     '</div>';
 }
 
-function dhCompositeAndLoad(ds) {
-  var D = dhStateFor(ds);
-  var root = dhCardRoot(ds);
-  if (!dhMappingComplete(ds)) return;
-  dhSetStatus(ds, 'Compositing…');
+// The compositing options as Drillhole.process expects them — read off the card
+// state D.opts/D.dipConvention. Shared by the host composite + emitted composites
+// (and serialized onto an emitted dataset's derivedFrom for re-derive).
+function dhCompositeOpts(D) {
   var lenInput = parseFloat(D.opts.length);
   var covInput = parseFloat(D.opts.minCov);
-  var opts = {
+  return {
     method: D.opts.method || 'minimumCurvature',
     dipConvention: D.dipConvention || 'pos-down',
     compositeLength: isFinite(lenInput) && lenInput > 0 ? lenInput : null,
@@ -854,6 +859,19 @@ function dhCompositeAndLoad(ds) {
     combine: D.opts.combine || null,         // A11 P3: per-column combine rules
     minCoverage: isFinite(covInput) && covInput > 0 ? covInput / 100 : null,
   };
+}
+function dhCompositeFileFrom(result, stem, suffix) {
+  var lines = [result.header.join(',')];
+  for (var i = 0; i < result.rows.length; i++) lines.push(result.rows[i].map(dhCsvCell).join(','));
+  return new File([lines.join('\n') + '\n'], stem + '-composites' + (suffix || '') + '.csv', { type: 'text/csv' });
+}
+
+function dhCompositeAndLoad(ds) {
+  var D = dhStateFor(ds);
+  var root = dhCardRoot(ds);
+  if (!dhMappingComplete(ds)) return;
+  dhSetStatus(ds, 'Compositing…');
+  var opts = dhCompositeOpts(D);
   var result;
   try {
     result = Drillhole.process(dhBuildTables(ds), opts);
@@ -875,14 +893,10 @@ function dhCompositeAndLoad(ds) {
     return;
   }
 
-  var lines = [result.header.join(',')];
-  for (var i = 0; i < result.rows.length; i++) {
-    lines.push(result.rows[i].map(dhCsvCell).join(','));
-  }
   var stem = (D.files.intervals.name.replace(/\.(csv|txt|dat)$/i, '') || 'drillholes');
-  D.derivedName = stem + '-composites.csv';
+  var file = dhCompositeFileFrom(result, stem, '');
+  D.derivedName = file.name;
   D.provFiles = [D.files.collar.name, D.files.survey.name, D.files.intervals.name];
-  var file = new File([lines.join('\n') + '\n'], D.derivedName, { type: 'text/csv' });
 
   // C12-P1: a fresh composite clears the recipe-stale cue (its derive() just ran)
   D._stale = false;
@@ -991,25 +1005,50 @@ function dhEmitFileName(srcDs, role) {
   var base = (D.files.collar && D.files.collar.name) || (srcDs.prefix || 'drillholes');
   return base.replace(/\.(csv|txt|dat)$/i, '') + '-' + role + '.csv';
 }
-// Emit a derived dataset for the given role ('collar' for now) from a loaded set.
-function dhEmitDataset(srcDs, role) {
-  var D = dhStateFor(srcDs);
-  if (role !== 'collar') return;
-  if (!D.parsed.collar) { dhSetStatus(srcDs, 'No collar table to emit.', true); return; }
+// Create a new registry dataset for an emit, set its derivedFrom link, and load
+// the derived `file` into it. Shared by every emit role; opts (composite recipe)
+// rides on derivedFrom for re-derive; weightCol auto-assigns the weight role.
+function dhEmitCreate(srcDs, role, file, opts, weightCol, labelSuffix) {
   if (!wsRails || typeof dsCreate !== 'function' || typeof wsMainTarget !== 'function') {
     if (typeof bmaConfirm === 'function') bmaConfirm({ title: 'Emit dataset', html: 'Emitting a dataset needs the desktop (rails) workspace.', okLabel: 'OK' });
-    return;
+    return null;
   }
-  var csv = dhEmitCollarCsv(D);
-  var file = new File([csv], dhEmitFileName(srcDs, role), { type: 'text/csv' });
-  var newDs = dsCreate({ prefix: (srcDs.prefix || 'dh') + ':' + role });
-  newDs.derivedFrom = { set: srcDs.id, role: role };   // C12 link + re-derive seed (persist: follow-up)
+  var newDs = dsCreate({ prefix: (srcDs.prefix || 'dh') + ':' + (labelSuffix || role) });
+  newDs.derivedFrom = { set: srcDs.id, role: role };   // C12 link + re-derive seed
+  if (opts) newDs.derivedFrom.opts = opts;
   dsAdd(newDs);
+  if (weightCol) catSetRole(newDs.id, 'weight', weightCol);
   wsRails.addTab({ id: newDs.id, title: 'Import: ' + newDs.prefix, closeable: true }, wsMainTarget());
   wsRails.activateTab(newDs.id);
   var root = (typeof dsConfigRoot === 'function') ? dsConfigRoot(newDs) : null;
   loadAuxFile(file, null, undefined, newDs, root);
   if (typeof renderTree === 'function') renderTree();
+  return newDs;
+}
+// Emit a derived dataset for the given role ('collar' | 'composite') from a set.
+// Composite uses the card's current compositing options, so changing the length
+// and emitting again produces a SECOND composite dataset (N composites, no reload).
+function dhEmitDataset(srcDs, role) {
+  var D = dhStateFor(srcDs);
+  if (role === 'collar') {
+    if (!D.parsed.collar) { dhSetStatus(srcDs, 'No collar table to emit.', true); return; }
+    var file = new File([dhEmitCollarCsv(D)], dhEmitFileName(srcDs, 'collar'), { type: 'text/csv' });
+    dhEmitCreate(srcDs, 'collar', file, null, null, 'collar');
+    return;
+  }
+  if (role === 'composite') {
+    if (!dhMappingComplete(srcDs)) { dhSetStatus(srcDs, 'Map collar / survey / intervals first.', true); return; }
+    var opts = dhCompositeOpts(D), result;
+    try { result = Drillhole.process(dhBuildTables(srcDs), opts); }
+    catch (e) { dhSetStatus(srcDs, 'Compositing failed: ' + e.message, true); return; }
+    if (!result.rows.length) { dhSetStatus(srcDs, 'No composites produced — check the mapping.', true); return; }
+    var stem = (D.files.intervals.name.replace(/\.(csv|txt|dat)$/i, '') || 'drillholes');
+    var lenLabel = opts.compositeLength ? (opts.compositeLength + 'm') : 'auto';
+    var cfile = dhCompositeFileFrom(result, stem, '-' + lenLabel);
+    dhSetStatus(srcDs, result.report.nComposites.toLocaleString() + ' composites emitted (' + lenLabel + ')…');
+    dhEmitCreate(srcDs, 'composite', cfile, opts, 'SUPPORT', lenLabel);
+    return;
+  }
 }
 
 // ── persistence (Phase 2, D8) ───────────────────────────────────────────
@@ -1301,7 +1340,8 @@ function wireDhCard(root, ds) {
     if (dk === 'exportZip') { dhExportTablesZip(ds); return; }                     // A11 P1
     if (e.target.dataset && e.target.dataset.dh === 'go') { dhCompositeAndLoad(ds); return; }
     if (e.target.dataset && e.target.dataset.dh === 'backToResults') { dhShowResults(ds); return; }   // C12: return to composite results without re-deriving
-    if (e.target.dataset && e.target.dataset.dh === 'emitCollar') { dhEmitDataset(ds, 'collar'); return; }   // A11 emit-as-dataset
+    if (e.target.dataset && e.target.dataset.dh === 'emitCollar') { dhEmitDataset(ds, 'collar'); return; }       // A11 emit-as-dataset
+    if (e.target.dataset && e.target.dataset.dh === 'emitComposite') { dhEmitDataset(ds, 'composite'); return; }  // A11 emit: N composites
     if (e.target.dataset && e.target.dataset.dh === 'clearBtn') { dhClearAll(ds); return; }
     if (e.target.dataset && e.target.dataset.dh === 'removeSecondary') { dhStateFor(ds).secondary = null; renderDhMapping(ds); dhAutoSave(); return; }   // A11 P5
     var conv = e.target.dataset && e.target.dataset.dhconv;
