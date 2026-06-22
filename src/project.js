@@ -736,9 +736,12 @@ function autoSaveProject() {
     // projects save from creation. Key resolves via the dual-key currentProjectKey().
     var key = currentProjectKey();
     if (!key || (currentFile && !preflightData)) return;
+    var ser = JSON.stringify(serializeProject());
     try {
-      localStorage.setItem(key, JSON.stringify(serializeProject()));
+      localStorage.setItem(key, ser);
     } catch (e) { /* quota — silent fail */ }
+    // C11-P1: a mounted project folder also gets the JSON written into it.
+    if (typeof mountedFolder !== 'undefined' && mountedFolder && typeof fsaaWriteProjectJson === 'function') fsaaWriteProjectJson(ser);
   }, 2000);
 }
 
@@ -749,10 +752,12 @@ function flushProjectSave() {
   if (!key || (currentFile && !preflightData)) return;
   clearTimeout(autoSaveTimer);
   var ok = false;
+  var ser = JSON.stringify(serializeProject());
   try {
-    localStorage.setItem(key, JSON.stringify(serializeProject()));
+    localStorage.setItem(key, ser);
     ok = true;
   } catch (e) { /* quota — silent fail */ }
+  if (typeof mountedFolder !== 'undefined' && mountedFolder && typeof fsaaWriteProjectJson === 'function') fsaaWriteProjectJson(ser);   // C11-P1
   var beat = document.getElementById('saveBeat');
   if (beat) {
     beat.textContent = ok ? 'Saved ✓' : 'Save failed';

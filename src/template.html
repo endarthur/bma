@@ -44,6 +44,8 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
     <input type="file" id="fileInput" accept=".csv,.txt,.dat,.CSV,.TXT,.DAT,.zip,.ZIP,.dm,.DM,.json,.JSON">
   </div>
 
+  <div class="landing-fsaa" id="landingFsaa" style="display:none"></div>
+
   <div class="landing-actions">
     <button class="landing-newproj-btn" id="newProjectBtn">+ Start an empty project</button>
     <span class="landing-newproj-hint">no block model needed — add drillholes or point data, then go</span>
@@ -98,6 +100,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
         <div class="app-menubar" id="appMenubar"></div>
         <button class="preflight-back-btn" id="backToPreflight" title="Close file">✕</button>
         <span class="results-toolbar-title" id="resultsFilename"></span>
+        <span class="fsaa-indicator" id="fsaaIndicator" title="Project folder (File menu to unmount)" style="display:none"></span>
       </div>
       <div class="toolbar-center">
         <span id="resultsRowInfo" class="results-toolbar-info"></span>

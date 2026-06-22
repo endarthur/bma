@@ -750,6 +750,10 @@ header .logo-mark {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+/* C11: folder-backed indicators */
+.fsaa-indicator { font: 0.68rem var(--mono); color: var(--fg-dim); background: var(--bg1); border: 1px solid var(--border); border-radius: 3px; padding: 0.08rem 0.4rem; margin-left: 0.5rem; white-space: nowrap; }
+.landing-fsaa { font: 0.85rem var(--sans); color: var(--fg-dim); margin: 0.6rem auto; max-width: 32rem; padding: 0.5rem 0.9rem; background: var(--bg1); border: 1px solid var(--border); border-radius: 5px; text-align: center; }
+.landing-fsaa b { color: var(--fg); }
 .results-toolbar-info {
   font-size: 0.68rem;
   color: var(--fg-dim);

@@ -107,10 +107,54 @@ function fsaaUnmount() {
 // The mounted folder's display name (or null).
 function fsaaFolderName() { return mountedFolder ? (mountedFolder.name || 'folder') : null; }
 
-// Reflect a mount change in the UI. The File menu is a live factory, so it picks
-// up mountedFolder on next open; this just nudges any other listeners.
+// ── C11-P1: read/write files in the mounted folder ────────────────────────
+// Resolve a source file from the folder by NAME (replaces re-drop). Returns the
+// File, or null if no folder is mounted / the file isn't there.
+function fsaaResolveFile(name) {
+  if (!name || !mountedFolder || typeof mountedFolder.getFileHandle !== 'function') return Promise.resolve(null);
+  return Promise.resolve(mountedFolder.getFileHandle(name)).then(function (fh) {
+    return fh.getFile();
+  }).catch(function () { return null; });
+}
+// Write a blob into the folder (create or overwrite). The no-silent-loss rule
+// extends to disk: callers only write derived/project files, never a user source.
+function fsaaWriteFile(name, blob) {
+  if (!name || !mountedFolder || typeof mountedFolder.getFileHandle !== 'function') return Promise.resolve(false);
+  return Promise.resolve(mountedFolder.getFileHandle(name, { create: true })).then(function (fh) {
+    return fh.createWritable().then(function (w) {
+      return Promise.resolve(w.write(blob)).then(function () { return w.close(); });
+    });
+  }).then(function () { return true; }).catch(function () { return false; });
+}
+// The project JSON's filename in the folder (stable per project title / model).
+function fsaaProjectJsonName() {
+  var stem = (typeof projectTitle !== 'undefined' && projectTitle) ? projectTitle
+    : (typeof currentFile !== 'undefined' && currentFile ? currentFile.name.replace(/\.[^.]+$/, '') : 'project');
+  return String(stem).replace(/[\\/:*?"<>|]+/g, '_') + '.bma.json';
+}
+function fsaaWriteProjectJson(jsonStr) {
+  if (!mountedFolder) return Promise.resolve(false);
+  return fsaaWriteFile(fsaaProjectJsonName(), new Blob([jsonStr], { type: 'application/json' }));
+}
+
+// Header pill + landing note showing the folder backing (Arthur's ask).
+function fsaaRenderIndicator() {
+  var name = fsaaFolderName();
+  var hdr = document.getElementById('fsaaIndicator');
+  if (hdr) { hdr.textContent = name ? ('📁 ' + name) : ''; hdr.style.display = name ? '' : 'none'; }
+  var land = document.getElementById('landingFsaa');
+  if (land) {
+    var e = (typeof esc === 'function') ? esc : function (s) { return s; };
+    land.innerHTML = name ? ('📁 Folder-backed: <b>' + e(name) + '</b> — source files resolve from here, no re-drop') : '';
+    land.style.display = name ? '' : 'none';
+  }
+}
+
+// Reflect a mount change: render the indicator + persist the project into the new
+// folder. The File menu is a live factory, so it picks up mountedFolder on open.
 function fsaaAfterMountChange() {
-  if (typeof autoSaveProject === 'function') { /* P1 will autosave into the folder */ }
+  fsaaRenderIndicator();
+  if (mountedFolder && typeof autoSaveProject === 'function') autoSaveProject();
 }
 
 // Silent restore on startup (no-op where unsupported / no saved handle).
