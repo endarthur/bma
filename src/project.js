@@ -2527,6 +2527,9 @@ function displayResults(data) {
     // ready (backstop for parents that re-derived before their emit instances were
     // recreated — e.g. the packed aux path; idempotent with dhLoadTrio's own call).
     if (typeof dhReEmitAll === 'function') dhReEmitAll();
+    // C11-P1: with a folder mounted, resolve a restored project's still-pending
+    // comparison-dataset + drillhole-trio files from the folder by name — no re-drop.
+    if (typeof fsaaResolveProjectFiles === 'function') fsaaResolveProjectFiles();
     pendingPanelState = restoredProject.panels || null;
     if (pendingPanelState && pendingPanelState.statistics) {
       var pst = pendingPanelState.statistics;

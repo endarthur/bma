@@ -126,6 +126,44 @@ function fsaaWriteFile(name, blob) {
     });
   }).then(function () { return true; }).catch(function () { return false; });
 }
+// C11-P1: resolve a restored project's still-pending source files from the folder
+// by NAME — the loose/localStorage path that otherwise needs a manual re-drop.
+// Comparison datasets (d2+) awaiting their file + drillhole trios awaiting re-drop.
+// Idempotent: anything already supplied / not in the folder is left untouched.
+function fsaaResolveProjectFiles() {
+  if (!mountedFolder || typeof datasets === 'undefined') return Promise.resolve(0);
+  var jobs = [], n = { c: 0 };
+  // comparison datasets (d2+) awaiting their own file
+  datasets.forEach(function (ds) {
+    if (!ds || ds.id === 'model' || ds.id === 'aux' || ds.file || ds.derivedFrom) return;   // emits re-derive; model/aux handled elsewhere
+    var cfg = ds._pendingRestore, fname = cfg && cfg.fileName;
+    if (!fname) return;
+    jobs.push(fsaaResolveFile(fname).then(function (f) {
+      if (f && !ds.file && typeof loadAuxFile === 'function') {
+        n.c++;
+        loadAuxFile(f, null, undefined, ds, (typeof dsConfigRoot === 'function') ? dsConfigRoot(ds) : null);
+      }
+    }));
+  });
+  // drillhole trios awaiting re-drop (any set whose files aren't loaded yet)
+  if (typeof dhStates === 'object' && dhStates && typeof dhLoadTrio === 'function') {
+    Object.keys(dhStates).forEach(function (id) {
+      var D = dhStates[id], pr = D && D.pendingRestore;
+      if (!pr || !pr.files || (D.files && D.files.collar)) return;
+      var dds = (typeof dsById === 'function') ? dsById(id) : null;
+      if (!dds) return;
+      var roles = ['collar', 'survey', 'intervals'];
+      if (pr.files.secondary) roles.push('secondary');
+      jobs.push(Promise.all(roles.map(function (r) { return pr.files[r] ? fsaaResolveFile(pr.files[r].name) : Promise.resolve(null); })).then(function (fl) {
+        var trio = { collar: fl[0], survey: fl[1], intervals: fl[2] };
+        if (pr.files.secondary) trio.secondary = fl[3];
+        if (trio.collar && trio.survey && trio.intervals) { n.c++; return dhLoadTrio(dds, trio); }
+      }));
+    });
+  }
+  return Promise.all(jobs).then(function () { return n.c; });
+}
+
 // The project JSON's filename in the folder (stable per project title / model).
 function fsaaProjectJsonName() {
   var stem = (typeof projectTitle !== 'undefined' && projectTitle) ? projectTitle
