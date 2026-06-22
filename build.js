@@ -29,6 +29,7 @@ css = css.replace('/* __INJECT_FONTS__ */', () => fontCss);
 // App modules — concatenated in order (core must be first, cdf/events last)
 const APP_MODULES = [
   'core.js',
+  'derivation.js',     // C12-P0 — the Derivation contract (derived-data DAG), inert projection over live state
   'vendor-rails.js',   // vendored @gcu/rails (C1b) — pinned, see file header
   'vendor-menu.js',    // vendored @gcu/menu (C1b-3, D7) — pinned, call via Menu.*
   'vendor-drillhole.js', // @gcu/drillhole REVERSE-vendored (A7 D9) — born here, upstreams to auditable/ext later

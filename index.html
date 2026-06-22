@@ -6083,7 +6083,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build b0436d4 — click to check for updates">b0436d4</div>
+<div class="build-badge" id="buildBadge" title="build c356663 — click to check for updates">c356663</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -10100,6 +10100,130 @@ document.addEventListener('keydown', function(e) {
     return;
   }
 });
+
+// ─── C12-P0: the Derivation contract (the derived-data DAG) ────────────────
+// BMA has six kinds of derived data (drillhole composite, merged interval table,
+// emitted / materialized dataset, export-preset output, calcol columns) — each
+// today hand-rolls its own staleness + recompute (model re-analyze, aux
+// markAuxStale, drillhole dhStale, export nothing). They form a DAG
+// (collar+survey+intervals → composite → analysis; model → calcol → filter).
+// C12 names the shared shape so propagation + Refresh can be owned once — the
+// C10 move (DatasetSource) applied to the WRITE side: DatasetSource named how a
+// dataset is READ; Derivation names how it CAME TO BE. Design:
+// docs/derivation-lineage.md.
+//
+// P0 is the INERT seam: the contract (makeDerivation) + a READ-ONLY projection
+// (derivAll) that expresses BMA's two live recompute mechanisms — each dataset's
+// analysis and each drillhole composite — AS Derivations, computed from existing
+// state. Nothing yet DRIVES staleness or refresh from this view (that is P1), so
+// every existing flow is byte-identical; the projection just gives them one name.
+
+// A source reference — a lightweight, serialization-friendly pointer to an
+// upstream node (a file input, or another derivation's output).
+function derivSourceRef(kind, id, name) { return { kind: kind, id: id, name: name }; }
+
+// The Derivation contract. `sources` / `stale` / `output` are getters so the view
+// stays live against the state it projects. mode: 'linked' (re-derive on demand)
+// is the only mode today; 'materialized' (freeze + keep link) lands with A11 emit
+// (P2). `derive()` recomputes the output from its sources (the recipe / kernel).
+function makeDerivation(spec) {
+  return {
+    id: spec.id,
+    kind: spec.kind,                       // 'analysis' | 'composite' (descriptive)
+    derive: spec.derive || function () {},
+    mode: spec.mode || 'linked',
+    get sources() { return spec.sources ? spec.sources() : []; },
+    get stale()   { return spec.stale ? !!spec.stale() : false; },
+    get output()  { return spec.output ? spec.output() : null; },
+  };
+}
+
+// The drillhole composite as a Derivation: collar + survey + intervals (+ a merge
+// table) → the composite CSV. Returns null when this set has produced no
+// composite yet. Staleness is not tracked for composites today (re-drop / re-run
+// is manual) → false; P1 gives it a real key.
+function derivForDrillhole(ds) {
+  if (typeof dhStateFor !== 'function') return null;
+  var D = dhStateFor(ds);
+  if (!(D.derivedName && D.files.collar && D.files.survey && D.files.intervals)) return null;
+  return makeDerivation({
+    id: 'composite:' + ds.id,
+    kind: 'composite',
+    sources: function () {
+      var s = [
+        derivSourceRef('file', 'collar', D.files.collar.name),
+        derivSourceRef('file', 'survey', D.files.survey.name),
+        derivSourceRef('file', 'intervals', D.files.intervals.name),
+      ];
+      if (typeof dhHasSecondary === 'function' && dhHasSecondary(D)) {
+        s.push(derivSourceRef('file', 'secondary', D.secondary.file.name));
+      }
+      return s;
+    },
+    derive: function () { return dhCompositeAndLoad(ds); },
+    stale: function () { return false; },              // P1: real composite staleness
+    output: function () { return ds.file || null; },   // the in-memory composite File
+  });
+}
+
+// A dataset's analysis as a Derivation: its input file (or its composite, when
+// drillhole-derived) → the completed analysis. derive() re-runs analysis; stale
+// mirrors the existing per-surface flags (model `analysisStale`, others
+// `ds.stale`). Returns null for a dataset with no file loaded.
+function derivForDataset(ds) {
+  if (!ds || !ds.file) return null;
+  var isModel = ds.id === 'model';
+  return makeDerivation({
+    id: 'analysis:' + ds.id,
+    kind: 'analysis',
+    sources: function () {
+      if (typeof dhIsDerivedAux === 'function' && dhIsDerivedAux(ds)) {
+        return [derivSourceRef('derivation', 'composite:' + ds.id, ds.file.name)];
+      }
+      return [derivSourceRef('file', ds.id, ds.file.name)];
+    },
+    derive: function () {
+      if (isModel) { if (typeof executeAnalysis === 'function') return executeAnalysis(); return; }
+      if (typeof runAuxAnalysis === 'function') return runAuxAnalysis(ds);
+    },
+    stale: function () {
+      if (isModel) return (typeof analysisStale !== 'undefined') ? !!analysisStale : false;
+      return !!ds.stale;
+    },
+  });
+}
+
+// The current derivation DAG, projected from live state (read-only). One
+// 'composite' node per drillhole set that has produced a composite, one
+// 'analysis' node per loaded dataset. P1 turns this into a driven registry with
+// topological staleness propagation + a single Refresh surface.
+function derivAll() {
+  var out = [];
+  if (typeof dhStates === 'object' && dhStates) {
+    for (var id in dhStates) {
+      if (!dhStates.hasOwnProperty(id)) continue;
+      var dsD = (typeof dsById === 'function') ? dsById(id) : null;
+      if (!dsD) continue;
+      var c = derivForDrillhole(dsD);
+      if (c) out.push(c);
+    }
+  }
+  if (typeof datasets !== 'undefined' && datasets && datasets.length) {
+    for (var i = 0; i < datasets.length; i++) {
+      var a = derivForDataset(datasets[i]);
+      if (a) out.push(a);
+    }
+  }
+  return out;
+}
+
+// Look up a single projected derivation by id (e.g. 'analysis:model',
+// 'composite:aux'). Convenience over derivAll() for the smoke + future consumers.
+function derivById(did) {
+  var all = derivAll();
+  for (var i = 0; i < all.length; i++) if (all[i].id === did) return all[i];
+  return null;
+}
 
 // ─── Vendored: @gcu/rails 0.1.0 ────────────────────────
 // Upstream: auditable/ext/rails, commit d065780681bd51f52d4edc572b1b0c73d15e4559
