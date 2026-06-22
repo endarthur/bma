@@ -637,7 +637,8 @@ function renderDhMapping(ds) {
     html += '<div class="dh-emit-row"><span class="dh-emit-label">Emit as dataset:</span>' +
       '<button class="dh-emit-btn" data-dh="emitCollar" title="Load the collar table as a point dataset, derived from this set">⬡ Collar (points)</button>' +
       (dhMappingComplete(ds)
-        ? '<button class="dh-emit-btn" data-dh="emitComposite" title="Composite the intervals at the length above into a NEW dataset — emit again at another length for multiple composites">⬡ Composite (' + esc(lenTxt) + ')</button>'
+        ? '<button class="dh-emit-btn" data-dh="emitIntervals" title="Raw intervals desurveyed to points (native support, no compositing)">⬡ Intervals</button>' +
+          '<button class="dh-emit-btn" data-dh="emitComposite" title="Composite the intervals at the length above into a NEW dataset — emit again at another length for multiple composites">⬡ Composite (' + esc(lenTxt) + ')</button>'
         : '') +
       '</div>';
   }
@@ -968,6 +969,7 @@ function renderDhProvenance(ds) {
       '<button data-dh="provRecomposite" title="Re-derive this composite at the length above, in place">↻ Re-composite</button>' +
       '<span class="dh-prov-emit">emit ' +
         '<button class="dh-emit-btn" data-dh="emitCollar" title="Collar table as a point dataset">⬡ Collar</button>' +
+        '<button class="dh-emit-btn" data-dh="emitIntervals" title="Raw intervals desurveyed to points (native support, no compositing)">⬡ Intervals</button>' +
         '<button class="dh-emit-btn" data-dh="emitComposite" title="Another composite at the length above, as its own dataset">⬡ Composite</button>' +
       '</span>' +
       '<button data-dh="provReport">Report</button>' +
@@ -982,6 +984,7 @@ function renderDhProvenance(ds) {
   });
   div.querySelector('[data-dh="provRecomposite"]').addEventListener('click', function() { dhCompositeAndLoad(ds); });
   div.querySelector('[data-dh="emitCollar"]').addEventListener('click', function() { dhEmitDataset(ds, 'collar'); });
+  div.querySelector('[data-dh="emitIntervals"]').addEventListener('click', function() { dhEmitDataset(ds, 'intervals'); });
   div.querySelector('[data-dh="emitComposite"]').addEventListener('click', function() { dhEmitDataset(ds, 'composite'); });
   div.querySelector('[data-dh="provReport"]').addEventListener('click', function() { dhOpenReportModal(ds); });
   // "Edit…" reveals the full mapping card (non-destructive — composite stays loaded).
@@ -1060,13 +1063,23 @@ function dhEmitDeriveFile(srcDs, role, opts) {
     if (!D.parsed.collar) return null;
     return new File([dhEmitCollarCsv(D)], dhEmitFileName(srcDs, 'collar'), { type: 'text/csv' });
   }
+  var stem = D.files.intervals ? (D.files.intervals.name.replace(/\.(csv|txt|dat)$/i, '') || 'drillholes') : 'drillholes';
   if (role === 'composite') {
     if (!dhMappingComplete(srcDs)) return null;
     var o = opts || dhCompositeOpts(D), result;
     try { result = Drillhole.process(dhBuildTables(srcDs), o); } catch (e) { return null; }
     if (!result.rows.length) return null;
-    var stem = (D.files.intervals.name.replace(/\.(csv|txt|dat)$/i, '') || 'drillholes');
     return dhCompositeFileFrom(result, stem, '-' + (o.compositeLength ? o.compositeLength + 'm' : 'auto'));
+  }
+  if (role === 'intervals') {
+    // desurvey-only: each raw/merged interval as a point at native support
+    if (!dhMappingComplete(srcDs)) return null;
+    var ires;
+    try { ires = Drillhole.desurveyIntervals(dhBuildTables(srcDs), { method: D.opts.method || 'minimumCurvature' }); } catch (e) { return null; }
+    if (!ires.rows.length) return null;
+    var ilines = [ires.header.join(',')];
+    for (var ri = 0; ri < ires.rows.length; ri++) ilines.push(ires.rows[ri].map(dhCsvCell).join(','));
+    return new File([ilines.join('\n') + '\n'], stem + '-intervals.csv', { type: 'text/csv' });
   }
   return null;
 }
@@ -1074,14 +1087,18 @@ function dhEmitLabel(role, opts) {
   if (role === 'composite') return opts && opts.compositeLength ? opts.compositeLength + 'm' : 'auto';
   return role;
 }
+// The weight role to auto-assign on an emitted dataset (the per-row support).
+function dhEmitWeightCol(role) {
+  return role === 'composite' ? 'SUPPORT' : role === 'intervals' ? 'LENGTH' : null;
+}
 function dhEmitDataset(srcDs, role) {
   var D = dhStateFor(srcDs);
   if (role === 'collar' && !D.parsed.collar) { dhSetStatus(srcDs, 'No collar table to emit.', true); return; }
-  if (role === 'composite' && !dhMappingComplete(srcDs)) { dhSetStatus(srcDs, 'Map collar / survey / intervals first.', true); return; }
+  if ((role === 'composite' || role === 'intervals') && !dhMappingComplete(srcDs)) { dhSetStatus(srcDs, 'Map collar / survey / intervals first.', true); return; }
   var opts = role === 'composite' ? dhCompositeOpts(D) : null;
   var file = dhEmitDeriveFile(srcDs, role, opts);
   if (!file) { dhSetStatus(srcDs, 'Nothing to emit — check the mapping.', true); return; }
-  dhEmitCreate(srcDs, role, file, opts, role === 'composite' ? 'SUPPORT' : null, dhEmitLabel(role, opts));
+  dhEmitCreate(srcDs, role, file, opts, dhEmitWeightCol(role), dhEmitLabel(role, opts));
 }
 
 // ── A11 emit persistence: re-derive emits on reload ───────────────────────
@@ -1099,7 +1116,8 @@ function dhEmitInto(targetDs) {
   var file = dhEmitDeriveFile(srcDs, df.role, df.opts);
   if (!file) return false;                       // parent not ready — retry next sweep
   targetDs._pendingEmit = false;                 // clear before the async load so a concurrent sweep skips it
-  if (df.role === 'composite' && typeof catSetRole === 'function') catSetRole(targetDs.id, 'weight', 'SUPPORT');
+  var wc = dhEmitWeightCol(df.role);
+  if (wc && typeof catSetRole === 'function') catSetRole(targetDs.id, 'weight', wc);
   loadAuxFile(file, null, undefined, targetDs, (typeof dsConfigRoot === 'function') ? dsConfigRoot(targetDs) : null);
   return true;
 }
@@ -1400,8 +1418,9 @@ function wireDhCard(root, ds) {
     if (dk === 'exportZip') { dhExportTablesZip(ds); return; }                     // A11 P1
     if (e.target.dataset && e.target.dataset.dh === 'go') { dhCompositeAndLoad(ds); return; }
     if (e.target.dataset && e.target.dataset.dh === 'backToResults') { dhShowResults(ds); return; }   // C12: return to composite results without re-deriving
-    if (e.target.dataset && e.target.dataset.dh === 'emitCollar') { dhEmitDataset(ds, 'collar'); return; }       // A11 emit-as-dataset
-    if (e.target.dataset && e.target.dataset.dh === 'emitComposite') { dhEmitDataset(ds, 'composite'); return; }  // A11 emit: N composites
+    if (e.target.dataset && e.target.dataset.dh === 'emitCollar') { dhEmitDataset(ds, 'collar'); return; }         // A11 emit-as-dataset
+    if (e.target.dataset && e.target.dataset.dh === 'emitIntervals') { dhEmitDataset(ds, 'intervals'); return; }   // A11 emit: raw intervals (desurvey)
+    if (e.target.dataset && e.target.dataset.dh === 'emitComposite') { dhEmitDataset(ds, 'composite'); return; }    // A11 emit: N composites
     if (e.target.dataset && e.target.dataset.dh === 'clearBtn') { dhClearAll(ds); return; }
     if (e.target.dataset && e.target.dataset.dh === 'removeSecondary') { dhStateFor(ds).secondary = null; renderDhMapping(ds); dhAutoSave(); return; }   // A11 P5
     var conv = e.target.dataset && e.target.dataset.dhconv;

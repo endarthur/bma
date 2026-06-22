@@ -483,6 +483,36 @@ function dhComposite(validated, opts) {
   return { header: header, rows: rows };
 }
 
+// A11 emit slice 3: desurvey ONLY — one point per raw interval at its midpoint,
+// columns carried verbatim (no compositing / re-segmentation). LENGTH = TO−FROM
+// (the native support). Bad intervals (TO≤FROM) are skipped — already counted by
+// dhValidate's consistency checks (no silent loss). Works on a merged interval
+// table too (the caller passes the already-merged tables).
+function dhDesurveyIntervals(tables, opts) {
+  opts = opts || {};
+  var validated = dhValidate(tables, opts);
+  var ivt = validated.intervals, cols = ivt.cols || [];
+  var header = ['BHID', 'X', 'Y', 'Z', 'FROM', 'TO', 'LENGTH'];
+  for (var hc = 0; hc < cols.length; hc++) header.push(cols[hc].name);
+  var rows = [];
+  for (var hI = 0; hI < validated.holes.length; hI++) {
+    var hole = validated.holes[hI];
+    var path = dhDesurveyHole(hole.collar, hole.stations, opts.method || 'minimumCurvature');
+    var idx = hole.iv;
+    for (var ii = 0; ii < idx.length; ii++) {
+      var r = idx[ii], from = ivt.from[r], to = ivt.to[r];
+      if (!(isFinite(from) && isFinite(to) && to > from)) continue;
+      var pos = dhPositionAt(path, (from + to) / 2);
+      var row = [hole.bhid, pos[0], pos[1], pos[2], from, to, to - from];
+      for (var c = 0; c < cols.length; c++) row.push(cols[c].values[r]);
+      rows.push(row);
+    }
+  }
+  var checkList = [];
+  for (var k in validated.checks) checkList.push(validated.checks[k]);
+  return { header: header, rows: rows, report: { checks: checkList, nHoles: validated.holes.length, nIntervals: rows.length, dipConvention: validated.dipConvention } };
+}
+
 // -- process.js --
 
 // One-call pipeline: validate → desurvey → composite. What BMA's Aux
@@ -628,6 +658,7 @@ const Drillhole = {
   defaultLength: dhDefaultLength,
   composite: dhComposite,
   process: dhProcess,
+  desurveyIntervals: dhDesurveyIntervals,
   mergeIntervals: dhMergeIntervals,
 };
 
