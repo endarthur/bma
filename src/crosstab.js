@@ -9,7 +9,8 @@
 var crosstabTargetDsId = 'model';
 var crosstabColA = null;          // column index into the target's header (or a calcol idx)
 var crosstabColB = null;
-var crosstabView = 'table';       // table | heatmap (Sankey, bars later)
+var crosstabView = 'table';       // table | heatmap | sankey | bars
+var crosstabBarMode = 'stacked';  // stacked | grouped (bars view)
 var crosstabCellMode = 'count';   // count | rowpct | colpct | totalpct
 var crosstabWorker = null;
 var lastCrosstabData = null;      // the last 'crosstab-complete' message
@@ -93,7 +94,7 @@ function renderCrosstab() {
       '<select class="stats-select" data-xt="colB">' + colOptions(crosstabColB) + '</select></div>' +
     '<div class="crosstab-section"><div class="crosstab-sidebar-title">View</div>' +
       '<select class="stats-select" data-xt="view">' +
-        ['table:Cross-table', 'heatmap:Confusion matrix', 'sankey:Sankey'].map(function (o) {
+        ['table:Cross-table', 'heatmap:Confusion matrix', 'sankey:Sankey', 'bars:Bars'].map(function (o) {
           var p = o.split(':'); return '<option value="' + p[0] + '"' + (p[0] === crosstabView ? ' selected' : '') + '>' + p[1] + '</option>';
         }).join('') +
       '</select></div>' +
@@ -243,6 +244,7 @@ function renderCrosstabResult(data) {
   }
   if (crosstabView === 'heatmap') return renderCrosstabHeatmap(data);
   if (crosstabView === 'sankey') return renderCrosstabSankey(data);
+  if (crosstabView === 'bars') return renderCrosstabBars(data);
   return renderCrosstabTable(data);
 }
 
@@ -410,4 +412,79 @@ function renderCrosstabSankey(data) {
   svg += '</svg>';
 
   content.innerHTML = crosstabCaptionHtml(data, grand) + crosstabNotesHtml(data) + '<div class="crosstab-sankey-wrap">' + svg + '</div>';
+}
+
+// Bars: one cluster per A category, segments coloured by B category. Stacked or
+// grouped (toggle); the Show selector drives absolute counts vs per-row %
+// (a pct mode → 100%-stacked / share-grouped, normalized within each A bar).
+function renderCrosstabBars(data) {
+  var content = crosstabContentEl();
+  var aL = data.aLabels, bL = data.bLabels, M = data.counts;
+  var m = crosstabMargins(data), rowTot = m.rowTot, grand = m.grand;
+  if (!grand) { content.innerHTML = crosstabCaptionHtml(data, grand) + '<div class="crosstab-hint">No data to plot.</div>'; return; }
+  var nA = aL.length, nB = bL.length;
+  var pct = (crosstabCellMode !== 'count');
+  var grouped = (crosstabBarMode === 'grouped');
+  function val(i, j) { return pct ? (rowTot[i] ? M[i][j] / rowTot[i] * 100 : 0) : M[i][j]; }
+
+  var W = 720, mL = 48, mT = 14, mB = 48, legendW = 150;
+  var plotH = 300, H = plotH + mT + mB;
+  var plotW = W - mL - legendW, plotR = W - legendW;
+
+  var maxVal = 1;
+  if (pct) maxVal = 100;
+  else if (grouped) { for (var i = 0; i < nA; i++) for (var j = 0; j < nB; j++) if (M[i][j] > maxVal) maxVal = M[i][j]; }
+  else { maxVal = Math.max.apply(null, rowTot.concat([1])); }
+
+  function ty(v) { return mT + plotH - (v / maxVal) * plotH; }
+  function tickLabel(v) { return pct ? Math.round(v) + '%' : (v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + 'k' : '' + Math.round(v)); }
+
+  var svg = '<svg class="crosstab-bars" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMin meet">';
+  // y gridlines + ticks
+  [0, 0.5, 1].forEach(function (f) {
+    var v = maxVal * f, yy = ty(v);
+    svg += '<line class="crosstab-grid" x1="' + mL + '" y1="' + yy + '" x2="' + plotR + '" y2="' + yy + '"/>';
+    svg += '<text class="crosstab-axis-lbl" x="' + (mL - 6) + '" y="' + (yy + 3) + '" text-anchor="end">' + tickLabel(v) + '</text>';
+  });
+
+  var clusterW = plotW / nA, barPad = clusterW * 0.16;
+  for (var i2 = 0; i2 < nA; i2++) {
+    var cx0 = mL + i2 * clusterW + barPad, cw = clusterW - 2 * barPad;
+    if (grouped) {
+      var sw = cw / nB;
+      for (var j = 0; j < nB; j++) {
+        var v2 = val(i2, j), h2 = (v2 / maxVal) * plotH;
+        svg += '<rect class="crosstab-bar" x="' + (cx0 + j * sw) + '" y="' + (mT + plotH - h2) + '" width="' + (sw * 0.86) + '" height="' + h2 + '" fill="hsl(' + crosstabHue(j) + ',55%,52%)"><title>' + esc(aL[i2]) + ' · ' + esc(bL[j]) + ': ' + M[i2][j].toLocaleString() + '</title></rect>';
+      }
+    } else {
+      var yacc = mT + plotH;
+      for (var j2 = 0; j2 < nB; j2++) {
+        var v3 = val(i2, j2), h3 = (v3 / maxVal) * plotH;
+        svg += '<rect class="crosstab-bar" x="' + cx0 + '" y="' + (yacc - h3) + '" width="' + cw + '" height="' + h3 + '" fill="hsl(' + crosstabHue(j2) + ',55%,52%)"><title>' + esc(aL[i2]) + ' · ' + esc(bL[j2]) + ': ' + M[i2][j2].toLocaleString() + '</title></rect>';
+        yacc -= h3;
+      }
+    }
+    svg += '<text class="crosstab-axis-lbl" x="' + (cx0 + cw / 2) + '" y="' + (mT + plotH + 14) + '" text-anchor="middle">' + esc(aL[i2]) + '</text>';
+  }
+  svg += '<line class="crosstab-axis" x1="' + mL + '" y1="' + (mT + plotH) + '" x2="' + plotR + '" y2="' + (mT + plotH) + '"/>';
+  // legend (B categories)
+  for (var lj = 0; lj < nB; lj++) {
+    var ly = mT + 4 + lj * 18;
+    svg += '<rect x="' + (plotR + 12) + '" y="' + ly + '" width="11" height="11" fill="hsl(' + crosstabHue(lj) + ',55%,52%)"/>';
+    svg += '<text class="crosstab-axis-lbl" x="' + (plotR + 28) + '" y="' + (ly + 10) + '" text-anchor="start">' + esc(bL[lj]) + '</text>';
+  }
+  svg += '</svg>';
+
+  var toggle = '<div class="crosstab-bar-toggle">' +
+    '<button data-bar="stacked"' + (grouped ? '' : ' class="active"') + '>Stacked</button>' +
+    '<button data-bar="grouped"' + (grouped ? ' class="active"' : '') + '>Grouped</button></div>';
+  content.innerHTML = crosstabCaptionHtml(data, grand) + crosstabNotesHtml(data) + toggle + '<div class="crosstab-bars-wrap">' + svg + '</div>';
+
+  content.querySelectorAll('.crosstab-bar-toggle button').forEach(function (btn) {
+    btn.onclick = function () {
+      crosstabBarMode = btn.getAttribute('data-bar');
+      if (lastCrosstabData) renderCrosstabResult(lastCrosstabData);
+      autoSaveProject && autoSaveProject();
+    };
+  });
 }
