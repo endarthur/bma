@@ -4335,6 +4335,10 @@ table.stats tr.stats-delta-row td:first-child {
 .tree-ds-label { color: var(--fg); font-weight: 600; letter-spacing: 0.04em; }
 .tree-ds-file { color: var(--fg-dim); font-size: 0.65rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
 .tree-ds-count { color: var(--fg-dim); font-size: 0.65rem; white-space: nowrap; }
+/* C12-P1b: the dataset-node staleness + Refresh affordance (warn = re-run cue) */
+.tree-ds-stale { color: var(--warn); background: var(--warn-soft); font-family: var(--sans); font-size: 0.58rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.04rem 0.3rem; border-radius: 3px; white-space: nowrap; }
+.tree-ds-refresh { background: none; border: 1px solid var(--warn); color: var(--warn); border-radius: 3px; cursor: pointer; font-size: 0.72rem; line-height: 1; padding: 0.05rem 0.3rem; }
+.tree-ds-refresh:hover { background: var(--warn); color: var(--bg); }
 .tree-ds-note { color: var(--fg-dim); font-family: var(--sans); font-size: 0.72rem; padding: 0.2rem 0.3rem 0; }
 .tree-group { margin: 0.15rem 0 0.15rem 0.3rem; }
 .tree-group > summary {

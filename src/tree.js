@@ -193,6 +193,24 @@ function treePairChip(ds, name) {
   return '<span class="tree-pair tree-pair--orphan" title="no model counterpart — compared nowhere">⇄ —</span>';
 }
 
+// C12-P1b: the unified staleness + Refresh surface. A dataset node shows a
+// "stale" badge + ↻ when its analysis (or the composite it derives from) is
+// stale — one place that follows the whole DAG. Refresh re-runs the right
+// node's derive() (composite first when its recipe changed, so the re-composite
+// cascades into the analysis; else just re-analyze). Only when the dataset has
+// been analyzed (a derivation node exists) — a never-run dataset is incomplete,
+// not stale. Mirrors the per-panel buttons (executeBtn / Analyze) into the tree.
+function treeDsRefreshHtml(ds) {
+  if (typeof derivById !== 'function') return '';
+  var a = derivById('analysis:' + ds), c = derivById('composite:' + ds);
+  var aStale = !!(a && a.stale), cStale = !!(c && c.stale);
+  if (!aStale && !cStale) return '';
+  var target = cStale ? ('composite:' + ds) : ('analysis:' + ds);
+  var title = cStale ? 'Recipe or source changed — re-composite & refresh' : 'Source changed — re-run analysis';
+  return '<span class="tree-ds-stale" title="' + esc(title) + '">stale</span>' +
+    '<button class="tree-ds-refresh" data-refresh="' + esc(target) + '" title="Refresh — ' + esc(title) + '">↻</button>';
+}
+
 function treeDatasetHtml(ds, openState) {
   var v = treeDatasetVars(ds);
   var dsKey = 'ds:' + ds;
@@ -200,6 +218,7 @@ function treeDatasetHtml(ds, openState) {
   var head = '<summary><span class="tree-ds-label">' + esc(dsLabel(ds)) + '</span>' +
     (v && v.fileName ? '<span class="tree-ds-file" title="' + esc(v.fileName) + '">' + esc(v.fileName) + '</span>' : '') +
     (v && v.countNote ? '<span class="tree-ds-count">' + esc(v.countNote) + '</span>' : '') +
+    (v ? treeDsRefreshHtml(ds) : '') +
     '</summary>';
 
   if (!v) {
@@ -506,6 +525,14 @@ function treeToggleRole(t, role) {
       }
     });
     $tree.addEventListener('click', function(e) {
+      // C12-P1b: Refresh a stale derivation. preventDefault so the click on the
+      // button inside <summary> doesn't toggle the dataset's open/closed state.
+      var refresh = e.target.closest('[data-refresh]');
+      if (refresh) {
+        e.preventDefault(); e.stopPropagation();
+        if (typeof derivRefresh === 'function') derivRefresh(refresh.getAttribute('data-refresh'));
+        return;
+      }
       var add = e.target.closest('[data-tree-add]');
       if (add) {
         // A10 #18: a small menu of add paths, anchored under the button.

@@ -442,6 +442,7 @@ function markAuxStale(ds, root) {
   if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]', root), true);  // C6-5: back to orange call-to-action
   var $st = auxQ('[data-aux="analyzeStatus"]', root);
   if ($st) { $st.textContent = '↻ config changed — re-run Analyze'; $st.style.color = 'var(--warn)'; }
+  if (typeof renderTree === 'function') renderTree();   // C12-P1b: the tree stale badge follows
 }
 
 // ─── Cell declustering (GSLIB DECLUS in the worker) ────────────────────

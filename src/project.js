@@ -1821,6 +1821,7 @@ function markAnalysisStale() {
   analysisStale = true;
   const btn = document.getElementById('executeBtn');
   if (btn) btn.classList.remove('clean');
+  if (typeof renderTree === 'function') renderTree();   // C12-P1b: the tree stale badge follows
 }
 
 function executeAnalysis() {
