@@ -587,10 +587,20 @@ function crosstabBuildInstancePanel(instId) {
   el.setAttribute('data-xt-inst', instId);
   el.setAttribute('data-tab', instId);
   el.classList.add('active');
-  renderCrosstab(el);                                  // data-xt sidebar/content survive cloneNode
-  var S = crosstabInstances[instId];
-  if (S.lastData) renderCrosstabResult(S.lastData, el);
   crosstabInstanceEls[instId] = el;
+  var S = crosstabInstances[instId];
+  // A restored clone carries a _pendingConfig (cols by name). rails builds inactive
+  // clone panels lazily — on activation — which may be AFTER the analysis that
+  // crosstabApplyAllInstances ran on. So resolve the pending config here too, once
+  // the target is analyzed; otherwise leave it for applyAll (build before analysis).
+  var ctx = crosstabCtx(el);
+  if (S._pendingConfig && ctx && ctx.categories && Object.keys(ctx.categories).length >= 2) {
+    crosstabApplyConfig(el, S._pendingConfig);          // applyConfig renders
+    delete S._pendingConfig;
+  } else {
+    renderCrosstab(el);                                 // data-xt sidebar/content survive cloneNode
+    if (S.lastData) renderCrosstabResult(S.lastData, el);
+  }
   return el;
 }
 
