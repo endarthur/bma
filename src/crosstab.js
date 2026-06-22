@@ -565,3 +565,108 @@ function renderCrosstabBars(data, root) {
     };
   });
 }
+
+// ─── A19-clone: cloneable Cross-tab panels (own worker per clone) ──────────
+// Like Swath/GT, each clone is a FULLY independent cross-tab (own target,
+// columns, weight, view, worker, results). The panel is template-structured, so
+// a clone is #panelCrosstab cloned with ids stripped + data-xt-inst tagged; its
+// state lives in crosstabInstances[id]; DOM resolves via the clone root.
+var crosstabInstSeq = 1;
+var crosstabInstanceEls = {};   // instId -> built clone element
+function crosstabNextInstId() { crosstabInstSeq += 1; return 'crosstab#' + crosstabInstSeq; }
+
+function crosstabBuildInstancePanel(instId) {
+  var tmpl = document.getElementById('panelCrosstab');
+  if (!tmpl) return null;
+  // rails may call renderPanel more than once per tab id — return the SAME clone
+  if (crosstabInstanceEls[instId] && document.contains(crosstabInstanceEls[instId])) return crosstabInstanceEls[instId];
+  if (!crosstabInstances[instId]) crosstabInstances[instId] = crosstabNewInstState();
+  var el = tmpl.cloneNode(true);
+  el.removeAttribute('id');
+  el.querySelectorAll('[id]').forEach(function (n) { n.removeAttribute('id'); });
+  el.setAttribute('data-xt-inst', instId);
+  el.setAttribute('data-tab', instId);
+  el.classList.add('active');
+  renderCrosstab(el);                                  // data-xt sidebar/content survive cloneNode
+  var S = crosstabInstances[instId];
+  if (S.lastData) renderCrosstabResult(S.lastData, el);
+  crosstabInstanceEls[instId] = el;
+  return el;
+}
+
+function crosstabDisposeInstance(instId) {
+  var st = crosstabInstances[instId];
+  if (st && st.worker) { try { st.worker.terminate(); } catch (e) {} }
+  delete crosstabInstances[instId];
+  delete crosstabInstanceEls[instId];
+}
+
+// A clone's config = its selections, columns/weight BY NAME against its target.
+function crosstabConfigHeader(targetDsId) {
+  if (targetDsId === 'model') return currentHeader;
+  var ds = dsById(targetDsId);
+  return (ds && ds.complete && ds.complete.header) || null;
+}
+function crosstabSerializeConfig(root) {
+  var S = crosstabStateForRoot(root), hdr = crosstabConfigHeader(S.targetDsId);
+  return {
+    targetDsId: S.targetDsId,
+    colA: (S.colA != null && hdr && hdr[S.colA]) ? hdr[S.colA] : null,
+    colB: (S.colB != null && hdr && hdr[S.colB]) ? hdr[S.colB] : null,
+    weightCol: (S.weightCol != null && hdr && hdr[S.weightCol]) ? hdr[S.weightCol] : null,
+    view: S.view, barMode: S.barMode, cellMode: S.cellMode
+  };
+}
+function crosstabApplyConfig(root, cfg) {
+  if (!cfg) return;
+  var S = crosstabStateForRoot(root);
+  S.targetDsId = cfg.targetDsId || 'model';
+  S.view = cfg.view || 'table'; S.barMode = cfg.barMode || 'stacked'; S.cellMode = cfg.cellMode || 'count';
+  var hdr = crosstabConfigHeader(S.targetDsId);
+  function idx(name) { return (name && hdr && hdr.indexOf(name) >= 0) ? hdr.indexOf(name) : null; }
+  S.colA = idx(cfg.colA); S.colB = idx(cfg.colB); S.weightCol = idx(cfg.weightCol);
+  renderCrosstab(root);
+}
+
+function crosstabSerializeInstances() {
+  var out = [];
+  Object.keys(crosstabInstances).forEach(function (id) {
+    var root = crosstabInstanceEls[id];
+    var live = root && document.contains(root) && crosstabSidebarEl(root) && crosstabSidebarEl(root).querySelector('[data-xt="colA"]');
+    var cfg = live ? crosstabSerializeConfig(root) : crosstabInstances[id]._pendingConfig;
+    out.push({ id: id, config: cfg || null });
+  });
+  return out;
+}
+function crosstabResetInstances() {
+  if (typeof surfaceCloseInstTabs === 'function') surfaceCloseInstTabs(crosstabInstances, crosstabDisposeInstance);
+  crosstabInstances = {}; crosstabInstanceEls = {}; crosstabInstSeq = 1;
+}
+// Recreate clone instances from a serialized list BEFORE the layout deserialize
+// rebuilds their tabs; config stays pending until crosstabApplyAllInstances.
+function crosstabRestoreInstances(list) {
+  crosstabResetInstances();
+  if (!Array.isArray(list)) return;
+  var maxSeq = 1;
+  list.forEach(function (rec) {
+    if (!rec || !rec.id) return;
+    var st = crosstabNewInstState();
+    if (rec.config) st._pendingConfig = rec.config;
+    crosstabInstances[rec.id] = st;
+    var m = /^crosstab#(\d+)$/.exec(rec.id);
+    if (m) maxSeq = Math.max(maxSeq, parseInt(m[1], 10));
+  });
+  crosstabInstSeq = maxSeq;
+}
+// After an analysis lands + clone roots are built, apply each restored clone's
+// pending config (resolves columns by name against its now-analyzed target).
+function crosstabApplyAllInstances() {
+  Object.keys(crosstabInstances).forEach(function (id) {
+    var st = crosstabInstances[id];
+    if (!st._pendingConfig) return;
+    var root = crosstabInstanceEls[id];
+    if (!root || !document.contains(root)) return;
+    crosstabApplyConfig(root, st._pendingConfig);
+    delete st._pendingConfig;
+  });
+}

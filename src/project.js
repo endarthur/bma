@@ -480,6 +480,9 @@ function serializePanelState() {
     },
     exportp: {
       instances: (typeof exportSerializeInstances === 'function') ? exportSerializeInstances() : []   // A10 G5b: cloned Export panels
+    },
+    crosstab: {
+      instances: (typeof crosstabSerializeInstances === 'function') ? crosstabSerializeInstances() : []   // A19-clone: cloned Cross-tab panels
     }
   };
 }
@@ -884,6 +887,11 @@ async function applyProject(project) {
   if (typeof exportRestoreInstances === 'function') {
     exportRestoreInstances(project.panels && project.panels.exportp && project.panels.exportp.instances);
   }
+  // A19-clone: same — recreate cloned Cross-tab instances (config pending) before
+  // the layout deserialize; resolved post-analysis by crosstabApplyAllInstances.
+  if (typeof crosstabRestoreInstances === 'function') {
+    crosstabRestoreInstances(project.panels && project.panels.crosstab && project.panels.crosstab.instances);
+  }
   // Phase 6: register comparison-dataset instances (d2+) in the registry NOW —
   // before the layout deserialize — so wsSanitizeLayout keeps their tabs at the
   // SAVED dock position instead of dropping them (displayResults would re-add at
@@ -1239,6 +1247,7 @@ function clearProject() {
   panelState.categories.dsHidden = new Set();
   if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
   if (typeof swResetInstances === 'function') swResetInstances();    // Swath s-5: drop cloned Swath panels
+  if (typeof crosstabResetInstances === 'function') crosstabResetInstances();   // A19-clone: drop cloned Cross-tab panels
   if (typeof statResetInstances === 'function') statResetInstances();  // Statistics st-5: drop cloned Statistics panels
   if (typeof gtResetInstances === 'function') gtResetInstances();      // G3b-4: drop cloned GT panels
   if (typeof statsCatResetInstances === 'function') statsCatResetInstances();  // G4b: drop cloned StatsCat panels
@@ -1463,6 +1472,7 @@ function resetProjectState() {
   panelState.categories.dsHidden = new Set();
   if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
   if (typeof swResetInstances === 'function') swResetInstances();    // Swath s-5: drop cloned Swath panels
+  if (typeof crosstabResetInstances === 'function') crosstabResetInstances();   // A19-clone: drop cloned Cross-tab panels
   if (typeof statResetInstances === 'function') statResetInstances();  // Statistics st-5: drop cloned Statistics panels
   if (typeof gtResetInstances === 'function') gtResetInstances();      // G3b-4: drop cloned GT panels
   if (typeof statsCatResetInstances === 'function') statsCatResetInstances();  // G4b: drop cloned StatsCat panels
@@ -1894,6 +1904,7 @@ $backToPreflight.addEventListener('click', () => {
   panelState.categories.dsHidden = new Set();
   if (typeof catResetInstances === 'function') catResetInstances();  // 4e-c-5: drop cloned Categories panels
   if (typeof swResetInstances === 'function') swResetInstances();    // Swath s-5: drop cloned Swath panels
+  if (typeof crosstabResetInstances === 'function') crosstabResetInstances();   // A19-clone: drop cloned Cross-tab panels
   if (typeof statResetInstances === 'function') statResetInstances();  // Statistics st-5: drop cloned Statistics panels
   if (typeof gtResetInstances === 'function') gtResetInstances();      // G3b-4: drop cloned GT panels
   if (typeof statsCatResetInstances === 'function') statsCatResetInstances();  // G4b: drop cloned StatsCat panels
@@ -2589,6 +2600,7 @@ function displayResults(data) {
   renderGtConfig(data);
   renderSwathConfig(data);
   if (typeof renderCrosstab === 'function') renderCrosstab();   // A19 cross-tab sidebar (columns from the model analysis)
+  if (typeof crosstabApplyAllInstances === 'function') crosstabApplyAllInstances();   // A19-clone: re-apply restored Cross-tab clone configs
   if (typeof swApplyAllInstances === 'function') swApplyAllInstances();      // s-5: re-apply restored clone configs
   if (typeof gtApplyAllInstances === 'function') gtApplyAllInstances();      // G3b-4: re-apply restored GT clone configs
   if (typeof swRefreshAllInstances === 'function') swRefreshAllInstances();  // follow-up: refresh live clone sidebars on re-analysis

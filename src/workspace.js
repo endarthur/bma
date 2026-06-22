@@ -186,6 +186,11 @@ function wsRehomePanel(tab, wrapper) {
     exportDisposeInstance(tab.id);
     return;
   }
+  // A19-clone: a closed Cross-tab clone is discarded with its state + worker.
+  if (typeof crosstabInstances !== 'undefined' && crosstabInstances[tab.id]) {
+    crosstabDisposeInstance(tab.id);
+    return;
+  }
   // A10 1g-c: instance dataset panels (d2+) are throwaway clones — their state
   // lives in the ds object and renderPanel rebuilds on reopen, so discard them
   // (re-home only the static singletons + the tree).
@@ -334,6 +339,21 @@ function wsSpawnCategoriesInstance(seedFocusedCol, seedChartShowAll, seedTargetD
 
 // A10 Swath s-4b: spawn a cloned Swath analysis panel. Starts with a fresh
 // (default) config; the user picks directions/vars and Generates its own run.
+// A19-clone: spawn a cloned Cross-tab panel. Each clone runs its OWN worker on
+// its OWN target/columns/weight (independent cross-tabs). Duplicate carries the
+// source panel's config via crosstabApplyConfig.
+function wsSpawnCrosstabInstance(seedConfig) {
+  if (!wsRails || typeof crosstabNextInstId !== 'function') { showPanel('crosstab'); return; }
+  var instId = crosstabNextInstId();
+  if (typeof crosstabInstances !== 'undefined' && typeof crosstabNewInstState === 'function') crosstabInstances[instId] = crosstabNewInstState();
+  wsRails.addTab({ id: instId, title: 'Cross-tab', closeable: true }, wsMainTarget());
+  wsRails.activateTab(instId);                 // renderPanel → crosstabBuildInstancePanel
+  if (seedConfig && typeof crosstabApplyConfig === 'function') {   // Duplicate: carry the source config
+    var root = document.querySelector('[data-xt-inst="' + instId + '"]');
+    if (root) crosstabApplyConfig(root, seedConfig);
+  }
+}
+
 function wsSpawnSwathInstance(seedConfig) {
   if (!wsRails || typeof swNextInstId !== 'function') { showPanel('swath'); return; }
   var instId = swNextInstId();
@@ -567,6 +587,7 @@ function wsNewTabMenuItems() {
   items.push({ label: 'New GT panel', action: 'newGt' });                   // A10 G3b
   items.push({ label: 'New StatsCat panel', action: 'newStatsCat' });       // A10 G4b
   items.push({ label: 'New Export panel', action: 'newExport' });           // A10 G5b
+  items.push({ label: 'New Cross-tab panel', action: 'newCrosstab' });      // A19-clone
   return items;
 }
 
@@ -694,6 +715,7 @@ function wsMenuAction(a) {
     case 'newGt': if (typeof wsSpawnGtInstance === 'function') wsSpawnGtInstance(); break;
     case 'newStatsCat': if (typeof wsSpawnStatsCatInstance === 'function') wsSpawnStatsCatInstance(); break;
     case 'newExport': if (typeof wsSpawnExportInstance === 'function') wsSpawnExportInstance(); break;
+    case 'newCrosstab': if (typeof wsSpawnCrosstabInstance === 'function') wsSpawnCrosstabInstance(); break;
     case 'addPoint': wsAddPointDataset(); break;
     case 'addDrillhole': wsAddDrillholeDataset(); break;
     case 'help': toggleHelp(); break;
@@ -740,6 +762,10 @@ function buildRailsShell(host) {
       // A10 G5b: a cloned Export panel (export#N)
       if (typeof exportBuildInstancePanel === 'function' && tab.id.indexOf('export#') === 0) {
         return exportBuildInstancePanel(tab.id);
+      }
+      // A19-clone: a cloned Cross-tab panel (crosstab#N)
+      if (typeof crosstabBuildInstancePanel === 'function' && tab.id.indexOf('crosstab#') === 0) {
+        return crosstabBuildInstancePanel(tab.id);
       }
       // A10 1g-c: a dataset instance tab (d2+) → build its panel from the ds
       var ds = (typeof dsById === 'function') ? dsById(tab.id) : null;
@@ -824,11 +850,12 @@ function buildRailsShell(host) {
     var isGt = ev.tab.id === 'gt' || ev.tab.id.indexOf('gt#') === 0;
     var isStatsCat = ev.tab.id === 'statscat' || ev.tab.id.indexOf('statscat#') === 0;
     var isExport = ev.tab.id === 'export' || ev.tab.id.indexOf('export#') === 0;
+    var isCrosstab = ev.tab.id === 'crosstab' || ev.tab.id.indexOf('crosstab#') === 0;
     var items = [
       inFloat ? { label: 'Dock', action: 'dock' } : { label: 'Float', action: 'float' },
       { label: 'Move to new rail', action: 'rail' },
     ];
-    if (isCat || isSwath || isStats || isGt || isStatsCat || isExport) items.push({ label: 'Duplicate', action: 'duplicate' });   // A10 clone arcs
+    if (isCat || isSwath || isStats || isGt || isStatsCat || isExport || isCrosstab) items.push({ label: 'Duplicate', action: 'duplicate' });   // A10 clone arcs + A19
     items.push('---', { label: 'Close', action: 'close' });
     if (ev.stack.tabs.length > 1) items.push({ label: 'Close others in stack', action: 'close-others' });
     Menu.show(items, { x: ev.x, y: ev.y }).then(function(a) {
@@ -854,6 +881,10 @@ function buildRailsShell(host) {
           var exRoot = ev.tab.id === 'export' ? null : document.querySelector('[data-export-inst="' + ev.tab.id + '"]');
           var exTarget = (typeof exportInstTarget === 'function') ? exportInstTarget(exRoot) : 'model';
           wsSpawnExportInstance(exTarget);   // carry the source panel's target dataset (G5b)
+        } else if (isCrosstab) {
+          var xtRoot = ev.tab.id === 'crosstab' ? document.getElementById('panelCrosstab') : document.querySelector('[data-xt-inst="' + ev.tab.id + '"]');
+          var xtCfg = (xtRoot && typeof crosstabSerializeConfig === 'function') ? crosstabSerializeConfig(xtRoot) : null;
+          wsSpawnCrosstabInstance(xtCfg);   // carry the source panel's target/columns/weight/view (A19-clone)
         } else {
           var src = ev.tab.id === 'categories' ? panelState.categories : (typeof catInstances !== 'undefined' ? catInstances[ev.tab.id] : null);
           wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false, src ? src.catTargetDsId : 'model');
@@ -991,6 +1022,7 @@ function wsSanitizeLayout(st) {
   if (typeof gtInstances !== 'undefined') Object.keys(gtInstances).forEach(function(id) { known[id] = true; });
   if (typeof statsCatInstances !== 'undefined') Object.keys(statsCatInstances).forEach(function(id) { known[id] = true; });
   if (typeof exportInstances !== 'undefined') Object.keys(exportInstances).forEach(function(id) { known[id] = true; });
+  if (typeof crosstabInstances !== 'undefined') Object.keys(crosstabInstances).forEach(function(id) { known[id] = true; });   // A19-clone
   // Phase 6: comparison-dataset instance tabs (d2+) survive sanitize once their
   // registry entry exists (registered before the layout deserialize), so their
   // saved dock position is preserved across a reload.
