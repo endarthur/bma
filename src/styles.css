@@ -5468,13 +5468,22 @@ table.stats tr.stats-delta-row td:first-child {
 .dh-check-bhids { color: var(--fg-dim); padding: 0.2rem 0 0.2rem 1rem; word-break: break-all; }
 
 .dh-provenance {
-  display: flex; align-items: center; gap: 0.6rem;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem;
   font-size: 0.64rem; color: var(--fg-dim);
-  padding: 0.2rem 0 0;
+  padding: 0.3rem 0.5rem; margin-top: 0.3rem;
   flex-basis: 100%;
+  background: var(--bg1); border: 1px solid var(--border); border-radius: 4px;
 }
+.dh-prov-summary { font-family: var(--sans); font-size: 0.72rem; }
+.dh-prov-summary b { color: var(--fg); }
+.dh-prov-files { color: var(--fg-dim); }
+.dh-prov-actions { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-left: auto; }
+.dh-prov-len { display: inline-flex; align-items: center; gap: 0.25rem; font-family: var(--sans); }
+.dh-prov-len input { width: 4rem; }
+.dh-prov-emit { display: inline-flex; align-items: center; gap: 0.3rem; font-family: var(--sans); text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.58rem; color: var(--fg-dim); }
 .dh-provenance button {
   background: none; border: 1px solid var(--border); border-radius: 3px;
-  color: var(--fg-dim); font: 0.65rem var(--mono); padding: 0.1rem 0.4rem; cursor: pointer;
+  color: var(--fg-dim); font: 0.65rem var(--mono); padding: 0.15rem 0.45rem; cursor: pointer;
 }
 .dh-provenance button:hover { color: var(--action); border-color: var(--action); }
+.dh-provenance .dh-emit-btn { color: var(--fg); }

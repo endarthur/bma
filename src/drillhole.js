@@ -949,20 +949,38 @@ function renderDhProvenance(ds) {
   var old = $head.querySelector('.dh-provenance');
   if (old) old.remove();
   if (!ds.file || !D.derivedName || ds.file.name !== D.derivedName || !D.lastReport) return;
+  // A11 slice 5: the provenance banner is now an always-visible container
+  // TOOLBAR — the common set actions (re-composite at a length, emit collar/
+  // composites) live here so they no longer need the "Edit & re-composite"
+  // reveal. The full mapping card stays behind "Edit…" for deep edits.
   var div = document.createElement('div');
   div.className = 'dh-provenance';
-  div.innerHTML = '<span>' + D.lastReport.nComposites.toLocaleString() + ' composites from ' +
-    D.lastReport.nHoles + ' holes · ' + D.provFiles.map(esc).join(' + ') + '</span>' +
-    '<button data-dh="provReport">Report</button>' +
-    '<button data-dh="provEdit">Edit &amp; re-composite</button>';
+  div.innerHTML =
+    '<div class="dh-prov-summary"><b>' + D.lastReport.nComposites.toLocaleString() + '</b> composites · ' +
+      D.lastReport.nHoles + ' holes · <span class="dh-prov-files">' + D.provFiles.map(esc).join(' + ') + '</span></div>' +
+    '<div class="dh-prov-actions">' +
+      '<label class="dh-prov-len">length <input type="number" data-dh="provLen" class="dh-narrow" min="0" step="any" value="' + esc(D.opts.length) + '"></label>' +
+      '<button data-dh="provRecomposite" title="Re-derive this composite at the length above, in place">↻ Re-composite</button>' +
+      '<span class="dh-prov-emit">emit ' +
+        '<button class="dh-emit-btn" data-dh="emitCollar" title="Collar table as a point dataset">⬡ Collar</button>' +
+        '<button class="dh-emit-btn" data-dh="emitComposite" title="Another composite at the length above, as its own dataset">⬡ Composite</button>' +
+      '</span>' +
+      '<button data-dh="provReport">Report</button>' +
+      '<button data-dh="provEdit" title="Full mapping / splits / combine editor">Edit…</button>' +
+    '</div>';
   $head.appendChild(div);
-  div.querySelector('[data-dh="provReport"]').addEventListener('click', function() { dhOpenReportModal(ds); });
-  // Non-destructive: reveal the drillhole card (slots/mapping/options) in place
-  // WITHOUT unloading the composite — edit a setting and "Composite & load ▶"
-  // re-derives over it, or "← Back to results" returns. (No more unload dance.)
-  div.querySelector('[data-dh="provEdit"]').addEventListener('click', function() {
-    dhShowEditCard(ds);
+  var $len = div.querySelector('[data-dh="provLen"]');
+  if ($len) $len.addEventListener('change', function() {
+    D.opts.length = $len.value;                 // keep in sync with the card's length field
+    dhMarkCompositeStaleIfLoaded(ds);
+    dhAutoSave();
   });
+  div.querySelector('[data-dh="provRecomposite"]').addEventListener('click', function() { dhCompositeAndLoad(ds); });
+  div.querySelector('[data-dh="emitCollar"]').addEventListener('click', function() { dhEmitDataset(ds, 'collar'); });
+  div.querySelector('[data-dh="emitComposite"]').addEventListener('click', function() { dhEmitDataset(ds, 'composite'); });
+  div.querySelector('[data-dh="provReport"]').addEventListener('click', function() { dhOpenReportModal(ds); });
+  // "Edit…" reveals the full mapping card (non-destructive — composite stays loaded).
+  div.querySelector('[data-dh="provEdit"]').addEventListener('click', function() { dhShowEditCard(ds); });
 }
 
 // Toggle a dataset panel between the composite RESULTS (config view) and the
