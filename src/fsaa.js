@@ -243,17 +243,27 @@ function fsaaAfterMountChange() {
   if (mountedFolder && typeof autoSaveProject === 'function') autoSaveProject();
 }
 
-// Show + wire the landing "Open project folder" button (the only mount affordance
-// on the starting screen — the File-menu one needs a loaded file to exist).
+// Landing affordances (the starting-screen mount — the File-menu one needs a
+// loaded file). "Open project folder" picks any folder; when a folder was used
+// before, a one-click "Reopen <name>" appears too (open-recent-folder). A refresh
+// returns to the landing — reopening is a deliberate click, not automatic.
 function fsaaInitLanding() {
-  var btn = document.getElementById('landingMountBtn');
-  if (!btn) return;
-  if (!fsaaSupported()) { btn.style.display = 'none'; return; }
-  btn.style.display = '';
-  btn.onclick = function () { fsaaMountFolder(); };   // a click is the user gesture showDirectoryPicker needs
+  var open = document.getElementById('landingMountBtn');
+  var reopen = document.getElementById('landingReopenBtn');
+  if (!open) return;
+  if (!fsaaSupported()) { open.style.display = 'none'; if (reopen) reopen.style.display = 'none'; return; }
+  open.style.display = '';
+  open.onclick = function () { fsaaMountFolder(); };   // a click is the gesture showDirectoryPicker needs
+  if (!reopen) return;
+  fsaaLoadHandle().then(function (h) {
+    if (!h || !h.name) { reopen.style.display = 'none'; return; }
+    reopen.textContent = '↻ Reopen ' + h.name;
+    reopen.title = 'Reopen the last project folder — no folder picker';
+    reopen.style.display = '';
+    reopen.onclick = function () { fsaaReopenFolder().then(function (ok) { if (ok) fsaaMaybeOpenProject(); }); };
+  }).catch(function () {});
 }
 
-// Startup: wire the landing button + silently restore a persisted folder (which
-// reopens its project). No-op where unsupported / no saved handle.
+// Startup: wire the landing affordances. NO auto-mount/auto-open — a refresh lands
+// on the starting screen; the user clicks Open or Reopen.
 if (typeof document !== 'undefined') { try { fsaaInitLanding(); } catch (e) {} }
-if (typeof indexedDB !== 'undefined') { try { fsaaTryRestoreOnLoad(); } catch (e) {} }
