@@ -3749,6 +3749,9 @@ table.cat-values td.cat-pct-cell {
   font-family: var(--sans);
   color: var(--warn);
 }
+/* C12-P1: a composite whose recipe/sources changed — emphasize "re-composite"
+   without dimming (the fresh look is unchanged). */
+.dh-go--stale { border-color: var(--warn) !important; color: var(--warn) !important; }
 .filter-section { display: none; flex: 1; min-width: 0; }
 .filter-section.active { display: flex; justify-content: flex-end; }
 .filter-editor-body {

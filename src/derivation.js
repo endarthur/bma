@@ -58,8 +58,8 @@ function derivForDrillhole(ds) {
       return s;
     },
     derive: function () { return dhCompositeAndLoad(ds); },
-    stale: function () { return false; },              // P1: real composite staleness
-    output: function () { return ds.file || null; },   // the in-memory composite File
+    stale: function () { return !!D._stale; },          // C12-P1: set when the recipe / sources change after a composite
+    output: function () { return ds.file || null; },    // the in-memory composite File
   });
 }
 
@@ -120,4 +120,67 @@ function derivById(did) {
   var all = derivAll();
   for (var i = 0; i < all.length; i++) if (all[i].id === did) return all[i];
   return null;
+}
+
+// ─── C12-P1: staleness propagation over the DAG ────────────────────────────
+// P0 named the nodes; P1 lets a change at one node flag every node DOWNSTREAM of
+// it stale, and refreshes a node by re-running its derive(). Staleness stays
+// single-source: an analysis node's stale is its dataset's existing flag
+// (ds.stale / analysisStale), a composite node's is D._stale. derivMarkStale
+// routes through the existing markers — it adds topology (propagation) + a
+// uniform entry point, not a second copy of the truth. Design:
+// docs/derivation-lineage.md §"Staleness propagation".
+
+// The nodes that list `id` among their sources (its immediate downstream).
+function derivConsumers(id) {
+  var all = derivAll(), out = [];
+  for (var i = 0; i < all.length; i++) {
+    var s = all[i].sources;
+    for (var j = 0; j < s.length; j++) {
+      if (s[j].kind === 'derivation' && s[j].id === id) { out.push(all[i]); break; }
+    }
+  }
+  return out;
+}
+
+// Set ONE node's stale through its authoritative flag (no propagation). The
+// existing per-surface UI reacts (model executeBtn, aux Analyze button, the dh
+// composite button); P1-b adds the tree badge on top. markAuxStale/
+// markAnalysisStale own the freshen side via the analyze-complete handlers, so
+// derivSetNodeStale only drives the stale (true) direction for analysis nodes.
+function derivSetNodeStale(id, stale) {
+  var p = id.indexOf(':'); if (p < 0) return;
+  var kind = id.slice(0, p), dsId = id.slice(p + 1);
+  if (kind === 'composite') {
+    var dsc = (typeof dsById === 'function') ? dsById(dsId) : null;
+    if (!dsc || typeof dhStateFor !== 'function') return;
+    dhStateFor(dsc)._stale = !!stale;
+    if (typeof dhReflectStale === 'function') dhReflectStale(dsc);
+  } else if (kind === 'analysis' && stale) {
+    var ds = (typeof dsById === 'function') ? dsById(dsId) : null;
+    if (!ds) return;
+    if (dsId === 'model') { if (typeof markAnalysisStale === 'function') markAnalysisStale(); }
+    else if (typeof runAuxAnalysis === 'function' && typeof markAuxStale === 'function') markAuxStale(ds);
+  }
+  if (typeof renderTree === 'function') renderTree();   // P1-b: the tree badge follows the flag
+}
+
+// Mark a derivation stale and propagate to everything downstream (topological
+// walk, visited-guarded — the DAG is acyclic by construction; cycles are
+// rejected at binding time, P2). The no-silent-stale rule (A9) generalized to
+// derived data: a source change never silently leaves a stale composite/analysis.
+function derivMarkStale(id, _seen) {
+  _seen = _seen || {};
+  if (_seen[id]) return;
+  _seen[id] = true;
+  derivSetNodeStale(id, true);
+  var cons = derivConsumers(id);
+  for (var i = 0; i < cons.length; i++) derivMarkStale(cons[i].id, _seen);
+}
+
+// Refresh = re-run a stale node's derive() (and, via the load → analyze chain,
+// its downstream). The tree Refresh action (P1-b) calls this.
+function derivRefresh(id) {
+  var d = derivById(id);
+  return d ? d.derive() : undefined;
 }

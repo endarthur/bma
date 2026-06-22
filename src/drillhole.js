@@ -336,6 +336,10 @@ async function dhAssignFiles(ds, files) {
     dhSetStatus(ds, 'Read failed: ' + err.message, true);
   }
   renderDhCard(ds);
+  // C12-P1: re-dropping a source file after a composite exists invalidates it
+  // (and propagates to the analysis). A pending restore that auto-recomposites
+  // below clears it again; a plain user re-drop leaves the cue up until re-run.
+  dhMarkCompositeStaleIfLoaded(ds);
   dhTryApplyPendingRestore(ds); // saved recipe applies when its files land
   dhAutoSave();
 }
@@ -617,7 +621,9 @@ function renderDhMapping(ds) {
 
   html += '<div class="dh-actions">' +
     '<button class="dh-go" data-dh="go"' + (dhMappingComplete(ds) ? '' : ' disabled') + '>Composite &amp; load ▶</button>' +
-    '<span class="dh-status" data-dh="status"></span></div>';
+    '<span class="dh-status" data-dh="status"></span>' +
+    // C12-P1: revealed by setGenStale when the recipe/sources change after a composite (no-silent-stale)
+    '<span class="gen-stale-note" style="display:none">↻ recipe changed — re-composite</span></div>';
 
   $m.innerHTML = html;
   // density select applied after render (option list is data-driven; splits are
@@ -625,6 +631,33 @@ function renderDhMapping(ds) {
   var $dens = dhQ('[data-dh="density"]', root);
   if ($dens && D.opts.densityCol) $dens.value = D.opts.densityCol;
   dhRenderIvtStatus(ds);   // A11 P2: calc-column / kept-row / error summary
+  dhReflectStale(ds);      // C12-P1: restore the stale "re-composite" cue across a re-render
+}
+
+// ── C12-P1: composite staleness ──────────────────────────────────────────
+// A composite Derivation goes stale when its recipe or sources change after one
+// was produced (re-drop a file, edit a compositing option / mapping / split /
+// density / combine / convention). dhReflectStale paints the cue on the
+// "Composite & load" button via the shared C6-5 gen-stale pattern;
+// dhMarkCompositeStaleIfLoaded routes through derivMarkStale so the staleness
+// PROPAGATES to the dataset's analysis (its downstream node). No-silent-stale.
+function dhReflectStale(ds) {
+  var root = dhCardRoot(ds);
+  if (!root) return;
+  var stale = !!dhStateFor(ds)._stale;
+  // Show the "re-composite" cue + emphasize the button WITHOUT dimming it when
+  // fresh (so the loaded-state look is unchanged from today — no gen-done flip).
+  var note = root.querySelector('.dh-actions .gen-stale-note');
+  if (note) note.style.display = stale ? 'block' : 'none';
+  var go = root.querySelector('[data-dh="go"]');
+  if (go) go.classList.toggle('dh-go--stale', stale);
+}
+function dhMarkCompositeStaleIfLoaded(ds) {
+  // Only meaningful once a composite has been produced for this set; the first
+  // drop / mapping edits before any composite are not "stale", just incomplete.
+  if (dhStateFor(ds).derivedName && typeof derivMarkStale === 'function') {
+    derivMarkStale('composite:' + ds.id);
+  }
 }
 
 // A11 P3: per-column combine rules — how each interval data column aggregates
@@ -840,6 +873,9 @@ function dhCompositeAndLoad(ds) {
   D.provFiles = [D.files.collar.name, D.files.survey.name, D.files.intervals.name];
   var file = new File([lines.join('\n') + '\n'], D.derivedName, { type: 'text/csv' });
 
+  // C12-P1: a fresh composite clears the recipe-stale cue (its derive() just ran)
+  D._stale = false;
+  dhReflectStale(ds);
   // SUPPORT is the support weight by construction — assign the role before
   // the load so the dataset sidebar renders with it selected (visible, not magic)
   catSetRole(ds.id, 'weight', 'SUPPORT');
@@ -1141,6 +1177,7 @@ function wireDhCard(root, ds) {
         if (parts[0] === 'survey' && parts[1] === 'dip') D.dipConvention = dhDetectConventionFromParsed(ds);
       }
       renderDhMapping(ds);
+      dhMarkCompositeStaleIfLoaded(ds);   // C12-P1: a mapping change invalidates the composite
       dhAutoSave();
       return;
     }
@@ -1182,6 +1219,10 @@ function wireDhCard(root, ds) {
         dhAutoSave();
       }
     }
+    // C12-P1: any compositing-recipe edit invalidates the composite + propagates
+    // to its analysis. ivtCalc/ivtFilter are export-only (A11 P2) → not a recipe
+    // change, so they are excluded.
+    if (k && k !== 'ivtCalc' && k !== 'ivtFilter') dhMarkCompositeStaleIfLoaded(ds);
   });
   $card.addEventListener('click', function(e) {
     var btn = e.target.closest ? e.target.closest('[data-dh]') : null;
