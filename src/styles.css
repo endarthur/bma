@@ -5316,6 +5316,11 @@ table.stats tr.stats-delta-row td:first-child {
   color: var(--fg-dim); font: 0.65rem var(--mono); padding: 0.15rem 0.45rem; cursor: pointer;
 }
 .dh-clear-btn:hover { color: var(--red); border-color: var(--red); }
+.dh-back-btn {
+  background: none; border: 1px solid var(--border); border-radius: 3px;
+  color: var(--fg-dim); font: 0.65rem var(--mono); padding: 0.15rem 0.45rem; cursor: pointer; margin-right: 0.4rem;
+}
+.dh-back-btn:hover { color: var(--action); border-color: var(--action); }
 
 .dh-slots { display: flex; gap: 0.6rem; }
 .dh-slot {

@@ -423,6 +423,10 @@ function renderDhCard(ds) {
   $slots.innerHTML = html;
   var $clear = dhQ('[data-dh="clearBtn"]', root);
   if ($clear) $clear.style.display = (D.files.collar || D.files.survey || D.files.intervals) ? '' : 'none';
+  // "Back to results" — shown only while a composite is loaded (the editing card
+  // was revealed non-destructively by "Edit & re-composite"); returns to config.
+  var $back = dhQ('[data-dh="backToResults"]', root);
+  if ($back) $back.style.display = (typeof dhIsDerivedAux === 'function' && dhIsDerivedAux(ds)) ? '' : 'none';
 
   // pending project recipe: tell the user which files it expects
   var $rep = dhQ('[data-dh="reportInline"]', root);
@@ -932,14 +936,30 @@ function renderDhProvenance(ds) {
     '<button data-dh="provEdit">Edit &amp; re-composite</button>';
   $head.appendChild(div);
   div.querySelector('[data-dh="provReport"]').addEventListener('click', function() { dhOpenReportModal(ds); });
-  div.querySelector('[data-dh="provEdit"]').addEventListener('click', async function() {
-    var go = await bmaConfirm({
-      title: 'Re-composite drillholes',
-      html: 'Unload the current composites and return to the drillhole mapping panel? The three source files and your mapping stay in place.',
-      okLabel: 'Edit set',
-    });
-    if (go) clearAux(ds, root); // dh slots/mapping survive — the card is right there
+  // Non-destructive: reveal the drillhole card (slots/mapping/options) in place
+  // WITHOUT unloading the composite — edit a setting and "Composite & load ▶"
+  // re-derives over it, or "← Back to results" returns. (No more unload dance.)
+  div.querySelector('[data-dh="provEdit"]').addEventListener('click', function() {
+    dhShowEditCard(ds);
   });
+}
+
+// Toggle a dataset panel between the composite RESULTS (config view) and the
+// drillhole EDITING card (load-area view), keeping all state intact.
+function dhShowEditCard(ds) {
+  var root = dhCardRoot(ds);
+  var emptyEl = dhQ('[data-aux="empty"]', root);
+  var cfgEl = dhQ('[data-aux="config"]', root);
+  if (emptyEl) emptyEl.style.display = '';
+  if (cfgEl) cfgEl.style.display = 'none';
+  renderDhCard(ds);   // refresh slots/mapping/options + show the Back button
+}
+function dhShowResults(ds) {
+  var root = dhCardRoot(ds);
+  var emptyEl = dhQ('[data-aux="empty"]', root);
+  var cfgEl = dhQ('[data-aux="config"]', root);
+  if (cfgEl && ds.file) cfgEl.style.display = '';
+  if (emptyEl && ds.file) emptyEl.style.display = 'none';
 }
 
 // ── persistence (Phase 2, D8) ───────────────────────────────────────────
@@ -1230,6 +1250,7 @@ function wireDhCard(root, ds) {
     if (dk === 'exportTable') { dhExportTable(ds, btn.dataset.dhRole); return; }   // A11 P1
     if (dk === 'exportZip') { dhExportTablesZip(ds); return; }                     // A11 P1
     if (e.target.dataset && e.target.dataset.dh === 'go') { dhCompositeAndLoad(ds); return; }
+    if (e.target.dataset && e.target.dataset.dh === 'backToResults') { dhShowResults(ds); return; }   // C12: return to composite results without re-deriving
     if (e.target.dataset && e.target.dataset.dh === 'clearBtn') { dhClearAll(ds); return; }
     if (e.target.dataset && e.target.dataset.dh === 'removeSecondary') { dhStateFor(ds).secondary = null; renderDhMapping(ds); dhAutoSave(); return; }   // A11 P5
     var conv = e.target.dataset && e.target.dataset.dhconv;
