@@ -1028,27 +1028,63 @@ function dhEmitCreate(srcDs, role, file, opts, weightCol, labelSuffix) {
 // Emit a derived dataset for the given role ('collar' | 'composite') from a set.
 // Composite uses the card's current compositing options, so changing the length
 // and emitting again produces a SECOND composite dataset (N composites, no reload).
-function dhEmitDataset(srcDs, role) {
+// Derive the output File for an emit role from a set's in-memory tables. Shared
+// by the LIVE emit (create a new dataset) + the RESTORE re-emit (load into an
+// existing instance). Returns null if the set's tables aren't ready yet.
+function dhEmitDeriveFile(srcDs, role, opts) {
   var D = dhStateFor(srcDs);
   if (role === 'collar') {
-    if (!D.parsed.collar) { dhSetStatus(srcDs, 'No collar table to emit.', true); return; }
-    var file = new File([dhEmitCollarCsv(D)], dhEmitFileName(srcDs, 'collar'), { type: 'text/csv' });
-    dhEmitCreate(srcDs, 'collar', file, null, null, 'collar');
-    return;
+    if (!D.parsed.collar) return null;
+    return new File([dhEmitCollarCsv(D)], dhEmitFileName(srcDs, 'collar'), { type: 'text/csv' });
   }
   if (role === 'composite') {
-    if (!dhMappingComplete(srcDs)) { dhSetStatus(srcDs, 'Map collar / survey / intervals first.', true); return; }
-    var opts = dhCompositeOpts(D), result;
-    try { result = Drillhole.process(dhBuildTables(srcDs), opts); }
-    catch (e) { dhSetStatus(srcDs, 'Compositing failed: ' + e.message, true); return; }
-    if (!result.rows.length) { dhSetStatus(srcDs, 'No composites produced — check the mapping.', true); return; }
+    if (!dhMappingComplete(srcDs)) return null;
+    var o = opts || dhCompositeOpts(D), result;
+    try { result = Drillhole.process(dhBuildTables(srcDs), o); } catch (e) { return null; }
+    if (!result.rows.length) return null;
     var stem = (D.files.intervals.name.replace(/\.(csv|txt|dat)$/i, '') || 'drillholes');
-    var lenLabel = opts.compositeLength ? (opts.compositeLength + 'm') : 'auto';
-    var cfile = dhCompositeFileFrom(result, stem, '-' + lenLabel);
-    dhSetStatus(srcDs, result.report.nComposites.toLocaleString() + ' composites emitted (' + lenLabel + ')…');
-    dhEmitCreate(srcDs, 'composite', cfile, opts, 'SUPPORT', lenLabel);
-    return;
+    return dhCompositeFileFrom(result, stem, '-' + (o.compositeLength ? o.compositeLength + 'm' : 'auto'));
   }
+  return null;
+}
+function dhEmitLabel(role, opts) {
+  if (role === 'composite') return opts && opts.compositeLength ? opts.compositeLength + 'm' : 'auto';
+  return role;
+}
+function dhEmitDataset(srcDs, role) {
+  var D = dhStateFor(srcDs);
+  if (role === 'collar' && !D.parsed.collar) { dhSetStatus(srcDs, 'No collar table to emit.', true); return; }
+  if (role === 'composite' && !dhMappingComplete(srcDs)) { dhSetStatus(srcDs, 'Map collar / survey / intervals first.', true); return; }
+  var opts = role === 'composite' ? dhCompositeOpts(D) : null;
+  var file = dhEmitDeriveFile(srcDs, role, opts);
+  if (!file) { dhSetStatus(srcDs, 'Nothing to emit — check the mapping.', true); return; }
+  dhEmitCreate(srcDs, role, file, opts, role === 'composite' ? 'SUPPORT' : null, dhEmitLabel(role, opts));
+}
+
+// ── A11 emit persistence: re-derive emits on reload ───────────────────────
+// An emitted dataset is recreated by the project restore as an empty instance
+// flagged ds._pendingEmit, carrying ds.derivedFrom {set, role, opts}. It can't be
+// re-supplied as a file — it re-derives from its parent SET. dhReEmitAll re-derives
+// every pending emit whose parent set's tables are ready; it's idempotent (a not-
+// yet-ready parent leaves the flag for the next sweep) so it can be called from
+// every "a set became ready" point without ordering care.
+function dhEmitInto(targetDs) {
+  var df = targetDs.derivedFrom;
+  if (!df || !df.set) return false;
+  var srcDs = (typeof dsById === 'function') ? dsById(df.set) : null;
+  if (!srcDs) return false;
+  var file = dhEmitDeriveFile(srcDs, df.role, df.opts);
+  if (!file) return false;                       // parent not ready — retry next sweep
+  targetDs._pendingEmit = false;                 // clear before the async load so a concurrent sweep skips it
+  if (df.role === 'composite' && typeof catSetRole === 'function') catSetRole(targetDs.id, 'weight', 'SUPPORT');
+  loadAuxFile(file, null, undefined, targetDs, (typeof dsConfigRoot === 'function') ? dsConfigRoot(targetDs) : null);
+  return true;
+}
+function dhReEmitAll() {
+  if (typeof datasets === 'undefined') return;
+  datasets.forEach(function (d) {
+    if (d && d._pendingEmit && d.derivedFrom) dhEmitInto(d);
+  });
 }
 
 // ── persistence (Phase 2, D8) ───────────────────────────────────────────
@@ -1211,6 +1247,7 @@ async function dhLoadTrio(ds, trio) {
   D.dipConvention = dhDetectConventionFromParsed(ds);
   renderDhCard(ds);
   dhTryApplyPendingRestore(ds);
+  if (typeof dhReEmitAll === 'function') dhReEmitAll();   // A11 emit persistence: this set is ready → re-derive its emits
 }
 
 // Pack integration (D8): when a dataset is drillhole-derived, the archive

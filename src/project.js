@@ -419,6 +419,7 @@ function serializeComparisonDatasets() {
       topcut: (ds.topcut && ds.topcut.varName) ? { varName: ds.topcut.varName, cap: ds.topcut.cap, xlog: !!ds.topcut.xlog, useDeclus: !!ds.topcut.useDeclus } : null,
       statsCat: statsCatSerializeFor(ds),   // A10 G4a-3: per-dataset StatsCat selection (by name)
       export: exportSerializeFor(ds),       // A10 G5a-3: per-dataset Export column selection (by name)
+      derivedFrom: ds.derivedFrom || undefined,   // A11 emit: re-derive from the parent set on reload (no own file)
       view: ds.view
     });
   }
@@ -1065,6 +1066,7 @@ function openPackModal() {
   }
   for (var pdi = 2; pdi < datasets.length; pdi++) {
     var pds = datasets[pdi];
+    if (pds.derivedFrom) continue;   // A11 emit: re-derives from its parent set — not a packed file
     if (!pds.file || cmpNames[pds.file.name]) continue;
     cmpNames[pds.file.name] = true;
     auxPackSize += pds.file.size;
@@ -1150,6 +1152,7 @@ async function runPack() {
       for (var fdi = 2; fdi < datasets.length; fdi++) {
         var fds = datasets[fdi];
         if (!fds.file) continue;
+        if (fds.derivedFrom) continue;   // A11 emit: re-derives from its parent set (whose trio is packed) — no own file
         if (dhIsDerivedAux(fds)) {
           // A10 p5-3b: a drillhole-derived comparison dataset packs its RAW trio
           // (not the frozen composite), so it re-derives on load like aux (D8).
@@ -2513,6 +2516,10 @@ function displayResults(data) {
         if (dds && pdt[id] && typeof dhLoadTrio === 'function') dhLoadTrio(dds, pdt[id]);
       });
     }
+    // A11 emit persistence: re-derive any emitted datasets whose parent set is now
+    // ready (backstop for parents that re-derived before their emit instances were
+    // recreated — e.g. the packed aux path; idempotent with dhLoadTrio's own call).
+    if (typeof dhReEmitAll === 'function') dhReEmitAll();
     pendingPanelState = restoredProject.panels || null;
     if (pendingPanelState && pendingPanelState.statistics) {
       var pst = pendingPanelState.statistics;

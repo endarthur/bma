@@ -309,7 +309,11 @@ function wsRestoreInstance(cfg, skipTab) {
   var ds = (typeof dsById === 'function') ? dsById(cfg.id) : null;
   if (!ds) {
     ds = dsCreate({ id: cfg.id, prefix: cfg.prefix || 'data', gridMode: cfg.gridMode || null });
-    ds._pendingRestore = cfg;
+    // A11 emit: an emitted dataset has no own file to re-supply — it re-derives
+    // from its parent set (dhReEmitAll once the set is ready), so flag it rather
+    // than seeding the file-await _pendingRestore.
+    if (cfg.derivedFrom && cfg.derivedFrom.set) { ds.derivedFrom = cfg.derivedFrom; ds._pendingEmit = true; }
+    else ds._pendingRestore = cfg;
     dsAdd(ds);
     var n = parseInt(String(cfg.id).replace(/^d/, ''), 10);
     if (typeof dsNextNum !== 'undefined' && isFinite(n) && n >= dsNextNum) dsNextNum = n + 1;
