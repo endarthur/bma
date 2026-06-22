@@ -3541,18 +3541,18 @@ table.cat-values td.cat-pct-cell {
 .crosstab-section { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .crosstab-sidebar-title { font-size: 0.65rem; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.3rem; }
 .crosstab-sidebar-note { padding: 1rem 0.8rem; color: var(--fg-dim); font-family: var(--sans); font-size: 0.78rem; line-height: 1.5; }
-.crosstab-content { flex: 1; min-width: 0; overflow: auto; padding: 0.8rem 1rem; }
+.crosstab-content { flex: 1; min-width: 0; overflow: auto; padding: 1.1rem 1.3rem; }
 .crosstab-hint { color: var(--fg-dim); font-family: var(--sans); font-size: 0.85rem; padding: 2rem; text-align: center; opacity: 0.5; }
 .crosstab-progress { display: none; margin-top: 0.4rem; }
 .crosstab-progress.active { display: block; }
 .crosstab-progress-bar { height: 4px; background: var(--bg2); border-radius: 2px; overflow: hidden; }
 .crosstab-progress-fill { height: 100%; width: 0; background: var(--action); transition: width 0.15s; }
 .crosstab-status { font-size: 0.66rem; color: var(--warn); margin-top: 0.35rem; font-family: var(--sans); }
-.crosstab-caption { font-family: var(--sans); font-size: 0.82rem; color: var(--fg); margin-bottom: 0.4rem; }
-.crosstab-notes { font-family: var(--sans); font-size: 0.7rem; color: var(--warn); margin-bottom: 0.6rem; }
+.crosstab-caption { font-family: var(--sans); font-size: 0.95rem; color: var(--fg); margin-bottom: 0.5rem; }
+.crosstab-notes { font-family: var(--sans); font-size: 0.72rem; color: var(--warn); margin-bottom: 0.7rem; }
 .crosstab-table-wrap { overflow: auto; }
-.crosstab-table { border-collapse: collapse; font-family: var(--mono); font-size: 0.72rem; }
-.crosstab-table th, .crosstab-table td { border: 1px solid var(--border); padding: 0.22rem 0.5rem; text-align: right; white-space: nowrap; }
+.crosstab-table { border-collapse: collapse; font-family: var(--mono); font-size: 0.82rem; }
+.crosstab-table th, .crosstab-table td { border: 1px solid var(--border); padding: 0.4rem 0.7rem; text-align: right; white-space: nowrap; }
 .crosstab-table thead th { background: var(--bg1); color: var(--fg-dim); position: sticky; top: 0; }
 .crosstab-corner { text-align: left !important; color: var(--fg-dim); font-style: italic; }
 .crosstab-rowhead { text-align: left !important; background: var(--bg1); color: var(--fg); }
@@ -3562,14 +3562,15 @@ table.cat-values td.cat-pct-cell {
 .crosstab-grand { color: var(--fg); }
 .crosstab-null { color: var(--warn); }
 /* A19-2 confusion matrix: agreement + κ readout, square shaded cells */
-.crosstab-stats { display: flex; gap: 1.4rem; font-family: var(--sans); font-size: 0.95rem; color: var(--fg); margin-bottom: 0.2rem; }
-.crosstab-stat b { font-family: var(--mono); color: var(--fg-bright, var(--fg)); }
-.crosstab-stat-sub { color: var(--fg-dim); font-size: 0.78rem; }
-.crosstab-stat-note { font-family: var(--sans); font-size: 0.68rem; color: var(--fg-dim); margin-bottom: 0.6rem; }
-.crosstab-heatmap td.crosstab-hcell { text-align: center; min-width: 3rem; height: 2.2rem; color: var(--fg); }
+.crosstab-stats { display: flex; gap: 1.8rem; align-items: baseline; font-family: var(--sans); font-size: 1.15rem; color: var(--fg); margin-bottom: 0.25rem; }
+.crosstab-stat b { font-family: var(--mono); font-size: 1.25rem; color: var(--fg-bright, var(--fg)); }
+.crosstab-stat-sub { color: var(--fg-dim); font-size: 0.8rem; }
+.crosstab-stat-note { font-family: var(--sans); font-size: 0.7rem; color: var(--fg-dim); margin-bottom: 0.8rem; }
+.crosstab-heatmap td.crosstab-hcell { text-align: center; min-width: 5rem; height: 3.4rem; font-size: 0.95rem; color: var(--fg); }
+.crosstab-heatmap th { font-size: 0.85rem; }
 .crosstab-heatmap .crosstab-diag { outline: 2px solid var(--green); outline-offset: -2px; }
 /* A19-3 Sankey — hand-rolled SVG flows */
-.crosstab-sankey-wrap { max-width: 760px; }
+.crosstab-sankey-wrap { max-width: 940px; }
 .crosstab-sankey { width: 100%; height: auto; }
 .crosstab-sankey-lbl { fill: var(--fg); font-family: var(--mono); font-size: 11px; }
 .crosstab-sankey-head { fill: var(--fg-dim); font-family: var(--sans); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
@@ -3577,7 +3578,7 @@ table.cat-values td.cat-pct-cell {
 .crosstab-flow { transition: fill-opacity 0.1s; }
 .crosstab-flow:hover { fill-opacity: 0.6 !important; }
 /* A19-4 grouped/stacked bars */
-.crosstab-bars-wrap { max-width: 760px; }
+.crosstab-bars-wrap { max-width: 940px; }
 .crosstab-bars { width: 100%; height: auto; }
 .crosstab-bar:hover { opacity: 0.8; }
 .crosstab-axis-lbl { fill: var(--fg-dim); font-family: var(--mono); font-size: 10px; }
@@ -4181,6 +4182,17 @@ table.cat-values tr.cat-aux-only td { background: color-mix(in srgb, var(--brand
   border-radius: 3px; padding: 0.25rem 0.35rem; font: 0.72rem var(--mono);
 }
 .stats-weight-select:focus { outline: none; border-color: var(--action); }
+/* Shared sidebar select (Statistics / Categories / Cross-tab dataset pickers +
+   the Cross-tab sidebar controls). Was referenced but never defined → native
+   unstyled dropdowns; mirrors .swath-select / .gt-select. */
+.stats-select {
+  width: 100%; box-sizing: border-box;
+  font-family: var(--mono); font-size: 0.72rem;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 3px;
+  padding: 0.2rem 0.5rem; cursor: pointer;
+}
+.stats-select:focus { border-color: var(--action); outline: none; }
 .stats-weight-note { color: var(--warn); font-size: 0.65rem; margin-top: 0.25rem; line-height: 1.4; }
 .stats-weight-note:empty { display: none; }
 
@@ -6157,7 +6169,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build fc0d2c1 — click to check for updates">fc0d2c1</div>
+<div class="build-badge" id="buildBadge" title="build 7f2fd80 — click to check for updates">7f2fd80</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
