@@ -3519,6 +3519,37 @@ table.cat-values td.cat-pct-cell {
   padding: 1rem;
 }
 .gt-hint { color: var(--fg-dim); font-family: var(--sans); font-size: 0.85rem; padding: 2rem; text-align: center; opacity: 0.5; }
+
+/* A19 Cross-tab — layout mirrors the GT panel (sidebar + content) */
+.crosstab-body { display: flex; flex: 1; min-height: 0; }
+.crosstab-sidebar { width: 260px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; background: var(--bg1); }
+.crosstab-section { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.crosstab-sidebar-title { font-size: 0.65rem; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.3rem; }
+.crosstab-sidebar-note { padding: 1rem 0.8rem; color: var(--fg-dim); font-family: var(--sans); font-size: 0.78rem; line-height: 1.5; }
+.crosstab-content { flex: 1; min-width: 0; overflow: auto; padding: 0.8rem 1rem; }
+.crosstab-hint { color: var(--fg-dim); font-family: var(--sans); font-size: 0.85rem; padding: 2rem; text-align: center; opacity: 0.5; }
+.crosstab-progress { display: none; margin-top: 0.4rem; }
+.crosstab-progress.active { display: block; }
+.crosstab-progress-bar { height: 4px; background: var(--bg2); border-radius: 2px; overflow: hidden; }
+.crosstab-progress-fill { height: 100%; width: 0; background: var(--action); transition: width 0.15s; }
+.crosstab-status { font-size: 0.66rem; color: var(--warn); margin-top: 0.35rem; font-family: var(--sans); }
+.crosstab-caption { font-family: var(--sans); font-size: 0.82rem; color: var(--fg); margin-bottom: 0.4rem; }
+.crosstab-notes { font-family: var(--sans); font-size: 0.7rem; color: var(--warn); margin-bottom: 0.6rem; }
+.crosstab-table-wrap { overflow: auto; }
+.crosstab-table { border-collapse: collapse; font-family: var(--mono); font-size: 0.72rem; }
+.crosstab-table th, .crosstab-table td { border: 1px solid var(--border); padding: 0.22rem 0.5rem; text-align: right; white-space: nowrap; }
+.crosstab-table thead th { background: var(--bg1); color: var(--fg-dim); position: sticky; top: 0; }
+.crosstab-corner { text-align: left !important; color: var(--fg-dim); font-style: italic; }
+.crosstab-rowhead { text-align: left !important; background: var(--bg1); color: var(--fg); }
+.crosstab-cell { color: var(--fg); }
+.crosstab-cell.crosstab-diag { outline: 1px solid var(--action); outline-offset: -1px; }
+.crosstab-total { background: var(--bg1); color: var(--fg-dim); font-weight: 600; }
+.crosstab-grand { color: var(--fg); }
+.crosstab-null { color: var(--warn); }
+@media (max-width: 700px) {
+  .crosstab-body { flex-direction: column; }
+  .crosstab-sidebar { width: 100%; flex-shrink: 0; border-right: none; border-bottom: 1px solid var(--border); }
+}
 .gt-toolbar {
   display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.8rem;
 }

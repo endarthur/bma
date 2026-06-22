@@ -42,6 +42,7 @@ var WS_PANELS = [
   { id: 'statscat',   title: 'StatsCat',   el: 'panelStatsCat' },
   { id: 'gt',         title: 'GT',         el: 'panelGt' },
   { id: 'swath',      title: 'Swath',      el: 'panelSwath' },
+  { id: 'crosstab',   title: 'Cross-tab',  el: 'panelCrosstab' },
   { id: 'export',     title: 'Export',     el: 'panelExport' },
 ];
 // (section stays out — hidden, unfinished; it lives on in .results-panels)

@@ -2481,6 +2481,115 @@ async function countAnalysis(data) {
   });
 }
 
+// A19: categorical cross-tabulation — a single streaming pass counting the JOINT
+// distribution of two columns (colA × colB), optionally tonnage/weight-weighted.
+// Columns arrive as INDICES (resolveColName handles calcols), read per-row by
+// name like the GT pass. Returns ordered value labels + a 2D counts (and weight)
+// matrix the panel renders as a table / confusion heatmap / Sankey / bars. A
+// missing value on either axis becomes the '∅' label (surfaced, never dropped —
+// A9); an invalid weight excludes the row and is counted (the GT weight contract).
+async function crosstabAnalysis(data) {
+  var startTime = performance.now();
+  var file = data.file, zipEntry = data.zipEntry, globalFilter = data.globalFilter,
+      localFilter = data.localFilter, calcolCode = data.calcolCode, calcolMeta = data.calcolMeta,
+      resolvedTypes = data.resolvedTypes, rowVarOverride = data.rowVarOverride,
+      colAIdx = data.colA, colBIdx = data.colB,
+      weightColIdx = (data.weightCol != null ? data.weightCol : null);
+  var src;
+  try {
+    src = await makeRowSource(file, {
+      zipEntry, dmEndianness: data.dmEndianness, dmFormat: data.dmFormat,
+      resolvedTypes: resolvedTypes, calcolCode: calcolCode, calcolMeta: calcolMeta,
+      rowVarOverride: rowVarOverride
+    });
+  } catch (e) {
+    self.postMessage({ type: 'error', message: e.message });
+    return;
+  }
+  var csvFile = src.csvFile, header = src.header, nCols = src.nCols;
+  var globalFn = null, localFn = null;
+  if (globalFilter) {
+    try { globalFn = compileFilterFn(src.rowVarName, globalFilter.expression); }
+    catch (e) { self.postMessage({ type: 'error', message: 'Global filter error: ' + e.message }); return; }
+  }
+  if (localFilter) {
+    try { localFn = compileFilterFn(src.rowVarName, localFilter); }
+    catch (e) { self.postMessage({ type: 'error', message: 'Local filter error: ' + e.message }); return; }
+  }
+  function resolveColName(idx) {
+    if (idx >= nCols && calcolMeta) return calcolMeta[idx - nCols].name;
+    return header[idx];
+  }
+  var aName = resolveColName(colAIdx), bName = resolveColName(colBIdx);
+  var wName = (weightColIdx != null && weightColIdx >= 0) ? resolveColName(weightColIdx) : null;
+
+  var MAX_CATS = 200;
+  var cells = {};                 // aLabel -> { bLabel -> { n, w } }
+  var aKeys = {}, bKeys = {}, aCount = 0, bCount = 0;
+  var aOverflow = false, bOverflow = false;
+  var total = 0, kept = 0, aMissing = 0, bMissing = 0, wExcluded = 0, wTotal = 0, placed = 0;
+  var lastProgress = 0;
+  await src.forEachRow({
+    globalFn: globalFn,
+    row: function(row, fields, totalChars) {
+      total++;
+      if (localFn && !localFn(row)) return;
+      kept++;
+      var av = row[aName], bv = row[bName];
+      var a = (av === '' || av == null) ? '∅' : String(av);
+      var b = (bv === '' || bv == null) ? '∅' : String(bv);
+      if (a === '∅') aMissing++;
+      if (b === '∅') bMissing++;
+      var w = 1;
+      if (wName) {
+        var wv = row[wName];
+        if (typeof wv === 'number' && isFinite(wv) && wv > 0) w = wv;
+        else { wExcluded++; return; }   // invalid weight excludes the row, counted (A9 / GT contract)
+      }
+      if (!aKeys[a]) { if (aCount >= MAX_CATS) { aOverflow = true; return; } aKeys[a] = 1; aCount++; }
+      if (!bKeys[b]) { if (bCount >= MAX_CATS) { bOverflow = true; return; } bKeys[b] = 1; bCount++; }
+      var cr = cells[a] || (cells[a] = {});
+      var cc = cr[b] || (cr[b] = { n: 0, w: 0 });
+      cc.n++; cc.w += w;
+      wTotal += w; placed++;
+      if (totalChars - lastProgress >= 500000) {
+        lastProgress = totalChars;
+        self.postMessage({ type: 'crosstab-progress', percent: (totalChars / csvFile.size) * 100 });
+      }
+    }
+  });
+
+  // Ordered labels — alphabetical, with '∅' (missing) sorted last
+  function sortLabels(keys) {
+    var arr = Object.keys(keys), hasNull = arr.indexOf('∅') >= 0;
+    arr = arr.filter(function (x) { return x !== '∅'; }).sort(function (a, b) { return a.localeCompare(b); });
+    if (hasNull) arr.push('∅');
+    return arr;
+  }
+  var aLabels = sortLabels(aKeys), bLabels = sortLabels(bKeys);
+  var counts = [], weights = [];
+  for (var i = 0; i < aLabels.length; i++) {
+    var rowN = [], rowW = [], crc = cells[aLabels[i]] || {};
+    for (var j = 0; j < bLabels.length; j++) {
+      var c2 = crc[bLabels[j]];
+      rowN.push(c2 ? c2.n : 0);
+      rowW.push(c2 ? c2.w : 0);
+    }
+    counts.push(rowN); weights.push(rowW);
+  }
+  self.postMessage({
+    type: 'crosstab-complete',
+    aName: aName, bName: bName, weightName: wName,
+    aLabels: aLabels, bLabels: bLabels, counts: counts, weights: weights,
+    total: total, kept: kept, placed: placed,
+    aMissing: aMissing, bMissing: bMissing,
+    aOverflow: aOverflow, bOverflow: bOverflow,
+    weightExcluded: wExcluded, weightTotal: wTotal,
+    elapsed: performance.now() - startTime,
+    filterErrors: filterErrPayload(globalFn, localFn), calcolErrors: calcolErrPayload(src)
+  });
+}
+
 self.onmessage = (e) => {
   if (e.data.mode === 'export') {
     exportCSV(e.data);
@@ -2498,6 +2607,8 @@ self.onmessage = (e) => {
     gtAnalysis(e.data);
   } else if (e.data.mode === 'count') {
     countAnalysis(e.data);
+  } else if (e.data.mode === 'crosstab') {
+    crosstabAnalysis(e.data);
   } else {
     const { file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName, weightArray, weightArrayLabel } = e.data;
     analyze(file, xyzOverride, filter, typeOverrides, zipEntry, skipCols, colFilters, calcolCode, calcolMeta, groupBy, groupStatsCols, dxyzOverride, dmEndianness, dmFormat, rowVarOverride, weightColName, weightArray, weightArrayLabel);

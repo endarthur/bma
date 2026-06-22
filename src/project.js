@@ -571,6 +571,17 @@ function serializeProject() {
         focusedCol: (fc !== null && hdr && hdr[fc]) ? hdr[fc] : null
       };
     })(),
+    // A19: cross-tab selections — target + the two columns BY NAME + cell display
+    crosstab: (function() {
+      var tid = (typeof crosstabTargetDsId !== 'undefined') ? (crosstabTargetDsId || 'model') : 'model';
+      var hdr = (tid === 'model') ? currentHeader : (((dsById(tid) || {}).complete || {}).header || null);
+      return {
+        targetDsId: tid,
+        colA: (crosstabColA != null && hdr && hdr[crosstabColA]) ? hdr[crosstabColA] : null,
+        colB: (crosstabColB != null && hdr && hdr[crosstabColB]) ? hdr[crosstabColB] : null,
+        cellMode: (typeof crosstabCellMode !== 'undefined') ? crosstabCellMode : 'count'
+      };
+    })(),
     tree: { open: catalogTreeOpen },
     // C6-4a collapsed control sidebars (per-panel) + C6-4b collapsed sections
     sidebars: {
@@ -2523,6 +2534,20 @@ function displayResults(data) {
         renderCatMain();
       }
     }
+
+    // A19: restore cross-tab target + the two columns BY NAME (resolved against
+    // the target header; the later renderCrosstab() picks up these indices).
+    if (typeof crosstabTargetDsId !== 'undefined') {
+      const xtP = restoredProject.crosstab || {};
+      crosstabTargetDsId = xtP.targetDsId || 'model';
+      crosstabCellMode = xtP.cellMode || 'count';
+      const xtid = crosstabTargetDsId;
+      const xhdr = (xtid === 'model') ? header : (((dsById(xtid) || {}).complete || {}).header || null);
+      const ia = (xtP.colA && xhdr) ? xhdr.indexOf(xtP.colA) : -1;
+      const ib = (xtP.colB && xhdr) ? xhdr.indexOf(xtP.colB) : -1;
+      crosstabColA = ia >= 0 ? ia : null;
+      crosstabColB = ib >= 0 ? ib : null;
+    }
   }
 
   // StatsCat — render after display state is restored (or with defaults)
@@ -2556,6 +2581,7 @@ function displayResults(data) {
   }
   renderGtConfig(data);
   renderSwathConfig(data);
+  if (typeof renderCrosstab === 'function') renderCrosstab();   // A19 cross-tab sidebar (columns from the model analysis)
   if (typeof swApplyAllInstances === 'function') swApplyAllInstances();      // s-5: re-apply restored clone configs
   if (typeof gtApplyAllInstances === 'function') gtApplyAllInstances();      // G3b-4: re-apply restored GT clone configs
   if (typeof swRefreshAllInstances === 'function') swRefreshAllInstances();  // follow-up: refresh live clone sidebars on re-analysis

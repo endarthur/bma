@@ -147,6 +147,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
       <button class="results-tab" data-tab="statscat">StatsCat</button>
       <button class="results-tab" data-tab="gt">GT</button>
       <button class="results-tab" data-tab="swath">Swath</button>
+      <button class="results-tab" data-tab="crosstab">Cross-tab</button>
       <button class="results-tab" data-tab="export">Export</button>
     </div>
     <div class="results-main" id="resultsMain">
@@ -607,6 +608,14 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
           <div class="swath-sidebar" id="swathSidebar"></div>
           <div class="swath-content" id="swathContent">
             <div class="swath-hint">Configure settings and click Generate to create swath plots.</div>
+          </div>
+        </div>
+      </div>
+      <div class="results-panel" id="panelCrosstab" data-tab="crosstab">
+        <div class="crosstab-body">
+          <div class="crosstab-sidebar" id="crosstabSidebar"></div>
+          <div class="crosstab-content" id="crosstabContent">
+            <div class="crosstab-hint">Pick two categorical columns and click Generate to cross-tabulate them.</div>
           </div>
         </div>
       </div>

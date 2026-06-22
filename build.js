@@ -41,6 +41,7 @@ const APP_MODULES = [
   'statistics.js',
   'export.js',
   'swath.js',
+  'crosstab.js',       // A19 categorical cross-tabulation tab (own worker pass)
   'gt.js',
   'section.js',
   'calcol.js',
