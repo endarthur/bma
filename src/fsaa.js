@@ -66,7 +66,7 @@ function fsaaMountFolder() {
       mountedFolder = handle;
       // store failures (quota / non-cloneable mock) are non-fatal — the folder is
       // mounted for this session regardless.
-      return fsaaStoreHandle(handle).catch(function () {}).then(function () { fsaaAfterMountChange(); return true; });
+      return fsaaStoreHandle(handle).catch(function () {}).then(function () { fsaaAfterMountChange(); fsaaMaybeOpenProject(); return true; });
     });
   }).catch(function () { return false; });   // AbortError = user cancelled the picker
 }
@@ -89,14 +89,27 @@ function fsaaReopenFolder() {
 // needs no gesture). 'prompt' is left for an explicit reopen click. So reopening
 // feels like "open recent", not a fresh pick.
 function fsaaTryRestoreOnLoad() {
+  function activate(handle) {
+    mountedFolder = handle;
+    fsaaAfterMountChange();
+    // C11-P3: reopening the folder reopens its project. Defer so the app is fully
+    // initialized before driving handleFile; guarded so it never clobbers an
+    // already-open project.
+    setTimeout(function () { fsaaMaybeOpenProject(); }, 0);
+    return true;
+  }
   return fsaaLoadHandle().then(function (handle) {
     if (!handle) return false;
-    if (typeof handle.queryPermission !== 'function') { mountedFolder = handle; fsaaAfterMountChange(); return true; }
+    if (typeof handle.queryPermission !== 'function') return activate(handle);
     return Promise.resolve(handle.queryPermission({ mode: 'readwrite' })).then(function (p) {
-      if (p === 'granted') { mountedFolder = handle; fsaaAfterMountChange(); return true; }
-      return false;
+      return p === 'granted' ? activate(handle) : false;
     });
   }).catch(function () { return false; });
+}
+// Open the folder's project iff nothing is loaded yet (folder-as-home).
+function fsaaMaybeOpenProject() {
+  if (mountedFolder && (typeof currentFile === 'undefined' || !currentFile)) return fsaaOpenProjectFromFolder();
+  return Promise.resolve(false);
 }
 
 function fsaaUnmount() {
@@ -162,6 +175,41 @@ function fsaaResolveProjectFiles() {
     });
   }
   return Promise.all(jobs).then(function () { return n.c; });
+}
+
+// ── C11-P3: folder-as-project-home ────────────────────────────────────────
+// Find a project JSON (*.bma.json) in the mounted folder.
+async function fsaaListProjectJson() {
+  if (!mountedFolder || typeof mountedFolder.keys !== 'function') return null;
+  try {
+    for await (var name of mountedFolder.keys()) {
+      if (/\.bma\.json$/i.test(name)) return name;
+    }
+  } catch (e) { /* iteration unsupported */ }
+  return null;
+}
+// Open the project stored in the folder: read its *.bma.json, resolve the model
+// from the folder by name, and apply it through the normal dropped-project path
+// (comparison datasets + drillhole trios then resolve from the folder too, C11-P1).
+// So mounting the folder opens the whole project — no drop.
+function fsaaOpenProjectFromFolder() {
+  if (!mountedFolder) return Promise.resolve(false);
+  return fsaaListProjectJson().then(function (name) {
+    if (!name) return false;
+    return fsaaResolveFile(name).then(function (jf) {
+      if (!jf) return false;
+      return jf.text().then(function (txt) {
+        var pj; try { pj = JSON.parse(txt); } catch (e) { return false; }
+        if (!pj || pj._bma !== 1 || !pj.file || !pj.file.name) return false;   // model-less folders: a later slice
+        return fsaaResolveFile(pj.file.name).then(function (mf) {
+          if (!mf) return false;   // the model isn't in the folder
+          if (typeof pendingDroppedProject !== 'undefined') pendingDroppedProject = pj;
+          if (typeof handleFile === 'function') return Promise.resolve(handleFile(mf)).then(function () { return true; });
+          return false;
+        });
+      });
+    });
+  }).catch(function () { return false; });
 }
 
 // The project JSON's filename in the folder (stable per project title / model).
