@@ -117,6 +117,16 @@ function datasetMenuFor(ds) {
     var flt = dsObj.filter && dsObj.filter.expression;
     items.push({ label: 'Filter…' + (flt ? ' ✓' : ''), action: function() { openDatasetFilterModal(dsObj); } });
   }
+  // C11-P2: materialize ⇄ relink a derived (emitted) dataset — freeze a snapshot
+  // (folder file / embedded) keeping the link, or revert to pure re-derive.
+  if (dsObj && dsObj.derivedFrom && typeof dsMaterialize === 'function') {
+    items.push({ sep: true });
+    if (typeof dsIsMaterialized === 'function' && dsIsMaterialized(dsObj)) {
+      items.push({ label: 'Relink (re-derive)', action: function() { dsRelink(dsObj); } });
+    } else if (dsObj.file) {
+      items.push({ label: 'Materialize (freeze)', action: function() { dsMaterialize(dsObj); } });
+    }
+  }
   if (ds === 'aux' && typeof clearAux === 'function') {
     items.push({ sep: true });
     items.push({ label: 'Remove dataset', danger: true, action: function() { clearAux(); } });

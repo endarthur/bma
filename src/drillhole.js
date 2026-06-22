@@ -1128,6 +1128,69 @@ function dhReEmitAll() {
   });
 }
 
+// ── C11-P2 / A11 slice 4: materialize ⇄ relink a derived (emitted) dataset ──
+// MATERIALIZED = freeze the current derived data into a durable snapshot (a real
+// file in the mounted folder; small data embeds in the project JSON) WHILE keeping
+// the source link. So a materialized dataset loads its snapshot on open (no
+// re-derive), but can be Refreshed from the source, or Relinked back to pure
+// re-derive. If the snapshot is gone on open (folder unmounted / file deleted), it
+// falls back to re-deriving from the kept link — never a dead dataset.
+var MATERIALIZE_EMBED_MAX = 256 * 1024;   // only embed small snapshots without a folder
+
+function dsMaterialize(ds) {
+  if (!ds || !ds.derivedFrom || !ds.file) return Promise.resolve(false);
+  // Prefer the mounted folder (real file, scales); else embed small data.
+  if (typeof mountedFolder !== 'undefined' && mountedFolder && typeof fsaaWriteFile === 'function') {
+    return fsaaWriteFile(ds.file.name, ds.file).then(function (ok) {
+      if (ok) { ds.materialized = { mode: 'folder', fileName: ds.file.name }; dsAfterMaterializeChange(ds); }
+      return ok;
+    });
+  }
+  if (ds.file.size > MATERIALIZE_EMBED_MAX) {
+    if (typeof bmaConfirm === 'function') bmaConfirm({
+      title: 'Materialize', okLabel: 'OK',
+      html: 'This dataset is too large to embed (' + formatBytes(ds.file.size) + '). Mount a project folder (File menu) to materialize it to disk, or keep it linked.',
+    });
+    return Promise.resolve(false);
+  }
+  return ds.file.text().then(function (csv) {
+    ds.materialized = { mode: 'embed', csv: csv, fileName: ds.file.name };
+    dsAfterMaterializeChange(ds);
+    return true;
+  });
+}
+function dsRelink(ds) {
+  if (!ds) return;
+  ds.materialized = null;   // back to linked — re-derives from the source on open
+  dsAfterMaterializeChange(ds);
+}
+function dsIsMaterialized(ds) { return !!(ds && ds.materialized); }
+function dsAfterMaterializeChange(ds) {
+  if (typeof renderTree === 'function') renderTree();
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+// Restore pass: load each materialized emit's snapshot (folder or embed); fall
+// back to re-derive from the kept link when the snapshot is unavailable.
+function dsRestoreMaterialized() {
+  if (typeof datasets === 'undefined') return;
+  datasets.forEach(function (ds) {
+    if (!ds || !ds._pendingMaterialized || ds.file) return;
+    var m = ds.materialized;
+    function fallback() { ds._pendingMaterialized = false; ds._pendingEmit = true; dhReEmitAll(); }
+    if (m && m.mode === 'embed' && m.csv != null) {
+      ds._pendingMaterialized = false;
+      loadAuxFile(new File([m.csv], m.fileName || (ds.id + '.csv'), { type: 'text/csv' }), null, undefined, ds, (typeof dsConfigRoot === 'function') ? dsConfigRoot(ds) : null);
+    } else if (m && m.mode === 'folder' && typeof mountedFolder !== 'undefined' && mountedFolder && typeof fsaaResolveFile === 'function') {
+      fsaaResolveFile(m.fileName).then(function (f) {
+        if (f) { ds._pendingMaterialized = false; loadAuxFile(f, null, undefined, ds, (typeof dsConfigRoot === 'function') ? dsConfigRoot(ds) : null); }
+        else fallback();   // snapshot missing → re-derive (link kept)
+      });
+    } else {
+      fallback();          // folder snapshot but no folder mounted → re-derive
+    }
+  });
+}
+
 // ── persistence (Phase 2, D8) ───────────────────────────────────────────
 // The recipe (file identities + mapping + options) rides the project; the
 // derived CSV is never persisted — restore re-derives, like declus weights.

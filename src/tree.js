@@ -211,6 +211,17 @@ function treeDsRefreshHtml(ds) {
     '<button class="tree-ds-refresh" data-refresh="' + esc(target) + '" title="Refresh — ' + esc(title) + '">↻</button>';
 }
 
+// C11-P2: a derived (emitted) dataset shows its mode — ◇ linked (re-derives) or
+// ◆ materialized (frozen snapshot, link kept). Visible state, no-magic-only-ui.
+function treeDsDerivedHtml(ds) {
+  var dsObj = (typeof dsById === 'function') ? dsById(ds) : null;
+  if (!dsObj || !dsObj.derivedFrom) return '';
+  var mat = (typeof dsIsMaterialized === 'function') && dsIsMaterialized(dsObj);
+  return '<span class="tree-ds-derived' + (mat ? ' tree-ds-derived--mat' : '') + '" title="' +
+    (mat ? 'materialized — frozen snapshot, source link kept' : 'linked — re-derives from ' + esc(dsObj.derivedFrom.set)) + '">' +
+    (mat ? '◆ materialized' : '◇ linked') + '</span>';
+}
+
 function treeDatasetHtml(ds, openState) {
   var v = treeDatasetVars(ds);
   var dsKey = 'ds:' + ds;
@@ -219,6 +230,7 @@ function treeDatasetHtml(ds, openState) {
     (v && v.fileName ? '<span class="tree-ds-file" title="' + esc(v.fileName) + '">' + esc(v.fileName) + '</span>' : '') +
     (v && v.countNote ? '<span class="tree-ds-count">' + esc(v.countNote) + '</span>' : '') +
     (v ? treeDsRefreshHtml(ds) : '') +
+    treeDsDerivedHtml(ds) +
     '</summary>';
 
   if (!v) {

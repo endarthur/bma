@@ -4414,6 +4414,9 @@ table.stats tr.stats-delta-row td:first-child {
 .tree-ds-refresh { background: none; border: 1px solid var(--warn); color: var(--warn); border-radius: 3px; cursor: pointer; font-size: 0.72rem; line-height: 1; padding: 0.05rem 0.3rem; }
 .tree-ds-refresh:hover { background: var(--warn); color: var(--bg); }
 .tree-ds-note { color: var(--fg-dim); font-family: var(--sans); font-size: 0.72rem; padding: 0.2rem 0.3rem 0; }
+/* C11-P2: derived-dataset mode badge (◇ linked / ◆ materialized) */
+.tree-ds-derived { font: 0.58rem var(--sans); color: var(--fg-dim); background: var(--bg2); border-radius: 3px; padding: 0.04rem 0.3rem; white-space: nowrap; }
+.tree-ds-derived--mat { color: var(--green); background: var(--green-soft); }
 .tree-group { margin: 0.15rem 0 0.15rem 0.3rem; }
 .tree-group > summary {
   cursor: pointer; list-style: none; color: var(--fg-dim);

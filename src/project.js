@@ -422,6 +422,7 @@ function serializeComparisonDatasets() {
       statsCat: statsCatSerializeFor(ds),   // A10 G4a-3: per-dataset StatsCat selection (by name)
       export: exportSerializeFor(ds),       // A10 G5a-3: per-dataset Export column selection (by name)
       derivedFrom: ds.derivedFrom || undefined,   // A11 emit: re-derive from the parent set on reload (no own file)
+      materialized: ds.materialized || undefined, // C11-P2: a frozen snapshot (folder file or embedded csv) — load it instead of re-deriving, link kept
       view: ds.view
     });
   }
@@ -2527,6 +2528,9 @@ function displayResults(data) {
     // ready (backstop for parents that re-derived before their emit instances were
     // recreated — e.g. the packed aux path; idempotent with dhLoadTrio's own call).
     if (typeof dhReEmitAll === 'function') dhReEmitAll();
+    // C11-P2: load each materialized emit's frozen snapshot (folder file / embedded
+    // csv); falls back to re-derive from the kept link when the snapshot is gone.
+    if (typeof dsRestoreMaterialized === 'function') dsRestoreMaterialized();
     // C11-P1: with a folder mounted, resolve a restored project's still-pending
     // comparison-dataset + drillhole-trio files from the folder by name — no re-drop.
     if (typeof fsaaResolveProjectFiles === 'function') fsaaResolveProjectFiles();

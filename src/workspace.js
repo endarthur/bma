@@ -312,7 +312,13 @@ function wsRestoreInstance(cfg, skipTab) {
     // A11 emit: an emitted dataset has no own file to re-supply — it re-derives
     // from its parent set (dhReEmitAll once the set is ready), so flag it rather
     // than seeding the file-await _pendingRestore.
-    if (cfg.derivedFrom && cfg.derivedFrom.set) { ds.derivedFrom = cfg.derivedFrom; ds._pendingEmit = true; }
+    if (cfg.derivedFrom && cfg.derivedFrom.set) {
+      ds.derivedFrom = cfg.derivedFrom;
+      // C11-P2: a materialized emit loads its snapshot (dsRestoreMaterialized);
+      // a linked emit re-derives from the parent set (dhReEmitAll).
+      if (cfg.materialized) { ds.materialized = cfg.materialized; ds._pendingMaterialized = true; }
+      else ds._pendingEmit = true;
+    }
     else ds._pendingRestore = cfg;
     dsAdd(ds);
     var n = parseInt(String(cfg.id).replace(/^d/, ''), 10);
