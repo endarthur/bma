@@ -3568,6 +3568,14 @@ table.cat-values td.cat-pct-cell {
 .crosstab-stat-note { font-family: var(--sans); font-size: 0.68rem; color: var(--fg-dim); margin-bottom: 0.6rem; }
 .crosstab-heatmap td.crosstab-hcell { text-align: center; min-width: 3rem; height: 2.2rem; color: var(--fg); }
 .crosstab-heatmap .crosstab-diag { outline: 2px solid var(--green); outline-offset: -2px; }
+/* A19-3 Sankey — hand-rolled SVG flows */
+.crosstab-sankey-wrap { max-width: 760px; }
+.crosstab-sankey { width: 100%; height: auto; }
+.crosstab-sankey-lbl { fill: var(--fg); font-family: var(--mono); font-size: 11px; }
+.crosstab-sankey-head { fill: var(--fg-dim); font-family: var(--sans); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+.crosstab-node { stroke: var(--bg); stroke-width: 0.5; }
+.crosstab-flow { transition: fill-opacity 0.1s; }
+.crosstab-flow:hover { fill-opacity: 0.6 !important; }
 @media (max-width: 700px) {
   .crosstab-body { flex-direction: column; }
   .crosstab-sidebar { width: 100%; flex-shrink: 0; border-right: none; border-bottom: 1px solid var(--border); }
@@ -6137,7 +6145,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 4994d65 — click to check for updates">4994d65</div>
+<div class="build-badge" id="buildBadge" title="build d2dd09d — click to check for updates">d2dd09d</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -27864,7 +27872,7 @@ function renderCrosstab() {
       '<select class="stats-select" data-xt="colB">' + colOptions(crosstabColB) + '</select></div>' +
     '<div class="crosstab-section"><div class="crosstab-sidebar-title">View</div>' +
       '<select class="stats-select" data-xt="view">' +
-        ['table:Cross-table', 'heatmap:Confusion matrix'].map(function (o) {
+        ['table:Cross-table', 'heatmap:Confusion matrix', 'sankey:Sankey'].map(function (o) {
           var p = o.split(':'); return '<option value="' + p[0] + '"' + (p[0] === crosstabView ? ' selected' : '') + '>' + p[1] + '</option>';
         }).join('') +
       '</select></div>' +
@@ -28013,8 +28021,12 @@ function renderCrosstabResult(data) {
     return;
   }
   if (crosstabView === 'heatmap') return renderCrosstabHeatmap(data);
+  if (crosstabView === 'sankey') return renderCrosstabSankey(data);
   return renderCrosstabTable(data);
 }
+
+// A distinct hue per category index — theme-independent, readable on both shells.
+function crosstabHue(i) { return (i * 53) % 360; }
 
 // Cell display per the Show selector — shared by table + heatmap.
 function crosstabFmtCell(v, rowTot, colTot, grand) {
@@ -28121,6 +28133,62 @@ function renderCrosstabHeatmap(data) {
   html += '</tbody></table></div>';
 
   content.innerHTML = html;
+}
+
+// Sankey: the matrix as FLOWS — left nodes = A categories, right nodes = B
+// categories, each ribbon = a cell (width ∝ count), coloured by its source (A).
+// The transition / reconciliation view (CLASS_2024 → CLASS_2025, resource →
+// reserve). Hand-rolled SVG (no deps), node heights ∝ row/column totals.
+function renderCrosstabSankey(data) {
+  var content = crosstabContentEl();
+  var aL = data.aLabels, bL = data.bLabels, M = data.counts;
+  var m = crosstabMargins(data), rowTot = m.rowTot, colTot = m.colTot, grand = m.grand;
+  if (!grand) { content.innerHTML = crosstabCaptionHtml(data, grand) + '<div class="crosstab-hint">No flows to draw.</div>'; return; }
+
+  var nA = aL.length, nB = bL.length;
+  var W = 720, gap = 6, nodeW = 14, labelPad = 6, topM = 24;
+  var leftLabel = 150, rightLabel = 150;
+  var lx = leftLabel, rx = W - rightLabel - nodeW;          // node column x
+  var plotH = Math.max(280, Math.max(nA, nB) * 30);
+  var maxGaps = gap * (Math.max(nA, nB) - 1);
+  var scale = (plotH - maxGaps) / grand;                     // shared px/count both sides
+  var H = plotH + topM + 14;
+
+  var aY = [], y = topM; for (var i = 0; i < nA; i++) { aY.push(y); y += rowTot[i] * scale + gap; }
+  var bY = [], y2 = topM; for (var j = 0; j < nB; j++) { bY.push(y2); y2 += colTot[j] * scale + gap; }
+
+  var svg = '<svg class="crosstab-sankey" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMin meet">';
+  svg += '<text class="crosstab-sankey-head" x="' + (lx + nodeW / 2) + '" y="12" text-anchor="middle">' + esc(data.aName) + '</text>';
+  svg += '<text class="crosstab-sankey-head" x="' + (rx + nodeW / 2) + '" y="12" text-anchor="middle">' + esc(data.bName) + '</text>';
+
+  // ribbons (source-coloured), stacked per node in the matrix order
+  var lOff = aY.slice(), rOff = bY.slice();
+  for (var i2 = 0; i2 < nA; i2++) {
+    for (var j2 = 0; j2 < nB; j2++) {
+      var v = M[i2][j2]; if (!v) continue;
+      var h = v * scale, ly = lOff[i2], ry = rOff[j2];
+      lOff[i2] += h; rOff[j2] += h;
+      var x0 = lx + nodeW, x1 = rx, cx = x0 + (x1 - x0) / 2;
+      var path = 'M' + x0 + ',' + ly + ' C' + cx + ',' + ly + ' ' + cx + ',' + ry + ' ' + x1 + ',' + ry +
+        ' L' + x1 + ',' + (ry + h) + ' C' + cx + ',' + (ry + h) + ' ' + cx + ',' + (ly + h) + ' ' + x0 + ',' + (ly + h) + ' Z';
+      svg += '<path class="crosstab-flow" d="' + path + '" fill="hsl(' + crosstabHue(i2) + ',55%,55%)" fill-opacity="0.34">' +
+        '<title>' + esc(aL[i2]) + ' → ' + esc(bL[j2]) + ': ' + v.toLocaleString() + '</title></path>';
+    }
+  }
+  // nodes + labels
+  for (var i3 = 0; i3 < nA; i3++) {
+    var nh = Math.max(rowTot[i3] * scale, 1);
+    svg += '<rect class="crosstab-node" x="' + lx + '" y="' + aY[i3] + '" width="' + nodeW + '" height="' + nh + '" fill="hsl(' + crosstabHue(i3) + ',55%,50%)"><title>' + esc(aL[i3]) + ': ' + rowTot[i3].toLocaleString() + '</title></rect>';
+    svg += '<text class="crosstab-sankey-lbl" x="' + (lx - labelPad) + '" y="' + (aY[i3] + nh / 2) + '" text-anchor="end" dominant-baseline="middle">' + esc(aL[i3]) + '</text>';
+  }
+  for (var j3 = 0; j3 < nB; j3++) {
+    var nh2 = Math.max(colTot[j3] * scale, 1);
+    svg += '<rect class="crosstab-node" x="' + rx + '" y="' + bY[j3] + '" width="' + nodeW + '" height="' + nh2 + '" fill="hsl(' + crosstabHue(j3) + ',30%,50%)"><title>' + esc(bL[j3]) + ': ' + colTot[j3].toLocaleString() + '</title></rect>';
+    svg += '<text class="crosstab-sankey-lbl" x="' + (rx + nodeW + labelPad) + '" y="' + (bY[j3] + nh2 / 2) + '" text-anchor="start" dominant-baseline="middle">' + esc(bL[j3]) + '</text>';
+  }
+  svg += '</svg>';
+
+  content.innerHTML = crosstabCaptionHtml(data, grand) + crosstabNotesHtml(data) + '<div class="crosstab-sankey-wrap">' + svg + '</div>';
 }
 
 // ─── Grade-Tonnage (GT) Tab ──────────────────────────────────────────
