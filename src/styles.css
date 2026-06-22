@@ -5321,6 +5321,15 @@ table.stats tr.stats-delta-row td:first-child {
   color: var(--fg-dim); font: 0.65rem var(--mono); padding: 0.15rem 0.45rem; cursor: pointer; margin-right: 0.4rem;
 }
 .dh-back-btn:hover { color: var(--action); border-color: var(--action); }
+/* A11 emit-as-dataset */
+.dh-emit-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.dh-emit-label { font: 0.65rem var(--sans); color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+.dh-emit-btn {
+  background: none; border: 1px solid var(--border); border-radius: 3px;
+  color: var(--fg); font: 0.7rem var(--mono); padding: 0.2rem 0.6rem; cursor: pointer;
+}
+.dh-emit-btn:hover { border-color: var(--action); color: var(--action); }
+.dh-emit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .dh-slots { display: flex; gap: 0.6rem; }
 .dh-slot {

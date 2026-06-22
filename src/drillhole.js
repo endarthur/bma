@@ -629,6 +629,13 @@ function renderDhMapping(ds) {
     // C12-P1: revealed by setGenStale when the recipe/sources change after a composite (no-silent-stale)
     '<span class="gen-stale-note" style="display:none">↻ recipe changed — re-composite</span></div>';
 
+  // A11 emit-as-dataset: emit a table as its own derived dataset (no compositing)
+  if (D.parsed.collar) {
+    html += '<div class="dh-emit-row"><span class="dh-emit-label">Emit as dataset:</span>' +
+      '<button class="dh-emit-btn" data-dh="emitCollar" title="Load the collar table as a point dataset, derived from this set">⬡ Collar (points)</button>' +
+      '</div>';
+  }
+
   $m.innerHTML = html;
   // density select applied after render (option list is data-driven; splits are
   // checkboxes rendered checked inline)
@@ -962,6 +969,49 @@ function dhShowResults(ds) {
   if (emptyEl && ds.file) emptyEl.style.display = 'none';
 }
 
+// ── A11 emit-as-dataset (slice 1: collar) ─────────────────────────────────
+// A drillhole SET is a container: any of its tables can emit its own registry
+// dataset, derived (source-linked) from the set. Collar is the clean first
+// target — it already has XYZ, no desurvey/compositing — so "emit collar" =
+// "load the set's collar as a point dataset without compositing it". The emitted
+// dataset carries derivedFrom {set, role} so it re-derives from the set on reload
+// (persistence: a follow-up slice) and shows in the C12 lineage DAG.
+function dhEmitCollarCsv(D) {
+  var p = D.parsed.collar, m = D.map.collar || {};
+  var used = {}, cols = [];
+  function add(name, idx) { if (idx != null && idx >= 0 && !used[idx]) { used[idx] = 1; cols.push({ name: name, idx: idx }); } }
+  add('BHID', m.bhid); add('X', m.x); add('Y', m.y); add('Z', m.z); add('EOH', m.eoh);
+  for (var i = 0; i < p.header.length; i++) if (!used[i]) cols.push({ name: p.header[i], idx: i });   // any extra collar columns, verbatim
+  var lines = [cols.map(function (c) { return c.name; }).join(',')];
+  for (var r = 0; r < p.rows.length; r++) lines.push(cols.map(function (c) { return dhCsvCell(p.rows[r][c.idx]); }).join(','));
+  return lines.join('\n') + '\n';
+}
+function dhEmitFileName(srcDs, role) {
+  var D = dhStateFor(srcDs);
+  var base = (D.files.collar && D.files.collar.name) || (srcDs.prefix || 'drillholes');
+  return base.replace(/\.(csv|txt|dat)$/i, '') + '-' + role + '.csv';
+}
+// Emit a derived dataset for the given role ('collar' for now) from a loaded set.
+function dhEmitDataset(srcDs, role) {
+  var D = dhStateFor(srcDs);
+  if (role !== 'collar') return;
+  if (!D.parsed.collar) { dhSetStatus(srcDs, 'No collar table to emit.', true); return; }
+  if (!wsRails || typeof dsCreate !== 'function' || typeof wsMainTarget !== 'function') {
+    if (typeof bmaConfirm === 'function') bmaConfirm({ title: 'Emit dataset', html: 'Emitting a dataset needs the desktop (rails) workspace.', okLabel: 'OK' });
+    return;
+  }
+  var csv = dhEmitCollarCsv(D);
+  var file = new File([csv], dhEmitFileName(srcDs, role), { type: 'text/csv' });
+  var newDs = dsCreate({ prefix: (srcDs.prefix || 'dh') + ':' + role });
+  newDs.derivedFrom = { set: srcDs.id, role: role };   // C12 link + re-derive seed (persist: follow-up)
+  dsAdd(newDs);
+  wsRails.addTab({ id: newDs.id, title: 'Import: ' + newDs.prefix, closeable: true }, wsMainTarget());
+  wsRails.activateTab(newDs.id);
+  var root = (typeof dsConfigRoot === 'function') ? dsConfigRoot(newDs) : null;
+  loadAuxFile(file, null, undefined, newDs, root);
+  if (typeof renderTree === 'function') renderTree();
+}
+
 // ── persistence (Phase 2, D8) ───────────────────────────────────────────
 // The recipe (file identities + mapping + options) rides the project; the
 // derived CSV is never persisted — restore re-derives, like declus weights.
@@ -1251,6 +1301,7 @@ function wireDhCard(root, ds) {
     if (dk === 'exportZip') { dhExportTablesZip(ds); return; }                     // A11 P1
     if (e.target.dataset && e.target.dataset.dh === 'go') { dhCompositeAndLoad(ds); return; }
     if (e.target.dataset && e.target.dataset.dh === 'backToResults') { dhShowResults(ds); return; }   // C12: return to composite results without re-deriving
+    if (e.target.dataset && e.target.dataset.dh === 'emitCollar') { dhEmitDataset(ds, 'collar'); return; }   // A11 emit-as-dataset
     if (e.target.dataset && e.target.dataset.dh === 'clearBtn') { dhClearAll(ds); return; }
     if (e.target.dataset && e.target.dataset.dh === 'removeSecondary') { dhStateFor(ds).secondary = null; renderDhMapping(ds); dhAutoSave(); return; }   // A11 P5
     var conv = e.target.dataset && e.target.dataset.dhconv;

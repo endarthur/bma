@@ -74,6 +74,10 @@ function derivForDataset(ds) {
     id: 'analysis:' + ds.id,
     kind: 'analysis',
     sources: function () {
+      // A11 emit: a dataset emitted from a drillhole set derives from that set.
+      if (ds.derivedFrom && ds.derivedFrom.set) {
+        return [derivSourceRef('dataset', ds.derivedFrom.set, ds.derivedFrom.role + ' ← ' + ds.derivedFrom.set)];
+      }
       if (typeof dhIsDerivedAux === 'function' && dhIsDerivedAux(ds)) {
         return [derivSourceRef('derivation', 'composite:' + ds.id, ds.file.name)];
       }
