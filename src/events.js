@@ -23,12 +23,7 @@ if (HAS_FSAA) {
     e.preventDefault();
     try {
       var handles = await window.showOpenFilePicker({
-        types: [
-          { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
-          { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } },
-          { description: 'BMA projects', accept: { 'application/json': ['.json'] } },
-          { description: 'Datamine files', accept: { 'application/octet-stream': ['.dm'] } }
-        ],
+        types: (typeof dataPickerTypes === 'function') ? dataPickerTypes() : undefined,
         multiple: false
       });
       var handle = handles[0];

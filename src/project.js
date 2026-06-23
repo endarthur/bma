@@ -247,11 +247,7 @@ function promptReselect(name) {
   if (HAS_FSAA) {
     // Use file picker
     window.showOpenFilePicker({
-      types: [
-        { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
-        { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } },
-        { description: 'Datamine files', accept: { 'application/octet-stream': ['.dm'] } }
-      ],
+      types: (typeof dataPickerTypes === 'function') ? dataPickerTypes() : undefined,
       multiple: false
     }).then(function(handles) {
       var handle = handles[0];
@@ -1752,11 +1748,7 @@ async function pickModelFile() {
   if (typeof HAS_FSAA !== 'undefined' && HAS_FSAA && window.showOpenFilePicker) {
     try {
       var handles = await window.showOpenFilePicker({
-        types: [
-          { description: 'CSV files', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
-          { description: 'ZIP files', accept: { 'application/zip': ['.zip'] } },
-          { description: 'Datamine files', accept: { 'application/octet-stream': ['.dm'] } }
-        ],
+        types: (typeof dataPickerTypes === 'function') ? dataPickerTypes() : undefined,
         multiple: false
       });
       var h = handles[0];

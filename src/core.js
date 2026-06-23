@@ -577,6 +577,21 @@ function refreshModelGridSection() {
 
 var HAS_FSAA = typeof window.showOpenFilePicker === 'function';
 
+// Shared file-picker types for selecting/reloading DATA. The FIRST entry is the
+// DEFAULT filter the OS picker selects — make it accept EVERYTHING BMA reads, so a
+// .zip (or .dm/.json) shows without the user hunting for the "All Files" option
+// (Arthur: "couldn't find the example zip until I saw the filter settings"). The
+// narrower filters are still offered below for when you DO want to narrow.
+function dataPickerTypes() {
+  return [
+    { description: 'All data files', accept: { 'text/*': ['.csv', '.txt', '.dat'], 'application/zip': ['.zip'], 'application/octet-stream': ['.dm'], 'application/json': ['.json'] } },
+    { description: 'CSV / text', accept: { 'text/*': ['.csv', '.txt', '.dat'] } },
+    { description: 'ZIP archives', accept: { 'application/zip': ['.zip'] } },
+    { description: 'Datamine (.dm)', accept: { 'application/octet-stream': ['.dm'] } },
+    { description: 'BMA project (.json)', accept: { 'application/json': ['.json'] } }
+  ];
+}
+
 // Fuzzy subsequence match — returns true if all chars in query appear in order within target.
 // Both should be lowercase. Empty query matches everything.
 function fuzzyMatch(query, target) {
