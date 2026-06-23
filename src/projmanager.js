@@ -166,32 +166,67 @@ function pmOpen(rec) {
 }
 
 // Inline tags + notes editor under a row.
+// Inline tags + notes editor — STAGED: edits go to a draft; Done saves, Cancel
+// discards (Esc = cancel). Tags add on Enter OR comma (paste "a, b, c" works too);
+// the chip × removes. Nothing persists until Done, so it's an unambiguous
+// confirm/cancel — and the editor doesn't collapse mid-edit.
 function pmToggleEditor(host, rec) {
   if (!rec) return;
   var ed = host.querySelector('[data-editor="' + cssEsc(rec.id) + '"]');
   if (!ed) return;
-  if (!ed.hasAttribute('hidden')) { ed.setAttribute('hidden', ''); ed.innerHTML = ''; return; }
-  var tagChips = (rec.tags || []).map(function (t) { return '<span class="pm-tag pm-tag--edit">' + esc(t) + '<button class="pm-tag-x" data-rmtag="' + esc(t) + '">×</button></span>'; }).join('');
+  if (!ed.hasAttribute('hidden')) { pmCloseEditor(ed); return; }   // toggle closed = cancel
+
+  var draft = { tags: (rec.tags || []).slice(), notes: rec.notes || '' };
+  function tagsInner() {
+    return draft.tags.map(function (t) { return '<span class="pm-tag pm-tag--edit">' + esc(t) + '<button class="pm-tag-x" data-rmtag="' + esc(t) + '">×</button></span>'; }).join('') +
+      '<input class="pm-ed-taginput" placeholder="add tag — Enter or comma" spellcheck="false">';
+  }
+  function addTags(raw) {
+    String(raw).split(/[,\n]/).map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (t) {
+      if (draft.tags.indexOf(t) < 0) draft.tags.push(t);
+    });
+  }
+  function notesEl() { return ed.querySelector('.pm-ed-notes'); }
+  function done() {
+    var inp = ed.querySelector('.pm-ed-taginput');
+    if (inp && inp.value.trim()) addTags(inp.value);   // capture a half-typed tag
+    rec.tags = draft.tags;
+    rec.notes = notesEl() ? notesEl().value : draft.notes;
+    projPut(rec).then(renderProjects);                 // persist + repaint the row
+  }
+  function cancel() { pmCloseEditor(ed); }              // draft discarded
+  function renderTags() {
+    var wrap = ed.querySelector('.pm-ed-tags');
+    wrap.innerHTML = tagsInner();
+    wireTags();
+    wrap.querySelector('.pm-ed-taginput').focus();
+  }
+  function wireTags() {
+    var input = ed.querySelector('.pm-ed-taginput');
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        if (input.value.trim()) { addTags(input.value); input.value = ''; renderTags(); }
+      } else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+      else if (e.key === 'Backspace' && !input.value && draft.tags.length) { draft.tags.pop(); renderTags(); }
+    });
+    ed.querySelectorAll('[data-rmtag]').forEach(function (b) {
+      b.addEventListener('click', function () { var t = b.getAttribute('data-rmtag'); draft.tags = draft.tags.filter(function (x) { return x !== t; }); renderTags(); });
+    });
+  }
+
   ed.innerHTML =
-    '<div class="pm-ed-row"><label class="pm-ed-label">Tags</label><div class="pm-ed-tags">' + tagChips +
-      '<input class="pm-ed-taginput" placeholder="add tag…" spellcheck="false"></div></div>' +
-    '<div class="pm-ed-row"><label class="pm-ed-label">Notes</label><textarea class="pm-ed-notes" rows="2" placeholder="notes for this project…" spellcheck="false">' + esc(rec.notes || '') + '</textarea></div>';
+    '<div class="pm-ed-row"><label class="pm-ed-label">Tags</label><div class="pm-ed-tags"></div></div>' +
+    '<div class="pm-ed-row"><label class="pm-ed-label">Notes</label><textarea class="pm-ed-notes" rows="2" placeholder="notes for this project…" spellcheck="false">' + esc(draft.notes) + '</textarea></div>' +
+    '<div class="pm-ed-foot"><span class="pm-ed-hint">Enter or comma adds a tag</span>' +
+      '<span class="pm-ed-btns"><button class="pm-ed-cancel" type="button">Cancel</button><button class="pm-ed-done" type="button">Done</button></span></div>';
   ed.removeAttribute('hidden');
-  var input = ed.querySelector('.pm-ed-taginput');
-  input.focus();
-  input.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      var v = input.value.trim();
-      if (v && (rec.tags || []).indexOf(v) < 0) { rec.tags = (rec.tags || []).concat([v]); projPut(rec).then(function () { pmToggleEditor(host, rec); pmToggleEditor(host, rec); renderProjects(); }); }
-    }
-  });
-  ed.querySelectorAll('[data-rmtag]').forEach(function (b) {
-    b.addEventListener('click', function () { var t = b.getAttribute('data-rmtag'); rec.tags = (rec.tags || []).filter(function (x) { return x !== t; }); projPut(rec).then(renderProjects); });
-  });
-  var notes = ed.querySelector('.pm-ed-notes');
-  notes.addEventListener('blur', function () { if ((rec.notes || '') !== notes.value) { rec.notes = notes.value; projPut(rec); } });
+  renderTags();
+  notesEl().addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.preventDefault(); cancel(); } });
+  ed.querySelector('.pm-ed-done').addEventListener('click', done);
+  ed.querySelector('.pm-ed-cancel').addEventListener('click', cancel);
 }
+function pmCloseEditor(ed) { ed.setAttribute('hidden', ''); ed.innerHTML = ''; }
 
 function pmDelete(rec) {
   if (!rec) return;
