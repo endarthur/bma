@@ -6400,7 +6400,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build d6d77be — click to check for updates">d6d77be</div>
+<div class="build-badge" id="buildBadge" title="build b4b3412 — click to check for updates">b4b3412</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -9057,6 +9057,7 @@ const workerBlob = new Blob([WORKER_CODE], { type: 'application/javascript' });
 const workerUrl = URL.createObjectURL(workerBlob);
 
 let currentFile = null;
+let currentFileHandle = null;  // C14: the model's FSAA file handle (when opened via picker/handle-drop) — lets a file-backed project reopen WITHOUT re-picking
 let currentProjectId = null;   // model-optional projects: dual-key identity when no model file (else null → file key)
 let currentHeader = [];
 let currentColTypes = [];
@@ -21255,6 +21256,7 @@ async function handleFile(file, handle, skipRecents) {
 
   currentFile = file;
   currentProjectId = null;   // model-backed: identity is the file key (dual-key)
+  if (typeof currentFileHandle !== 'undefined') currentFileHandle = handle || null;   // C14: keep the model's FSAA handle so reopen needs no re-pick
   // C14: a FRESH load starts its own registry record; an open driven by projOpen
   // (projOpening) keeps the record id it set.
   if (typeof projOpening === 'undefined' || !projOpening) { if (typeof currentProjectRecId !== 'undefined') currentProjectRecId = null; }
@@ -21362,6 +21364,7 @@ function closeProjectToLanding() {
   if (typeof renderProjectList === 'function') renderProjectList();
   if (typeof renderProjects === 'function') renderProjects();   // C14 manager
   currentFile = null;
+  if (typeof currentFileHandle !== 'undefined') currentFileHandle = null;
   currentProjectId = null;   // closing returns to the landing; a model-less project is reopened from its list
   if (typeof currentProjectRecId !== 'undefined') currentProjectRecId = null;   // C14: next project gets its own record
   preflightData = null;
@@ -24149,6 +24152,11 @@ function projCurrentBacking(existing) {
   if (existing && existing.backing && existing.backing.kind !== 'local' && existing.backing.kind !== 'file') return existing.backing;
   if (typeof mountedFolder !== 'undefined' && mountedFolder && !(typeof mountedFolderVirtual !== 'undefined' && mountedFolderVirtual)) {
     return { kind: 'folder', folderHandle: mountedFolder };   // a real FSAA folder
+  }
+  // Model opened via a file handle (picker / handle-drop): store it so reopen
+  // re-resolves the file (then the saved config restores by file key) — no re-pick.
+  if (typeof currentFileHandle !== 'undefined' && currentFileHandle && typeof currentFile !== 'undefined' && currentFile) {
+    return { kind: 'file', fileHandle: currentFileHandle, modelFileName: currentFile.name };
   }
   return { kind: 'local', projKey: (typeof currentProjectKey === 'function' ? currentProjectKey() : null) };
 }

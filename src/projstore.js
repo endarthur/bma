@@ -399,6 +399,11 @@ function projCurrentBacking(existing) {
   if (typeof mountedFolder !== 'undefined' && mountedFolder && !(typeof mountedFolderVirtual !== 'undefined' && mountedFolderVirtual)) {
     return { kind: 'folder', folderHandle: mountedFolder };   // a real FSAA folder
   }
+  // Model opened via a file handle (picker / handle-drop): store it so reopen
+  // re-resolves the file (then the saved config restores by file key) — no re-pick.
+  if (typeof currentFileHandle !== 'undefined' && currentFileHandle && typeof currentFile !== 'undefined' && currentFile) {
+    return { kind: 'file', fileHandle: currentFileHandle, modelFileName: currentFile.name };
+  }
   return { kind: 'local', projKey: (typeof currentProjectKey === 'function' ? currentProjectKey() : null) };
 }
 // Upsert the open project's registry record. Called from autosave/flush, so the

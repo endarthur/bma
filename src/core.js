@@ -3,6 +3,7 @@ const workerBlob = new Blob([WORKER_CODE], { type: 'application/javascript' });
 const workerUrl = URL.createObjectURL(workerBlob);
 
 let currentFile = null;
+let currentFileHandle = null;  // C14: the model's FSAA file handle (when opened via picker/handle-drop) — lets a file-backed project reopen WITHOUT re-picking
 let currentProjectId = null;   // model-optional projects: dual-key identity when no model file (else null → file key)
 let currentHeader = [];
 let currentColTypes = [];

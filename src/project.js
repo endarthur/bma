@@ -1813,6 +1813,7 @@ async function handleFile(file, handle, skipRecents) {
 
   currentFile = file;
   currentProjectId = null;   // model-backed: identity is the file key (dual-key)
+  if (typeof currentFileHandle !== 'undefined') currentFileHandle = handle || null;   // C14: keep the model's FSAA handle so reopen needs no re-pick
   // C14: a FRESH load starts its own registry record; an open driven by projOpen
   // (projOpening) keeps the record id it set.
   if (typeof projOpening === 'undefined' || !projOpening) { if (typeof currentProjectRecId !== 'undefined') currentProjectRecId = null; }
@@ -1920,6 +1921,7 @@ function closeProjectToLanding() {
   if (typeof renderProjectList === 'function') renderProjectList();
   if (typeof renderProjects === 'function') renderProjects();   // C14 manager
   currentFile = null;
+  if (typeof currentFileHandle !== 'undefined') currentFileHandle = null;
   currentProjectId = null;   // closing returns to the landing; a model-less project is reopened from its list
   if (typeof currentProjectRecId !== 'undefined') currentProjectRecId = null;   // C14: next project gets its own record
   preflightData = null;
