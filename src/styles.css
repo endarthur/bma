@@ -4423,6 +4423,12 @@ table.stats tr.stats-delta-row td:first-child {
 /* C11-P2: derived-dataset mode badge (◇ linked / ◆ materialized) */
 .tree-ds-derived { font: 0.58rem var(--sans); color: var(--fg-dim); background: var(--bg2); border-radius: 3px; padding: 0.04rem 0.3rem; white-space: nowrap; }
 .tree-ds-derived--mat { color: var(--green); background: var(--green-soft); }
+/* A11: derived datasets nest under their source set (filesystem / GIS-layer idiom)
+   — indent + a connector rail; nested summaries drop the sticky so they don't
+   stack on the parent's sticky header */
+.tree-ds-children { margin-left: 0.55rem; padding-left: 0.5rem; border-left: 1px solid var(--border); }
+.tree-ds-children > .tree-ds { margin-bottom: 0.3rem; }
+.tree-ds-children > .tree-ds > summary { position: static; }
 .tree-group { margin: 0.15rem 0 0.15rem 0.3rem; }
 .tree-group > summary {
   cursor: pointer; list-style: none; color: var(--fg-dim);

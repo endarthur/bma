@@ -64,11 +64,26 @@ function renderCatalogTree(container) {
     ? '<div class="tree-search"><input type="text" id="treeSearch" class="tree-search-input" placeholder="Filter variables…" spellcheck="false" value="' + esc(treeSearchQuery) + '"></div>'
     : '';
   // Model node always; then every comparison dataset that has been loaded
-  // (preflight present). Iterating the registry makes this N-ready.
-  html += treeDatasetHtml('model', openState);
+  // (preflight present). Derived datasets (an emitted collar / composite /
+  // intervals carries derivedFrom.set) nest UNDER their source set instead of
+  // listing flat — the catalog reads as a layer/filesystem tree. A derived
+  // dataset whose parent isn't loaded falls back to the top level (never hidden).
+  var childrenMap = {}, hasParent = {};
   for (var di = 0; di < datasets.length; di++) {
-    if (datasets[di].id === 'model') continue;
-    if (datasets[di].preflight) html += treeDatasetHtml(datasets[di].id, openState);
+    var dd = datasets[di];
+    if (dd.id === 'model' || !dd.preflight) continue;
+    var pid = dd.derivedFrom && dd.derivedFrom.set;
+    var par = pid && pid !== dd.id && typeof dsById === 'function' ? dsById(pid) : null;
+    if (par && par.preflight) {
+      (childrenMap[pid] = childrenMap[pid] || []).push(dd.id);
+      hasParent[dd.id] = true;
+    }
+  }
+  html += treeBuildDsNode('model', openState, childrenMap);
+  for (var di = 0; di < datasets.length; di++) {
+    if (datasets[di].id === 'model' || !datasets[di].preflight) continue;
+    if (hasParent[datasets[di].id]) continue;   // rendered nested under its set
+    html += treeBuildDsNode(datasets[di].id, openState, childrenMap);
   }
   // A10 #18: add comparison datasets straight from the Data rail (mirrors the
   // [+] launcher / Data menu) — the most discoverable spot once a model exists.
@@ -222,7 +237,8 @@ function treeDsDerivedHtml(ds) {
     (mat ? '◆ materialized' : '◇ linked') + '</span>';
 }
 
-function treeDatasetHtml(ds, openState) {
+function treeDatasetHtml(ds, openState, childrenHtml) {
+  childrenHtml = childrenHtml || '';
   var v = treeDatasetVars(ds);
   var dsKey = 'ds:' + ds;
   var dsOpen = openState[dsKey] !== undefined ? openState[dsKey] : true;
@@ -235,7 +251,7 @@ function treeDatasetHtml(ds, openState) {
 
   if (!v) {
     return '<details class="tree-ds" data-key="' + dsKey + '"' + (dsOpen ? ' open' : '') + '>' + head +
-      '<div class="tree-hint">Run Analyze to populate.</div></details>';
+      '<div class="tree-hint">Run Analyze to populate.</div>' + childrenHtml + '</details>';
   }
 
   // classify
@@ -358,7 +374,25 @@ function treeDatasetHtml(ds, openState) {
   }
 
   return '<details class="tree-ds" data-key="' + dsKey + '"' + (dsOpen ? ' open' : '') + '>' +
-    head + dsNote + body + '</details>';
+    head + dsNote + body + childrenHtml + '</details>';
+}
+
+// Build a dataset node + recursively nest its derived children (datasets whose
+// derivedFrom.set points back to it) under it — the catalog reads as a filesystem
+// / GIS layer panel: a container set and the datasets it emits. `seen` guards the
+// (data-model-impossible but cheap to rule out) cycle.
+function treeBuildDsNode(ds, openState, childrenMap, seen) {
+  seen = seen || {};
+  if (seen[ds]) return '';
+  seen[ds] = true;
+  var kids = childrenMap[ds] || [];
+  var childHtml = '';
+  if (kids.length) {
+    childHtml = '<div class="tree-ds-children">' +
+      kids.map(function(k) { return treeBuildDsNode(k, openState, childrenMap, seen); }).join('') +
+      '</div>';
+  }
+  return treeDatasetHtml(ds, openState, childHtml);
 }
 
 // ─── Row editor popover (C1a step 3) ──────────────────────────────────

@@ -4438,6 +4438,12 @@ table.stats tr.stats-delta-row td:first-child {
 /* C11-P2: derived-dataset mode badge (◇ linked / ◆ materialized) */
 .tree-ds-derived { font: 0.58rem var(--sans); color: var(--fg-dim); background: var(--bg2); border-radius: 3px; padding: 0.04rem 0.3rem; white-space: nowrap; }
 .tree-ds-derived--mat { color: var(--green); background: var(--green-soft); }
+/* A11: derived datasets nest under their source set (filesystem / GIS-layer idiom)
+   — indent + a connector rail; nested summaries drop the sticky so they don't
+   stack on the parent's sticky header */
+.tree-ds-children { margin-left: 0.55rem; padding-left: 0.5rem; border-left: 1px solid var(--border); }
+.tree-ds-children > .tree-ds { margin-bottom: 0.3rem; }
+.tree-ds-children > .tree-ds > summary { position: static; }
 .tree-group { margin: 0.15rem 0 0.15rem 0.3rem; }
 .tree-group > summary {
   cursor: pointer; list-style: none; color: var(--fg-dim);
@@ -6210,7 +6216,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 744f3f0 — click to check for updates">744f3f0</div>
+<div class="build-badge" id="buildBadge" title="build e9a424b — click to check for updates">e9a424b</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -34998,11 +35004,26 @@ function renderCatalogTree(container) {
     ? '<div class="tree-search"><input type="text" id="treeSearch" class="tree-search-input" placeholder="Filter variables…" spellcheck="false" value="' + esc(treeSearchQuery) + '"></div>'
     : '';
   // Model node always; then every comparison dataset that has been loaded
-  // (preflight present). Iterating the registry makes this N-ready.
-  html += treeDatasetHtml('model', openState);
+  // (preflight present). Derived datasets (an emitted collar / composite /
+  // intervals carries derivedFrom.set) nest UNDER their source set instead of
+  // listing flat — the catalog reads as a layer/filesystem tree. A derived
+  // dataset whose parent isn't loaded falls back to the top level (never hidden).
+  var childrenMap = {}, hasParent = {};
   for (var di = 0; di < datasets.length; di++) {
-    if (datasets[di].id === 'model') continue;
-    if (datasets[di].preflight) html += treeDatasetHtml(datasets[di].id, openState);
+    var dd = datasets[di];
+    if (dd.id === 'model' || !dd.preflight) continue;
+    var pid = dd.derivedFrom && dd.derivedFrom.set;
+    var par = pid && pid !== dd.id && typeof dsById === 'function' ? dsById(pid) : null;
+    if (par && par.preflight) {
+      (childrenMap[pid] = childrenMap[pid] || []).push(dd.id);
+      hasParent[dd.id] = true;
+    }
+  }
+  html += treeBuildDsNode('model', openState, childrenMap);
+  for (var di = 0; di < datasets.length; di++) {
+    if (datasets[di].id === 'model' || !datasets[di].preflight) continue;
+    if (hasParent[datasets[di].id]) continue;   // rendered nested under its set
+    html += treeBuildDsNode(datasets[di].id, openState, childrenMap);
   }
   // A10 #18: add comparison datasets straight from the Data rail (mirrors the
   // [+] launcher / Data menu) — the most discoverable spot once a model exists.
@@ -35156,7 +35177,8 @@ function treeDsDerivedHtml(ds) {
     (mat ? '◆ materialized' : '◇ linked') + '</span>';
 }
 
-function treeDatasetHtml(ds, openState) {
+function treeDatasetHtml(ds, openState, childrenHtml) {
+  childrenHtml = childrenHtml || '';
   var v = treeDatasetVars(ds);
   var dsKey = 'ds:' + ds;
   var dsOpen = openState[dsKey] !== undefined ? openState[dsKey] : true;
@@ -35169,7 +35191,7 @@ function treeDatasetHtml(ds, openState) {
 
   if (!v) {
     return '<details class="tree-ds" data-key="' + dsKey + '"' + (dsOpen ? ' open' : '') + '>' + head +
-      '<div class="tree-hint">Run Analyze to populate.</div></details>';
+      '<div class="tree-hint">Run Analyze to populate.</div>' + childrenHtml + '</details>';
   }
 
   // classify
@@ -35292,7 +35314,25 @@ function treeDatasetHtml(ds, openState) {
   }
 
   return '<details class="tree-ds" data-key="' + dsKey + '"' + (dsOpen ? ' open' : '') + '>' +
-    head + dsNote + body + '</details>';
+    head + dsNote + body + childrenHtml + '</details>';
+}
+
+// Build a dataset node + recursively nest its derived children (datasets whose
+// derivedFrom.set points back to it) under it — the catalog reads as a filesystem
+// / GIS layer panel: a container set and the datasets it emits. `seen` guards the
+// (data-model-impossible but cheap to rule out) cycle.
+function treeBuildDsNode(ds, openState, childrenMap, seen) {
+  seen = seen || {};
+  if (seen[ds]) return '';
+  seen[ds] = true;
+  var kids = childrenMap[ds] || [];
+  var childHtml = '';
+  if (kids.length) {
+    childHtml = '<div class="tree-ds-children">' +
+      kids.map(function(k) { return treeBuildDsNode(k, openState, childrenMap, seen); }).join('') +
+      '</div>';
+  }
+  return treeDatasetHtml(ds, openState, childHtml);
 }
 
 // ─── Row editor popover (C1a step 3) ──────────────────────────────────
