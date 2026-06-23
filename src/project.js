@@ -1910,8 +1910,9 @@ function executeAnalysis() {
 
 let hasResults = false; // Track whether analysis has been run
 
-// Back button in toolbar — go back to dropzone
-$backToPreflight.addEventListener('click', () => {
+// Back button in toolbar — go back to dropzone. Extracted so switching projects
+// (File ▸ Open recent, or the manager) can return to a clean landing first.
+function closeProjectToLanding() {
   $results.classList.remove('active');
   document.querySelector('.app').classList.remove('has-results');
   $appFooter.classList.remove('active');
@@ -1974,7 +1975,15 @@ $backToPreflight.addEventListener('click', () => {
   sectionDefaultBlockSize = null;
   currentDXYZ = { dx: -1, dy: -1, dz: -1 };
   currentGridMode = null;   // A10 4f-2: back to the model default ('grid')
-});
+  // C14: drop the session mount (the registry record keeps the handle for reopen;
+  // we don't clear the persisted FSAA handle here, just this session's mount).
+  if (typeof mountedFolder !== 'undefined') mountedFolder = null;
+  if (typeof projOpenLabel !== 'undefined') projOpenLabel = null;
+  if (typeof fsaaCurrentJsonName !== 'undefined') fsaaCurrentJsonName = null;
+  if (typeof mountedFolderVirtual !== 'undefined') mountedFolderVirtual = false;
+  if (typeof fsaaRenderIndicator === 'function') fsaaRenderIndicator();
+}
+$backToPreflight.addEventListener('click', closeProjectToLanding);
 
 // Allow dropping new files onto results area
 $results.addEventListener('dragover', (e) => { e.preventDefault(); });

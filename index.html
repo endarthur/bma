@@ -6300,7 +6300,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build de36e05 — click to check for updates">de36e05</div>
+<div class="build-badge" id="buildBadge" title="build b3d70d9 — click to check for updates">b3d70d9</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -21089,8 +21089,9 @@ function executeAnalysis() {
 
 let hasResults = false; // Track whether analysis has been run
 
-// Back button in toolbar — go back to dropzone
-$backToPreflight.addEventListener('click', () => {
+// Back button in toolbar — go back to dropzone. Extracted so switching projects
+// (File ▸ Open recent, or the manager) can return to a clean landing first.
+function closeProjectToLanding() {
   $results.classList.remove('active');
   document.querySelector('.app').classList.remove('has-results');
   $appFooter.classList.remove('active');
@@ -21153,7 +21154,15 @@ $backToPreflight.addEventListener('click', () => {
   sectionDefaultBlockSize = null;
   currentDXYZ = { dx: -1, dy: -1, dz: -1 };
   currentGridMode = null;   // A10 4f-2: back to the model default ('grid')
-});
+  // C14: drop the session mount (the registry record keeps the handle for reopen;
+  // we don't clear the persisted FSAA handle here, just this session's mount).
+  if (typeof mountedFolder !== 'undefined') mountedFolder = null;
+  if (typeof projOpenLabel !== 'undefined') projOpenLabel = null;
+  if (typeof fsaaCurrentJsonName !== 'undefined') fsaaCurrentJsonName = null;
+  if (typeof mountedFolderVirtual !== 'undefined') mountedFolderVirtual = false;
+  if (typeof fsaaRenderIndicator === 'function') fsaaRenderIndicator();
+}
+$backToPreflight.addEventListener('click', closeProjectToLanding);
 
 // Allow dropping new files onto results area
 $results.addEventListener('dragover', (e) => { e.preventDefault(); });
@@ -23701,8 +23710,15 @@ function projUnpackInto(dirHandle, file, entries) {
 function projImportPack(file, dest) {
   return projPeekPack(file).then(function (peek) {
     if (!peek) return Promise.reject(new Error('Not a BMA project pack'));
+    // Re-importing the same pack is ALWAYS a NEW, independent project (fresh id +
+    // its own storage) — it never overwrites a prior import or its edits. Just
+    // disambiguate the title so the two are legible in the list.
+    return projList().then(function (existing) { return { peek: peek, existing: existing || [] }; });
+  }).then(function (ctx) {
+    var peek = ctx.peek;
     var id = projNewId();
     var meta = projMetaFromProject(peek.project);
+    meta.title = projUniqueTitle(meta.title, ctx.existing);
     var now = Date.now();
     var write;
     var backing;
@@ -23732,6 +23748,9 @@ function projImportPack(file, dest) {
 // ── open a project from its record (dispatch on backing) ──────────────────
 function projOpen(rec) {
   if (!rec || !rec.backing) return Promise.resolve(false);
+  // switching projects while one is open (File ▸ Open recent): return to a clean
+  // landing first, so the folder-open path (guarded on !currentFile) runs.
+  if (typeof currentFile !== 'undefined' && currentFile && typeof closeProjectToLanding === 'function') closeProjectToLanding();
   currentProjectRecId = rec.id;   // edits/autosaves update THIS record, not a new one
   projOpening = true;             // tells handleFile (run inside the open) not to clear the id
   var b = rec.backing;
@@ -23813,6 +23832,19 @@ function projMigrateFromRecents() {
   }).catch(function () { return 0; });
 }
 
+// A title not already used by another project: "Name", then "Name (copy)",
+// "Name (copy 2)", … So a re-imported pack reads as a distinct copy, not a clone.
+function projUniqueTitle(base, existing) {
+  base = base || 'Untitled project';
+  var taken = {};
+  (existing || []).forEach(function (r) { if (r && r.title) taken[r.title] = true; });
+  if (!taken[base]) return base;
+  var t = base + ' (copy)';
+  var n = 2;
+  while (taken[t]) { t = base + ' (copy ' + n + ')'; n++; }
+  return t;
+}
+
 // Display label for a backing kind (used by the manager + the header pill).
 function projBackingLabel(kind) {
   return kind === 'folder' ? 'folder' : kind === 'opfs' ? 'browser storage' : kind === 'idb' ? 'embedded' : kind === 'local' ? 'local' : 'file';
@@ -23869,7 +23901,7 @@ function projTouchCurrent() {
     if (!rec.lastOpened) rec.lastOpened = now;
     rec.backing = projCurrentBacking(existing);
     currentProjectRecId = id;
-    return projPut(rec);
+    return projPut(rec).then(function (r) { if (typeof projRefreshMenuCache === 'function') projRefreshMenuCache(); return r; });
   }).catch(function () { return null; });
 }
 
@@ -23903,6 +23935,13 @@ var mountedFolderVirtual = false;
 // projstore.js; replaces the old recent-files + model-less project lists.
 
 var pmState = { search: '', sort: 'opened', tags: {} /* active tag filter set */ };
+// Sync snapshot of the registry for the File ▸ Open recent menu (a synchronous
+// factory). Kept fresh by renderProjects() + projTouchCurrent().
+var wsProjectsCache = [];
+function projRefreshMenuCache() {
+  if (typeof projList !== 'function') return;
+  projList().then(function (l) { wsProjectsCache = l || []; }).catch(function () {});
+}
 var PM_SORTS = [
   { key: 'opened', label: 'Last opened' },
   { key: 'saved', label: 'Last saved' },
@@ -23987,6 +24026,7 @@ function renderProjects() {
   var seed = (typeof projMigrateFromRecents === 'function') ? projMigrateFromRecents() : Promise.resolve(0);
   seed.then(function () { return (typeof projList === 'function') ? projList() : []; }).then(function (all) {
     all = all || [];
+    wsProjectsCache = all;   // keep the File-menu recents in sync
     if (!all.length) { host.innerHTML = ''; return; }
     var allTags = pmAllTags(all);
     var shown = pmSortRecs(all.filter(pmMatch));
@@ -37933,10 +37973,14 @@ function wsScaleMenuItems() {
     return { label: s + '%', checked: s === cur, action: { scale: s } };
   });
 }
+// C14: File ▸ Open recent now lists PROJECTS (the registry), not raw files.
 function wsRecentMenuItems() {
-  if (!wsRecentsCache || !wsRecentsCache.length) return [{ label: '(no recent files)', disabled: true }];
-  return wsRecentsCache.slice(0, 12).map(function(it) {
-    return { label: (it.isFolder ? '📁 ' : '') + it.name, action: { recent: it._key } };   // C11: folder badge
+  var ps = (typeof wsProjectsCache !== 'undefined' && wsProjectsCache) ? wsProjectsCache : [];
+  if (!ps.length) return [{ label: '(no recent projects)', disabled: true }];
+  return ps.slice(0, 12).map(function(p) {
+    var k = p.backing && p.backing.kind;
+    var icon = k === 'folder' ? '📁 ' : k === 'opfs' ? '🗄 ' : k === 'idb' ? '💾 ' : '';
+    return { label: icon + (p.title || 'Untitled project'), action: { project: p.id } };
   });
 }
 function wsFileMenuItems() {
@@ -38024,6 +38068,7 @@ function wsMenuAction(a) {
   if (a.theme) { applyTheme(a.theme); return; }
   if (a.scale != null) { if (typeof applyUiScale === 'function') applyUiScale(a.scale); return; }
   if (a.recent) { if (typeof reopenRecent === 'function') reopenRecent(a.recent); return; }
+  if (a.project) { if (typeof projGet === 'function' && typeof projOpen === 'function') projGet(a.project).then(function (r) { if (r) projOpen(r); }); return; }   // C14
   switch (a) {
     case 'newProject': if (typeof newEmptyProject === 'function') newEmptyProject(); break;
     case 'open': { var fi = document.getElementById('fileInput'); if (fi) fi.click(); break; }

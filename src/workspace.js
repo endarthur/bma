@@ -621,10 +621,14 @@ function wsScaleMenuItems() {
     return { label: s + '%', checked: s === cur, action: { scale: s } };
   });
 }
+// C14: File ▸ Open recent now lists PROJECTS (the registry), not raw files.
 function wsRecentMenuItems() {
-  if (!wsRecentsCache || !wsRecentsCache.length) return [{ label: '(no recent files)', disabled: true }];
-  return wsRecentsCache.slice(0, 12).map(function(it) {
-    return { label: (it.isFolder ? '📁 ' : '') + it.name, action: { recent: it._key } };   // C11: folder badge
+  var ps = (typeof wsProjectsCache !== 'undefined' && wsProjectsCache) ? wsProjectsCache : [];
+  if (!ps.length) return [{ label: '(no recent projects)', disabled: true }];
+  return ps.slice(0, 12).map(function(p) {
+    var k = p.backing && p.backing.kind;
+    var icon = k === 'folder' ? '📁 ' : k === 'opfs' ? '🗄 ' : k === 'idb' ? '💾 ' : '';
+    return { label: icon + (p.title || 'Untitled project'), action: { project: p.id } };
   });
 }
 function wsFileMenuItems() {
@@ -712,6 +716,7 @@ function wsMenuAction(a) {
   if (a.theme) { applyTheme(a.theme); return; }
   if (a.scale != null) { if (typeof applyUiScale === 'function') applyUiScale(a.scale); return; }
   if (a.recent) { if (typeof reopenRecent === 'function') reopenRecent(a.recent); return; }
+  if (a.project) { if (typeof projGet === 'function' && typeof projOpen === 'function') projGet(a.project).then(function (r) { if (r) projOpen(r); }); return; }   // C14
   switch (a) {
     case 'newProject': if (typeof newEmptyProject === 'function') newEmptyProject(); break;
     case 'open': { var fi = document.getElementById('fileInput'); if (fi) fi.click(); break; }

@@ -5,6 +5,13 @@
 // projstore.js; replaces the old recent-files + model-less project lists.
 
 var pmState = { search: '', sort: 'opened', tags: {} /* active tag filter set */ };
+// Sync snapshot of the registry for the File ▸ Open recent menu (a synchronous
+// factory). Kept fresh by renderProjects() + projTouchCurrent().
+var wsProjectsCache = [];
+function projRefreshMenuCache() {
+  if (typeof projList !== 'function') return;
+  projList().then(function (l) { wsProjectsCache = l || []; }).catch(function () {});
+}
 var PM_SORTS = [
   { key: 'opened', label: 'Last opened' },
   { key: 'saved', label: 'Last saved' },
@@ -89,6 +96,7 @@ function renderProjects() {
   var seed = (typeof projMigrateFromRecents === 'function') ? projMigrateFromRecents() : Promise.resolve(0);
   seed.then(function () { return (typeof projList === 'function') ? projList() : []; }).then(function (all) {
     all = all || [];
+    wsProjectsCache = all;   // keep the File-menu recents in sync
     if (!all.length) { host.innerHTML = ''; return; }
     var allTags = pmAllTags(all);
     var shown = pmSortRecs(all.filter(pmMatch));

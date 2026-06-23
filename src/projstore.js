@@ -222,8 +222,15 @@ function projUnpackInto(dirHandle, file, entries) {
 function projImportPack(file, dest) {
   return projPeekPack(file).then(function (peek) {
     if (!peek) return Promise.reject(new Error('Not a BMA project pack'));
+    // Re-importing the same pack is ALWAYS a NEW, independent project (fresh id +
+    // its own storage) — it never overwrites a prior import or its edits. Just
+    // disambiguate the title so the two are legible in the list.
+    return projList().then(function (existing) { return { peek: peek, existing: existing || [] }; });
+  }).then(function (ctx) {
+    var peek = ctx.peek;
     var id = projNewId();
     var meta = projMetaFromProject(peek.project);
+    meta.title = projUniqueTitle(meta.title, ctx.existing);
     var now = Date.now();
     var write;
     var backing;
@@ -253,6 +260,9 @@ function projImportPack(file, dest) {
 // ── open a project from its record (dispatch on backing) ──────────────────
 function projOpen(rec) {
   if (!rec || !rec.backing) return Promise.resolve(false);
+  // switching projects while one is open (File ▸ Open recent): return to a clean
+  // landing first, so the folder-open path (guarded on !currentFile) runs.
+  if (typeof currentFile !== 'undefined' && currentFile && typeof closeProjectToLanding === 'function') closeProjectToLanding();
   currentProjectRecId = rec.id;   // edits/autosaves update THIS record, not a new one
   projOpening = true;             // tells handleFile (run inside the open) not to clear the id
   var b = rec.backing;
@@ -334,6 +344,19 @@ function projMigrateFromRecents() {
   }).catch(function () { return 0; });
 }
 
+// A title not already used by another project: "Name", then "Name (copy)",
+// "Name (copy 2)", … So a re-imported pack reads as a distinct copy, not a clone.
+function projUniqueTitle(base, existing) {
+  base = base || 'Untitled project';
+  var taken = {};
+  (existing || []).forEach(function (r) { if (r && r.title) taken[r.title] = true; });
+  if (!taken[base]) return base;
+  var t = base + ' (copy)';
+  var n = 2;
+  while (taken[t]) { t = base + ' (copy ' + n + ')'; n++; }
+  return t;
+}
+
 // Display label for a backing kind (used by the manager + the header pill).
 function projBackingLabel(kind) {
   return kind === 'folder' ? 'folder' : kind === 'opfs' ? 'browser storage' : kind === 'idb' ? 'embedded' : kind === 'local' ? 'local' : 'file';
@@ -390,7 +413,7 @@ function projTouchCurrent() {
     if (!rec.lastOpened) rec.lastOpened = now;
     rec.backing = projCurrentBacking(existing);
     currentProjectRecId = id;
-    return projPut(rec);
+    return projPut(rec).then(function (r) { if (typeof projRefreshMenuCache === 'function') projRefreshMenuCache(); return r; });
   }).catch(function () { return null; });
 }
 
