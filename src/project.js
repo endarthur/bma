@@ -2585,6 +2585,9 @@ function displayResults(data) {
     // C11-P1: with a folder mounted, resolve a restored project's still-pending
     // comparison-dataset + drillhole-trio files from the folder by name — no re-drop.
     if (typeof fsaaResolveProjectFiles === 'function') fsaaResolveProjectFiles();
+    // Derived-lifecycle: after re-derives settle, surface a single banner if any
+    // view-bearing derived dataset couldn't be recreated (source not loaded).
+    if (typeof dsCheckDerivedHealth === 'function') setTimeout(dsCheckDerivedHealth, 3000);
     pendingPanelState = restoredProject.panels || null;
     if (pendingPanelState && pendingPanelState.statistics) {
       var pst = pendingPanelState.statistics;

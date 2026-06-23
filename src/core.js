@@ -467,6 +467,30 @@ function dsDependentViewCount(dsId) {
   if (typeof surfaceList !== 'function') return 0;
   return surfaceList().filter(function (s) { return s.target === dsId; }).length;
 }
+// One consolidated banner when view-bearing derived datasets couldn't be recreated
+// on open (source not loaded) — the per-node ⚠ badge is the detail; this is the
+// "you should know" summary. Dismissible, mounts on body, refreshes itself.
+function dsCheckDerivedHealth() {
+  var existing = document.getElementById('derivedHealthBanner');
+  if (existing) existing.remove();
+  if (typeof datasets === 'undefined') return;
+  var broken = datasets.filter(function (d) {
+    return d && d.derivedFrom && !d.file && !(typeof dsIsMaterialized === 'function' && dsIsMaterialized(d)) &&
+      dsDependentViewCount(d.id) > 0;
+  });
+  if (!broken.length) return;
+  var views = broken.reduce(function (n, d) { return n + dsDependentViewCount(d.id); }, 0);
+  var msg = broken.length + ' derived dataset' + (broken.length > 1 ? 's' : '') + ' couldn’t be recreated' +
+    ' (source not loaded) — ' + views + ' view' + (views > 1 ? 's' : '') + ' affected. Open the project folder or re-drop the source files.';
+  var bar = document.createElement('div');
+  bar.id = 'derivedHealthBanner';
+  bar.className = 'derived-health-banner';
+  bar.innerHTML = '<span class="dhb-icon">⚠</span><span class="dhb-msg"></span>' +
+    '<button class="dhb-dismiss" title="Dismiss">✕</button>';
+  bar.querySelector('.dhb-msg').textContent = msg;
+  bar.querySelector('.dhb-dismiss').addEventListener('click', function () { bar.remove(); });
+  document.body.appendChild(bar);
+}
 function viewTarget(id) { var s = surfaceList().filter(function (x) { return x.id === id; })[0]; return s ? s.target : 'model'; }
 
 // User-given surface titles (persisted as the `surfaceTitles` project key) — let

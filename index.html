@@ -4563,6 +4563,17 @@ table.stats tr.stats-delta-row td:first-child {
 /* timing nudge: one-click freeze for a slow-to-recreate derived dataset */
 .tree-ds-mat-nudge { font: 0.56rem var(--sans); color: var(--amber); background: none; border: 1px solid var(--amber); border-radius: 3px; padding: 0.02rem 0.3rem; cursor: pointer; white-space: nowrap; }
 .tree-ds-mat-nudge:hover { background: var(--amber); color: var(--bg); }
+/* consolidated derived-health banner (project open) */
+.derived-health-banner {
+  position: fixed; top: 0.6rem; left: 50%; transform: translateX(-50%); z-index: 3000;
+  display: flex; align-items: center; gap: 0.55rem; max-width: min(90vw, 720px);
+  background: var(--warn-soft); border: 1px solid var(--warn); border-radius: 6px;
+  padding: 0.45rem 0.6rem; box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+}
+.derived-health-banner .dhb-icon { color: var(--warn); font-size: 0.9rem; flex: none; }
+.derived-health-banner .dhb-msg { font: 0.72rem var(--sans); color: var(--fg); }
+.derived-health-banner .dhb-dismiss { background: none; border: none; color: var(--fg-dim); cursor: pointer; font-size: 0.8rem; padding: 0 0.2rem; flex: none; }
+.derived-health-banner .dhb-dismiss:hover { color: var(--fg); }
 /* C10: the "Surfaces" group — analysis views targeting a dataset (reverse index of
    the per-surface Dataset picker). Click a row to focus the view; ✎ renames it. */
 .tree-surface { cursor: pointer; gap: 0.4rem; }
@@ -6380,7 +6391,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 711e2be — click to check for updates">711e2be</div>
+<div class="build-badge" id="buildBadge" title="build dcae755 — click to check for updates">dcae755</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -9500,6 +9511,30 @@ function viewKindFacet(kind) { var d = surfaceDescriptors().filter(function (x) 
 function dsDependentViewCount(dsId) {
   if (typeof surfaceList !== 'function') return 0;
   return surfaceList().filter(function (s) { return s.target === dsId; }).length;
+}
+// One consolidated banner when view-bearing derived datasets couldn't be recreated
+// on open (source not loaded) — the per-node ⚠ badge is the detail; this is the
+// "you should know" summary. Dismissible, mounts on body, refreshes itself.
+function dsCheckDerivedHealth() {
+  var existing = document.getElementById('derivedHealthBanner');
+  if (existing) existing.remove();
+  if (typeof datasets === 'undefined') return;
+  var broken = datasets.filter(function (d) {
+    return d && d.derivedFrom && !d.file && !(typeof dsIsMaterialized === 'function' && dsIsMaterialized(d)) &&
+      dsDependentViewCount(d.id) > 0;
+  });
+  if (!broken.length) return;
+  var views = broken.reduce(function (n, d) { return n + dsDependentViewCount(d.id); }, 0);
+  var msg = broken.length + ' derived dataset' + (broken.length > 1 ? 's' : '') + ' couldn’t be recreated' +
+    ' (source not loaded) — ' + views + ' view' + (views > 1 ? 's' : '') + ' affected. Open the project folder or re-drop the source files.';
+  var bar = document.createElement('div');
+  bar.id = 'derivedHealthBanner';
+  bar.className = 'derived-health-banner';
+  bar.innerHTML = '<span class="dhb-icon">⚠</span><span class="dhb-msg"></span>' +
+    '<button class="dhb-dismiss" title="Dismiss">✕</button>';
+  bar.querySelector('.dhb-msg').textContent = msg;
+  bar.querySelector('.dhb-dismiss').addEventListener('click', function () { bar.remove(); });
+  document.body.appendChild(bar);
 }
 function viewTarget(id) { var s = surfaceList().filter(function (x) { return x.id === id; })[0]; return s ? s.target : 'model'; }
 
@@ -21972,6 +22007,9 @@ function displayResults(data) {
     // C11-P1: with a folder mounted, resolve a restored project's still-pending
     // comparison-dataset + drillhole-trio files from the folder by name — no re-drop.
     if (typeof fsaaResolveProjectFiles === 'function') fsaaResolveProjectFiles();
+    // Derived-lifecycle: after re-derives settle, surface a single banner if any
+    // view-bearing derived dataset couldn't be recreated (source not loaded).
+    if (typeof dsCheckDerivedHealth === 'function') setTimeout(dsCheckDerivedHealth, 3000);
     pendingPanelState = restoredProject.panels || null;
     if (pendingPanelState && pendingPanelState.statistics) {
       var pst = pendingPanelState.statistics;
