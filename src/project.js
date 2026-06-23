@@ -101,9 +101,20 @@ function renderRecentFiles() {
       $recentFiles.innerHTML = '';
       return;
     }
-    var html = '<div class="recent-files-title">Recent Files</div>';
+    var html = '<div class="recent-files-title">Recent</div>';
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
+      // C11: a mounted project FOLDER (an on-disk project) \u2014 distinct icon + badge
+      if (it.isFolder) {
+        html += '<div class="recent-item recent-item--folder" data-key="' + esc(it._key) + '" title="On-disk project folder">';
+        html += '<span class="recent-item-name">\ud83d\udcc1 ' + esc(it.name) + '</span>';
+        html += '<span class="recent-item-size"></span>';
+        html += '<span class="recent-item-project recent-item-folder-badge">folder</span>';
+        html += '<span class="recent-item-time">' + timeAgo(it.lastOpened) + '</span>';
+        html += '<button class="recent-item-remove" data-key="' + esc(it._key) + '" title="Remove">\u2715</button>';
+        html += '</div>';
+        continue;
+      }
       var hasProj = !!it.packed;
       try { hasProj = hasProj || localStorage.getItem(it._key) !== null; } catch(e) {}
       html += '<div class="recent-item" data-key="' + esc(it._key) + '">';
@@ -197,6 +208,10 @@ function reopenRecent(key) {
     });
   }).then(function(entry) {
     if (!entry) return;
+    // C11: a folder recent → re-mount it + open its project (open-recent-folder)
+    if (entry.isFolder && entry.folderHandle && typeof fsaaActivateHandle === 'function') {
+      return fsaaActivateHandle(entry.folderHandle);
+    }
     if (entry.handle && typeof entry.handle.queryPermission === 'function') {
       // FSAA path — check permission first, only prompt if needed
       entry.handle.queryPermission({ mode: 'read' }).then(function(perm) {
@@ -256,6 +271,15 @@ function saveToRecents(file, handle, isPacked) {
     lastOpened: Date.now()
   };
   recentPut(key, entry).catch(function() { /* silent */ });
+}
+
+// C11: record a mounted project folder in recents (on-disk project) so it lists
+// alongside recent files with a folder badge + one-click reopen.
+function saveFolderToRecents(handle) {
+  if (!handle || !handle.name) return Promise.resolve();
+  return recentPut('folder:' + handle.name, {
+    name: handle.name, isFolder: true, folderHandle: handle, lastOpened: Date.now()
+  }).then(function() { if (typeof renderRecentFiles === 'function') renderRecentFiles(); }).catch(function() {});
 }
 
 function cacheGet(key) {

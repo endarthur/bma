@@ -624,7 +624,7 @@ function wsScaleMenuItems() {
 function wsRecentMenuItems() {
   if (!wsRecentsCache || !wsRecentsCache.length) return [{ label: '(no recent files)', disabled: true }];
   return wsRecentsCache.slice(0, 12).map(function(it) {
-    return { label: it.name, action: { recent: it._key } };
+    return { label: (it.isFolder ? '📁 ' : '') + it.name, action: { recent: it._key } };   // C11: folder badge
   });
 }
 function wsFileMenuItems() {

@@ -236,32 +236,37 @@ function fsaaRenderIndicator() {
   }
 }
 
-// Reflect a mount change: render the indicator + persist the project into the new
-// folder. The File menu is a live factory, so it picks up mountedFolder on open.
+// Reflect a mount change: render the indicator, record the folder in recents (an
+// on-disk project), and persist the project into the new folder. The File menu is
+// a live factory, so it picks up mountedFolder on open.
 function fsaaAfterMountChange() {
   fsaaRenderIndicator();
+  if (mountedFolder && typeof saveFolderToRecents === 'function') saveFolderToRecents(mountedFolder);
   if (mountedFolder && typeof autoSaveProject === 'function') autoSaveProject();
 }
 
-// Landing affordances (the starting-screen mount — the File-menu one needs a
-// loaded file). "Open project folder" picks any folder; when a folder was used
-// before, a one-click "Reopen <name>" appears too (open-recent-folder). A refresh
-// returns to the landing — reopening is a deliberate click, not automatic.
+// Re-mount a directory handle (from a recents entry) + open its project.
+function fsaaActivateHandle(handle) {
+  if (!handle) return Promise.resolve(false);
+  return fsaaEnsurePermission(handle, true).then(function (ok) {
+    if (!ok) return false;
+    mountedFolder = handle;
+    fsaaStoreHandle(handle).catch(function () {});
+    fsaaAfterMountChange();
+    return fsaaMaybeOpenProject().then(function () { return true; });
+  });
+}
+
+// Landing affordance (the starting-screen mount — the File-menu one needs a loaded
+// file). "Open project folder" picks any folder; folders you've used before list
+// in Recent (with a 📁 badge) for one-click reopen. A refresh returns to the
+// landing — reopening is a deliberate click, not automatic.
 function fsaaInitLanding() {
   var open = document.getElementById('landingMountBtn');
-  var reopen = document.getElementById('landingReopenBtn');
   if (!open) return;
-  if (!fsaaSupported()) { open.style.display = 'none'; if (reopen) reopen.style.display = 'none'; return; }
+  if (!fsaaSupported()) { open.style.display = 'none'; return; }
   open.style.display = '';
   open.onclick = function () { fsaaMountFolder(); };   // a click is the gesture showDirectoryPicker needs
-  if (!reopen) return;
-  fsaaLoadHandle().then(function (h) {
-    if (!h || !h.name) { reopen.style.display = 'none'; return; }
-    reopen.textContent = '↻ Reopen ' + h.name;
-    reopen.title = 'Reopen the last project folder — no folder picker';
-    reopen.style.display = '';
-    reopen.onclick = function () { fsaaReopenFolder().then(function (ok) { if (ok) fsaaMaybeOpenProject(); }); };
-  }).catch(function () {});
 }
 
 // Startup: wire the landing affordances. NO auto-mount/auto-open — a refresh lands

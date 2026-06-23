@@ -327,6 +327,8 @@ header .logo-mark {
   border-radius: 2px;
   white-space: nowrap;
 }
+/* C11: on-disk folder project badge — green to distinguish from file projects */
+.recent-item-folder-badge { color: var(--green); background: var(--green-soft); }
 .recent-item-remove {
   background: none;
   border: none;
@@ -5550,7 +5552,6 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
 
   <div class="landing-actions">
     <button class="landing-newproj-btn" id="newProjectBtn">+ Start an empty project</button>
-    <button class="landing-newproj-btn landing-mount-btn" id="landingReopenBtn" style="display:none"></button>
     <button class="landing-newproj-btn landing-mount-btn" id="landingMountBtn" style="display:none" title="Open a BMA project folder — its files resolve from disk, no re-drop">📁 Open project folder</button>
     <span class="landing-newproj-hint">no block model needed — add drillholes or point data, then go</span>
   </div>
@@ -6209,7 +6210,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 2d787a3 — click to check for updates">2d787a3</div>
+<div class="build-badge" id="buildBadge" title="build 744f3f0 — click to check for updates">744f3f0</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -19189,9 +19190,20 @@ function renderRecentFiles() {
       $recentFiles.innerHTML = '';
       return;
     }
-    var html = '<div class="recent-files-title">Recent Files</div>';
+    var html = '<div class="recent-files-title">Recent</div>';
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
+      // C11: a mounted project FOLDER (an on-disk project) \u2014 distinct icon + badge
+      if (it.isFolder) {
+        html += '<div class="recent-item recent-item--folder" data-key="' + esc(it._key) + '" title="On-disk project folder">';
+        html += '<span class="recent-item-name">\ud83d\udcc1 ' + esc(it.name) + '</span>';
+        html += '<span class="recent-item-size"></span>';
+        html += '<span class="recent-item-project recent-item-folder-badge">folder</span>';
+        html += '<span class="recent-item-time">' + timeAgo(it.lastOpened) + '</span>';
+        html += '<button class="recent-item-remove" data-key="' + esc(it._key) + '" title="Remove">\u2715</button>';
+        html += '</div>';
+        continue;
+      }
       var hasProj = !!it.packed;
       try { hasProj = hasProj || localStorage.getItem(it._key) !== null; } catch(e) {}
       html += '<div class="recent-item" data-key="' + esc(it._key) + '">';
@@ -19285,6 +19297,10 @@ function reopenRecent(key) {
     });
   }).then(function(entry) {
     if (!entry) return;
+    // C11: a folder recent → re-mount it + open its project (open-recent-folder)
+    if (entry.isFolder && entry.folderHandle && typeof fsaaActivateHandle === 'function') {
+      return fsaaActivateHandle(entry.folderHandle);
+    }
     if (entry.handle && typeof entry.handle.queryPermission === 'function') {
       // FSAA path — check permission first, only prompt if needed
       entry.handle.queryPermission({ mode: 'read' }).then(function(perm) {
@@ -19344,6 +19360,15 @@ function saveToRecents(file, handle, isPacked) {
     lastOpened: Date.now()
   };
   recentPut(key, entry).catch(function() { /* silent */ });
+}
+
+// C11: record a mounted project folder in recents (on-disk project) so it lists
+// alongside recent files with a folder badge + one-click reopen.
+function saveFolderToRecents(handle) {
+  if (!handle || !handle.name) return Promise.resolve();
+  return recentPut('folder:' + handle.name, {
+    name: handle.name, isFolder: true, folderHandle: handle, lastOpened: Date.now()
+  }).then(function() { if (typeof renderRecentFiles === 'function') renderRecentFiles(); }).catch(function() {});
 }
 
 function cacheGet(key) {
@@ -23293,32 +23318,37 @@ function fsaaRenderIndicator() {
   }
 }
 
-// Reflect a mount change: render the indicator + persist the project into the new
-// folder. The File menu is a live factory, so it picks up mountedFolder on open.
+// Reflect a mount change: render the indicator, record the folder in recents (an
+// on-disk project), and persist the project into the new folder. The File menu is
+// a live factory, so it picks up mountedFolder on open.
 function fsaaAfterMountChange() {
   fsaaRenderIndicator();
+  if (mountedFolder && typeof saveFolderToRecents === 'function') saveFolderToRecents(mountedFolder);
   if (mountedFolder && typeof autoSaveProject === 'function') autoSaveProject();
 }
 
-// Landing affordances (the starting-screen mount — the File-menu one needs a
-// loaded file). "Open project folder" picks any folder; when a folder was used
-// before, a one-click "Reopen <name>" appears too (open-recent-folder). A refresh
-// returns to the landing — reopening is a deliberate click, not automatic.
+// Re-mount a directory handle (from a recents entry) + open its project.
+function fsaaActivateHandle(handle) {
+  if (!handle) return Promise.resolve(false);
+  return fsaaEnsurePermission(handle, true).then(function (ok) {
+    if (!ok) return false;
+    mountedFolder = handle;
+    fsaaStoreHandle(handle).catch(function () {});
+    fsaaAfterMountChange();
+    return fsaaMaybeOpenProject().then(function () { return true; });
+  });
+}
+
+// Landing affordance (the starting-screen mount — the File-menu one needs a loaded
+// file). "Open project folder" picks any folder; folders you've used before list
+// in Recent (with a 📁 badge) for one-click reopen. A refresh returns to the
+// landing — reopening is a deliberate click, not automatic.
 function fsaaInitLanding() {
   var open = document.getElementById('landingMountBtn');
-  var reopen = document.getElementById('landingReopenBtn');
   if (!open) return;
-  if (!fsaaSupported()) { open.style.display = 'none'; if (reopen) reopen.style.display = 'none'; return; }
+  if (!fsaaSupported()) { open.style.display = 'none'; return; }
   open.style.display = '';
   open.onclick = function () { fsaaMountFolder(); };   // a click is the gesture showDirectoryPicker needs
-  if (!reopen) return;
-  fsaaLoadHandle().then(function (h) {
-    if (!h || !h.name) { reopen.style.display = 'none'; return; }
-    reopen.textContent = '↻ Reopen ' + h.name;
-    reopen.title = 'Reopen the last project folder — no folder picker';
-    reopen.style.display = '';
-    reopen.onclick = function () { fsaaReopenFolder().then(function (ok) { if (ok) fsaaMaybeOpenProject(); }); };
-  }).catch(function () {});
 }
 
 // Startup: wire the landing affordances. NO auto-mount/auto-open — a refresh lands
@@ -37022,7 +37052,7 @@ function wsScaleMenuItems() {
 function wsRecentMenuItems() {
   if (!wsRecentsCache || !wsRecentsCache.length) return [{ label: '(no recent files)', disabled: true }];
   return wsRecentsCache.slice(0, 12).map(function(it) {
-    return { label: it.name, action: { recent: it._key } };
+    return { label: (it.isFolder ? '📁 ' : '') + it.name, action: { recent: it._key } };   // C11: folder badge
   });
 }
 function wsFileMenuItems() {

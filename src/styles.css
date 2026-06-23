@@ -312,6 +312,8 @@ header .logo-mark {
   border-radius: 2px;
   white-space: nowrap;
 }
+/* C11: on-disk folder project badge — green to distinguish from file projects */
+.recent-item-folder-badge { color: var(--green); background: var(--green-soft); }
 .recent-item-remove {
   background: none;
   border: none;
