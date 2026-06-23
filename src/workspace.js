@@ -724,12 +724,16 @@ function wsScaleMenuItems() {
 // C14: File ▸ Open recent now lists PROJECTS (the registry), not raw files.
 function wsRecentMenuItems() {
   var ps = (typeof wsProjectsCache !== 'undefined' && wsProjectsCache) ? wsProjectsCache : [];
-  if (!ps.length) return [{ label: '(no recent projects)', disabled: true }];
-  return ps.slice(0, 12).map(function(p) {
+  var items = ps.slice(0, 12).map(function(p) {
     var k = p.backing && p.backing.kind;
     var icon = k === 'folder' ? '📁 ' : k === 'opfs' ? '🗄 ' : k === 'idb' ? '💾 ' : '';
     return { label: icon + (p.title || 'Untitled project'), action: { project: p.id } };
   });
+  if (!items.length) items = [{ label: '(no recent projects)', disabled: true }];
+  // converge the quick list with the rich landing manager (search / tags / import)
+  items.push('---');
+  items.push({ label: 'All projects…', action: 'projectManager' });
+  return items;
 }
 function wsFileMenuItems() {
   // C11: a mounted project folder (when FSAA is supported). Live factory → the
@@ -829,6 +833,7 @@ function wsMenuAction(a) {
     case 'fsaaUnmount': if (typeof fsaaUnmount === 'function') fsaaUnmount(); break;             // C11
     case 'clear': clearProject(); break;
     case 'closeFile': $backToPreflight.click(); break;
+    case 'projectManager': if (typeof closeProjectToLanding === 'function') closeProjectToLanding(); else if ($backToPreflight) $backToPreflight.click(); break;   // → landing manager
     case 'settings': openSettings(); break;
     case 'toggleTree': toggleCatalogTree(); break;
     case 'resetLayout': wsResetLayout(); break;
