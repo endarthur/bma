@@ -181,9 +181,16 @@ Project  (registry record + storage backing)
   materialize to skip re-deriving next time?" (Arthur's idea, 2026-06-23). Not yet
   built; the manual Materialize affordance covers it for now.
 
-- **Statistics panel layout** — the table/plot split wants resize handles + a layout
-  pass (the scrolling CDF plot reads awkwardly). Flagged 2026-06-22; not yet done.
-- **A16 orientation / stereonet** — the first new surface kind to validate the C10
-  contract against this ontology.
-- Whether the File-menu recents and the manager should converge further (today the
-  manager is the rich surface; the menu is a quick list).
+- **Stats selection polish** — the metric pills could show a stronger active state,
+  and the wide stats table could use zebra striping. (The layout pass itself —
+  draggable split, plot-fills-pane, sticky header/column, restyled selection — is
+  DONE, 2026-06-23.)
+- **Warn-on-broken: consolidated notice.** Today a derived dataset that can't be
+  recreated warns via its tree badge (`⚠ N ▦`). A project-open banner that sums up
+  "M composites couldn't be recreated, N views affected" was left out.
+- **Backup of a local/file-backed project** opens-then-packs (dir backings —
+  folder/opfs/idb — re-zip directly without opening). Minor.
+- Whether the File-menu "Open recent" and the project manager should converge
+  further (the manager is the rich surface; the menu is a quick list).
+- **A16 orientation / stereonet** — not polish but the next *feature*; the first new
+  view kind to validate the C10 contract against this ontology.
