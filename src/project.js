@@ -1800,6 +1800,10 @@ async function handleFile(file, handle, skipRecents) {
       // via its handle) — not the extracted inner CSV, which used to land
       // in the list under a name nobody dropped and could never re-open
       saveToRecents(file, handle, true);
+      // C14: the ZIP is the re-openable artifact — keep its handle so reopen
+      // re-extracts the pack (handleFile auto-detects .zip), no re-pick. The inner
+      // handleFile below is skipRecents=true, so it won't clobber this (see 1816).
+      if (typeof currentFileHandle !== 'undefined') currentFileHandle = handle || null;
       if (packed.modelFile) {
         handleFile(packed.modelFile, null, true);
       } else {
@@ -1813,7 +1817,10 @@ async function handleFile(file, handle, skipRecents) {
 
   currentFile = file;
   currentProjectId = null;   // model-backed: identity is the file key (dual-key)
-  if (typeof currentFileHandle !== 'undefined') currentFileHandle = handle || null;   // C14: keep the model's FSAA handle so reopen needs no re-pick
+  // C14: keep the model's FSAA handle so reopen needs no re-pick. Guarded on
+  // !skipRecents so an INNER call (packed-zip → inner model, folder-open → model)
+  // doesn't null out the outer artifact's handle captured above.
+  if (!skipRecents && typeof currentFileHandle !== 'undefined') currentFileHandle = handle || null;
   // C14: a FRESH load starts its own registry record; an open driven by projOpen
   // (projOpening) keeps the record id it set.
   if (typeof projOpening === 'undefined' || !projOpening) { if (typeof currentProjectRecId !== 'undefined') currentProjectRecId = null; }
