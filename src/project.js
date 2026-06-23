@@ -771,6 +771,7 @@ function autoSaveProject() {
     } catch (e) { /* quota — silent fail */ }
     // C11-P1: a mounted project folder also gets the JSON written into it.
     if (typeof mountedFolder !== 'undefined' && mountedFolder && typeof fsaaWriteProjectJson === 'function') fsaaWriteProjectJson(ser);
+    if (typeof projTouchCurrent === 'function') projTouchCurrent();   // C14: keep the registry fresh
   }, 2000);
 }
 
@@ -787,6 +788,7 @@ function flushProjectSave() {
     ok = true;
   } catch (e) { /* quota — silent fail */ }
   if (typeof mountedFolder !== 'undefined' && mountedFolder && typeof fsaaWriteProjectJson === 'function') fsaaWriteProjectJson(ser);   // C11-P1
+  if (typeof projTouchCurrent === 'function') projTouchCurrent();   // C14: keep the registry fresh
   var beat = document.getElementById('saveBeat');
   if (beat) {
     beat.textContent = ok ? 'Saved ✓' : 'Save failed';
@@ -1816,6 +1818,9 @@ async function handleFile(file, handle, skipRecents) {
 
   currentFile = file;
   currentProjectId = null;   // model-backed: identity is the file key (dual-key)
+  // C14: a FRESH load starts its own registry record; an open driven by projOpen
+  // (projOpening) keeps the record id it set.
+  if (typeof projOpening === 'undefined' || !projOpening) { if (typeof currentProjectRecId !== 'undefined') currentProjectRecId = null; }
   if (!skipRecents) saveToRecents(file, handle);
   resetProjectState();
 
@@ -1917,8 +1922,10 @@ $backToPreflight.addEventListener('click', () => {
   $dropzone.querySelector('.label').innerHTML = 'Drop a CSV file here, or <strong>click to browse</strong>';
   renderRecentFiles();
   if (typeof renderProjectList === 'function') renderProjectList();
+  if (typeof renderProjects === 'function') renderProjects();   // C14 manager
   currentFile = null;
   currentProjectId = null;   // closing returns to the landing; a model-less project is reopened from its list
+  if (typeof currentProjectRecId !== 'undefined') currentProjectRecId = null;   // C14: next project gets its own record
   preflightData = null;
   hasResults = false;
   currentCalcolCode = '';

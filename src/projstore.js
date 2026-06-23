@@ -253,6 +253,8 @@ function projImportPack(file, dest) {
 // ── open a project from its record (dispatch on backing) ──────────────────
 function projOpen(rec) {
   if (!rec || !rec.backing) return Promise.resolve(false);
+  currentProjectRecId = rec.id;   // edits/autosaves update THIS record, not a new one
+  projOpening = true;             // tells handleFile (run inside the open) not to clear the id
   var b = rec.backing;
   var done = Promise.resolve(false);
   if (b.kind === 'folder' && b.folderHandle && typeof fsaaActivateHandle === 'function') {
@@ -274,10 +276,12 @@ function projOpen(rec) {
     }
   }
   return Promise.resolve(done).then(function (r) {
+    projOpening = false;
+    currentProjectRecId = rec.id;   // re-assert (handleFile may have run mid-open)
     rec.lastOpened = Date.now();
     projPut(rec).catch(function () {});
     return r;
-  });
+  }, function (e) { projOpening = false; throw e; });
 }
 
 // Mount a non-FSAA directory handle (opfs / idb virtual folder) as the project
@@ -333,6 +337,75 @@ function projMigrateFromRecents() {
 // Display label for a backing kind (used by the manager + the header pill).
 function projBackingLabel(kind) {
   return kind === 'folder' ? 'folder' : kind === 'opfs' ? 'browser storage' : kind === 'idb' ? 'embedded' : kind === 'local' ? 'local' : 'file';
+}
+
+// ── keep the registry fresh as the user works ─────────────────────────────
+// The record id for the open project. Set when opening from the registry; else a
+// dropped/created project is keyed by its stable currentProjectKey() so re-opening
+// updates the same record (no duplicates). Reset on close/clear.
+var currentProjectRecId = null;
+var projOpening = false;   // true while projOpen drives handleFile, so it keeps the rec id
+
+// Live metadata for the open project (title, model, counts, drillholes).
+function projCurrentMeta() {
+  var title = (typeof projectTitle !== 'undefined' && projectTitle) ? projectTitle
+    : (typeof currentFile !== 'undefined' && currentFile ? String(currentFile.name).replace(/\.[^.]+$/, '') : 'Untitled project');
+  var dsc = 0, dh = false;
+  if (typeof datasets !== 'undefined' && datasets) datasets.forEach(function (d) { if (d && d.id !== 'model' && d.preflight) dsc++; });
+  if (typeof dhStates === 'object' && dhStates) Object.keys(dhStates).forEach(function (k) { if (dhStates[k] && dhStates[k].files && dhStates[k].files.collar) dh = true; });
+  return {
+    title: title,
+    modelName: (typeof currentFile !== 'undefined' && currentFile) ? currentFile.name : null,
+    modelSize: (typeof currentFile !== 'undefined' && currentFile) ? currentFile.size : null,
+    rowCount: (typeof lastCompleteData !== 'undefined' && lastCompleteData) ? lastCompleteData.rowCount : null,
+    datasetCount: dsc, hasDrillholes: dh
+  };
+}
+// The backing to record for the open project. Preserve a non-local backing the
+// project already came from (folder/opfs/idb — edits persist there); a plain
+// dropped project is 'local' (its autosave blob in localStorage).
+function projCurrentBacking(existing) {
+  if (existing && existing.backing && existing.backing.kind !== 'local' && existing.backing.kind !== 'file') return existing.backing;
+  if (typeof mountedFolder !== 'undefined' && mountedFolder && !(typeof mountedFolderVirtual !== 'undefined' && mountedFolderVirtual)) {
+    return { kind: 'folder', folderHandle: mountedFolder };   // a real FSAA folder
+  }
+  return { kind: 'local', projKey: (typeof currentProjectKey === 'function' ? currentProjectKey() : null) };
+}
+// Upsert the open project's registry record. Called from autosave/flush, so the
+// manager always reflects what you've been working on. No-op until there's a real
+// project (a key + — for model-backed — a preflight).
+function projTouchCurrent() {
+  var key = (typeof currentProjectKey === 'function') ? currentProjectKey() : null;
+  if (!key) return Promise.resolve(null);
+  if (typeof currentFile !== 'undefined' && currentFile && typeof preflightData !== 'undefined' && !preflightData) return Promise.resolve(null);
+  var id = currentProjectRecId || key;
+  return projGet(id).then(function (existing) {
+    var now = Date.now();
+    var meta = projCurrentMeta();
+    var rec = existing || { id: id, tags: [], notes: '', created: now, lastOpened: now };
+    rec.id = id;
+    rec.title = meta.title; rec.modelName = meta.modelName; rec.modelSize = meta.modelSize;
+    rec.rowCount = meta.rowCount; rec.datasetCount = meta.datasetCount; rec.hasDrillholes = meta.hasDrillholes;
+    rec.lastSaved = now;
+    if (!rec.lastOpened) rec.lastOpened = now;
+    rec.backing = projCurrentBacking(existing);
+    currentProjectRecId = id;
+    return projPut(rec);
+  }).catch(function () { return null; });
+}
+
+// Open a 'local'-backed project from its localStorage blob. Model-less restores
+// fully; a model-backed local project needs its model file re-picked.
+function reopenLocalProject(projKey) {
+  var raw = null; try { raw = localStorage.getItem(projKey); } catch (e) {}
+  if (!raw) return Promise.resolve(false);
+  var pj; try { pj = JSON.parse(raw); } catch (e) { return Promise.resolve(false); }
+  if (pj.file && pj.file.name) {
+    if (typeof pendingDroppedProject !== 'undefined') pendingDroppedProject = pj;
+    if (typeof promptReselect === 'function') promptReselect(pj.file.name);
+    return Promise.resolve(true);
+  }
+  return Promise.resolve(typeof applyProject === 'function' ? applyProject(pj) : false).then(function () { return true; });
 }
 
 // The pill prefers a friendly project title over a raw opfs dir name.

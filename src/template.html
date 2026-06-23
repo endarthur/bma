@@ -49,12 +49,15 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <div class="landing-actions">
     <button class="landing-newproj-btn" id="newProjectBtn">+ Start an empty project</button>
     <button class="landing-newproj-btn landing-mount-btn" id="landingMountBtn" style="display:none" title="Open a BMA project folder — its files resolve from disk, no re-drop">📁 Open project folder</button>
+    <button class="landing-newproj-btn landing-import-btn" id="landingImportBtn" title="Import a .bma.zip pack into your projects without opening it">⬇ Import pack</button>
     <span class="landing-newproj-hint">no block model needed — add drillholes or point data, then go</span>
   </div>
 
-  <div class="project-list" id="projectList"></div>
-
-  <div class="recent-files" id="recentFiles"></div>
+  <!-- C14 project manager renders here; the legacy lists stay hidden in the DOM
+       (renderRecentFiles still feeds the File-menu recents cache) -->
+  <div class="project-manager" id="projectManager"></div>
+  <div class="project-list" id="projectList" style="display:none"></div>
+  <div class="recent-files" id="recentFiles" style="display:none"></div>
 
   <div class="example-download">
     <button class="example-download-btn" id="exampleDownload">⤓ Download example dataset</button>

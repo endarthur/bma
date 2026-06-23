@@ -40,6 +40,7 @@ const APP_MODULES = [
   'project.js',
   'fsaa.js',            // C11 FSAA-mounted project folder (mount/persist handle; uses openCacheDB)
   'projstore.js',       // C14 project registry — records + storage backends (folder/opfs/idb), import, migration
+  'projmanager.js',     // C14 landing project manager — search/sort/tags/notes, import, backup (uses projstore + DOM)
   'statistics.js',
   'export.js',
   'swath.js',

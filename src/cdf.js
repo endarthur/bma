@@ -12,6 +12,7 @@ function showCDF(colIdx) {
 
 // (service worker registration lives in pwa.js)
 
-// Load recent files + saved (model-less) projects on page load
+// Load recent files (feeds the File-menu cache) + the C14 project manager on load
 renderRecentFiles();
 if (typeof renderProjectList === 'function') renderProjectList();
+if (typeof renderProjects === 'function') renderProjects();
