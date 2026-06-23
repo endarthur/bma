@@ -113,11 +113,17 @@ function refreshAuxGridSection(ds, root) {
   if (wrap) wrap.innerHTML = dsGridSectionHtml(ds);
 }
 
+// A derived dataset whose recreate+analyze takes longer than this gets a (subtle,
+// one-click) "materialize?" nudge in the tree — auto-recreate is fine when fast,
+// but a slow one is worth freezing so reloads skip re-deriving it.
+var DERIVE_SLOW_MS = 2500;
+
 function runAuxAnalysis(ds, root) {
   ds = ds || dsById('aux');
   root = root || dsConfigRoot(ds);
   if (!ds.file || !ds.preflight) return;
   if (ds._worker) { try { ds._worker.terminate(); } catch (e) {} ds._worker = null; }
+  ds._analyzeStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
   ds._worker = new Worker(workerUrl);
 
   var $btn = auxQ('[data-act="auxAnalyze"]', root);
@@ -206,6 +212,13 @@ function runAuxAnalysis(ds, root) {
         filterErrors: m.filterErrors || null, calcolErrors: m.calcolErrors || null,
         raggedRows: m.raggedRows || 0, coordInvalidCells: m.coordInvalidCells || 0, weightExcluded: m.weightExcluded || 0 };
       ds.stale = false;
+      // timing-threshold nudge: flag a DERIVED dataset that was slow to recreate so
+      // the tree offers a one-click Materialize (freeze → fast reloads next time).
+      if (ds.derivedFrom && ds._analyzeStart && !(typeof dsIsMaterialized === 'function' && dsIsMaterialized(ds))) {
+        var elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - ds._analyzeStart;
+        ds._slowDerive = elapsed > DERIVE_SLOW_MS;
+      }
+      ds._analyzeStart = null;
       if ($btn) $btn.disabled = false;
       if (typeof setGenStale === 'function') setGenStale(auxQ('[data-act="auxAnalyze"]', root), false);  // C6-5 dim-when-done
       refreshAuxGridSection(ds, root);  // A10 4f-2: detected-grid badge now known

@@ -1115,7 +1115,9 @@ header .logo-mark {
 }
 .stats-metric-toggle input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
 .stats-metric-toggle:hover { border-color: var(--fg-dim); color: var(--fg); }
-.stats-metric-toggle:has(input:checked) { background: var(--sel-soft); border-color: var(--sel); color: var(--sel); }
+/* active = solid fill (unmistakable on/off, no zebra needed) */
+.stats-metric-toggle:has(input:checked) { background: var(--sel); border-color: var(--sel); color: var(--bg); font-weight: 600; }
+.stats-metric-toggle:has(input:checked):hover { color: var(--bg); }
 .stats-search {
   width: 100%;
   background: var(--bg);
@@ -4543,6 +4545,9 @@ table.stats tr.stats-delta-row td:first-child {
 /* derived-dataset dependents badge (N views rely on it); warn if it couldn't recreate */
 .tree-ds-dependents { font: 0.56rem var(--sans); color: var(--blue); background: var(--blue-soft); border-radius: 3px; padding: 0.04rem 0.3rem; white-space: nowrap; }
 .tree-ds-dependents--warn { color: var(--warn); background: var(--warn-soft); }
+/* timing nudge: one-click freeze for a slow-to-recreate derived dataset */
+.tree-ds-mat-nudge { font: 0.56rem var(--sans); color: var(--amber); background: none; border: 1px solid var(--amber); border-radius: 3px; padding: 0.02rem 0.3rem; cursor: pointer; white-space: nowrap; }
+.tree-ds-mat-nudge:hover { background: var(--amber); color: var(--bg); }
 /* C10: the "Surfaces" group — analysis views targeting a dataset (reverse index of
    the per-surface Dataset picker). Click a row to focus the view; ✎ renames it. */
 .tree-surface { cursor: pointer; gap: 0.4rem; }

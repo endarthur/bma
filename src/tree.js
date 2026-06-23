@@ -250,6 +250,10 @@ function treeDsDerivedHtml(ds) {
     html += '<span class="tree-ds-dependents' + (broken ? ' tree-ds-dependents--warn' : '') + '" title="' + esc(t) + '">' +
       (broken ? '⚠ ' : '') + dep + ' ▦</span>';
   }
+  // timing nudge: this derived dataset was slow to recreate — offer a one-click freeze
+  if (!mat && dsObj._slowDerive && typeof dsMaterialize === 'function') {
+    html += '<button class="tree-ds-mat-nudge" data-materialize="' + esc(ds) + '" title="This was slow to recreate — materialize (freeze a snapshot) so reloads skip re-deriving it">⚡ materialize?</button>';
+  }
   return html;
 }
 
@@ -669,6 +673,14 @@ function treeToggleRole(t, role) {
       if (analyzeBtn) {
         e.preventDefault(); e.stopPropagation();
         if (typeof wsAnalyzeDataset === 'function') wsAnalyzeDataset(analyzeBtn.getAttribute('data-analyze'));
+        return;
+      }
+      // timing nudge: materialize (freeze) a slow-to-recreate derived dataset
+      var matBtn = e.target.closest('[data-materialize]');
+      if (matBtn) {
+        e.preventDefault(); e.stopPropagation();
+        var mds = (typeof dsById === 'function') ? dsById(matBtn.getAttribute('data-materialize')) : null;
+        if (mds && typeof dsMaterialize === 'function') { mds._slowDerive = false; Promise.resolve(dsMaterialize(mds)).then(function () { if (typeof renderCatalogTree === 'function') renderCatalogTree(); }); }
         return;
       }
       var add = e.target.closest('[data-tree-add]');
