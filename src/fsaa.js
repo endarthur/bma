@@ -64,6 +64,8 @@ function fsaaMountFolder() {
     return fsaaEnsurePermission(handle, true).then(function (ok) {
       if (!ok) return false;
       mountedFolder = handle;
+      if (typeof mountedFolderVirtual !== 'undefined') mountedFolderVirtual = false;   // a real FSAA folder
+      if (typeof projOpenLabel !== 'undefined') projOpenLabel = null;
       // store failures (quota / non-cloneable mock) are non-fatal — the folder is
       // mounted for this session regardless.
       return fsaaStoreHandle(handle).catch(function () {}).then(function () { fsaaAfterMountChange(); fsaaMaybeOpenProject(); return true; });
@@ -114,7 +116,9 @@ function fsaaMaybeOpenProject() {
 
 function fsaaUnmount() {
   mountedFolder = null;
+  fsaaCurrentJsonName = null;
   if (typeof projOpenLabel !== 'undefined') projOpenLabel = null;
+  if (typeof mountedFolderVirtual !== 'undefined') mountedFolderVirtual = false;
   return fsaaClearHandle().catch(function () {}).then(function () { fsaaAfterMountChange(); });
 }
 
@@ -197,6 +201,7 @@ function fsaaOpenProjectFromFolder() {
   if (!mountedFolder) return Promise.resolve(false);
   return fsaaListProjectJson().then(function (name) {
     if (!name) return false;
+    fsaaCurrentJsonName = name;   // save edits back to THIS file (a rename mustn't orphan it)
     return fsaaResolveFile(name).then(function (jf) {
       if (!jf) return false;
       return jf.text().then(function (txt) {
@@ -216,6 +221,9 @@ function fsaaOpenProjectFromFolder() {
   }).catch(function () { return false; });
 }
 
+// The filename the project JSON was loaded from (so saves overwrite it rather than
+// orphaning it on a title change). Null until a folder project opens.
+var fsaaCurrentJsonName = null;
 // The project JSON's filename in the folder (stable per project title / model).
 function fsaaProjectJsonName() {
   var stem = (typeof projectTitle !== 'undefined' && projectTitle) ? projectTitle
@@ -224,7 +232,10 @@ function fsaaProjectJsonName() {
 }
 function fsaaWriteProjectJson(jsonStr) {
   if (!mountedFolder) return Promise.resolve(false);
-  return fsaaWriteFile(fsaaProjectJsonName(), new Blob([jsonStr], { type: 'application/json' }));
+  // overwrite the file the project was opened from; else derive a name (first save)
+  var name = fsaaCurrentJsonName || fsaaProjectJsonName();
+  fsaaCurrentJsonName = name;
+  return fsaaWriteFile(name, new Blob([jsonStr], { type: 'application/json' }));
 }
 
 // Header pill + landing note showing the folder backing (Arthur's ask).
@@ -257,6 +268,8 @@ function fsaaActivateHandle(handle) {
   return fsaaEnsurePermission(handle, true).then(function (ok) {
     if (!ok) return false;
     mountedFolder = handle;
+    if (typeof mountedFolderVirtual !== 'undefined') mountedFolderVirtual = false;   // a real FSAA folder
+    if (typeof projOpenLabel !== 'undefined') projOpenLabel = null;
     fsaaStoreHandle(handle).catch(function () {});
     fsaaAfterMountChange();
     return fsaaMaybeOpenProject().then(function () { return true; });

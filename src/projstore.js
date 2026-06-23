@@ -56,7 +56,7 @@ function projPut(rec) {
 function projDelete(id) {
   return projGet(id).then(function (rec) {
     var jobs = [];
-    if (rec && rec.backing && rec.backing.kind === 'idb') jobs.push(projPackStoreDelete(id).catch(function () {}));
+    if (rec && rec.backing && rec.backing.kind === 'idb') jobs.push(idbDirDelete(id).catch(function () {}));
     if (rec && rec.backing && rec.backing.kind === 'opfs') jobs.push(opfsRemoveProject(id).catch(function () {}));
     return Promise.all(jobs);
   }).then(function () {
@@ -71,35 +71,96 @@ function projDelete(id) {
   });
 }
 
-// ── packstore: embedded pack bytes for the 'idb' backing ──────────────────
-function projPackStorePut(id, blob) {
+// ── 'idb' backing = a VIRTUAL FOLDER in the packstore ─────────────────────
+// Each project file is a separate blob keyed '<id>/<name>'. idbDirHandle wraps the
+// store in the FileSystemDirectoryHandle interface (getFileHandle/createWritable/
+// keys), so the C11 folder machinery (fsaaOpenProjectFromFolder / fsaaWriteProjectJson
+// / fsaaResolveProjectFiles) drives an idb project exactly like a real folder — and
+// autosave's project-JSON write persists edits IN PLACE (no snapshot loss).
+function idbFileGet(key) {
+  return openCacheDB().then(function (db) {
+    return new Promise(function (resolve, reject) {
+      var r = db.transaction('packstore', 'readonly').objectStore('packstore').get(key);
+      r.onsuccess = function () { resolve(r.result == null ? null : r.result); };
+      r.onerror = function () { reject(r.error); };
+    });
+  });
+}
+function idbFilePut(key, blob) {
   return openCacheDB().then(function (db) {
     return new Promise(function (resolve, reject) {
       var tx = db.transaction('packstore', 'readwrite');
-      tx.objectStore('packstore').put(blob, id);
+      tx.objectStore('packstore').put(blob, key);
       tx.oncomplete = function () { resolve(true); };
       tx.onerror = function () { reject(tx.error); };
     });
   });
 }
-function projPackStoreGet(id) {
-  return openCacheDB().then(function (db) {
-    return new Promise(function (resolve, reject) {
-      var req = db.transaction('packstore', 'readonly').objectStore('packstore').get(id);
-      req.onsuccess = function () { resolve(req.result || null); };
-      req.onerror = function () { reject(req.error); };
-    });
-  });
-}
-function projPackStoreDelete(id) {
+function idbFileDelete(key) {
   return openCacheDB().then(function (db) {
     return new Promise(function (resolve, reject) {
       var tx = db.transaction('packstore', 'readwrite');
-      tx.objectStore('packstore').delete(id);
+      tx.objectStore('packstore').delete(key);
       tx.oncomplete = function () { resolve(true); };
       tx.onerror = function () { reject(tx.error); };
     });
   });
+}
+function idbKeysWithPrefix(prefix) {
+  return openCacheDB().then(function (db) {
+    return new Promise(function (resolve, reject) {
+      var r = db.transaction('packstore', 'readonly').objectStore('packstore').getAllKeys();
+      r.onsuccess = function () { resolve((r.result || []).filter(function (k) { return typeof k === 'string' && k.indexOf(prefix) === 0; })); };
+      r.onerror = function () { reject(r.error); };
+    });
+  });
+}
+function idbDirDelete(id) {
+  return idbKeysWithPrefix(id + '/').then(function (keys) { return Promise.all(keys.map(idbFileDelete)); });
+}
+// A FileSystemDirectoryHandle-shaped view over the '<id>/*' blobs.
+function idbDirHandle(id) {
+  var prefix = id + '/';
+  function fileHandle(name, blob) {
+    var key = prefix + name;
+    return {
+      kind: 'file', name: name,
+      getFile: function () {
+        return (blob != null ? Promise.resolve(blob) : idbFileGet(key)).then(function (b) {
+          if (b == null) b = new Blob([]);
+          return new File([b], name);
+        });
+      },
+      createWritable: function () {
+        var parts = [];
+        return Promise.resolve({
+          write: function (d) { parts.push(d); return Promise.resolve(); },
+          close: function () { return idbFilePut(key, new Blob(parts)); }
+        });
+      }
+    };
+  }
+  return {
+    name: 'bma-proj-' + id, kind: 'directory', _bmaIdbDir: true, _id: id,
+    getFileHandle: function (name, opts) {
+      var key = prefix + name;
+      if (opts && opts.create) return Promise.resolve(fileHandle(name, null));
+      return idbFileGet(key).then(function (b) {
+        if (b == null) throw new Error('NotFound');
+        return fileHandle(name, b);
+      });
+    },
+    removeEntry: function (name) { return idbFileDelete(prefix + name); },
+    keys: function () {
+      var list = null, i = 0;
+      return { [Symbol.asyncIterator]: function () {
+        return { next: function () {
+          return (list ? Promise.resolve(list) : idbKeysWithPrefix(prefix).then(function (ks) { list = ks; return ks; }))
+            .then(function (ks) { return i < ks.length ? { value: ks[i++].slice(prefix.length), done: false } : { value: undefined, done: true }; });
+        } };
+      } };
+    }
+  };
 }
 
 // ── OPFS (origin-private filesystem) — a no-permission, persistent folder ──
@@ -172,8 +233,8 @@ function projImportPack(file, dest) {
     } else if (dest && dest.kind === 'opfs') {
       write = opfsProjectDir(id, true).then(function (dir) { return projUnpackInto(dir, file, peek.entries); });
       backing = { kind: 'opfs', opfsDir: opfsDirName(id), modelFileName: meta.modelName };
-    } else { // idb — embed the pack bytes
-      write = projPackStorePut(id, file);
+    } else { // idb — unpack into a virtual folder (per-file blobs, editable in place)
+      write = projUnpackInto(idbDirHandle(id), file, peek.entries);
       backing = { kind: 'idb', modelFileName: meta.modelName };
     }
     return write.then(function () {
@@ -195,23 +256,11 @@ function projOpen(rec) {
   var b = rec.backing;
   var done = Promise.resolve(false);
   if (b.kind === 'folder' && b.folderHandle && typeof fsaaActivateHandle === 'function') {
-    done = fsaaActivateHandle(b.folderHandle);
+    done = fsaaActivateHandle(b.folderHandle);   // FSAA folder: re-grant permission first
   } else if (b.kind === 'opfs' && opfsSupported()) {
-    // OPFS dir = a no-permission folder: set it as the mount + run the C11 open path
-    done = opfsProjectDir(rec.id, false).then(function (dir) {
-      if (typeof mountedFolder !== 'undefined') mountedFolder = dir;
-      if (typeof projOpenLabel !== 'undefined') projOpenLabel = rec.title || null;   // pill prefers the title
-      if (typeof fsaaRenderIndicator === 'function') fsaaRenderIndicator();
-      return (typeof fsaaMaybeOpenProject === 'function') ? fsaaMaybeOpenProject() : false;
-    });
+    done = opfsProjectDir(rec.id, false).then(function (dir) { return projMountDir(rec, dir); });
   } else if (b.kind === 'idb') {
-    done = projPackStoreGet(rec.id).then(function (blob) {
-      if (!blob) return false;
-      var f = new File([blob], (rec.title || 'project').replace(/[\\/:*?"<>|]+/g, '_') + '.bma.zip', { type: 'application/zip' });
-      projAutoLoadPack = true;   // registry open = deliberate; skip the packed-project confirm
-      return Promise.resolve(handleFile(f)).then(function () { projAutoLoadPack = false; return true; })
-        .catch(function (e) { projAutoLoadPack = false; throw e; });
-    });
+    done = Promise.resolve(projMountDir(rec, idbDirHandle(rec.id)));   // virtual folder, no permission
   } else if (b.kind === 'local' && typeof reopenLocalProject === 'function') {
     done = reopenLocalProject(rec.backing.projKey || rec.id);
   } else if (b.kind === 'file') {
@@ -231,6 +280,17 @@ function projOpen(rec) {
   });
 }
 
+// Mount a non-FSAA directory handle (opfs / idb virtual folder) as the project
+// home + run the C11 folder-open path. No permission prompt, no folder-recents,
+// no FSAA handle store — just the same source-resolution + autosave-writes-back.
+function projMountDir(rec, dir) {
+  if (typeof mountedFolder !== 'undefined') mountedFolder = dir;
+  if (typeof mountedFolderVirtual !== 'undefined') mountedFolderVirtual = true;
+  projOpenLabel = rec.title || null;                         // pill prefers the title
+  if (typeof fsaaRenderIndicator === 'function') fsaaRenderIndicator();
+  return (typeof fsaaMaybeOpenProject === 'function') ? fsaaMaybeOpenProject() : false;
+}
+
 // Re-grant + read a stored file handle (legacy 'file' backing).
 function fsaaEnsureFileHandle(fh) {
   function read() { return fh.getFile().catch(function () { return null; }); }
@@ -239,15 +299,6 @@ function fsaaEnsureFileHandle(fh) {
     if (p === 'granted') return read();
     return Promise.resolve(fh.requestPermission({ mode: 'read' })).then(function (p2) { return p2 === 'granted' ? read() : null; });
   }).catch(function () { return null; });
-}
-
-// ── backup a project record as a downloadable pack (.bma.zip) ─────────────
-// For the OPEN project, defer to the existing runPack(). For a non-open idb /
-// folder / opfs record we hand back its already-packed bytes (idb) or re-zip the
-// folder's files; the simplest faithful path is to open→pack, so the manager wires
-// "backup" to: if it's the current project use runPack, else open it first.
-function projBackupIdbPack(id) {
-  return projPackStoreGet(id).then(function (blob) { return blob || null; });
 }
 
 // ── migration: seed the registry from the legacy 'recents' store, once ────
@@ -289,3 +340,6 @@ var projOpenLabel = null;
 // Set while opening a pack from the registry — tells tryPackedProject to skip its
 // interactive "Packed project found" confirm (a raw drag-drop still asks).
 var projAutoLoadPack = false;
+// True while the mounted folder is a VIRTUAL dir (opfs / idb), not a user FSAA
+// folder — so folder-recents / handle-store logic stays off for it.
+var mountedFolderVirtual = false;
