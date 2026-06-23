@@ -4555,6 +4555,9 @@ table.stats tr.stats-delta-row td:first-child {
 /* C11-P2: derived-dataset mode badge (◇ linked / ◆ materialized) */
 .tree-ds-derived { font: 0.58rem var(--sans); color: var(--fg-dim); background: var(--bg2); border-radius: 3px; padding: 0.04rem 0.3rem; white-space: nowrap; }
 .tree-ds-derived--mat { color: var(--green); background: var(--green-soft); }
+/* derived-dataset dependents badge (N views rely on it); warn if it couldn't recreate */
+.tree-ds-dependents { font: 0.56rem var(--sans); color: var(--blue); background: var(--blue-soft); border-radius: 3px; padding: 0.04rem 0.3rem; white-space: nowrap; }
+.tree-ds-dependents--warn { color: var(--warn); background: var(--warn-soft); }
 /* C10: the "Surfaces" group — analysis views targeting a dataset (reverse index of
    the per-surface Dataset picker). Click a row to focus the view; ✎ renames it. */
 .tree-surface { cursor: pointer; gap: 0.4rem; }
@@ -6372,7 +6375,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 5dfe037 — click to check for updates">5dfe037</div>
+<div class="build-badge" id="buildBadge" title="build 7dd9b94 — click to check for updates">7dd9b94</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -9486,6 +9489,13 @@ function viewsForDataset(dsId) {
   return surfaceList().filter(function (s) { return s.target === dsId && (s.clone || s.open) && surfaceIsDeliberate(s); });
 }
 function viewKindFacet(kind) { var d = surfaceDescriptors().filter(function (x) { return x.kind === kind; })[0]; return d ? d.facet : 'analyzed'; }
+// How many live views target a dataset (its "dependents"). A derived dataset with
+// dependents is load-bearing — surfaced as a badge so you see it before deleting/
+// relinking, and the reason its auto-recreate matters.
+function dsDependentViewCount(dsId) {
+  if (typeof surfaceList !== 'function') return 0;
+  return surfaceList().filter(function (s) { return s.target === dsId; }).length;
+}
 function viewTarget(id) { var s = surfaceList().filter(function (x) { return x.id === id; })[0]; return s ? s.target : 'model'; }
 
 // User-given surface titles (persisted as the `surfaceTitles` project key) — let
@@ -17059,6 +17069,15 @@ function loadAuxFile(file, handle, zipEntryName, ds, root) {
     if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
     if (typeof refreshGtTheoSource === 'function') refreshGtTheoSource();   // G2: GT theo source picker
     if (typeof autoSaveProject === 'function') autoSaveProject();
+    // DERIVED dataset lifecycle (general — composite/emit/merge/future join): a
+    // derived dataset auto-(re)analyzes once it's (re)created, so its data + any
+    // VIEWS targeting it resolve on reload instead of silently bouncing to the
+    // model. Materialized snapshots also analyze (their file IS the data). Plain
+    // dropped datasets keep configure-then-Analyze (no derivedFrom → skipped).
+    if (ds.derivedFrom && typeof runAuxAnalysis === 'function' && !ds._autoAnalyzing) {
+      ds._autoAnalyzing = true;
+      try { runAuxAnalysis(ds, root); } finally { ds._autoAnalyzing = false; }
+    }
   }).catch(function(err) {
     ds.file = null;
     ds.preflight = null;
@@ -36272,9 +36291,24 @@ function treeDsDerivedHtml(ds) {
   var dsObj = (typeof dsById === 'function') ? dsById(ds) : null;
   if (!dsObj || !dsObj.derivedFrom) return '';
   var mat = (typeof dsIsMaterialized === 'function') && dsIsMaterialized(dsObj);
-  return '<span class="tree-ds-derived' + (mat ? ' tree-ds-derived--mat' : '') + '" title="' +
-    (mat ? 'materialized — frozen snapshot, source link kept' : 'linked — re-derives from ' + esc(dsObj.derivedFrom.set)) + '">' +
+  var html = '<span class="tree-ds-derived' + (mat ? ' tree-ds-derived--mat' : '') + '" title="' +
+    (mat ? 'materialized — frozen snapshot, source link kept' : 'linked — re-derives & re-analyzes from ' + esc(dsObj.derivedFrom.set) + ' on open') + '">' +
     (mat ? '◆ materialized' : '◇ linked') + '</span>';
+  // dependents badge: a derived dataset that feeds views is load-bearing — show it
+  // (and, while linked, that those views rely on it re-deriving — right-click to
+  // Materialize/freeze it self-contained).
+  var dep = (typeof dsDependentViewCount === 'function') ? dsDependentViewCount(ds) : 0;
+  if (dep > 0) {
+    // warn when dependents exist but the dataset couldn't be recreated (no file +
+    // not materialized → its source set isn't loaded) — don't silently strand views
+    var broken = !mat && !dsObj.file;
+    var t = dep + ' view' + (dep === 1 ? '' : 's') + ' depend on this dataset';
+    t += broken ? ' — but it could not be recreated (its source isn’t loaded). Re-drop the source or open the project folder.'
+                : (mat ? '' : ' — right-click ▸ Materialize to freeze it self-contained');
+    html += '<span class="tree-ds-dependents' + (broken ? ' tree-ds-dependents--warn' : '') + '" title="' + esc(t) + '">' +
+      (broken ? '⚠ ' : '') + dep + ' ▦</span>';
+  }
+  return html;
 }
 
 // C10: the VIEWS (Statistics, GT, …) deliberately created for a dataset — the
@@ -38063,6 +38097,7 @@ function wsSpawnCategoriesInstance(seedFocusedCol, seedChartShowAll, seedTargetD
     var root = document.querySelector('[data-cat-inst="' + instId + '"]');
     if (root) catSyncInstanceTitle(root);
   }
+  return instId;
 }
 
 // A10 Swath s-4b: spawn a cloned Swath analysis panel. Starts with a fresh
@@ -38080,6 +38115,7 @@ function wsSpawnCrosstabInstance(seedConfig) {
     var root = document.querySelector('[data-xt-inst="' + instId + '"]');
     if (root) crosstabApplyConfig(root, seedConfig);
   }
+  return instId;
 }
 
 function wsSpawnSwathInstance(seedConfig) {
@@ -38092,6 +38128,7 @@ function wsSpawnSwathInstance(seedConfig) {
     var root = document.querySelector('[data-sw-inst="' + instId + '"]');
     if (root) swApplyConfig(root, seedConfig);
   }
+  return instId;
 }
 
 // A10 Statistics st-4: spawn a cloned Statistics analysis panel. Renders the
@@ -38109,6 +38146,7 @@ function wsSpawnStatisticsInstance(seedView) {
     statApplyAllInstances();
     if (typeof statRenderAllInstances === 'function') statRenderAllInstances();
   }
+  return instId;
 }
 
 // A10 G3b: spawn a cloned GT analysis panel. Each clone runs its OWN worker on
@@ -38124,6 +38162,7 @@ function wsSpawnGtInstance(seedConfig) {
     var root = document.querySelector('[data-gt-inst="' + instId + '"]');
     if (root) gtApplyConfig(root, seedConfig);
   }
+  return instId;
 }
 
 // A10 G4b: spawn a cloned StatsCat panel — an independent VIEW onto a dataset's
@@ -38134,6 +38173,7 @@ function wsSpawnStatsCatInstance(seedTargetDsId) {
   if (typeof statsCatInstances !== 'undefined') statsCatInstances[instId] = { targetDsId: seedTargetDsId || 'model' };
   wsRails.addTab({ id: instId, title: 'StatsCat', closeable: true }, wsMainTarget());
   wsRails.activateTab(instId);                 // renderPanel → statsCatBuildInstancePanel
+  return instId;
 }
 
 // A10 G5b: spawn a cloned Export panel (own target dataset + column selection).
@@ -38143,6 +38183,7 @@ function wsSpawnExportInstance(seedTargetDsId) {
   if (typeof exportInstances !== 'undefined') exportInstances[instId] = { targetDsId: seedTargetDsId || 'model' };
   wsRails.addTab({ id: instId, title: 'Export', closeable: true }, wsMainTarget());
   wsRails.activateTab(instId);                 // renderPanel → exportBuildInstancePanel
+  return instId;
 }
 
 // ── C10 view operations (create / duplicate / delete) — used by the Data-tree
@@ -38177,15 +38218,15 @@ function wsSetViewTarget(kind, id, dsId) {
 // Create a fresh view of `kind` targeting `dsId` (a deliberate, listed view).
 function wsCreateView(kind, dsId) {
   var spawn = {
-    categories: function () { wsSpawnCategoriesInstance(null, false, 'model'); }, statscat: function () { wsSpawnStatsCatInstance('model'); },
-    export: function () { wsSpawnExportInstance('model'); }, swath: function () { wsSpawnSwathInstance(null); },
-    statistics: function () { wsSpawnStatisticsInstance(null); }, gt: function () { wsSpawnGtInstance(null); }, crosstab: function () { wsSpawnCrosstabInstance(null); }
+    categories: function () { return wsSpawnCategoriesInstance(null, false, 'model'); }, statscat: function () { return wsSpawnStatsCatInstance('model'); },
+    export: function () { return wsSpawnExportInstance('model'); }, swath: function () { return wsSpawnSwathInstance(null); },
+    statistics: function () { return wsSpawnStatisticsInstance(null); }, gt: function () { return wsSpawnGtInstance(null); }, crosstab: function () { return wsSpawnCrosstabInstance(null); }
   }[kind];
   if (!spawn) return;
-  spawn();
-  var instId = (typeof getActiveTabId === 'function') ? getActiveTabId() : null;   // spawn activates the new clone
+  var instId = spawn();   // the spawn returns the new clone's id (clone tabs aren't in the legacy bar)
   if (instId && dsId && dsId !== 'model') wsSetViewTarget(kind, instId, dsId);
   if (typeof autoSaveProject === 'function') autoSaveProject();
+  return instId;
 }
 // Duplicate a view (singleton or clone), carrying its config — the same per-kind
 // seeding the tab's "Duplicate" uses, factored to take any view id.

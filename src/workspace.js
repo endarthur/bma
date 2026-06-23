@@ -345,6 +345,7 @@ function wsSpawnCategoriesInstance(seedFocusedCol, seedChartShowAll, seedTargetD
     var root = document.querySelector('[data-cat-inst="' + instId + '"]');
     if (root) catSyncInstanceTitle(root);
   }
+  return instId;
 }
 
 // A10 Swath s-4b: spawn a cloned Swath analysis panel. Starts with a fresh
@@ -362,6 +363,7 @@ function wsSpawnCrosstabInstance(seedConfig) {
     var root = document.querySelector('[data-xt-inst="' + instId + '"]');
     if (root) crosstabApplyConfig(root, seedConfig);
   }
+  return instId;
 }
 
 function wsSpawnSwathInstance(seedConfig) {
@@ -374,6 +376,7 @@ function wsSpawnSwathInstance(seedConfig) {
     var root = document.querySelector('[data-sw-inst="' + instId + '"]');
     if (root) swApplyConfig(root, seedConfig);
   }
+  return instId;
 }
 
 // A10 Statistics st-4: spawn a cloned Statistics analysis panel. Renders the
@@ -391,6 +394,7 @@ function wsSpawnStatisticsInstance(seedView) {
     statApplyAllInstances();
     if (typeof statRenderAllInstances === 'function') statRenderAllInstances();
   }
+  return instId;
 }
 
 // A10 G3b: spawn a cloned GT analysis panel. Each clone runs its OWN worker on
@@ -406,6 +410,7 @@ function wsSpawnGtInstance(seedConfig) {
     var root = document.querySelector('[data-gt-inst="' + instId + '"]');
     if (root) gtApplyConfig(root, seedConfig);
   }
+  return instId;
 }
 
 // A10 G4b: spawn a cloned StatsCat panel — an independent VIEW onto a dataset's
@@ -416,6 +421,7 @@ function wsSpawnStatsCatInstance(seedTargetDsId) {
   if (typeof statsCatInstances !== 'undefined') statsCatInstances[instId] = { targetDsId: seedTargetDsId || 'model' };
   wsRails.addTab({ id: instId, title: 'StatsCat', closeable: true }, wsMainTarget());
   wsRails.activateTab(instId);                 // renderPanel → statsCatBuildInstancePanel
+  return instId;
 }
 
 // A10 G5b: spawn a cloned Export panel (own target dataset + column selection).
@@ -425,6 +431,7 @@ function wsSpawnExportInstance(seedTargetDsId) {
   if (typeof exportInstances !== 'undefined') exportInstances[instId] = { targetDsId: seedTargetDsId || 'model' };
   wsRails.addTab({ id: instId, title: 'Export', closeable: true }, wsMainTarget());
   wsRails.activateTab(instId);                 // renderPanel → exportBuildInstancePanel
+  return instId;
 }
 
 // ── C10 view operations (create / duplicate / delete) — used by the Data-tree
@@ -459,15 +466,15 @@ function wsSetViewTarget(kind, id, dsId) {
 // Create a fresh view of `kind` targeting `dsId` (a deliberate, listed view).
 function wsCreateView(kind, dsId) {
   var spawn = {
-    categories: function () { wsSpawnCategoriesInstance(null, false, 'model'); }, statscat: function () { wsSpawnStatsCatInstance('model'); },
-    export: function () { wsSpawnExportInstance('model'); }, swath: function () { wsSpawnSwathInstance(null); },
-    statistics: function () { wsSpawnStatisticsInstance(null); }, gt: function () { wsSpawnGtInstance(null); }, crosstab: function () { wsSpawnCrosstabInstance(null); }
+    categories: function () { return wsSpawnCategoriesInstance(null, false, 'model'); }, statscat: function () { return wsSpawnStatsCatInstance('model'); },
+    export: function () { return wsSpawnExportInstance('model'); }, swath: function () { return wsSpawnSwathInstance(null); },
+    statistics: function () { return wsSpawnStatisticsInstance(null); }, gt: function () { return wsSpawnGtInstance(null); }, crosstab: function () { return wsSpawnCrosstabInstance(null); }
   }[kind];
   if (!spawn) return;
-  spawn();
-  var instId = (typeof getActiveTabId === 'function') ? getActiveTabId() : null;   // spawn activates the new clone
+  var instId = spawn();   // the spawn returns the new clone's id (clone tabs aren't in the legacy bar)
   if (instId && dsId && dsId !== 'model') wsSetViewTarget(kind, instId, dsId);
   if (typeof autoSaveProject === 'function') autoSaveProject();
+  return instId;
 }
 // Duplicate a view (singleton or clone), carrying its config — the same per-kind
 // seeding the tab's "Duplicate" uses, factored to take any view id.

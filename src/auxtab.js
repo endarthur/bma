@@ -833,6 +833,15 @@ function loadAuxFile(file, handle, zipEntryName, ds, root) {
     if (typeof refreshCalcolModeToggle === 'function') refreshCalcolModeToggle();
     if (typeof refreshGtTheoSource === 'function') refreshGtTheoSource();   // G2: GT theo source picker
     if (typeof autoSaveProject === 'function') autoSaveProject();
+    // DERIVED dataset lifecycle (general — composite/emit/merge/future join): a
+    // derived dataset auto-(re)analyzes once it's (re)created, so its data + any
+    // VIEWS targeting it resolve on reload instead of silently bouncing to the
+    // model. Materialized snapshots also analyze (their file IS the data). Plain
+    // dropped datasets keep configure-then-Analyze (no derivedFrom → skipped).
+    if (ds.derivedFrom && typeof runAuxAnalysis === 'function' && !ds._autoAnalyzing) {
+      ds._autoAnalyzing = true;
+      try { runAuxAnalysis(ds, root); } finally { ds._autoAnalyzing = false; }
+    }
   }).catch(function(err) {
     ds.file = null;
     ds.preflight = null;

@@ -93,6 +93,34 @@ The property catalog (C1a → A10 4a): a **property** is a named measured quanti
 unit, value colors/order). A pair is a 2-member property; an unmatched column a
 singleton. This is the **cross-cutting** axis — orthogonal to datasets and views.
 
+### Derived datasets — the lifecycle (a cross-cutting concern)
+A **derived dataset** carries `derivedFrom {source, role, opts}` — a drillhole emit
+or composite today, a C13 join/merge tomorrow. They share ONE lifecycle policy, hung
+off `derivedFrom` (not anything drillhole-specific), so every present and future
+derivation behaves the same:
+
+- **Auto-recreate + auto-analyze on load.** A derived dataset re-derives from its
+  source and **auto-analyzes** when it (re)loads (`loadAuxFile` → `runAuxAnalysis`
+  for any `derivedFrom`). So its data AND any **views** targeting it resolve on
+  reload, instead of the view silently bouncing to the model (the prior bug:
+  re-derived composites stayed unanalyzed, and `surfaceTarget` falls back to the
+  first usable dataset). Plain dropped datasets keep configure-then-Analyze.
+- **Materialize is the escape hatch.** A derived dataset can be **materialized**
+  (C11-P2) — frozen to a self-contained snapshot, link kept — for archival, sharing,
+  or when re-deriving is slow/undesirable. Right-click ▸ Materialize / Relink. The
+  default stays live (fresh, reflects source edits).
+- **Dependents are visible.** A derived dataset that feeds views shows an `N ▦`
+  badge in the tree (it's load-bearing — see before you delete/relink it).
+- **Never strand a view silently.** If a derived dataset has dependents but couldn't
+  be recreated (no file + not materialized → its source isn't loaded), the badge
+  turns to a `⚠` warning telling you to re-drop the source / open the project folder.
+
+> Decision (2026-06-22/23): **derived-dataset lifecycle is general** — auto-recreate
+> + auto-analyze live by default, materialize as the explicit freeze, dependents
+> surfaced, broken targets warned, never silently bounced. Applies to ALL
+> `derivedFrom` datasets (composites, emits, merges, future joins), not just
+> drillhole composites.
+
 ### 4. Sets — the containers that emit datasets
 A **drillhole set** (A11) is a container: a collar+survey backbone + N interval
 tables (imported / merged / composite — a DAG), each with its own calcols/filter. A
@@ -142,8 +170,16 @@ Project  (registry record + storage backing)
 - **The landing is a project manager**; projects (not files) are the unit; pluggable
   storage backings (folder / opfs / idb-edit-in-place); re-import = a new project.
 - **Don't build a Leapfrog-style scene-of-objects tree** — keep tables + analyses.
+- **Derived datasets auto-recreate + auto-analyze live by default**; materialize is
+  the explicit freeze; dependents are surfaced; broken targets warn (never silent).
+  General to all `derivedFrom` (composites/emits/merges/joins).
 
 ## Open / deferred
+
+- **Timing-threshold materialize nudge** — auto-recreate is fine when fast, but a
+  heavy derivation that re-derives slowly should prompt "this took a while —
+  materialize to skip re-deriving next time?" (Arthur's idea, 2026-06-23). Not yet
+  built; the manual Materialize affordance covers it for now.
 
 - **Statistics panel layout** — the table/plot split wants resize handles + a layout
   pass (the scrolling CDF plot reads awkwardly). Flagged 2026-06-22; not yet done.

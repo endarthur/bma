@@ -460,6 +460,13 @@ function viewsForDataset(dsId) {
   return surfaceList().filter(function (s) { return s.target === dsId && (s.clone || s.open) && surfaceIsDeliberate(s); });
 }
 function viewKindFacet(kind) { var d = surfaceDescriptors().filter(function (x) { return x.kind === kind; })[0]; return d ? d.facet : 'analyzed'; }
+// How many live views target a dataset (its "dependents"). A derived dataset with
+// dependents is load-bearing — surfaced as a badge so you see it before deleting/
+// relinking, and the reason its auto-recreate matters.
+function dsDependentViewCount(dsId) {
+  if (typeof surfaceList !== 'function') return 0;
+  return surfaceList().filter(function (s) { return s.target === dsId; }).length;
+}
 function viewTarget(id) { var s = surfaceList().filter(function (x) { return x.id === id; })[0]; return s ? s.target : 'model'; }
 
 // User-given surface titles (persisted as the `surfaceTitles` project key) — let

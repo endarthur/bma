@@ -233,9 +233,24 @@ function treeDsDerivedHtml(ds) {
   var dsObj = (typeof dsById === 'function') ? dsById(ds) : null;
   if (!dsObj || !dsObj.derivedFrom) return '';
   var mat = (typeof dsIsMaterialized === 'function') && dsIsMaterialized(dsObj);
-  return '<span class="tree-ds-derived' + (mat ? ' tree-ds-derived--mat' : '') + '" title="' +
-    (mat ? 'materialized — frozen snapshot, source link kept' : 'linked — re-derives from ' + esc(dsObj.derivedFrom.set)) + '">' +
+  var html = '<span class="tree-ds-derived' + (mat ? ' tree-ds-derived--mat' : '') + '" title="' +
+    (mat ? 'materialized — frozen snapshot, source link kept' : 'linked — re-derives & re-analyzes from ' + esc(dsObj.derivedFrom.set) + ' on open') + '">' +
     (mat ? '◆ materialized' : '◇ linked') + '</span>';
+  // dependents badge: a derived dataset that feeds views is load-bearing — show it
+  // (and, while linked, that those views rely on it re-deriving — right-click to
+  // Materialize/freeze it self-contained).
+  var dep = (typeof dsDependentViewCount === 'function') ? dsDependentViewCount(ds) : 0;
+  if (dep > 0) {
+    // warn when dependents exist but the dataset couldn't be recreated (no file +
+    // not materialized → its source set isn't loaded) — don't silently strand views
+    var broken = !mat && !dsObj.file;
+    var t = dep + ' view' + (dep === 1 ? '' : 's') + ' depend on this dataset';
+    t += broken ? ' — but it could not be recreated (its source isn’t loaded). Re-drop the source or open the project folder.'
+                : (mat ? '' : ' — right-click ▸ Materialize to freeze it self-contained');
+    html += '<span class="tree-ds-dependents' + (broken ? ' tree-ds-dependents--warn' : '') + '" title="' + esc(t) + '">' +
+      (broken ? '⚠ ' : '') + dep + ' ▦</span>';
+  }
+  return html;
 }
 
 // C10: the VIEWS (Statistics, GT, …) deliberately created for a dataset — the

@@ -4540,6 +4540,9 @@ table.stats tr.stats-delta-row td:first-child {
 /* C11-P2: derived-dataset mode badge (◇ linked / ◆ materialized) */
 .tree-ds-derived { font: 0.58rem var(--sans); color: var(--fg-dim); background: var(--bg2); border-radius: 3px; padding: 0.04rem 0.3rem; white-space: nowrap; }
 .tree-ds-derived--mat { color: var(--green); background: var(--green-soft); }
+/* derived-dataset dependents badge (N views rely on it); warn if it couldn't recreate */
+.tree-ds-dependents { font: 0.56rem var(--sans); color: var(--blue); background: var(--blue-soft); border-radius: 3px; padding: 0.04rem 0.3rem; white-space: nowrap; }
+.tree-ds-dependents--warn { color: var(--warn); background: var(--warn-soft); }
 /* C10: the "Surfaces" group — analysis views targeting a dataset (reverse index of
    the per-surface Dataset picker). Click a row to focus the view; ✎ renames it. */
 .tree-surface { cursor: pointer; gap: 0.4rem; }
