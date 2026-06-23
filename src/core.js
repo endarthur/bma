@@ -381,12 +381,25 @@ function surfaceCloseInstTabs(instances, dispose) {
 // esc() is a no-op on dataset ids (model/aux/d2…) so output stays byte-identical.
 function dsPickerHtml(cfg) {
   var ts = surfaceTargetableDatasets(cfg.facet);
-  if (ts.length < 2) return '';
-  var cur = cfg.current;
+  if (ts.length >= 2) {
+    var cur = cfg.current;
+    return '<div class="' + cfg.titleClass + '">Dataset</div>' +
+      '<select class="' + cfg.selectClass + '" ' + cfg.selAttr + '>' +
+      ts.map(function(d) { return '<option value="' + esc(d.id) + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
+      '</select>';
+  }
+  // Below 2 targetable datasets the surface is implicitly its sole dataset. But
+  // silently hiding the control means targeting is undiscoverable (you can't tell
+  // it exists). So when ANOTHER dataset is loaded but not yet usable here, show the
+  // control DISABLED with the action that unlocks it (no-magic-only-ui).
+  var loaded = (typeof datasets !== 'undefined' ? datasets : []).filter(function(d) { return d && d.preflight; });
+  if (loaded.length < 2) return '';   // genuinely a single-dataset project — nothing to target
+  var anyUnanalyzed = loaded.some(function(d) { return !d.complete && !ts.some(function(t) { return t.id === d.id; }); });
+  var hint = anyUnanalyzed ? 'Analyze another dataset to target it here' : 'No other dataset fits this surface yet';
   return '<div class="' + cfg.titleClass + '">Dataset</div>' +
-    '<select class="' + cfg.selectClass + '" ' + cfg.selAttr + '>' +
-    ts.map(function(d) { return '<option value="' + esc(d.id) + '"' + (d.id === cur ? ' selected' : '') + '>' + esc(dsLabel(d.id)) + '</option>'; }).join('') +
-    '</select>';
+    '<select class="' + cfg.selectClass + ' ds-picker-latent" ' + cfg.selAttr + ' disabled title="' + esc(hint) + '">' +
+    '<option selected>' + esc(dsLabel(cfg.current)) + '</option></select>' +
+    '<div class="ds-picker-hint">' + esc(hint) + '</div>';
 }
 
 // A10 4f-2: the grid-classification control for a dataset's import panel — the

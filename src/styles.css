@@ -3543,6 +3543,10 @@ table.cat-values td.cat-pct-cell {
   letter-spacing: 0.08em;
   margin-bottom: 0.3rem;
 }
+/* C10: the discoverable-but-disabled dataset picker (only one targetable dataset
+   yet) + the hint that says what unlocks it */
+.ds-picker-latent { opacity: 0.6; cursor: not-allowed; }
+.ds-picker-hint { font-size: 0.62rem; color: var(--fg-dim); margin-top: 0.25rem; font-style: italic; }
 .gt-select {
   font-family: var(--mono);
   font-size: 0.72rem;
