@@ -427,6 +427,75 @@ function wsSpawnExportInstance(seedTargetDsId) {
   wsRails.activateTab(instId);                 // renderPanel → exportBuildInstancePanel
 }
 
+// ── C10 view operations (create / duplicate / delete) — used by the Data-tree
+// Views section. A "view" = a deliberately-kept analysis over a dataset. ──────
+var VIEW_SINGLETON_EL = { statistics: 'panelStatistics', categories: 'panelCategories', swath: 'panelSwath', gt: 'panelGt', crosstab: 'panelCrosstab', statscat: 'panelStatsCat', export: 'panelExport' };
+var VIEW_INST_ATTR = { statistics: 'data-stat-inst', categories: 'data-cat-inst', swath: 'data-sw-inst', gt: 'data-gt-inst', crosstab: 'data-xt-inst', statscat: 'data-statcat-inst', export: 'data-export-inst' };
+var VIEW_CREATE_KINDS = [
+  { kind: 'statistics', label: 'Statistics' }, { kind: 'categories', label: 'Categories' },
+  { kind: 'statscat', label: 'StatsCat' }, { kind: 'gt', label: 'Grade–Tonnage' },
+  { kind: 'swath', label: 'Swath' }, { kind: 'crosstab', label: 'Cross-tab' }, { kind: 'export', label: 'Export' }
+];
+function viewCanDuplicate(id) { return !!VIEW_SINGLETON_EL[String(id).split('#')[0]]; }
+function wsViewRoot(kind, id) {
+  return id.indexOf('#') >= 0 ? document.querySelector('[' + VIEW_INST_ATTR[kind] + '="' + id + '"]') : document.getElementById(VIEW_SINGLETON_EL[kind]);
+}
+// Retarget any view (singleton or clone) at a dataset — routes to the kind's own
+// setTarget (which rebuilds the sidebar); crosstab has no setter fn, so inline it.
+function wsSetViewTarget(kind, id, dsId) {
+  var root = wsViewRoot(kind, id);
+  if (!root) return;
+  if (kind === 'gt' && typeof setGtTarget === 'function') setGtTarget(dsId, root);
+  else if (kind === 'statistics' && typeof setStatsTarget === 'function') setStatsTarget(dsId, root);
+  else if (kind === 'swath' && typeof setSwathTarget === 'function') setSwathTarget(dsId, root);
+  else if (kind === 'categories' && typeof setCatTarget === 'function') setCatTarget(dsId, root);
+  else if (kind === 'statscat' && typeof setStatsCatTarget === 'function') setStatsCatTarget(dsId, root);
+  else if (kind === 'export' && typeof setExportTarget === 'function') setExportTarget(dsId, root);
+  else if (kind === 'crosstab' && typeof crosstabStateForRoot === 'function') {
+    var S = crosstabStateForRoot(root); S.targetDsId = dsId; S.colA = null; S.colB = null; S.lastData = null;
+    if (typeof renderCrosstab === 'function') renderCrosstab(root);
+  }
+}
+// Create a fresh view of `kind` targeting `dsId` (a deliberate, listed view).
+function wsCreateView(kind, dsId) {
+  var spawn = {
+    categories: function () { wsSpawnCategoriesInstance(null, false, 'model'); }, statscat: function () { wsSpawnStatsCatInstance('model'); },
+    export: function () { wsSpawnExportInstance('model'); }, swath: function () { wsSpawnSwathInstance(null); },
+    statistics: function () { wsSpawnStatisticsInstance(null); }, gt: function () { wsSpawnGtInstance(null); }, crosstab: function () { wsSpawnCrosstabInstance(null); }
+  }[kind];
+  if (!spawn) return;
+  spawn();
+  var instId = (typeof getActiveTabId === 'function') ? getActiveTabId() : null;   // spawn activates the new clone
+  if (instId && dsId && dsId !== 'model') wsSetViewTarget(kind, instId, dsId);
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+// Duplicate a view (singleton or clone), carrying its config — the same per-kind
+// seeding the tab's "Duplicate" uses, factored to take any view id.
+function wsDuplicateView(id) {
+  if (!wsRails) { showPanel(id); return; }
+  var kind = String(id).split('#')[0], isClone = id.indexOf('#') >= 0;
+  var root = wsViewRoot(kind, id);
+  if (kind === 'swath') wsSpawnSwathInstance(root && typeof swSerializeConfig === 'function' ? swSerializeConfig(root) : null);
+  else if (kind === 'statistics') wsSpawnStatisticsInstance(root && typeof statSerializeView === 'function' && typeof statStateForRoot === 'function' ? statSerializeView(statStateForRoot(root)) : null);
+  else if (kind === 'gt') wsSpawnGtInstance(root && typeof gtSerializeConfig === 'function' ? gtSerializeConfig(root) : null);
+  else if (kind === 'statscat') wsSpawnStatsCatInstance(typeof statsCatInstTarget === 'function' ? statsCatInstTarget(isClone ? root : null) : 'model');
+  else if (kind === 'export') wsSpawnExportInstance(typeof exportInstTarget === 'function' ? exportInstTarget(isClone ? root : null) : 'model');
+  else if (kind === 'crosstab') wsSpawnCrosstabInstance(root && typeof crosstabSerializeConfig === 'function' ? crosstabSerializeConfig(root) : null);
+  else { var src = isClone ? (typeof catInstances !== 'undefined' ? catInstances[id] : null) : panelState.categories; wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false, src ? src.catTargetDsId : 'model'); }
+}
+// Delete a view: a clone is destroyed (close its tab); a singleton can't be removed,
+// so "delete" means stop keeping it — clear its custom name + return it to the model.
+function wsDeleteView(id) {
+  var kind = String(id).split('#')[0];
+  if (id.indexOf('#') >= 0) {
+    if (wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) wsRails.closeTab(id);   // → onPanelDestroy disposes it
+    return;
+  }
+  if (typeof surfaceSetTitle === 'function') surfaceSetTitle(id, '');   // un-name (refreshes the tree)
+  wsSetViewTarget(kind, id, 'model');                                    // back to ambient default
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+
 // Track the dataset in its tab title (loadAuxFile on load, onAuxConfigChange on
 // edit, clearAux on reset). The first comparison dataset's tab used to be hard-
 // labelled "Aux"; now it follows its loaded file like d2+ ("Import: <name>"), and
@@ -887,34 +956,7 @@ function buildRailsShell(host) {
     Menu.show(items, { x: ev.x, y: ev.y }).then(function(a) {
       if (!a || !wsRails) return;
       if (a === 'duplicate') {
-        if (isSwath) {
-          var swRoot = ev.tab.id === 'swath' ? document.getElementById('panelSwath') : document.querySelector('[data-sw-inst="' + ev.tab.id + '"]');
-          var swCfg = (swRoot && typeof swSerializeConfig === 'function') ? swSerializeConfig(swRoot) : null;
-          wsSpawnSwathInstance(swCfg);   // carry the source panel's directions/vars/stat/display
-        } else if (isStats) {
-          var stRoot = ev.tab.id === 'statistics' ? document.getElementById('panelStatistics') : document.querySelector('[data-stat-inst="' + ev.tab.id + '"]');
-          var stView = (stRoot && typeof statSerializeView === 'function' && typeof statStateForRoot === 'function') ? statSerializeView(statStateForRoot(stRoot)) : null;
-          wsSpawnStatisticsInstance(stView);   // carry the source panel's var/metric/CDF/comparison view
-        } else if (isGt) {
-          var gtRoot = ev.tab.id === 'gt' ? document.getElementById('panelGt') : document.querySelector('[data-gt-inst="' + ev.tab.id + '"]');
-          var gtCfg = (gtRoot && typeof gtSerializeConfig === 'function') ? gtSerializeConfig(gtRoot) : null;
-          wsSpawnGtInstance(gtCfg);   // carry the source panel's target/grades/cutoffs/units (G3b-4)
-        } else if (isStatsCat) {
-          var scRoot = ev.tab.id === 'statscat' ? null : document.querySelector('[data-statcat-inst="' + ev.tab.id + '"]');
-          var scTarget = (typeof statsCatInstTarget === 'function') ? statsCatInstTarget(scRoot) : 'model';
-          wsSpawnStatsCatInstance(scTarget);   // carry the source panel's target dataset (G4b)
-        } else if (isExport) {
-          var exRoot = ev.tab.id === 'export' ? null : document.querySelector('[data-export-inst="' + ev.tab.id + '"]');
-          var exTarget = (typeof exportInstTarget === 'function') ? exportInstTarget(exRoot) : 'model';
-          wsSpawnExportInstance(exTarget);   // carry the source panel's target dataset (G5b)
-        } else if (isCrosstab) {
-          var xtRoot = ev.tab.id === 'crosstab' ? document.getElementById('panelCrosstab') : document.querySelector('[data-xt-inst="' + ev.tab.id + '"]');
-          var xtCfg = (xtRoot && typeof crosstabSerializeConfig === 'function') ? crosstabSerializeConfig(xtRoot) : null;
-          wsSpawnCrosstabInstance(xtCfg);   // carry the source panel's target/columns/weight/view (A19-clone)
-        } else {
-          var src = ev.tab.id === 'categories' ? panelState.categories : (typeof catInstances !== 'undefined' ? catInstances[ev.tab.id] : null);
-          wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false, src ? src.catTargetDsId : 'model');
-        }
+        wsDuplicateView(ev.tab.id);   // C10: shared with the Data-tree Views ⎘
       } else if (a === 'float') {
         var hostRect = document.getElementById('resultsMain').getBoundingClientRect();
         wsRails.floatTab(ev.tab.id, {

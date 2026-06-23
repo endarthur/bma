@@ -4536,6 +4536,13 @@ table.stats tr.stats-delta-row td:first-child {
 .tree-surface:hover .tree-surface-edit { opacity: 1; }
 .tree-surface-edit:hover { color: var(--fg); }
 .tree-surface-input { flex: 1; min-width: 0; background: var(--bg1); border: 1px solid var(--blue); border-radius: 3px; color: var(--fg); font: 0.72rem var(--mono); padding: 0.05rem 0.3rem; }
+.tree-view-del:hover { color: var(--red); }
+/* Views group header "+ New view" + the learnable empty state */
+.tree-views-group > summary { display: flex; align-items: center; gap: 0.4rem; }
+.tree-views-add { margin-left: auto; background: none; border: 1px solid var(--border); color: var(--fg-dim); border-radius: 3px; cursor: pointer; font: 0.6rem var(--sans); padding: 0.02rem 0.35rem; opacity: 0.7; }
+.tree-views-add:hover { border-color: var(--blue); color: var(--blue); opacity: 1; }
+.tree-views-empty { font-size: 0.64rem; color: var(--fg-dim); padding: 0.3rem 0.5rem 0.3rem 1rem; line-height: 1.4; font-style: italic; }
+.tree-views-empty b { font-style: normal; color: var(--fg); }
 
 /* A11: derived datasets nest under their source set (filesystem / GIS-layer idiom)
    — indent + a connector rail; nested summaries drop the sticky so they don't
@@ -6324,7 +6331,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 4d30e3e — click to check for updates">4d30e3e</div>
+<div class="build-badge" id="buildBadge" title="build 4b4f0bd — click to check for updates">4b4f0bd</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -9422,6 +9429,19 @@ function surfaceList() {
 // The surfaces pointed at a dataset (live ones: open singletons + clones).
 function surfacesTargeting(dsId) {
   return surfaceList().filter(function (s) { return s.target === dsId && (s.clone || s.open); });
+}
+// A VIEW (user-facing term) = an analysis DELIBERATELY created/kept for a dataset,
+// not an ambient default panel. Deliberate = a clone, a renamed one, or a singleton
+// retargeted off the model. So a pristine default Statistics tab doesn't clutter the
+// dataset's view list; a GT you cloned onto the drillhole composites does.
+function surfaceIsDeliberate(s) {
+  if (!s) return false;
+  if (s.clone) return true;
+  if (typeof surfaceHasCustomTitle === 'function' && surfaceHasCustomTitle(s.id)) return true;
+  return !!(s.target && s.target !== 'model');
+}
+function viewsForDataset(dsId) {
+  return surfaceList().filter(function (s) { return s.target === dsId && (s.clone || s.open) && surfaceIsDeliberate(s); });
 }
 
 // User-given surface titles (persisted as the `surfaceTitles` project key) — let
@@ -36163,22 +36183,39 @@ function treeDsDerivedHtml(ds) {
     (mat ? '◆ materialized' : '◇ linked') + '</span>';
 }
 
-// C10: the analysis surfaces (Statistics, GT, …) targeting a dataset — the reverse
-// index of the per-surface "Dataset" picker. Each row focuses its panel on click
-// and can be renamed (✎). Returns row HTML strings for the shared group() wrapper.
-function treeSurfaceRows(ds) {
-  if (typeof surfacesTargeting !== 'function') return [];
-  return surfacesTargeting(ds).map(function (s) {
+// C10: the VIEWS (Statistics, GT, …) deliberately created for a dataset — the
+// reverse index of the per-view "Dataset" picker. Each row focuses its panel on
+// click and can be renamed (✎). Returns row HTML strings.
+function treeViewRows(ds) {
+  if (typeof viewsForDataset !== 'function') return [];
+  return viewsForDataset(ds).map(function (s) {
     var title = surfaceTitle(s.id);
     var custom = (typeof surfaceHasCustomTitle === 'function') && surfaceHasCustomTitle(s.id);
     return '<div class="tree-row tree-surface" data-surface="' + esc(s.id) + '" tabindex="0" title="Click to focus this view">' +
       '<span class="tree-surface-dot tree-surface-dot--' + esc(s.kind) + '"></span>' +
       '<span class="tree-name tree-surface-name">' + esc(title) + '</span>' +
       (custom ? '<span class="tree-surface-kind">' + esc(s.label) + '</span>' : '') +
-      (s.clone ? '<span class="tree-surface-badge">clone</span>' : '') +
+      (s.clone ? '<span class="tree-surface-badge">copy</span>' : '') +
       '<button class="tree-surface-edit" data-surface-edit="' + esc(s.id) + '" title="Rename this view">✎</button>' +
+      (typeof viewCanDuplicate === 'function' && viewCanDuplicate(s.id) ? '<button class="tree-surface-edit tree-view-dup" data-view-dup="' + esc(s.id) + '" title="Duplicate this view">⎘</button>' : '') +
+      '<button class="tree-surface-edit tree-view-del" data-view-del="' + esc(s.id) + '" title="' + (s.clone ? 'Delete this view' : 'Stop keeping this view') + '">✕</button>' +
       '</div>';
   });
+}
+
+// The Views group under a dataset — deliberate views + a learnable empty state +
+// a "+" to create one. Always shown for an analyzed dataset so the concept is
+// discoverable (Arthur: make it easy to understand).
+function treeViewsGroupHtml(ds, openState) {
+  var rows = treeViewRows(ds);
+  var gKey = 'g:' + ds + ':views';
+  var gOpen = openState[gKey] !== undefined ? openState[gKey] : true;   // open by default (hint teaches when empty)
+  var inner = rows.length ? rows.join('')
+    : '<div class="tree-views-empty">No views kept yet — <b>+ New view</b>, or duplicate an analysis, to keep one here.</div>';
+  return '<details class="tree-group tree-views-group" data-key="' + gKey + '"' + (gOpen ? ' open' : '') + '>' +
+    '<summary>Views <span class="tree-count">' + rows.length + '</span>' +
+    '<button class="tree-views-add" data-view-add="' + esc(ds) + '" title="Create a view for this dataset">+ New view</button></summary>' +
+    inner + '</details>';
 }
 
 function treeDatasetHtml(ds, openState, childrenHtml) {
@@ -36304,13 +36341,17 @@ function treeDatasetHtml(ds, openState, childrenHtml) {
     group('Grades', grades.map(numRow), 'grades') +
     group('Categories', cats.map(catRow), 'cats') +
     group('Calculated', calcs.map(calcRow), 'calc') +
-    group('Surfaces', treeSurfaceRows(ds), 'surfaces') +   // C10: views targeting this dataset
     (stale.length > 0
       ? group('Missing', stale.map(function(n) {
           return '<div class="tree-row tree-row--stale" title="catalog entry with no matching variable">' +
             '<span class="tree-chip tree-chip--stale"></span><span class="tree-name">' + esc(n) + '</span></div>';
         }), 'stale')
       : '');
+  // C10: Views — analyses kept for this dataset — once it's analyzed (you create a
+  // view over results). Always shown then, even empty, so the concept is learnable.
+  var dsAnalyzed = (ds === 'model') ? (typeof lastCompleteData !== 'undefined' && !!lastCompleteData)
+    : !!(typeof dsById === 'function' && dsById(ds) && dsById(ds).complete);
+  if (dsAnalyzed) body += treeViewsGroupHtml(ds, openState);
 
   // dataset-level note: declustered-weights sentinel isn't a variable
   var dsNote = '';
@@ -36536,6 +36577,32 @@ function treeToggleRole(t, role) {
         } else if (typeof wsAddPointDataset === 'function') {
           wsAddPointDataset();   // legacy/<700px fallback (no Menu mounted)
         }
+        return;
+      }
+      // C10: + New view — pick a kind, create it targeting this dataset
+      var vadd = e.target.closest('[data-view-add]');
+      if (vadd) {
+        e.preventDefault(); e.stopPropagation();
+        var dsForView = vadd.getAttribute('data-view-add');
+        var r = vadd.getBoundingClientRect();
+        if (typeof Menu !== 'undefined' && typeof VIEW_CREATE_KINDS !== 'undefined' && typeof wsCreateView === 'function') {
+          Menu.show(VIEW_CREATE_KINDS.map(function (k) { return { label: k.label, action: { newView: k.kind, ds: dsForView } }; }), { x: r.left, y: r.bottom })
+            .then(function (a) { if (a && a.newView) wsCreateView(a.newView, a.ds); });
+        }
+        return;
+      }
+      // C10: duplicate / delete a view
+      var vdup = e.target.closest('[data-view-dup]');
+      if (vdup) { e.preventDefault(); e.stopPropagation(); if (typeof wsDuplicateView === 'function') wsDuplicateView(vdup.getAttribute('data-view-dup')); return; }
+      var vdel = e.target.closest('[data-view-del]');
+      if (vdel) {
+        e.preventDefault(); e.stopPropagation();
+        var vid = vdel.getAttribute('data-view-del');
+        var clone = vid.indexOf('#') >= 0;
+        Promise.resolve(typeof bmaConfirm === 'function'
+          ? bmaConfirm({ title: clone ? 'Delete view' : 'Stop keeping view', okLabel: clone ? 'Delete' : 'Stop keeping', cancelLabel: 'Cancel',
+              html: clone ? 'Delete this view? Its analysis config is discarded.' : 'Return this view to a default panel? Its custom name is cleared.' })
+          : true).then(function (ok) { if (ok && typeof wsDeleteView === 'function') wsDeleteView(vid); });
         return;
       }
       // C10: rename a surface (✎) — inline edit; commit to surfaceSetTitle
@@ -37930,6 +37997,75 @@ function wsSpawnExportInstance(seedTargetDsId) {
   wsRails.activateTab(instId);                 // renderPanel → exportBuildInstancePanel
 }
 
+// ── C10 view operations (create / duplicate / delete) — used by the Data-tree
+// Views section. A "view" = a deliberately-kept analysis over a dataset. ──────
+var VIEW_SINGLETON_EL = { statistics: 'panelStatistics', categories: 'panelCategories', swath: 'panelSwath', gt: 'panelGt', crosstab: 'panelCrosstab', statscat: 'panelStatsCat', export: 'panelExport' };
+var VIEW_INST_ATTR = { statistics: 'data-stat-inst', categories: 'data-cat-inst', swath: 'data-sw-inst', gt: 'data-gt-inst', crosstab: 'data-xt-inst', statscat: 'data-statcat-inst', export: 'data-export-inst' };
+var VIEW_CREATE_KINDS = [
+  { kind: 'statistics', label: 'Statistics' }, { kind: 'categories', label: 'Categories' },
+  { kind: 'statscat', label: 'StatsCat' }, { kind: 'gt', label: 'Grade–Tonnage' },
+  { kind: 'swath', label: 'Swath' }, { kind: 'crosstab', label: 'Cross-tab' }, { kind: 'export', label: 'Export' }
+];
+function viewCanDuplicate(id) { return !!VIEW_SINGLETON_EL[String(id).split('#')[0]]; }
+function wsViewRoot(kind, id) {
+  return id.indexOf('#') >= 0 ? document.querySelector('[' + VIEW_INST_ATTR[kind] + '="' + id + '"]') : document.getElementById(VIEW_SINGLETON_EL[kind]);
+}
+// Retarget any view (singleton or clone) at a dataset — routes to the kind's own
+// setTarget (which rebuilds the sidebar); crosstab has no setter fn, so inline it.
+function wsSetViewTarget(kind, id, dsId) {
+  var root = wsViewRoot(kind, id);
+  if (!root) return;
+  if (kind === 'gt' && typeof setGtTarget === 'function') setGtTarget(dsId, root);
+  else if (kind === 'statistics' && typeof setStatsTarget === 'function') setStatsTarget(dsId, root);
+  else if (kind === 'swath' && typeof setSwathTarget === 'function') setSwathTarget(dsId, root);
+  else if (kind === 'categories' && typeof setCatTarget === 'function') setCatTarget(dsId, root);
+  else if (kind === 'statscat' && typeof setStatsCatTarget === 'function') setStatsCatTarget(dsId, root);
+  else if (kind === 'export' && typeof setExportTarget === 'function') setExportTarget(dsId, root);
+  else if (kind === 'crosstab' && typeof crosstabStateForRoot === 'function') {
+    var S = crosstabStateForRoot(root); S.targetDsId = dsId; S.colA = null; S.colB = null; S.lastData = null;
+    if (typeof renderCrosstab === 'function') renderCrosstab(root);
+  }
+}
+// Create a fresh view of `kind` targeting `dsId` (a deliberate, listed view).
+function wsCreateView(kind, dsId) {
+  var spawn = {
+    categories: function () { wsSpawnCategoriesInstance(null, false, 'model'); }, statscat: function () { wsSpawnStatsCatInstance('model'); },
+    export: function () { wsSpawnExportInstance('model'); }, swath: function () { wsSpawnSwathInstance(null); },
+    statistics: function () { wsSpawnStatisticsInstance(null); }, gt: function () { wsSpawnGtInstance(null); }, crosstab: function () { wsSpawnCrosstabInstance(null); }
+  }[kind];
+  if (!spawn) return;
+  spawn();
+  var instId = (typeof getActiveTabId === 'function') ? getActiveTabId() : null;   // spawn activates the new clone
+  if (instId && dsId && dsId !== 'model') wsSetViewTarget(kind, instId, dsId);
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+// Duplicate a view (singleton or clone), carrying its config — the same per-kind
+// seeding the tab's "Duplicate" uses, factored to take any view id.
+function wsDuplicateView(id) {
+  if (!wsRails) { showPanel(id); return; }
+  var kind = String(id).split('#')[0], isClone = id.indexOf('#') >= 0;
+  var root = wsViewRoot(kind, id);
+  if (kind === 'swath') wsSpawnSwathInstance(root && typeof swSerializeConfig === 'function' ? swSerializeConfig(root) : null);
+  else if (kind === 'statistics') wsSpawnStatisticsInstance(root && typeof statSerializeView === 'function' && typeof statStateForRoot === 'function' ? statSerializeView(statStateForRoot(root)) : null);
+  else if (kind === 'gt') wsSpawnGtInstance(root && typeof gtSerializeConfig === 'function' ? gtSerializeConfig(root) : null);
+  else if (kind === 'statscat') wsSpawnStatsCatInstance(typeof statsCatInstTarget === 'function' ? statsCatInstTarget(isClone ? root : null) : 'model');
+  else if (kind === 'export') wsSpawnExportInstance(typeof exportInstTarget === 'function' ? exportInstTarget(isClone ? root : null) : 'model');
+  else if (kind === 'crosstab') wsSpawnCrosstabInstance(root && typeof crosstabSerializeConfig === 'function' ? crosstabSerializeConfig(root) : null);
+  else { var src = isClone ? (typeof catInstances !== 'undefined' ? catInstances[id] : null) : panelState.categories; wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false, src ? src.catTargetDsId : 'model'); }
+}
+// Delete a view: a clone is destroyed (close its tab); a singleton can't be removed,
+// so "delete" means stop keeping it — clear its custom name + return it to the model.
+function wsDeleteView(id) {
+  var kind = String(id).split('#')[0];
+  if (id.indexOf('#') >= 0) {
+    if (wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) wsRails.closeTab(id);   // → onPanelDestroy disposes it
+    return;
+  }
+  if (typeof surfaceSetTitle === 'function') surfaceSetTitle(id, '');   // un-name (refreshes the tree)
+  wsSetViewTarget(kind, id, 'model');                                    // back to ambient default
+  if (typeof autoSaveProject === 'function') autoSaveProject();
+}
+
 // Track the dataset in its tab title (loadAuxFile on load, onAuxConfigChange on
 // edit, clearAux on reset). The first comparison dataset's tab used to be hard-
 // labelled "Aux"; now it follows its loaded file like d2+ ("Import: <name>"), and
@@ -38390,34 +38526,7 @@ function buildRailsShell(host) {
     Menu.show(items, { x: ev.x, y: ev.y }).then(function(a) {
       if (!a || !wsRails) return;
       if (a === 'duplicate') {
-        if (isSwath) {
-          var swRoot = ev.tab.id === 'swath' ? document.getElementById('panelSwath') : document.querySelector('[data-sw-inst="' + ev.tab.id + '"]');
-          var swCfg = (swRoot && typeof swSerializeConfig === 'function') ? swSerializeConfig(swRoot) : null;
-          wsSpawnSwathInstance(swCfg);   // carry the source panel's directions/vars/stat/display
-        } else if (isStats) {
-          var stRoot = ev.tab.id === 'statistics' ? document.getElementById('panelStatistics') : document.querySelector('[data-stat-inst="' + ev.tab.id + '"]');
-          var stView = (stRoot && typeof statSerializeView === 'function' && typeof statStateForRoot === 'function') ? statSerializeView(statStateForRoot(stRoot)) : null;
-          wsSpawnStatisticsInstance(stView);   // carry the source panel's var/metric/CDF/comparison view
-        } else if (isGt) {
-          var gtRoot = ev.tab.id === 'gt' ? document.getElementById('panelGt') : document.querySelector('[data-gt-inst="' + ev.tab.id + '"]');
-          var gtCfg = (gtRoot && typeof gtSerializeConfig === 'function') ? gtSerializeConfig(gtRoot) : null;
-          wsSpawnGtInstance(gtCfg);   // carry the source panel's target/grades/cutoffs/units (G3b-4)
-        } else if (isStatsCat) {
-          var scRoot = ev.tab.id === 'statscat' ? null : document.querySelector('[data-statcat-inst="' + ev.tab.id + '"]');
-          var scTarget = (typeof statsCatInstTarget === 'function') ? statsCatInstTarget(scRoot) : 'model';
-          wsSpawnStatsCatInstance(scTarget);   // carry the source panel's target dataset (G4b)
-        } else if (isExport) {
-          var exRoot = ev.tab.id === 'export' ? null : document.querySelector('[data-export-inst="' + ev.tab.id + '"]');
-          var exTarget = (typeof exportInstTarget === 'function') ? exportInstTarget(exRoot) : 'model';
-          wsSpawnExportInstance(exTarget);   // carry the source panel's target dataset (G5b)
-        } else if (isCrosstab) {
-          var xtRoot = ev.tab.id === 'crosstab' ? document.getElementById('panelCrosstab') : document.querySelector('[data-xt-inst="' + ev.tab.id + '"]');
-          var xtCfg = (xtRoot && typeof crosstabSerializeConfig === 'function') ? crosstabSerializeConfig(xtRoot) : null;
-          wsSpawnCrosstabInstance(xtCfg);   // carry the source panel's target/columns/weight/view (A19-clone)
-        } else {
-          var src = ev.tab.id === 'categories' ? panelState.categories : (typeof catInstances !== 'undefined' ? catInstances[ev.tab.id] : null);
-          wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false, src ? src.catTargetDsId : 'model');
-        }
+        wsDuplicateView(ev.tab.id);   // C10: shared with the Data-tree Views ⎘
       } else if (a === 'float') {
         var hostRect = document.getElementById('resultsMain').getBoundingClientRect();
         wsRails.floatTab(ev.tab.id, {

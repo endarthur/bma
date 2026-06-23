@@ -237,22 +237,39 @@ function treeDsDerivedHtml(ds) {
     (mat ? '◆ materialized' : '◇ linked') + '</span>';
 }
 
-// C10: the analysis surfaces (Statistics, GT, …) targeting a dataset — the reverse
-// index of the per-surface "Dataset" picker. Each row focuses its panel on click
-// and can be renamed (✎). Returns row HTML strings for the shared group() wrapper.
-function treeSurfaceRows(ds) {
-  if (typeof surfacesTargeting !== 'function') return [];
-  return surfacesTargeting(ds).map(function (s) {
+// C10: the VIEWS (Statistics, GT, …) deliberately created for a dataset — the
+// reverse index of the per-view "Dataset" picker. Each row focuses its panel on
+// click and can be renamed (✎). Returns row HTML strings.
+function treeViewRows(ds) {
+  if (typeof viewsForDataset !== 'function') return [];
+  return viewsForDataset(ds).map(function (s) {
     var title = surfaceTitle(s.id);
     var custom = (typeof surfaceHasCustomTitle === 'function') && surfaceHasCustomTitle(s.id);
     return '<div class="tree-row tree-surface" data-surface="' + esc(s.id) + '" tabindex="0" title="Click to focus this view">' +
       '<span class="tree-surface-dot tree-surface-dot--' + esc(s.kind) + '"></span>' +
       '<span class="tree-name tree-surface-name">' + esc(title) + '</span>' +
       (custom ? '<span class="tree-surface-kind">' + esc(s.label) + '</span>' : '') +
-      (s.clone ? '<span class="tree-surface-badge">clone</span>' : '') +
+      (s.clone ? '<span class="tree-surface-badge">copy</span>' : '') +
       '<button class="tree-surface-edit" data-surface-edit="' + esc(s.id) + '" title="Rename this view">✎</button>' +
+      (typeof viewCanDuplicate === 'function' && viewCanDuplicate(s.id) ? '<button class="tree-surface-edit tree-view-dup" data-view-dup="' + esc(s.id) + '" title="Duplicate this view">⎘</button>' : '') +
+      '<button class="tree-surface-edit tree-view-del" data-view-del="' + esc(s.id) + '" title="' + (s.clone ? 'Delete this view' : 'Stop keeping this view') + '">✕</button>' +
       '</div>';
   });
+}
+
+// The Views group under a dataset — deliberate views + a learnable empty state +
+// a "+" to create one. Always shown for an analyzed dataset so the concept is
+// discoverable (Arthur: make it easy to understand).
+function treeViewsGroupHtml(ds, openState) {
+  var rows = treeViewRows(ds);
+  var gKey = 'g:' + ds + ':views';
+  var gOpen = openState[gKey] !== undefined ? openState[gKey] : true;   // open by default (hint teaches when empty)
+  var inner = rows.length ? rows.join('')
+    : '<div class="tree-views-empty">No views kept yet — <b>+ New view</b>, or duplicate an analysis, to keep one here.</div>';
+  return '<details class="tree-group tree-views-group" data-key="' + gKey + '"' + (gOpen ? ' open' : '') + '>' +
+    '<summary>Views <span class="tree-count">' + rows.length + '</span>' +
+    '<button class="tree-views-add" data-view-add="' + esc(ds) + '" title="Create a view for this dataset">+ New view</button></summary>' +
+    inner + '</details>';
 }
 
 function treeDatasetHtml(ds, openState, childrenHtml) {
@@ -378,13 +395,17 @@ function treeDatasetHtml(ds, openState, childrenHtml) {
     group('Grades', grades.map(numRow), 'grades') +
     group('Categories', cats.map(catRow), 'cats') +
     group('Calculated', calcs.map(calcRow), 'calc') +
-    group('Surfaces', treeSurfaceRows(ds), 'surfaces') +   // C10: views targeting this dataset
     (stale.length > 0
       ? group('Missing', stale.map(function(n) {
           return '<div class="tree-row tree-row--stale" title="catalog entry with no matching variable">' +
             '<span class="tree-chip tree-chip--stale"></span><span class="tree-name">' + esc(n) + '</span></div>';
         }), 'stale')
       : '');
+  // C10: Views — analyses kept for this dataset — once it's analyzed (you create a
+  // view over results). Always shown then, even empty, so the concept is learnable.
+  var dsAnalyzed = (ds === 'model') ? (typeof lastCompleteData !== 'undefined' && !!lastCompleteData)
+    : !!(typeof dsById === 'function' && dsById(ds) && dsById(ds).complete);
+  if (dsAnalyzed) body += treeViewsGroupHtml(ds, openState);
 
   // dataset-level note: declustered-weights sentinel isn't a variable
   var dsNote = '';
@@ -610,6 +631,32 @@ function treeToggleRole(t, role) {
         } else if (typeof wsAddPointDataset === 'function') {
           wsAddPointDataset();   // legacy/<700px fallback (no Menu mounted)
         }
+        return;
+      }
+      // C10: + New view — pick a kind, create it targeting this dataset
+      var vadd = e.target.closest('[data-view-add]');
+      if (vadd) {
+        e.preventDefault(); e.stopPropagation();
+        var dsForView = vadd.getAttribute('data-view-add');
+        var r = vadd.getBoundingClientRect();
+        if (typeof Menu !== 'undefined' && typeof VIEW_CREATE_KINDS !== 'undefined' && typeof wsCreateView === 'function') {
+          Menu.show(VIEW_CREATE_KINDS.map(function (k) { return { label: k.label, action: { newView: k.kind, ds: dsForView } }; }), { x: r.left, y: r.bottom })
+            .then(function (a) { if (a && a.newView) wsCreateView(a.newView, a.ds); });
+        }
+        return;
+      }
+      // C10: duplicate / delete a view
+      var vdup = e.target.closest('[data-view-dup]');
+      if (vdup) { e.preventDefault(); e.stopPropagation(); if (typeof wsDuplicateView === 'function') wsDuplicateView(vdup.getAttribute('data-view-dup')); return; }
+      var vdel = e.target.closest('[data-view-del]');
+      if (vdel) {
+        e.preventDefault(); e.stopPropagation();
+        var vid = vdel.getAttribute('data-view-del');
+        var clone = vid.indexOf('#') >= 0;
+        Promise.resolve(typeof bmaConfirm === 'function'
+          ? bmaConfirm({ title: clone ? 'Delete view' : 'Stop keeping view', okLabel: clone ? 'Delete' : 'Stop keeping', cancelLabel: 'Cancel',
+              html: clone ? 'Delete this view? Its analysis config is discarded.' : 'Return this view to a default panel? Its custom name is cleared.' })
+          : true).then(function (ok) { if (ok && typeof wsDeleteView === 'function') wsDeleteView(vid); });
         return;
       }
       // C10: rename a surface (✎) — inline edit; commit to surfaceSetTitle

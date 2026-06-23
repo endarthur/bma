@@ -4521,6 +4521,13 @@ table.stats tr.stats-delta-row td:first-child {
 .tree-surface:hover .tree-surface-edit { opacity: 1; }
 .tree-surface-edit:hover { color: var(--fg); }
 .tree-surface-input { flex: 1; min-width: 0; background: var(--bg1); border: 1px solid var(--blue); border-radius: 3px; color: var(--fg); font: 0.72rem var(--mono); padding: 0.05rem 0.3rem; }
+.tree-view-del:hover { color: var(--red); }
+/* Views group header "+ New view" + the learnable empty state */
+.tree-views-group > summary { display: flex; align-items: center; gap: 0.4rem; }
+.tree-views-add { margin-left: auto; background: none; border: 1px solid var(--border); color: var(--fg-dim); border-radius: 3px; cursor: pointer; font: 0.6rem var(--sans); padding: 0.02rem 0.35rem; opacity: 0.7; }
+.tree-views-add:hover { border-color: var(--blue); color: var(--blue); opacity: 1; }
+.tree-views-empty { font-size: 0.64rem; color: var(--fg-dim); padding: 0.3rem 0.5rem 0.3rem 1rem; line-height: 1.4; font-style: italic; }
+.tree-views-empty b { font-style: normal; color: var(--fg); }
 
 /* A11: derived datasets nest under their source set (filesystem / GIS-layer idiom)
    — indent + a connector rail; nested summaries drop the sticky so they don't

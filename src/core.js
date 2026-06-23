@@ -445,6 +445,19 @@ function surfaceList() {
 function surfacesTargeting(dsId) {
   return surfaceList().filter(function (s) { return s.target === dsId && (s.clone || s.open); });
 }
+// A VIEW (user-facing term) = an analysis DELIBERATELY created/kept for a dataset,
+// not an ambient default panel. Deliberate = a clone, a renamed one, or a singleton
+// retargeted off the model. So a pristine default Statistics tab doesn't clutter the
+// dataset's view list; a GT you cloned onto the drillhole composites does.
+function surfaceIsDeliberate(s) {
+  if (!s) return false;
+  if (s.clone) return true;
+  if (typeof surfaceHasCustomTitle === 'function' && surfaceHasCustomTitle(s.id)) return true;
+  return !!(s.target && s.target !== 'model');
+}
+function viewsForDataset(dsId) {
+  return surfaceList().filter(function (s) { return s.target === dsId && (s.clone || s.open) && surfaceIsDeliberate(s); });
+}
 
 // User-given surface titles (persisted as the `surfaceTitles` project key) — let
 // the user name a view to organize the workspace. Absent → a sensible default.
