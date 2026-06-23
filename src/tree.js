@@ -237,6 +237,24 @@ function treeDsDerivedHtml(ds) {
     (mat ? '◆ materialized' : '◇ linked') + '</span>';
 }
 
+// C10: the analysis surfaces (Statistics, GT, …) targeting a dataset — the reverse
+// index of the per-surface "Dataset" picker. Each row focuses its panel on click
+// and can be renamed (✎). Returns row HTML strings for the shared group() wrapper.
+function treeSurfaceRows(ds) {
+  if (typeof surfacesTargeting !== 'function') return [];
+  return surfacesTargeting(ds).map(function (s) {
+    var title = surfaceTitle(s.id);
+    var custom = (typeof surfaceHasCustomTitle === 'function') && surfaceHasCustomTitle(s.id);
+    return '<div class="tree-row tree-surface" data-surface="' + esc(s.id) + '" tabindex="0" title="Click to focus this view">' +
+      '<span class="tree-surface-dot tree-surface-dot--' + esc(s.kind) + '"></span>' +
+      '<span class="tree-name tree-surface-name">' + esc(title) + '</span>' +
+      (custom ? '<span class="tree-surface-kind">' + esc(s.label) + '</span>' : '') +
+      (s.clone ? '<span class="tree-surface-badge">clone</span>' : '') +
+      '<button class="tree-surface-edit" data-surface-edit="' + esc(s.id) + '" title="Rename this view">✎</button>' +
+      '</div>';
+  });
+}
+
 function treeDatasetHtml(ds, openState, childrenHtml) {
   childrenHtml = childrenHtml || '';
   var v = treeDatasetVars(ds);
@@ -360,6 +378,7 @@ function treeDatasetHtml(ds, openState, childrenHtml) {
     group('Grades', grades.map(numRow), 'grades') +
     group('Categories', cats.map(catRow), 'cats') +
     group('Calculated', calcs.map(calcRow), 'calc') +
+    group('Surfaces', treeSurfaceRows(ds), 'surfaces') +   // C10: views targeting this dataset
     (stale.length > 0
       ? group('Missing', stale.map(function(n) {
           return '<div class="tree-row tree-row--stale" title="catalog entry with no matching variable">' +
@@ -593,6 +612,35 @@ function treeToggleRole(t, role) {
         }
         return;
       }
+      // C10: rename a surface (✎) — inline edit; commit to surfaceSetTitle
+      var ed = e.target.closest('[data-surface-edit]');
+      if (ed) {
+        e.preventDefault(); e.stopPropagation();
+        var sid = ed.getAttribute('data-surface-edit');
+        var srow = ed.closest('.tree-surface');
+        var nameEl = srow && srow.querySelector('.tree-surface-name');
+        if (!nameEl || srow.querySelector('.tree-surface-input')) return;
+        var inp = document.createElement('input');
+        inp.className = 'tree-surface-input'; inp.spellcheck = false;
+        inp.value = (typeof surfaceTitle === 'function') ? surfaceTitle(sid) : nameEl.textContent;
+        nameEl.replaceWith(inp); inp.focus(); inp.select();
+        var committed = false;
+        var commit = function(save) {
+          if (committed) return; committed = true;
+          if (save && typeof surfaceSetTitle === 'function') surfaceSetTitle(sid, inp.value);   // re-renders the tree
+          else if (typeof renderCatalogTree === 'function') renderCatalogTree();
+        };
+        inp.addEventListener('keydown', function(ev) {
+          if (ev.key === 'Enter') { ev.preventDefault(); commit(true); }
+          else if (ev.key === 'Escape') { ev.preventDefault(); commit(false); }
+        });
+        inp.addEventListener('blur', function() { commit(true); });
+        inp.addEventListener('click', function(ev) { ev.stopPropagation(); });
+        return;
+      }
+      // C10: focus the surface a row names
+      var surfRow = e.target.closest('.tree-surface');
+      if (surfRow) { if (typeof showPanel === 'function') showPanel(surfRow.getAttribute('data-surface')); return; }
       var row = e.target.closest('.tree-row--edit');
       if (!row) return;
       showTreePopover(row);

@@ -4518,6 +4518,25 @@ table.stats tr.stats-delta-row td:first-child {
 /* C11-P2: derived-dataset mode badge (◇ linked / ◆ materialized) */
 .tree-ds-derived { font: 0.58rem var(--sans); color: var(--fg-dim); background: var(--bg2); border-radius: 3px; padding: 0.04rem 0.3rem; white-space: nowrap; }
 .tree-ds-derived--mat { color: var(--green); background: var(--green-soft); }
+/* C10: the "Surfaces" group — analysis views targeting a dataset (reverse index of
+   the per-surface Dataset picker). Click a row to focus the view; ✎ renames it. */
+.tree-surface { cursor: pointer; gap: 0.4rem; }
+.tree-surface:hover { background: var(--bg2); }
+.tree-surface:focus { outline: none; background: var(--bg2); box-shadow: inset 2px 0 0 var(--blue); }
+.tree-surface-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--fg-dim); flex: none; }
+.tree-surface-dot--gt { background: var(--amber); }
+.tree-surface-dot--statistics { background: var(--blue); }
+.tree-surface-dot--categories { background: var(--green); }
+.tree-surface-dot--swath { background: var(--teal, var(--blue)); }
+.tree-surface-dot--crosstab { background: var(--indigo, var(--blue)); }
+.tree-surface-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-surface-kind { font: 0.56rem var(--sans); color: var(--fg-dim); white-space: nowrap; }
+.tree-surface-badge { font: 0.54rem var(--sans); color: var(--fg-dim); background: var(--bg2); border: 1px solid var(--border); border-radius: 3px; padding: 0 0.25rem; white-space: nowrap; }
+.tree-surface-edit { background: none; border: none; color: var(--fg-dim); cursor: pointer; font-size: 0.7rem; line-height: 1; padding: 0 0.2rem; opacity: 0; }
+.tree-surface:hover .tree-surface-edit { opacity: 1; }
+.tree-surface-edit:hover { color: var(--fg); }
+.tree-surface-input { flex: 1; min-width: 0; background: var(--bg1); border: 1px solid var(--blue); border-radius: 3px; color: var(--fg); font: 0.72rem var(--mono); padding: 0.05rem 0.3rem; }
+
 /* A11: derived datasets nest under their source set (filesystem / GIS-layer idiom)
    — indent + a connector rail; nested summaries drop the sticky so they don't
    stack on the parent's sticky header */
@@ -6305,7 +6324,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 3718364 — click to check for updates">3718364</div>
+<div class="build-badge" id="buildBadge" title="build 4d30e3e — click to check for updates">4d30e3e</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -9359,6 +9378,69 @@ function dsPickerHtml(cfg) {
     '<select class="' + cfg.selectClass + ' ds-picker-latent" ' + cfg.selAttr + ' disabled title="' + esc(hint) + '">' +
     '<option selected>' + esc(dsLabel(cfg.current)) + '</option></select>' +
     '<div class="ds-picker-hint">' + esc(hint) + '</div>';
+}
+
+// ── C10: the surface registry (reverse index of the dataset picker) ───────
+// One descriptor per analysis surface: how to read the singleton's target, its
+// clone instances, and a clone's target field. Lets the Data tree list, per
+// dataset, the surfaces pointed at it — and lets any code enumerate surfaces
+// without re-deriving each panel's bespoke target storage. Globals are read
+// lazily (the surface modules load after core.js); guarded for load order.
+function surfaceDescriptors() {
+  return [
+    { kind: 'statistics', label: 'Statistics', facet: 'analyzed',    singleton: function () { return statsTargetDsId; },    insts: function () { return statInstances; },     instTarget: function (s) { return s.statsTargetDsId; } },
+    { kind: 'categories', label: 'Categories', facet: 'categorical', singleton: function () { return panelState.categories.catTargetDsId || 'model'; }, insts: function () { return catInstances; }, instTarget: function (s) { return s.catTargetDsId; } },
+    { kind: 'statscat',   label: 'StatsCat',   facet: 'analyzed',    singleton: function () { return statsCatTargetDsId; },  insts: function () { return statsCatInstances; }, instTarget: function (s) { return s.targetDsId; } },
+    { kind: 'gt',         label: 'Grade–Tonnage', facet: 'analyzed', singleton: function () { return gtTargetDsId; },        insts: function () { return gtInstances; },       instTarget: function (s) { return s.gtTargetDsId; } },
+    { kind: 'swath',      label: 'Swath',      facet: 'gridded',     singleton: function () { return swathTargetDsId; },     insts: function () { return swathInstances; },    instTarget: function (s) { return s.swathTargetDsId; } },
+    { kind: 'crosstab',   label: 'Cross-tab',  facet: 'categorical', singleton: function () { return crosstabTargetDsId; },  insts: function () { return crosstabInstances; }, instTarget: function (s) { return s.targetDsId; } },
+    { kind: 'export',     label: 'Export',     facet: 'analyzed',    singleton: function () { return exportTargetDsId; },    insts: function () { return exportInstances; },   instTarget: function (s) { return s.targetDsId; } }
+  ];
+}
+// Is a surface currently a live tab? (clones are only in their map while alive;
+// a singleton is "in use" once opened as a tab — on the rails shell via findTab).
+function surfaceIsOpen(id) {
+  if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function') return !!findTab(wsRails.state, id);
+  return true;   // legacy shell isn't multi-tabbed the same way — include
+}
+// Every live analysis surface (each singleton + each clone) with the dataset it
+// targets and whether it's an open tab.
+function surfaceList() {
+  var out = [];
+  surfaceDescriptors().forEach(function (d) {
+    var t; try { t = d.singleton(); } catch (e) { t = 'model'; }
+    out.push({ id: d.kind, kind: d.kind, label: d.label, target: t || 'model', clone: false, open: surfaceIsOpen(d.kind) });
+    var insts; try { insts = d.insts() || {}; } catch (e) { insts = {}; }
+    Object.keys(insts).forEach(function (iid) {
+      var s = insts[iid]; if (!s) return;
+      var it; try { it = d.instTarget(s); } catch (e) { it = 'model'; }
+      out.push({ id: iid, kind: d.kind, label: d.label, target: it || 'model', clone: true, open: true });
+    });
+  });
+  return out;
+}
+// The surfaces pointed at a dataset (live ones: open singletons + clones).
+function surfacesTargeting(dsId) {
+  return surfaceList().filter(function (s) { return s.target === dsId && (s.clone || s.open); });
+}
+
+// User-given surface titles (persisted as the `surfaceTitles` project key) — let
+// the user name a view to organize the workspace. Absent → a sensible default.
+var surfaceTitles = {};
+function surfaceDefaultTitle(id) {
+  var kind = String(id).split('#')[0];
+  var d = surfaceDescriptors().filter(function (x) { return x.kind === kind; })[0];
+  var label = d ? d.label : kind;
+  var hash = String(id).indexOf('#');
+  return hash >= 0 ? (label + ' ' + String(id).slice(hash + 1)) : label;
+}
+function surfaceTitle(id) { return (surfaceTitles[id] || '').trim() || surfaceDefaultTitle(id); }
+function surfaceHasCustomTitle(id) { return !!(surfaceTitles[id] && surfaceTitles[id].trim()); }
+function surfaceSetTitle(id, t) {
+  t = (t || '').trim();
+  if (t && t !== surfaceDefaultTitle(id)) surfaceTitles[id] = t; else delete surfaceTitles[id];
+  if (typeof wsRefreshSurfaceTabLabel === 'function') wsRefreshSurfaceTabLabel(id);   // mirror onto the tab if wired
+  if (typeof autoSaveProject === 'function') autoSaveProject();   // persists + refreshes the tree
 }
 
 // A10 4f-2: the grid-classification control for a dataset's import panel — the
@@ -19722,6 +19804,7 @@ function serializeProject() {
     _ts: Date.now(),
     id: currentProjectId,   // model-optional: set for model-less projects, null when model-backed
     title: projectTitle,
+    surfaceTitles: (typeof surfaceTitles !== 'undefined' && Object.keys(surfaceTitles).length) ? surfaceTitles : undefined,   // C10: user-named views
     activeTab: document.querySelector('.results-tab.active')?.dataset.tab || null,
     modelView: (typeof modelView !== 'undefined') ? modelView : 'preview',   // ws-v2 phase 2: Import Model panel's right-pane view
     file: currentFile ? { name: currentFile.name, size: currentFile.size } : null,
@@ -20001,6 +20084,7 @@ async function applyProject(project) {
 
   currentProjectId = project.id || null;   // model-optional: restore the dual-key id (null for model-backed)
   projectTitle = project.title || null;
+  if (typeof surfaceTitles !== 'undefined') surfaceTitles = project.surfaceTitles || {};   // C10: user-named views
   updateProjectTitleDisplay();
 
   // Restore preflight config
@@ -21172,6 +21256,7 @@ function closeProjectToLanding() {
   sectionDefaultBlockSize = null;
   currentDXYZ = { dx: -1, dy: -1, dz: -1 };
   currentGridMode = null;   // A10 4f-2: back to the model default ('grid')
+  if (typeof surfaceTitles !== 'undefined') surfaceTitles = {};   // C10: clear user-named views
   // C14: drop the session mount (the registry record keeps the handle for reopen;
   // we don't clear the persisted FSAA handle here, just this session's mount).
   if (typeof mountedFolder !== 'undefined') mountedFolder = null;
@@ -36078,6 +36163,24 @@ function treeDsDerivedHtml(ds) {
     (mat ? '◆ materialized' : '◇ linked') + '</span>';
 }
 
+// C10: the analysis surfaces (Statistics, GT, …) targeting a dataset — the reverse
+// index of the per-surface "Dataset" picker. Each row focuses its panel on click
+// and can be renamed (✎). Returns row HTML strings for the shared group() wrapper.
+function treeSurfaceRows(ds) {
+  if (typeof surfacesTargeting !== 'function') return [];
+  return surfacesTargeting(ds).map(function (s) {
+    var title = surfaceTitle(s.id);
+    var custom = (typeof surfaceHasCustomTitle === 'function') && surfaceHasCustomTitle(s.id);
+    return '<div class="tree-row tree-surface" data-surface="' + esc(s.id) + '" tabindex="0" title="Click to focus this view">' +
+      '<span class="tree-surface-dot tree-surface-dot--' + esc(s.kind) + '"></span>' +
+      '<span class="tree-name tree-surface-name">' + esc(title) + '</span>' +
+      (custom ? '<span class="tree-surface-kind">' + esc(s.label) + '</span>' : '') +
+      (s.clone ? '<span class="tree-surface-badge">clone</span>' : '') +
+      '<button class="tree-surface-edit" data-surface-edit="' + esc(s.id) + '" title="Rename this view">✎</button>' +
+      '</div>';
+  });
+}
+
 function treeDatasetHtml(ds, openState, childrenHtml) {
   childrenHtml = childrenHtml || '';
   var v = treeDatasetVars(ds);
@@ -36201,6 +36304,7 @@ function treeDatasetHtml(ds, openState, childrenHtml) {
     group('Grades', grades.map(numRow), 'grades') +
     group('Categories', cats.map(catRow), 'cats') +
     group('Calculated', calcs.map(calcRow), 'calc') +
+    group('Surfaces', treeSurfaceRows(ds), 'surfaces') +   // C10: views targeting this dataset
     (stale.length > 0
       ? group('Missing', stale.map(function(n) {
           return '<div class="tree-row tree-row--stale" title="catalog entry with no matching variable">' +
@@ -36434,6 +36538,35 @@ function treeToggleRole(t, role) {
         }
         return;
       }
+      // C10: rename a surface (✎) — inline edit; commit to surfaceSetTitle
+      var ed = e.target.closest('[data-surface-edit]');
+      if (ed) {
+        e.preventDefault(); e.stopPropagation();
+        var sid = ed.getAttribute('data-surface-edit');
+        var srow = ed.closest('.tree-surface');
+        var nameEl = srow && srow.querySelector('.tree-surface-name');
+        if (!nameEl || srow.querySelector('.tree-surface-input')) return;
+        var inp = document.createElement('input');
+        inp.className = 'tree-surface-input'; inp.spellcheck = false;
+        inp.value = (typeof surfaceTitle === 'function') ? surfaceTitle(sid) : nameEl.textContent;
+        nameEl.replaceWith(inp); inp.focus(); inp.select();
+        var committed = false;
+        var commit = function(save) {
+          if (committed) return; committed = true;
+          if (save && typeof surfaceSetTitle === 'function') surfaceSetTitle(sid, inp.value);   // re-renders the tree
+          else if (typeof renderCatalogTree === 'function') renderCatalogTree();
+        };
+        inp.addEventListener('keydown', function(ev) {
+          if (ev.key === 'Enter') { ev.preventDefault(); commit(true); }
+          else if (ev.key === 'Escape') { ev.preventDefault(); commit(false); }
+        });
+        inp.addEventListener('blur', function() { commit(true); });
+        inp.addEventListener('click', function(ev) { ev.stopPropagation(); });
+        return;
+      }
+      // C10: focus the surface a row names
+      var surfRow = e.target.closest('.tree-surface');
+      if (surfRow) { if (typeof showPanel === 'function') showPanel(surfRow.getAttribute('data-surface')); return; }
       var row = e.target.closest('.tree-row--edit');
       if (!row) return;
       showTreePopover(row);

@@ -525,6 +525,7 @@ function serializeProject() {
     _ts: Date.now(),
     id: currentProjectId,   // model-optional: set for model-less projects, null when model-backed
     title: projectTitle,
+    surfaceTitles: (typeof surfaceTitles !== 'undefined' && Object.keys(surfaceTitles).length) ? surfaceTitles : undefined,   // C10: user-named views
     activeTab: document.querySelector('.results-tab.active')?.dataset.tab || null,
     modelView: (typeof modelView !== 'undefined') ? modelView : 'preview',   // ws-v2 phase 2: Import Model panel's right-pane view
     file: currentFile ? { name: currentFile.name, size: currentFile.size } : null,
@@ -804,6 +805,7 @@ async function applyProject(project) {
 
   currentProjectId = project.id || null;   // model-optional: restore the dual-key id (null for model-backed)
   projectTitle = project.title || null;
+  if (typeof surfaceTitles !== 'undefined') surfaceTitles = project.surfaceTitles || {};   // C10: user-named views
   updateProjectTitleDisplay();
 
   // Restore preflight config
@@ -1975,6 +1977,7 @@ function closeProjectToLanding() {
   sectionDefaultBlockSize = null;
   currentDXYZ = { dx: -1, dy: -1, dz: -1 };
   currentGridMode = null;   // A10 4f-2: back to the model default ('grid')
+  if (typeof surfaceTitles !== 'undefined') surfaceTitles = {};   // C10: clear user-named views
   // C14: drop the session mount (the registry record keeps the handle for reopen;
   // we don't clear the persisted FSAA handle here, just this session's mount).
   if (typeof mountedFolder !== 'undefined') mountedFolder = null;

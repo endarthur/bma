@@ -402,6 +402,69 @@ function dsPickerHtml(cfg) {
     '<div class="ds-picker-hint">' + esc(hint) + '</div>';
 }
 
+// ── C10: the surface registry (reverse index of the dataset picker) ───────
+// One descriptor per analysis surface: how to read the singleton's target, its
+// clone instances, and a clone's target field. Lets the Data tree list, per
+// dataset, the surfaces pointed at it — and lets any code enumerate surfaces
+// without re-deriving each panel's bespoke target storage. Globals are read
+// lazily (the surface modules load after core.js); guarded for load order.
+function surfaceDescriptors() {
+  return [
+    { kind: 'statistics', label: 'Statistics', facet: 'analyzed',    singleton: function () { return statsTargetDsId; },    insts: function () { return statInstances; },     instTarget: function (s) { return s.statsTargetDsId; } },
+    { kind: 'categories', label: 'Categories', facet: 'categorical', singleton: function () { return panelState.categories.catTargetDsId || 'model'; }, insts: function () { return catInstances; }, instTarget: function (s) { return s.catTargetDsId; } },
+    { kind: 'statscat',   label: 'StatsCat',   facet: 'analyzed',    singleton: function () { return statsCatTargetDsId; },  insts: function () { return statsCatInstances; }, instTarget: function (s) { return s.targetDsId; } },
+    { kind: 'gt',         label: 'Grade–Tonnage', facet: 'analyzed', singleton: function () { return gtTargetDsId; },        insts: function () { return gtInstances; },       instTarget: function (s) { return s.gtTargetDsId; } },
+    { kind: 'swath',      label: 'Swath',      facet: 'gridded',     singleton: function () { return swathTargetDsId; },     insts: function () { return swathInstances; },    instTarget: function (s) { return s.swathTargetDsId; } },
+    { kind: 'crosstab',   label: 'Cross-tab',  facet: 'categorical', singleton: function () { return crosstabTargetDsId; },  insts: function () { return crosstabInstances; }, instTarget: function (s) { return s.targetDsId; } },
+    { kind: 'export',     label: 'Export',     facet: 'analyzed',    singleton: function () { return exportTargetDsId; },    insts: function () { return exportInstances; },   instTarget: function (s) { return s.targetDsId; } }
+  ];
+}
+// Is a surface currently a live tab? (clones are only in their map while alive;
+// a singleton is "in use" once opened as a tab — on the rails shell via findTab).
+function surfaceIsOpen(id) {
+  if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function') return !!findTab(wsRails.state, id);
+  return true;   // legacy shell isn't multi-tabbed the same way — include
+}
+// Every live analysis surface (each singleton + each clone) with the dataset it
+// targets and whether it's an open tab.
+function surfaceList() {
+  var out = [];
+  surfaceDescriptors().forEach(function (d) {
+    var t; try { t = d.singleton(); } catch (e) { t = 'model'; }
+    out.push({ id: d.kind, kind: d.kind, label: d.label, target: t || 'model', clone: false, open: surfaceIsOpen(d.kind) });
+    var insts; try { insts = d.insts() || {}; } catch (e) { insts = {}; }
+    Object.keys(insts).forEach(function (iid) {
+      var s = insts[iid]; if (!s) return;
+      var it; try { it = d.instTarget(s); } catch (e) { it = 'model'; }
+      out.push({ id: iid, kind: d.kind, label: d.label, target: it || 'model', clone: true, open: true });
+    });
+  });
+  return out;
+}
+// The surfaces pointed at a dataset (live ones: open singletons + clones).
+function surfacesTargeting(dsId) {
+  return surfaceList().filter(function (s) { return s.target === dsId && (s.clone || s.open); });
+}
+
+// User-given surface titles (persisted as the `surfaceTitles` project key) — let
+// the user name a view to organize the workspace. Absent → a sensible default.
+var surfaceTitles = {};
+function surfaceDefaultTitle(id) {
+  var kind = String(id).split('#')[0];
+  var d = surfaceDescriptors().filter(function (x) { return x.kind === kind; })[0];
+  var label = d ? d.label : kind;
+  var hash = String(id).indexOf('#');
+  return hash >= 0 ? (label + ' ' + String(id).slice(hash + 1)) : label;
+}
+function surfaceTitle(id) { return (surfaceTitles[id] || '').trim() || surfaceDefaultTitle(id); }
+function surfaceHasCustomTitle(id) { return !!(surfaceTitles[id] && surfaceTitles[id].trim()); }
+function surfaceSetTitle(id, t) {
+  t = (t || '').trim();
+  if (t && t !== surfaceDefaultTitle(id)) surfaceTitles[id] = t; else delete surfaceTitles[id];
+  if (typeof wsRefreshSurfaceTabLabel === 'function') wsRefreshSurfaceTabLabel(id);   // mirror onto the tab if wired
+  if (typeof autoSaveProject === 'function') autoSaveProject();   // persists + refreshes the tree
+}
+
 // A10 4f-2: the grid-classification control for a dataset's import panel — the
 // grid/point/auto override chips + the detected-grid badge. Inferred state stays
 // visible AND overridable (no-magic-only-ui). Shared by the model preflight
