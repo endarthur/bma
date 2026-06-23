@@ -1108,20 +1108,29 @@ header .logo-mark {
 }
 .stats-custom-input::placeholder { color: var(--fg-dim); opacity: 0.5; }
 .stats-custom-input:focus { outline: none; border-color: var(--action); }
+/* Metric selection = toggle pills (was a dense grid of native checkboxes) */
 .stats-metric-toggles {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.15rem 0.3rem;
+  gap: 0.25rem;
 }
 .stats-metric-toggle {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.2rem;
-  font-size: 0.65rem;
+  font: 0.62rem var(--mono);
+  letter-spacing: 0.02em;
   color: var(--fg-dim);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.08rem 0.5rem;
   cursor: pointer;
+  user-select: none;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-.stats-metric-toggle input { cursor: pointer; accent-color: var(--sel); width: 12px; height: 12px; }
+.stats-metric-toggle input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+.stats-metric-toggle:hover { border-color: var(--fg-dim); color: var(--fg); }
+.stats-metric-toggle:has(input:checked) { background: var(--sel-soft); border-color: var(--sel); color: var(--sel); }
 .stats-search {
   width: 100%;
   background: var(--bg);
@@ -1165,9 +1174,20 @@ header .logo-mark {
   border-bottom: 1px solid var(--bg2);
 }
 .stats-var-item:hover { background: var(--bg2); }
-.stats-var-item input { flex-shrink: 0; cursor: pointer; accent-color: var(--sel); width: 13px; height: 13px; }
+/* custom styled checkbox (was the bare native box) */
+.stats-var-item input {
+  appearance: none; -webkit-appearance: none; flex-shrink: 0; cursor: pointer;
+  width: 14px; height: 14px; border: 1px solid var(--border); border-radius: 3px;
+  background: var(--bg2); position: relative; transition: background 0.1s, border-color 0.1s;
+}
+.stats-var-item input:hover { border-color: var(--fg-dim); }
+.stats-var-item input:checked { background: var(--sel); border-color: var(--sel); }
+.stats-var-item input:checked::after {
+  content: '✓'; position: absolute; inset: 0; color: var(--bg); font-size: 10px; line-height: 13px; text-align: center; font-weight: 700;
+}
 .stats-var-item .var-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-bright); }
-.stats-var-item.unchecked { opacity: 0.4; }
+.stats-var-item.unchecked { opacity: 0.5; }
+.stats-var-item.unchecked:hover { opacity: 0.8; }
 .stats-main {
   flex: 1;
   display: flex;
@@ -6352,7 +6372,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build a2853a2 — click to check for updates">a2853a2</div>
+<div class="build-badge" id="buildBadge" title="build 5dfe037 — click to check for updates">5dfe037</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
