@@ -114,6 +114,7 @@ function fsaaMaybeOpenProject() {
 
 function fsaaUnmount() {
   mountedFolder = null;
+  if (typeof projOpenLabel !== 'undefined') projOpenLabel = null;
   return fsaaClearHandle().catch(function () {}).then(function () { fsaaAfterMountChange(); });
 }
 
@@ -228,7 +229,9 @@ function fsaaWriteProjectJson(jsonStr) {
 
 // Header pill + landing note showing the folder backing (Arthur's ask).
 function fsaaRenderIndicator() {
-  var name = fsaaFolderName();
+  // a project opened from the registry prefers its friendly title over a raw
+  // backing name (e.g. an opfs 'bma-proj-<id>' directory)
+  var name = (typeof projOpenLabel !== 'undefined' && projOpenLabel) ? projOpenLabel : fsaaFolderName();
   var hdr = document.getElementById('fsaaIndicator');
   if (hdr) { hdr.textContent = name ? ('📁 ' + name) : ''; hdr.style.display = name ? '' : 'none'; }
   var land = document.getElementById('landingFsaa');

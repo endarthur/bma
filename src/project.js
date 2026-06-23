@@ -2,7 +2,7 @@
 
 function openCacheDB() {
   return new Promise(function(resolve, reject) {
-    var req = indexedDB.open('bma-cache', 3);
+    var req = indexedDB.open('bma-cache', 4);
     req.onupgradeneeded = function(e) {
       var db = req.result;
       if (!db.objectStoreNames.contains('results'))
@@ -11,6 +11,10 @@ function openCacheDB() {
         db.createObjectStore('recents');
       if (!db.objectStoreNames.contains('handles'))   // C11: FSAA directory handles
         db.createObjectStore('handles');
+      if (!db.objectStoreNames.contains('projects'))  // C14: project registry records
+        db.createObjectStore('projects');
+      if (!db.objectStoreNames.contains('packstore'))  // C14: embedded pack bytes (idb backing)
+        db.createObjectStore('packstore');
     };
     req.onsuccess = function() { resolve(req.result); };
     req.onerror = function() { reject(req.error); };
@@ -1404,7 +1408,9 @@ async function tryPackedProject(file) {
   let dhMapPacked = project.drillholes || null;
   if (dhMapPacked && dhMapPacked.files) dhMapPacked = { aux: dhMapPacked };
   const dhAuxRecipe = dhMapPacked ? (dhMapPacked.aux || null) : null;
-  const ok = await bmaConfirm({
+  // Opening from the project manager (registry) is already a deliberate choice —
+  // skip the "Packed project found" confirm; a raw drag-drop still asks.
+  const ok = (typeof projAutoLoadPack !== 'undefined' && projAutoLoadPack) ? true : await bmaConfirm({
     title: 'Packed project found',
     html: 'This archive contains a BMA project' +
       (project.title ? ': <strong>' + esc(project.title) + '</strong>' : '') +

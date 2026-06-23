@@ -39,6 +39,7 @@ const APP_MODULES = [
   'topcut.js',
   'project.js',
   'fsaa.js',            // C11 FSAA-mounted project folder (mount/persist handle; uses openCacheDB)
+  'projstore.js',       // C14 project registry — records + storage backends (folder/opfs/idb), import, migration
   'statistics.js',
   'export.js',
   'swath.js',
