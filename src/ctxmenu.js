@@ -112,6 +112,11 @@ function datasetMenuFor(ds) {
     // A10 1g-c: instance ids open their own panel (showPanel(ds) → activate-or-rebuild)
     { label: 'Open import panel', action: function() { showPanel(ds === 'model' ? 'preflight' : ds); } }
   ];
+  // C10: analyze an unanalyzed dataset (unlocks stats/pairing/views) — discoverability
+  var dsAnalyzed = (ds === 'model') ? (typeof lastCompleteData !== 'undefined' && !!lastCompleteData) : !!(dsObj && dsObj.complete);
+  if (!dsAnalyzed && dsObj && dsObj.file && dsObj.preflight && typeof wsAnalyzeDataset === 'function') {
+    items.push({ label: 'Analyze', action: function() { wsAnalyzeDataset(ds); } });
+  }
   // A14: edit this dataset's filter (+ live size preview) without leaving the tree
   if (dsObj && dsObj.file && dsObj.preflight && typeof openDatasetFilterModal === 'function') {
     var flt = dsObj.filter && dsObj.filter.expression;

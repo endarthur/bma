@@ -496,6 +496,30 @@ function wsDeleteView(id) {
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
 
+// C10: a view's tab title mirrors its (custom or default) view title — so a renamed
+// view reads the same on its tab as in the Data tree. Rails-only (the <700px legacy
+// tab keeps its panel label + badge).
+function wsRefreshSurfaceTabLabel(id) {
+  if (!wsRails || typeof surfaceTitle !== 'function' || typeof findTab !== 'function') return;
+  if (findTab(wsRails.state, id)) wsRails.updateTab(id, { title: surfaceTitle(id) });
+}
+function wsApplyAllViewTabTitles() {
+  if (!wsRails || typeof surfaceList !== 'function') return;
+  surfaceList().forEach(function (s) { wsRefreshSurfaceTabLabel(s.id); });
+}
+// Analyze a dataset on demand (the tree's "not analyzed" affordance + the dataset
+// menu) — model runs the main analysis; a comparison runs its own pass.
+function wsAnalyzeDataset(dsId) {
+  if (dsId === 'model') {
+    var btn = document.getElementById('executeBtn');
+    if (btn && btn.offsetParent !== null) btn.click();
+    else if (typeof executeAnalysis === 'function') executeAnalysis();
+    return;
+  }
+  var ds = (typeof dsById === 'function') ? dsById(dsId) : null;
+  if (ds && ds.file && ds.preflight && typeof runAuxAnalysis === 'function') runAuxAnalysis(ds);
+}
+
 // Track the dataset in its tab title (loadAuxFile on load, onAuxConfigChange on
 // edit, clearAux on reset). The first comparison dataset's tab used to be hard-
 // labelled "Aux"; now it follows its loaded file like d2+ ("Import: <name>"), and

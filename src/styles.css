@@ -4528,6 +4528,9 @@ table.stats tr.stats-delta-row td:first-child {
 .tree-views-add:hover { border-color: var(--blue); color: var(--blue); opacity: 1; }
 .tree-views-empty { font-size: 0.64rem; color: var(--fg-dim); padding: 0.3rem 0.5rem 0.3rem 1rem; line-height: 1.4; font-style: italic; }
 .tree-views-empty b { font-style: normal; color: var(--fg); }
+/* C10: actionable "Analyze" in an unanalyzed dataset's tree header */
+.tree-ds-analyze { background: none; border: 1px solid var(--amber); color: var(--amber); border-radius: 3px; cursor: pointer; font: 0.58rem var(--sans); letter-spacing: 0.04em; text-transform: uppercase; padding: 0.04rem 0.35rem; white-space: nowrap; }
+.tree-ds-analyze:hover { background: var(--amber); color: var(--bg); }
 
 /* A11: derived datasets nest under their source set (filesystem / GIS-layer idiom)
    — indent + a connector rail; nested summaries drop the sticky so they don't

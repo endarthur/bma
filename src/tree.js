@@ -100,6 +100,7 @@ function renderCatalogTree(container) {
   }
   $tree.innerHTML = html;
   applyTreeFilter();   // re-apply the active filter to the freshly built rows
+  if (typeof wsApplyAllViewTabTitles === 'function') wsApplyAllViewTabTitles();   // C10: tab titles ← view titles
 }
 
 // Filter the tree's variable rows by treeSearchQuery, IN PLACE (no innerHTML
@@ -258,17 +259,20 @@ function treeViewRows(ds) {
 }
 
 // The Views group under a dataset — deliberate views + a learnable empty state +
-// a "+" to create one. Always shown for an analyzed dataset so the concept is
-// discoverable (Arthur: make it easy to understand).
-function treeViewsGroupHtml(ds, openState) {
-  var rows = treeViewRows(ds);
+// a "+" to create one. Shown for EVERY dataset (not just the model) so views read
+// as a universal capability; an unanalyzed dataset shows the analyze-first hint
+// and no creator (you make a view over results). Arthur: make it easy to understand.
+function treeViewsGroupHtml(ds, openState, analyzed) {
+  var rows = analyzed ? treeViewRows(ds) : [];
   var gKey = 'g:' + ds + ':views';
   var gOpen = openState[gKey] !== undefined ? openState[gKey] : true;   // open by default (hint teaches when empty)
   var inner = rows.length ? rows.join('')
-    : '<div class="tree-views-empty">No views kept yet — <b>+ New view</b>, or duplicate an analysis, to keep one here.</div>';
+    : (analyzed
+        ? '<div class="tree-views-empty">No views kept yet — <b>+ New view</b>, or duplicate an analysis, to keep one here.</div>'
+        : '<div class="tree-views-empty"><b>Analyze</b> this dataset to create views over it.</div>');
+  var add = analyzed ? '<button class="tree-views-add" data-view-add="' + esc(ds) + '" title="Create a view for this dataset">+ New view</button>' : '';
   return '<details class="tree-group tree-views-group" data-key="' + gKey + '"' + (gOpen ? ' open' : '') + '>' +
-    '<summary>Views <span class="tree-count">' + rows.length + '</span>' +
-    '<button class="tree-views-add" data-view-add="' + esc(ds) + '" title="Create a view for this dataset">+ New view</button></summary>' +
+    '<summary>Views <span class="tree-count">' + rows.length + '</span>' + add + '</summary>' +
     inner + '</details>';
 }
 
@@ -302,7 +306,10 @@ function treeDatasetHtml(ds, openState, childrenHtml) {
   var dsOpen = openState[dsKey] !== undefined ? openState[dsKey] : true;
   var head = '<summary><span class="tree-ds-label">' + esc(dsLabel(ds)) + '</span>' +
     (v && v.fileName ? '<span class="tree-ds-file" title="' + esc(v.fileName) + '">' + esc(v.fileName) + '</span>' : '') +
-    (v && v.countNote ? '<span class="tree-ds-count">' + esc(v.countNote) + '</span>' : '') +
+    // "not analyzed" becomes an actionable Analyze button (discoverability — Arthur)
+    (v && v.countNote === 'not analyzed'
+      ? '<button class="tree-ds-analyze" data-analyze="' + esc(ds) + '" title="Analyze this dataset to unlock stats, pairing & views">Analyze ▸</button>'
+      : (v && v.countNote ? '<span class="tree-ds-count">' + esc(v.countNote) + '</span>' : '')) +
     (v ? treeDsRefreshHtml(ds) : '') +
     treeDsDerivedHtml(ds) +
     '</summary>';
@@ -424,11 +431,11 @@ function treeDatasetHtml(ds, openState, childrenHtml) {
             '<span class="tree-chip tree-chip--stale"></span><span class="tree-name">' + esc(n) + '</span></div>';
         }), 'stale')
       : '');
-  // C10: Views — analyses kept for this dataset — once it's analyzed (you create a
-  // view over results). Always shown then, even empty, so the concept is learnable.
+  // C10: Views — analyses kept for this dataset. Shown for EVERY dataset (universal
+  // capability); unanalyzed ones show the analyze-first hint.
   var dsAnalyzed = (ds === 'model') ? (typeof lastCompleteData !== 'undefined' && !!lastCompleteData)
     : !!(typeof dsById === 'function' && dsById(ds) && dsById(ds).complete);
-  if (dsAnalyzed) body += treeViewsGroupHtml(ds, openState);
+  body += treeViewsGroupHtml(ds, openState, dsAnalyzed);
 
   // dataset-level note: declustered-weights sentinel isn't a variable
   var dsNote = '';
@@ -640,6 +647,13 @@ function treeToggleRole(t, role) {
       if (refresh) {
         e.preventDefault(); e.stopPropagation();
         if (typeof derivRefresh === 'function') derivRefresh(refresh.getAttribute('data-refresh'));
+        return;
+      }
+      // C10: Analyze an unanalyzed dataset straight from its tree header
+      var analyzeBtn = e.target.closest('[data-analyze]');
+      if (analyzeBtn) {
+        e.preventDefault(); e.stopPropagation();
+        if (typeof wsAnalyzeDataset === 'function') wsAnalyzeDataset(analyzeBtn.getAttribute('data-analyze'));
         return;
       }
       var add = e.target.closest('[data-tree-add]');
