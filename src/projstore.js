@@ -315,15 +315,22 @@ function fsaaEnsureFileHandle(fh) {
   }).catch(function () { return null; });
 }
 
-// ── migration: seed the registry from the legacy 'recents' store, once ────
-// Idempotent: only seeds when the registry is empty (a real project list means
-// migration already ran or the user created projects). Recents are left intact.
+// ── migration: seed the registry from the legacy 'recents' store, ONCE EVER ──
+// Run-once, gated on a localStorage flag — NOT on "registry is empty". The empty
+// check was the bug: deleting your last project left the registry empty, so the
+// next render re-seeded everything from the still-intact recents store. Once this
+// has run (whether it seeded anything or the registry already had projects), it
+// never re-seeds, so an intentionally-emptied list stays empty. Recents untouched.
+var PROJ_MIGRATED_KEY = 'bma:projMigrated';
+function projMigrationDone() { try { return !!localStorage.getItem(PROJ_MIGRATED_KEY); } catch (e) { return false; } }
+function projMarkMigrated() { try { localStorage.setItem(PROJ_MIGRATED_KEY, '1'); } catch (e) {} }
 function projMigrateFromRecents() {
+  if (projMigrationDone()) return Promise.resolve(0);
   return projList().then(function (existing) {
-    if (existing && existing.length) return 0;
+    if (existing && existing.length) { projMarkMigrated(); return 0; }   // already have projects → migration moot
     if (typeof recentList !== 'function') return 0;
     return recentList().then(function (recents) {
-      if (!recents || !recents.length) return 0;
+      if (!recents || !recents.length) { projMarkMigrated(); return 0; }
       return recents.reduce(function (chain, r) {
         return chain.then(function () {
           var when = r.lastOpened || Date.now();
@@ -339,7 +346,7 @@ function projMigrateFromRecents() {
           else rec.backing = { kind: 'file', modelFileName: r.name, packed: !!r.packed };
           return projPut(rec);
         });
-      }, Promise.resolve()).then(function () { return recents.length; });
+      }, Promise.resolve()).then(function () { projMarkMigrated(); return recents.length; });
     });
   }).catch(function () { return 0; });
 }
