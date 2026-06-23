@@ -227,6 +227,11 @@ function pmToggleEditor(host, rec) {
     '<div class="pm-ed-foot"><span class="pm-ed-hint">Enter or comma adds a tag</span>' +
       '<span class="pm-ed-btns"><button class="pm-ed-cancel" type="button">Cancel</button><button class="pm-ed-done" type="button">Done</button></span></div>';
   ed.removeAttribute('hidden');
+  // Isolate the editor: nothing inside it bubbles to the ROW's open handler. (A
+  // tag × re-renders the chips, detaching the clicked node, so the row's
+  // closest('.pm-editor') guard misses it — stop it at the editor instead.)
+  ed.addEventListener('click', function (e) { e.stopPropagation(); });
+  ed.addEventListener('keydown', function (e) { e.stopPropagation(); });
   renderTags();
   notesEl().addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.preventDefault(); cancel(); } });
   ed.querySelector('.pm-ed-done').addEventListener('click', done);
