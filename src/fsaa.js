@@ -204,7 +204,10 @@ function fsaaOpenProjectFromFolder() {
         return fsaaResolveFile(pj.file.name).then(function (mf) {
           if (!mf) return false;   // the model isn't in the folder
           if (typeof pendingDroppedProject !== 'undefined') pendingDroppedProject = pj;
-          if (typeof handleFile === 'function') return Promise.resolve(handleFile(mf)).then(function () { return true; });
+          // skipRecents: a folder-backed project's recents identity is the FOLDER
+          // (saveFolderToRecents, via fsaaAfterMountChange) — don't also record the
+          // model file, or the same project lists twice (folder + model.csv).
+          if (typeof handleFile === 'function') return Promise.resolve(handleFile(mf, null, true)).then(function () { return true; });
           return false;
         });
       });
