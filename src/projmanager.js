@@ -138,7 +138,13 @@ function pmWire(host, all) {
       if (e.target.closest('.pm-act') || e.target.closest('.pm-editor')) return;
       pmOpen(byId[row.getAttribute('data-id')]);
     });
-    row.addEventListener('keydown', function (e) { if (e.key === 'Enter') pmOpen(byId[row.getAttribute('data-id')]); });
+    row.addEventListener('keydown', function (e) {
+      // only "Enter on the focused row" opens — NOT Enter inside the editor/inputs
+      // (else adding a tag with Enter bubbles up and opens the project)
+      if (e.key !== 'Enter' || e.target !== row) return;
+      if (e.target.closest('.pm-act') || e.target.closest('.pm-editor')) return;
+      pmOpen(byId[row.getAttribute('data-id')]);
+    });
   });
   host.querySelectorAll('.pm-open').forEach(function (b) { b.addEventListener('click', function (e) { e.stopPropagation(); pmOpen(byId[b.getAttribute('data-id')]); }); });
   host.querySelectorAll('.pm-edit').forEach(function (b) { b.addEventListener('click', function (e) { e.stopPropagation(); pmToggleEditor(host, byId[b.getAttribute('data-id')]); }); });
