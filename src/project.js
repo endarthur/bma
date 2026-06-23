@@ -589,6 +589,7 @@ function serializeProject() {
       cdfSelected: Array.from(statsCdfSelected),
       cdfScale: statsCdfScale,
       cdfMode: statsCdfMode,
+      cdfPaneH: (typeof statsCdfPaneH !== 'undefined') ? statsCdfPaneH : null,   // draggable split height
       // Persistence covers model + aux today (A10 4c-ii); d2+ stats selection
       // is ephemeral until phase 6 takes over the datasets key.
       auxSelected: (auxCompleteData && panelState.statistics.cmpSel.aux != null)
@@ -2523,6 +2524,7 @@ function displayResults(data) {
     if (st.cdfSelected) statsCdfSelected = new Set(st.cdfSelected);
     if (st.cdfScale) statsCdfScale = st.cdfScale;
     if (st.cdfMode) statsCdfMode = st.cdfMode;
+    if (typeof statsCdfPaneH !== 'undefined' && st.cdfPaneH) statsCdfPaneH = st.cdfPaneH;
     if (st.auxSelected || st.cdfAuxSelected) {
       pendingStatsAuxRestore = { selected: st.auxSelected || null, cdf: st.cdfAuxSelected || null };
       applyStatsAuxRestore(); // no-op until aux analysis exists; consumed then

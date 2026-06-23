@@ -242,6 +242,7 @@ function statEls(root) {
     metricToggles: q('metricToggles'), datasetsSection: q('datasetsSection'), datasetChips: q('datasetChips'),
     varSearch: q('varSearch'), varAll: q('varAll'), varNone: q('varNone'), varList: q('varList'),
     copyBtn: q('copyBtn'), cdfPanel: q('cdfPanel'), cdfToolbar: q('cdfToolbar'), cdfChart: q('cdfChart'),
+    vsplit: q('vsplit'),
     downloadSvg: q('downloadSvg'), downloadPng: q('downloadPng')
   };
 }
@@ -1147,6 +1148,13 @@ function chartHostWidth(el, fallback, min, pad) {
   var w = el ? el.clientWidth : 0;
   if (!w || w < 60) return fallback;   // hidden/unmounted → legacy constant
   return Math.max(min || 560, Math.floor(w - (pad || 0)));
+}
+// Height analog — lets a chart fill its (resizable) pane instead of being sized by
+// width alone (which made the CDF plot overflow + scroll). Clamped to a sane floor.
+function chartHostHeight(el, fallback, min, pad) {
+  var h = el ? el.clientHeight : 0;
+  if (!h || h < 60) return fallback;   // hidden/unmounted → legacy constant
+  return Math.max(min || 220, Math.floor(h - (pad || 0)));
 }
 
 function observeChartWidth(el, render) {

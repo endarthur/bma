@@ -50,6 +50,14 @@ var statInstances = {};
 // 'model' → bit-identical to the pre-targeting behavior. The singleton's target
 // lives in this module global; a clone keeps its own in statInstances[id].
 var statsTargetDsId = 'model';
+var statsCdfPaneH = null;   // px height of the CDF plot pane (the draggable split); null = CSS default
+// Apply the saved split height to a stats panel + re-fit its chart to the new pane.
+function statsApplyPaneHeight(root) {
+  var els = statEls(root);
+  if (!els.main) return;
+  if (statsCdfPaneH) els.main.style.setProperty('--stats-cdf-h', statsCdfPaneH + 'px');
+  else els.main.style.removeProperty('--stats-cdf-h');
+}
 var _statSingleton = {
   get statsTargetDsId() { return statsTargetDsId; }, set statsTargetDsId(v) { statsTargetDsId = v; },
   get statsSelectedVars() { return statsSelectedVars; }, set statsSelectedVars(v) { statsSelectedVars = v; },
@@ -616,6 +624,7 @@ function renderStatsTab(stats, header, origColCount, isFiltered, rowCount, root)
   _statsOrigColCount = origColCount;
   var els = statEls(root);
   var ctx = statsCtx(root);
+  statsApplyPaneHeight(root);   // restore the draggable table/plot split height
 
   els.badge.textContent = ctx.numCols.length + ' columns' + (ctx.isFiltered ? ' \u00B7 ' + ctx.rowCount.toLocaleString() + ' rows' : '');
 
@@ -964,7 +973,7 @@ function renderStatsCdfPanel(root) {
 // the CDF overlay.
 function renderStatsQqSvg(entries, root) {
   var isLog = statStateForRoot(root).statsCdfScale === 'log';
-  var W = chartHostWidth(statEls(root).cdfChart, 700), plotBaseH = 420;
+  var W = chartHostWidth(statEls(root).cdfChart, 700), plotBaseH = chartHostHeight(statEls(root).cdfChart, 420, 220, 16);
   var pad = { top: 20, right: 30, bottom: 64, left: 70 };
   var plotW = W - pad.left - pad.right;
   var plotH = plotBaseH - pad.top - pad.bottom;
@@ -1096,7 +1105,7 @@ function renderStatsCdfSvg(entries, root) {
   var S = statStateForRoot(root);
   var isLog = S.statsCdfScale === 'log';
   var probScale = S.statsCdfMode === 'logprob';
-  var W = chartHostWidth(statEls(root).cdfChart, 700), plotBaseH = 380;
+  var W = chartHostWidth(statEls(root).cdfChart, 700), plotBaseH = chartHostHeight(statEls(root).cdfChart, 380, 200, 16);
   var pad = { top: 20, right: 30, bottom: 50, left: 60 };
   var plotW = W - pad.left - pad.right;
   var plotH = plotBaseH - pad.top - pad.bottom;
@@ -1365,6 +1374,37 @@ function wireStatsCdfTooltip(root) {
 function wireStatsEvents(root) {
   var els = statEls(root);
   var S = statStateForRoot(root);
+
+  // --- Draggable table ↕ plot split ---
+  if (els.vsplit && !els.vsplit._wired) {
+    els.vsplit._wired = true;
+    els.vsplit.addEventListener('pointerdown', function(e) {
+      e.preventDefault();
+      var startY = e.clientY;
+      var startH = els.cdfPanel ? els.cdfPanel.getBoundingClientRect().height : 340;
+      var mainH = els.main ? els.main.getBoundingClientRect().height : 800;
+      els.vsplit.classList.add('dragging');
+      els.vsplit.setPointerCapture(e.pointerId);
+      var raf = null;
+      function move(ev) {
+        var h = startH + (startY - ev.clientY);                 // drag up → taller plot
+        h = Math.max(110, Math.min(h, mainH - 140));            // keep both panes usable
+        statsCdfPaneH = Math.round(h);
+        statsApplyPaneHeight(root);
+        if (!raf) raf = requestAnimationFrame(function() { raf = null; renderStatsCdfPanel(root); });
+      }
+      function up(ev) {
+        els.vsplit.classList.remove('dragging');
+        try { els.vsplit.releasePointerCapture(ev.pointerId); } catch (e2) {}
+        els.vsplit.removeEventListener('pointermove', move);
+        els.vsplit.removeEventListener('pointerup', up);
+        renderStatsCdfPanel(root);                              // crisp re-fit at final size
+        if (typeof autoSaveProject === 'function') autoSaveProject();   // persist the split
+      }
+      els.vsplit.addEventListener('pointermove', move);
+      els.vsplit.addEventListener('pointerup', up);
+    });
+  }
 
   // --- Preset buttons ---
   els.presetBtns.addEventListener('click', function(e) {
