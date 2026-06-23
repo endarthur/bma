@@ -176,15 +176,10 @@ body {
   max-width: none;
   padding: 0;
 }
-.app.has-results > header,
-.app.has-results > .dropzone,
-.app.has-results > .about-section,
-.app.has-results > .recent-files,
-.app.has-results > .project-list,
-.app.has-results > .landing-actions,
-.app.has-results > .landing-fsaa,
-.app.has-results > .example-download,
-.app.has-results > .landing-footer { display: none; }
+/* ONE rule hides the whole landing in the results view — every landing element
+   lives inside #landingView, so new ones hide automatically (no per-element rule
+   to forget; this replaced a brittle list that kept leaking new elements through). */
+.app.has-results > #landingView { display: none; }
 .app.has-results > .error-msg { display: none; }
 .app.has-results > .error-msg.active { display: block; }
 header {
@@ -5608,6 +5603,11 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
 </head>
 <body>
 <div class="app">
+  <!-- All landing-only content lives in #landingView. ONE rule
+       (.app.has-results #landingView { display:none }) hides the whole landing in
+       the results view — add new landing elements INSIDE here, never as a bare
+       child of .app, and they hide automatically (no per-element hide rule). -->
+  <div class="landing-view" id="landingView">
   <header>
     <div>
       <h1>BMA — Block Model Atelier</h1>
@@ -5686,6 +5686,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
     <span>© 2026 <a href="https://endarthur.github.io" target="_blank">Arthur Endlein</a> — <a href="https://gentropic.org" target="_blank">Geoscientific Chaos Union</a></span>
     <span><a href="https://opensource.org/license/mit" target="_blank">MIT License</a> — use, modify, distribute freely</span>
   </div>
+  </div><!-- /#landingView -->
 
   <div class="error-msg" id="errorMsg"></div>
 
@@ -6300,7 +6301,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build b3d70d9 — click to check for updates">b3d70d9</div>
+<div class="build-badge" id="buildBadge" title="build 790f547 — click to check for updates">790f547</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">

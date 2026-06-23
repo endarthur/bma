@@ -17,6 +17,11 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
 </head>
 <body>
 <div class="app">
+  <!-- All landing-only content lives in #landingView. ONE rule
+       (.app.has-results #landingView { display:none }) hides the whole landing in
+       the results view — add new landing elements INSIDE here, never as a bare
+       child of .app, and they hide automatically (no per-element hide rule). -->
+  <div class="landing-view" id="landingView">
   <header>
     <div>
       <h1>BMA — Block Model Atelier</h1>
@@ -95,6 +100,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
     <span>© 2026 <a href="https://endarthur.github.io" target="_blank">Arthur Endlein</a> — <a href="https://gentropic.org" target="_blank">Geoscientific Chaos Union</a></span>
     <span><a href="https://opensource.org/license/mit" target="_blank">MIT License</a> — use, modify, distribute freely</span>
   </div>
+  </div><!-- /#landingView -->
 
   <div class="error-msg" id="errorMsg"></div>
 

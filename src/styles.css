@@ -161,15 +161,10 @@ body {
   max-width: none;
   padding: 0;
 }
-.app.has-results > header,
-.app.has-results > .dropzone,
-.app.has-results > .about-section,
-.app.has-results > .recent-files,
-.app.has-results > .project-list,
-.app.has-results > .landing-actions,
-.app.has-results > .landing-fsaa,
-.app.has-results > .example-download,
-.app.has-results > .landing-footer { display: none; }
+/* ONE rule hides the whole landing in the results view — every landing element
+   lives inside #landingView, so new ones hide automatically (no per-element rule
+   to forget; this replaced a brittle list that kept leaking new elements through). */
+.app.has-results > #landingView { display: none; }
 .app.has-results > .error-msg { display: none; }
 .app.has-results > .error-msg.active { display: block; }
 header {
