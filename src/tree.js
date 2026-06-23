@@ -272,6 +272,29 @@ function treeViewsGroupHtml(ds, openState) {
     inner + '</details>';
 }
 
+// Inline-rename a view's row (the ✎ button + the context menu both call this).
+function treeStartRenameView(sid) {
+  var srow = document.querySelector('#catalogTree .tree-surface[data-surface="' + sid + '"]');
+  var nameEl = srow && srow.querySelector('.tree-surface-name');
+  if (!nameEl || srow.querySelector('.tree-surface-input')) return;
+  var inp = document.createElement('input');
+  inp.className = 'tree-surface-input'; inp.spellcheck = false;
+  inp.value = (typeof surfaceTitle === 'function') ? surfaceTitle(sid) : nameEl.textContent;
+  nameEl.replaceWith(inp); inp.focus(); inp.select();
+  var committed = false;
+  var commit = function (save) {
+    if (committed) return; committed = true;
+    if (save && typeof surfaceSetTitle === 'function') surfaceSetTitle(sid, inp.value);   // re-renders the tree
+    else if (typeof renderCatalogTree === 'function') renderCatalogTree();
+  };
+  inp.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter') { ev.preventDefault(); commit(true); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); commit(false); }
+  });
+  inp.addEventListener('blur', function () { commit(true); });
+  inp.addEventListener('click', function (ev) { ev.stopPropagation(); });
+}
+
 function treeDatasetHtml(ds, openState, childrenHtml) {
   childrenHtml = childrenHtml || '';
   var v = treeDatasetVars(ds);
@@ -659,32 +682,9 @@ function treeToggleRole(t, role) {
           : true).then(function (ok) { if (ok && typeof wsDeleteView === 'function') wsDeleteView(vid); });
         return;
       }
-      // C10: rename a surface (✎) — inline edit; commit to surfaceSetTitle
+      // C10: rename a view (✎) — inline edit (also reachable from the context menu)
       var ed = e.target.closest('[data-surface-edit]');
-      if (ed) {
-        e.preventDefault(); e.stopPropagation();
-        var sid = ed.getAttribute('data-surface-edit');
-        var srow = ed.closest('.tree-surface');
-        var nameEl = srow && srow.querySelector('.tree-surface-name');
-        if (!nameEl || srow.querySelector('.tree-surface-input')) return;
-        var inp = document.createElement('input');
-        inp.className = 'tree-surface-input'; inp.spellcheck = false;
-        inp.value = (typeof surfaceTitle === 'function') ? surfaceTitle(sid) : nameEl.textContent;
-        nameEl.replaceWith(inp); inp.focus(); inp.select();
-        var committed = false;
-        var commit = function(save) {
-          if (committed) return; committed = true;
-          if (save && typeof surfaceSetTitle === 'function') surfaceSetTitle(sid, inp.value);   // re-renders the tree
-          else if (typeof renderCatalogTree === 'function') renderCatalogTree();
-        };
-        inp.addEventListener('keydown', function(ev) {
-          if (ev.key === 'Enter') { ev.preventDefault(); commit(true); }
-          else if (ev.key === 'Escape') { ev.preventDefault(); commit(false); }
-        });
-        inp.addEventListener('blur', function() { commit(true); });
-        inp.addEventListener('click', function(ev) { ev.stopPropagation(); });
-        return;
-      }
+      if (ed) { e.preventDefault(); e.stopPropagation(); treeStartRenameView(ed.getAttribute('data-surface-edit')); return; }
       // C10: focus the surface a row names
       var surfRow = e.target.closest('.tree-surface');
       if (surfRow) { if (typeof showPanel === 'function') showPanel(surfRow.getAttribute('data-surface')); return; }

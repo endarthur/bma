@@ -458,6 +458,8 @@ function surfaceIsDeliberate(s) {
 function viewsForDataset(dsId) {
   return surfaceList().filter(function (s) { return s.target === dsId && (s.clone || s.open) && surfaceIsDeliberate(s); });
 }
+function viewKindFacet(kind) { var d = surfaceDescriptors().filter(function (x) { return x.kind === kind; })[0]; return d ? d.facet : 'analyzed'; }
+function viewTarget(id) { var s = surfaceList().filter(function (x) { return x.id === id; })[0]; return s ? s.target : 'model'; }
 
 // User-given surface titles (persisted as the `surfaceTitles` project key) — let
 // the user name a view to organize the workspace. Absent → a sensible default.

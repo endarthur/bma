@@ -136,12 +136,48 @@ function datasetMenuFor(ds) {
   }
   return items;
 }
+// C10: right-click a VIEW row (Statistics/GT/… kept for a dataset) → its actions:
+// focus, rename, duplicate, retarget, delete. Mirrors the row's ✎/⎘/✕ buttons for
+// the right-click-native among us.
+CTX_PROVIDERS.push(function viewProvider(e) {
+  var row = e.target.closest && e.target.closest('.tree-surface');
+  if (!row) return null;
+  var id = row.getAttribute('data-surface');
+  if (!id) return null;
+  var kind = String(id).split('#')[0], isClone = id.indexOf('#') >= 0;
+  var title = (typeof surfaceTitle === 'function') ? surfaceTitle(id) : id;
+  var items = [{ head: true, label: title }];
+  items.push({ label: 'Focus', action: function () { showPanel(id); } });
+  items.push({ label: 'Rename…', action: function () { if (typeof treeStartRenameView === 'function') treeStartRenameView(id); } });
+  if (typeof viewCanDuplicate === 'function' && viewCanDuplicate(id)) {
+    items.push({ label: 'Duplicate', action: function () { if (typeof wsDuplicateView === 'function') wsDuplicateView(id); } });
+  }
+  // Retarget submenu — every dataset this view's kind can target, radio-checked
+  var facet = (typeof viewKindFacet === 'function') ? viewKindFacet(kind) : 'analyzed';
+  var targets = (typeof surfaceTargetableDatasets === 'function') ? surfaceTargetableDatasets(facet) : [];
+  if (targets.length > 1 && typeof wsSetViewTarget === 'function') {
+    var cur = (typeof viewTarget === 'function') ? viewTarget(id) : 'model';
+    var kids = targets.map(function (d) {
+      return { label: dsLabel(d.id), checked: d.id === cur, action: function () { wsSetViewTarget(kind, id, d.id); if (typeof autoSaveProject === 'function') autoSaveProject(); } };
+    });
+    items.push({ label: 'Target dataset', children: kids });
+  }
+  items.push({ sep: true });
+  items.push({ label: isClone ? 'Delete' : 'Stop keeping', danger: true, action: function () {
+    Promise.resolve(typeof bmaConfirm === 'function'
+      ? bmaConfirm({ title: isClone ? 'Delete view' : 'Stop keeping view', okLabel: isClone ? 'Delete' : 'Stop keeping', cancelLabel: 'Cancel',
+          html: isClone ? 'Delete this view? Its analysis config is discarded.' : 'Return this view to a default panel? Its custom name is cleared.' })
+      : true).then(function (ok) { if (ok && typeof wsDeleteView === 'function') wsDeleteView(id); });
+  } });
+  return items;
+});
+
 CTX_PROVIDERS.push(function datasetProvider(e) {
-  // Fire on ANY part of a dataset node that isn't a variable/coord row (the
-  // summary, a group header, the body) — variableProvider handles the rows. This
-  // is what makes group headers + dataset body give the dataset menu instead of
-  // leaking the native browser menu.
-  if (e.target.closest && e.target.closest('.tree-row--edit, .tree-row--coord')) return null;
+  // Fire on ANY part of a dataset node that isn't a variable/coord/view row (the
+  // summary, a group header, the body) — variableProvider/viewProvider handle the
+  // rows. This is what makes group headers + dataset body give the dataset menu
+  // instead of leaking the native browser menu.
+  if (e.target.closest && e.target.closest('.tree-row--edit, .tree-row--coord, .tree-surface')) return null;
   var dsNode = e.target.closest && e.target.closest('.tree-ds');
   if (!dsNode) return null;
   var key = dsNode.dataset.key || '';
