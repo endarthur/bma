@@ -492,14 +492,14 @@ function wsDuplicateView(id) {
 }
 // Delete a view: a clone is destroyed (close its tab); a singleton can't be removed,
 // so "delete" means stop keeping it — clear its custom name + return it to the model.
+// "Everything is a view": a clone is destroyed; a default panel view is CLOSED
+// (removed from the workspace — re-add it via + New view / the View menu), and its
+// custom name cleared. Both just close their tab; closing a default panel re-homes
+// the reusable singleton, closing a clone disposes it (onPanelDestroy).
 function wsDeleteView(id) {
-  var kind = String(id).split('#')[0];
-  if (id.indexOf('#') >= 0) {
-    if (wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) wsRails.closeTab(id);   // → onPanelDestroy disposes it
-    return;
-  }
-  if (typeof surfaceSetTitle === 'function') surfaceSetTitle(id, '');   // un-name (refreshes the tree)
-  wsSetViewTarget(kind, id, 'model');                                    // back to ambient default
+  if (id.indexOf('#') < 0 && typeof surfaceSetTitle === 'function') surfaceSetTitle(id, '');   // default view → drop its custom name
+  if (wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) wsRails.closeTab(id);
+  else if (id.indexOf('#') < 0 && typeof showPanel !== 'function') { /* legacy shell: nothing to close */ }
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
 

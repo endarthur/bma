@@ -168,10 +168,10 @@ CTX_PROVIDERS.push(function viewProvider(e) {
     items.push({ label: 'Target dataset', children: kids });
   }
   items.push({ sep: true });
-  items.push({ label: isClone ? 'Delete' : 'Stop keeping', danger: true, action: function () {
+  items.push({ label: isClone ? 'Delete' : 'Close', danger: true, action: function () {
     Promise.resolve(typeof bmaConfirm === 'function'
-      ? bmaConfirm({ title: isClone ? 'Delete view' : 'Stop keeping view', okLabel: isClone ? 'Delete' : 'Stop keeping', cancelLabel: 'Cancel',
-          html: isClone ? 'Delete this view? Its analysis config is discarded.' : 'Return this view to a default panel? Its custom name is cleared.' })
+      ? bmaConfirm({ title: isClone ? 'Delete view' : 'Close view', okLabel: isClone ? 'Delete' : 'Close', cancelLabel: 'Cancel',
+          html: isClone ? 'Delete this view? Its analysis config is discarded.' : 'Close this view? Re-add it any time with + New view.' })
       : true).then(function (ok) { if (ok && typeof wsDeleteView === 'function') wsDeleteView(id); });
   } });
   return items;

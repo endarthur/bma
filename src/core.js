@@ -447,18 +447,13 @@ function surfaceList() {
 function surfacesTargeting(dsId) {
   return surfaceList().filter(function (s) { return s.target === dsId && (s.clone || s.open); });
 }
-// A VIEW (user-facing term) = an analysis DELIBERATELY created/kept for a dataset,
-// not an ambient default panel. Deliberate = a clone, a renamed one, or a singleton
-// retargeted off the model. So a pristine default Statistics tab doesn't clutter the
-// dataset's view list; a GT you cloned onto the drillhole composites does.
-function surfaceIsDeliberate(s) {
-  if (!s) return false;
-  if (s.clone) return true;
-  if (typeof surfaceHasCustomTitle === 'function' && surfaceHasCustomTitle(s.id)) return true;
-  return !!(s.target && s.target !== 'model');
-}
+// A VIEW (user-facing term) = an analysis panel over a dataset. EVERYTHING is a
+// view (Arthur 2026-06-23): a kind's default panel is just its first view, a clone
+// is another — all equal, all listed, all nameable. So viewsForDataset lists every
+// LIVE view (an open singleton or a clone) targeting the dataset; no hidden
+// "deliberate vs scratch" distinction.
 function viewsForDataset(dsId) {
-  return surfaceList().filter(function (s) { return s.target === dsId && (s.clone || s.open) && surfaceIsDeliberate(s); });
+  return surfaceList().filter(function (s) { return s.target === dsId && (s.clone || s.open); });
 }
 function viewKindFacet(kind) { var d = surfaceDescriptors().filter(function (x) { return x.kind === kind; })[0]; return d ? d.facet : 'analyzed'; }
 // How many live views target a dataset (its "dependents"). A derived dataset with

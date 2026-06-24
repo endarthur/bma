@@ -488,6 +488,15 @@ function exampleProjectJson(modelSize, samplesSize) {
       declus: { params: { varName: 'Fe', cellMin: null, cellMax: null, ncell: 24, noff: 8, anisy: 1, anisz: 1, criterion: 'min', pinned: null } }
     },
     statsTab: { cdfSelected: [3] },
+    // Pre-named VIEWS so the example teaches the concept — the Data rail's Views
+    // group shows these instead of bare "Statistics"/"Categories" (everything is a
+    // view; a view can be named). GT/Swath show named once opened.
+    surfaceTitles: {
+      statistics: 'Grade statistics',
+      categories: 'Lithology breakdown',
+      gt: 'Grade–tonnage curve',
+      swath: 'Grade trends (swath)'
+    },
     gt: {
       gradeCols: ['Fe'], groupByCol: 'LITO', densityCol: 'DENSITY',
       densityConst: null, weightCol: null, localFilter: '',

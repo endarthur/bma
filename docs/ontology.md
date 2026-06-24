@@ -50,23 +50,29 @@ A dataset must be **analyzed** before its stats/pairing/views are available; the
 unanalyzed state is now actionable (an "Analyze" affordance in the tree header + the
 dataset context menu) rather than a dead "not analyzed" label.
 
-### 2. Views — the analyses you keep
-A **View** is an analysis **deliberately created/kept over a dataset**: a
-Grade–Tonnage, a Swath, a Cross-tab, a Statistics, a Categories, a StatsCat, an
-Export. Internally these are still the C10 "surfaces" (the targeting framework keeps
-that name); **"View" is the user-facing term.**
+### 2. Views — the analyses over a dataset
+A **View** is an analysis panel over a dataset: a Grade–Tonnage, a Swath, a
+Cross-tab, a Statistics, a Categories, a StatsCat, an Export. Internally these are
+still the C10 "surfaces" (the targeting framework keeps that name); **"View" is the
+user-facing term.**
 
 > Decision: **the noun is "View," not "surface."** "Surface" = a 3D mesh to a
 > geologist and aping it reads as Leapfrog. (2026-06-22.)
 
-A view has: a **target dataset** (via the C10 facet picker), a **config** (selected
-grades, cutoffs, columns…), a **result**, and an optional **user title**. Default
-analysis panels (the always-there Statistics/Categories tabs) are *scratch*, not
-views, until you keep one.
+> Decision: **EVERYTHING is a view.** (2026-06-23, reversing the deliberate-only call
+> below.) A kind's default panel is simply its *first* view; a clone is *another* —
+> all equal, all named, all listed. There is **no hidden "scratch vs kept"
+> distinction** (that was the temp-vs-cloned confusion). `viewsForDataset` lists every
+> LIVE view (an open default panel **or** a clone) targeting the dataset. Deleting a
+> default view CLOSES it (re-add via + New view); deleting a clone destroys it.
 
-> Decision: **only DELIBERATE views are listed** under a dataset — a clone, a renamed
-> one, or a singleton retargeted off the model (`surfaceIsDeliberate`). A pristine
-> default panel doesn't clutter the list. (2026-06-22.)
+A view has: a **target dataset** (via the C10 facet picker), a **config** (selected
+grades, cutoffs, columns…), a **result**, and an optional **user title** (which also
+shows on its tab).
+
+> ~~Superseded 2026-06-23~~ — Decision (2026-06-22): only DELIBERATE views were listed
+> (a clone / renamed / retargeted). This created the temp-vs-cloned confusion and was
+> reversed by "everything is a view" above.
 
 Lifecycle (all reachable three ways — row buttons, right-click context menu, the tab
 menu):
@@ -163,8 +169,9 @@ Project  (registry record + storage backing)
 
 - **"View," not "surface"** — user-facing term; avoids the geology/Leapfrog landmine.
 - **Summary/geometry are intrinsic** to a dataset — never listed as views.
-- **Only deliberate views are listed** (clone / renamed / retargeted); defaults stay
-  scratch. Plus create/duplicate/delete/rename + a context menu.
+- **Everything is a view** (2026-06-23): a kind's default panel is its first view, a
+  clone is another — all equal/named/listed; no scratch-vs-kept distinction. Create/
+  duplicate/delete/rename + a context menu; titles mirror onto tabs.
 - **Views are universal** — every dataset, not just the model.
 - **Tab titles mirror view titles.**
 - **The landing is a project manager**; projects (not files) are the unit; pluggable

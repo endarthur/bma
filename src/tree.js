@@ -257,9 +257,10 @@ function treeDsDerivedHtml(ds) {
   return html;
 }
 
-// C10: the VIEWS (Statistics, GT, …) deliberately created for a dataset — the
-// reverse index of the per-view "Dataset" picker. Each row focuses its panel on
-// click and can be renamed (✎). Returns row HTML strings.
+// C10: the VIEWS (Statistics, GT, …) targeting a dataset — the reverse index of the
+// per-view "Dataset" picker. Every live view (the default panel + any clones) is
+// listed; each row focuses its panel on click, and can be renamed (✎) / duplicated
+// (⎘) / removed (✕). Returns row HTML strings.
 function treeViewRows(ds) {
   if (typeof viewsForDataset !== 'function') return [];
   return viewsForDataset(ds).map(function (s) {
@@ -272,22 +273,21 @@ function treeViewRows(ds) {
       (s.clone ? '<span class="tree-surface-badge">copy</span>' : '') +
       '<button class="tree-surface-edit" data-surface-edit="' + esc(s.id) + '" title="Rename this view">✎</button>' +
       (typeof viewCanDuplicate === 'function' && viewCanDuplicate(s.id) ? '<button class="tree-surface-edit tree-view-dup" data-view-dup="' + esc(s.id) + '" title="Duplicate this view">⎘</button>' : '') +
-      '<button class="tree-surface-edit tree-view-del" data-view-del="' + esc(s.id) + '" title="' + (s.clone ? 'Delete this view' : 'Stop keeping this view') + '">✕</button>' +
+      '<button class="tree-surface-edit tree-view-del" data-view-del="' + esc(s.id) + '" title="' + (s.clone ? 'Delete this view' : 'Close this view') + '">✕</button>' +
       '</div>';
   });
 }
 
-// The Views group under a dataset — deliberate views + a learnable empty state +
-// a "+" to create one. Shown for EVERY dataset (not just the model) so views read
-// as a universal capability; an unanalyzed dataset shows the analyze-first hint
-// and no creator (you make a view over results). Arthur: make it easy to understand.
+// The Views group under a dataset — every view (default panels + clones) targeting
+// it + a "+" to add one. Shown for EVERY dataset (not just the model); an unanalyzed
+// dataset shows the analyze-first hint and no creator (you make a view over results).
 function treeViewsGroupHtml(ds, openState, analyzed) {
   var rows = analyzed ? treeViewRows(ds) : [];
   var gKey = 'g:' + ds + ':views';
   var gOpen = openState[gKey] !== undefined ? openState[gKey] : true;   // open by default (hint teaches when empty)
   var inner = rows.length ? rows.join('')
     : (analyzed
-        ? '<div class="tree-views-empty">No views kept yet — <b>+ New view</b>, or duplicate an analysis, to keep one here.</div>'
+        ? '<div class="tree-views-empty">No views here yet — <b>+ New view</b> to add one.</div>'
         : '<div class="tree-views-empty"><b>Analyze</b> this dataset to create views over it.</div>');
   var add = analyzed ? '<button class="tree-views-add" data-view-add="' + esc(ds) + '" title="Create a view for this dataset">+ New view</button>' : '';
   return '<details class="tree-group tree-views-group" data-key="' + gKey + '"' + (gOpen ? ' open' : '') + '>' +
@@ -718,8 +718,8 @@ function treeToggleRole(t, role) {
         var vid = vdel.getAttribute('data-view-del');
         var clone = vid.indexOf('#') >= 0;
         Promise.resolve(typeof bmaConfirm === 'function'
-          ? bmaConfirm({ title: clone ? 'Delete view' : 'Stop keeping view', okLabel: clone ? 'Delete' : 'Stop keeping', cancelLabel: 'Cancel',
-              html: clone ? 'Delete this view? Its analysis config is discarded.' : 'Return this view to a default panel? Its custom name is cleared.' })
+          ? bmaConfirm({ title: clone ? 'Delete view' : 'Close view', okLabel: clone ? 'Delete' : 'Close', cancelLabel: 'Cancel',
+              html: clone ? 'Delete this view? Its analysis config is discarded.' : 'Close this view? Re-add it any time with <b>+ New view</b>.' })
           : true).then(function (ok) { if (ok && typeof wsDeleteView === 'function') wsDeleteView(vid); });
         return;
       }
