@@ -124,7 +124,9 @@ function renderProjects() {
 }
 
 function pmWire(host, all) {
-  var byId = {}; all.forEach(function (r) { byId[r.id] = r; });
+  // STATIC controls — wired ONCE per full render. NOT re-bound on each keystroke:
+  // pmRerenderRows re-renders only the rows and calls pmWireRows, so the search
+  // input keeps its single listener (re-binding here leaked one per key → freeze).
   var search = host.querySelector('#pmSearch');
   if (search) search.addEventListener('input', function () { pmState.search = search.value; pmRerenderRows(host, all); });
   var sort = host.querySelector('#pmSort');
@@ -132,6 +134,11 @@ function pmWire(host, all) {
   host.querySelectorAll('[data-tagf]').forEach(function (b) {
     b.addEventListener('click', function () { var t = b.getAttribute('data-tagf'); pmState.tags[t] = !pmState.tags[t]; renderProjects(); });
   });
+  pmWireRows(host, all);
+}
+// Wire ONLY the per-row handlers (re-run after a rows-only re-render).
+function pmWireRows(host, all) {
+  var byId = {}; all.forEach(function (r) { byId[r.id] = r; });
   // open: row click or Open button
   host.querySelectorAll('.pm-row').forEach(function (row) {
     row.addEventListener('click', function (e) {
@@ -159,7 +166,7 @@ function pmRerenderRows(host, all) {
   if (rows) rows.innerHTML = shown.length ? shown.map(pmRowHtml).join('') : '<div class="pm-empty">No projects match.</div>';
   var count = host.querySelector('.pm-count');
   if (count) count.textContent = shown.length + (shown.length !== all.length ? ' / ' + all.length : '');
-  pmWire(host, all);
+  pmWireRows(host, all);   // ONLY the rows changed — don't re-bind the static controls (listener leak)
 }
 
 function pmOpen(rec) {

@@ -767,10 +767,27 @@ function autoSaveProject() {
     try {
       localStorage.setItem(key, ser);
     } catch (e) { /* quota — silent fail */ }
-    // C11-P1: a mounted project folder also gets the JSON written into it.
-    if (typeof mountedFolder !== 'undefined' && mountedFolder && typeof fsaaWriteProjectJson === 'function') fsaaWriteProjectJson(ser);
+    // C11-P1: a mounted project folder also gets the JSON written into it. R2:
+    // a write FAILURE (permission revoked, disk) must not be swallowed — surface it,
+    // else the user keeps editing thinking it's saved when it isn't (silent loss).
+    if (typeof mountedFolder !== 'undefined' && mountedFolder && typeof fsaaWriteProjectJson === 'function') {
+      Promise.resolve(fsaaWriteProjectJson(ser)).then(function (folderOk) {
+        if (folderOk === false) showSaveBeat(false, 'Autosave failed — project folder not writable');
+      });
+    }
     if (typeof projTouchCurrent === 'function') projTouchCurrent();   // C14: keep the registry fresh
   }, 2000);
+}
+
+// Shared "Saved ✓" / "Save failed" toast (red + longer when failed).
+function showSaveBeat(saved, msg) {
+  var beat = document.getElementById('saveBeat');
+  if (!beat) return;
+  beat.textContent = msg;
+  beat.style.color = saved ? 'var(--green)' : 'var(--red)';
+  beat.classList.add('on');
+  clearTimeout(flushProjectSave._t);
+  flushProjectSave._t = setTimeout(function () { beat.classList.remove('on'); }, saved ? 1400 : 4500);
 }
 
 // C6-2: File → Save (Ctrl+S) — flush the continuous autosave immediately and
@@ -779,22 +796,21 @@ function flushProjectSave() {
   var key = currentProjectKey();
   if (!key || (currentFile && !preflightData)) return;
   clearTimeout(autoSaveTimer);
-  var ok = false;
+  var localOk = false;
   var ser = JSON.stringify(serializeProject());
   try {
     localStorage.setItem(key, ser);
-    ok = true;
-  } catch (e) { /* quota — silent fail */ }
-  if (typeof mountedFolder !== 'undefined' && mountedFolder && typeof fsaaWriteProjectJson === 'function') fsaaWriteProjectJson(ser);   // C11-P1
+    localOk = true;
+  } catch (e) { /* quota — surfaced below */ }
   if (typeof projTouchCurrent === 'function') projTouchCurrent();   // C14: keep the registry fresh
-  var beat = document.getElementById('saveBeat');
-  if (beat) {
-    beat.textContent = ok ? 'Saved ✓' : 'Save failed';
-    beat.style.color = ok ? 'var(--green)' : 'var(--red)';
-    beat.classList.add('on');
-    clearTimeout(flushProjectSave._t);
-    flushProjectSave._t = setTimeout(function() { beat.classList.remove('on'); }, 1400);
-  }
+  // R2: gate the "Saved ✓" beat on the FOLDER write too — don't report success
+  // when the backing write actually failed (silent edit loss on reopen).
+  var folderP = (typeof mountedFolder !== 'undefined' && mountedFolder && typeof fsaaWriteProjectJson === 'function')
+    ? Promise.resolve(fsaaWriteProjectJson(ser)) : Promise.resolve(true);
+  folderP.then(function (folderOk) {
+    var saved = localOk && folderOk !== false;
+    showSaveBeat(saved, saved ? 'Saved ✓' : (folderOk === false ? 'Save failed — project folder not writable' : 'Save failed'));
+  });
 }
 
 async function applyProject(project) {
@@ -1486,6 +1502,7 @@ async function tryPackedProject(file) {
 // model) and newEmptyProject (model-less). Pure state resets — no file refs — so
 // the model-load path is byte-identical to the inlined block it replaced.
 function resetProjectState() {
+  if (typeof surfaceTitles !== 'undefined') surfaceTitles = {};   // R8: don't leak view names across projects (applyProject re-sets if there's a saved one)
   currentFilter = null;
   currentGroupBy = null;
   currentStatsCatVar = null;
@@ -1770,6 +1787,19 @@ async function pickModelFile() {
 async function handleFile(file, handle, skipRecents) {
   if (!file) return;
 
+  // BLOCKER fix (review R1): a FRESH load (not driven by projOpen, which passes
+  // skipRecents) must drop any previous project's folder/virtual MOUNT first — else
+  // autosave writes THIS project's JSON into the OLD project's folder, clobbering
+  // it. projOpen's folder/opfs/idb path sets mountedFolder then calls handleFile
+  // with skipRecents=true, so it's preserved there.
+  if (!skipRecents) {
+    if (typeof mountedFolder !== 'undefined') mountedFolder = null;
+    if (typeof fsaaCurrentJsonName !== 'undefined') fsaaCurrentJsonName = null;
+    if (typeof projOpenLabel !== 'undefined') projOpenLabel = null;
+    if (typeof mountedFolderVirtual !== 'undefined') mountedFolderVirtual = false;
+    if (typeof fsaaRenderIndicator === 'function') fsaaRenderIndicator();
+  }
+
   // Bare project file: stash it and ask for its data file
   if (/\.bma\.json$/i.test(file.name)) {
     try {
@@ -1916,6 +1946,9 @@ let hasResults = false; // Track whether analysis has been run
 // Back button in toolbar — go back to dropzone. Extracted so switching projects
 // (File ▸ Open recent, or the manager) can return to a clean landing first.
 function closeProjectToLanding() {
+  // R7: flush the pending autosave before tearing down, so the outgoing project's
+  // last edits aren't dropped when switching projects (projOpen calls us first).
+  if (currentFile && preflightData && typeof flushProjectSave === 'function') flushProjectSave();
   $results.classList.remove('active');
   document.querySelector('.app').classList.remove('has-results');
   $appFooter.classList.remove('active');

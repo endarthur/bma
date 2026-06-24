@@ -414,19 +414,36 @@ function projTouchCurrent() {
   if (!key) return Promise.resolve(null);
   if (typeof currentFile !== 'undefined' && currentFile && typeof preflightData !== 'undefined' && !preflightData) return Promise.resolve(null);
   var id = currentProjectRecId || key;
+  // SNAPSHOT the live state NOW — projGet is async, and a caller (closeProjectToLanding
+  // flushing on switch/close) may reset currentFile/projectTitle/mountedFolder before
+  // the .then runs, which previously captured the post-reset state (→ "Untitled").
+  var meta = projCurrentMeta();
+  var snap = {
+    folder: (typeof mountedFolder !== 'undefined') ? mountedFolder : null,
+    virtual: (typeof mountedFolderVirtual !== 'undefined') ? mountedFolderVirtual : false,
+    fileHandle: (typeof currentFileHandle !== 'undefined') ? currentFileHandle : null,
+    fileName: (typeof currentFile !== 'undefined' && currentFile) ? currentFile.name : null,
+    projKey: key
+  };
+  currentProjectRecId = id;
   return projGet(id).then(function (existing) {
     var now = Date.now();
-    var meta = projCurrentMeta();
     var rec = existing || { id: id, tags: [], notes: '', created: now, lastOpened: now };
     rec.id = id;
     rec.title = meta.title; rec.modelName = meta.modelName; rec.modelSize = meta.modelSize;
     rec.rowCount = meta.rowCount; rec.datasetCount = meta.datasetCount; rec.hasDrillholes = meta.hasDrillholes;
     rec.lastSaved = now;
     if (!rec.lastOpened) rec.lastOpened = now;
-    rec.backing = projCurrentBacking(existing);
-    currentProjectRecId = id;
+    rec.backing = projBackingFromSnapshot(snap, existing);
     return projPut(rec).then(function (r) { if (typeof projRefreshMenuCache === 'function') projRefreshMenuCache(); return r; });
   }).catch(function () { return null; });
+}
+// Backing from a sync snapshot (+ the existing record, for the preserve rule).
+function projBackingFromSnapshot(snap, existing) {
+  if (existing && existing.backing && existing.backing.kind !== 'local' && existing.backing.kind !== 'file') return existing.backing;
+  if (snap.folder && !snap.virtual) return { kind: 'folder', folderHandle: snap.folder };
+  if (snap.fileHandle && snap.fileName) return { kind: 'file', fileHandle: snap.fileHandle, modelFileName: snap.fileName };
+  return { kind: 'local', projKey: snap.projKey };
 }
 
 // Open a 'local'-backed project from its localStorage blob. Model-less restores

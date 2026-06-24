@@ -6416,7 +6416,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build e294a59 — click to check for updates">e294a59</div>
+<div class="build-badge" id="buildBadge" title="build e80cac1 — click to check for updates">e80cac1</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -20222,10 +20222,27 @@ function autoSaveProject() {
     try {
       localStorage.setItem(key, ser);
     } catch (e) { /* quota — silent fail */ }
-    // C11-P1: a mounted project folder also gets the JSON written into it.
-    if (typeof mountedFolder !== 'undefined' && mountedFolder && typeof fsaaWriteProjectJson === 'function') fsaaWriteProjectJson(ser);
+    // C11-P1: a mounted project folder also gets the JSON written into it. R2:
+    // a write FAILURE (permission revoked, disk) must not be swallowed — surface it,
+    // else the user keeps editing thinking it's saved when it isn't (silent loss).
+    if (typeof mountedFolder !== 'undefined' && mountedFolder && typeof fsaaWriteProjectJson === 'function') {
+      Promise.resolve(fsaaWriteProjectJson(ser)).then(function (folderOk) {
+        if (folderOk === false) showSaveBeat(false, 'Autosave failed — project folder not writable');
+      });
+    }
     if (typeof projTouchCurrent === 'function') projTouchCurrent();   // C14: keep the registry fresh
   }, 2000);
+}
+
+// Shared "Saved ✓" / "Save failed" toast (red + longer when failed).
+function showSaveBeat(saved, msg) {
+  var beat = document.getElementById('saveBeat');
+  if (!beat) return;
+  beat.textContent = msg;
+  beat.style.color = saved ? 'var(--green)' : 'var(--red)';
+  beat.classList.add('on');
+  clearTimeout(flushProjectSave._t);
+  flushProjectSave._t = setTimeout(function () { beat.classList.remove('on'); }, saved ? 1400 : 4500);
 }
 
 // C6-2: File → Save (Ctrl+S) — flush the continuous autosave immediately and
@@ -20234,22 +20251,21 @@ function flushProjectSave() {
   var key = currentProjectKey();
   if (!key || (currentFile && !preflightData)) return;
   clearTimeout(autoSaveTimer);
-  var ok = false;
+  var localOk = false;
   var ser = JSON.stringify(serializeProject());
   try {
     localStorage.setItem(key, ser);
-    ok = true;
-  } catch (e) { /* quota — silent fail */ }
-  if (typeof mountedFolder !== 'undefined' && mountedFolder && typeof fsaaWriteProjectJson === 'function') fsaaWriteProjectJson(ser);   // C11-P1
+    localOk = true;
+  } catch (e) { /* quota — surfaced below */ }
   if (typeof projTouchCurrent === 'function') projTouchCurrent();   // C14: keep the registry fresh
-  var beat = document.getElementById('saveBeat');
-  if (beat) {
-    beat.textContent = ok ? 'Saved ✓' : 'Save failed';
-    beat.style.color = ok ? 'var(--green)' : 'var(--red)';
-    beat.classList.add('on');
-    clearTimeout(flushProjectSave._t);
-    flushProjectSave._t = setTimeout(function() { beat.classList.remove('on'); }, 1400);
-  }
+  // R2: gate the "Saved ✓" beat on the FOLDER write too — don't report success
+  // when the backing write actually failed (silent edit loss on reopen).
+  var folderP = (typeof mountedFolder !== 'undefined' && mountedFolder && typeof fsaaWriteProjectJson === 'function')
+    ? Promise.resolve(fsaaWriteProjectJson(ser)) : Promise.resolve(true);
+  folderP.then(function (folderOk) {
+    var saved = localOk && folderOk !== false;
+    showSaveBeat(saved, saved ? 'Saved ✓' : (folderOk === false ? 'Save failed — project folder not writable' : 'Save failed'));
+  });
 }
 
 async function applyProject(project) {
@@ -20941,6 +20957,7 @@ async function tryPackedProject(file) {
 // model) and newEmptyProject (model-less). Pure state resets — no file refs — so
 // the model-load path is byte-identical to the inlined block it replaced.
 function resetProjectState() {
+  if (typeof surfaceTitles !== 'undefined') surfaceTitles = {};   // R8: don't leak view names across projects (applyProject re-sets if there's a saved one)
   currentFilter = null;
   currentGroupBy = null;
   currentStatsCatVar = null;
@@ -21225,6 +21242,19 @@ async function pickModelFile() {
 async function handleFile(file, handle, skipRecents) {
   if (!file) return;
 
+  // BLOCKER fix (review R1): a FRESH load (not driven by projOpen, which passes
+  // skipRecents) must drop any previous project's folder/virtual MOUNT first — else
+  // autosave writes THIS project's JSON into the OLD project's folder, clobbering
+  // it. projOpen's folder/opfs/idb path sets mountedFolder then calls handleFile
+  // with skipRecents=true, so it's preserved there.
+  if (!skipRecents) {
+    if (typeof mountedFolder !== 'undefined') mountedFolder = null;
+    if (typeof fsaaCurrentJsonName !== 'undefined') fsaaCurrentJsonName = null;
+    if (typeof projOpenLabel !== 'undefined') projOpenLabel = null;
+    if (typeof mountedFolderVirtual !== 'undefined') mountedFolderVirtual = false;
+    if (typeof fsaaRenderIndicator === 'function') fsaaRenderIndicator();
+  }
+
   // Bare project file: stash it and ask for its data file
   if (/\.bma\.json$/i.test(file.name)) {
     try {
@@ -21371,6 +21401,9 @@ let hasResults = false; // Track whether analysis has been run
 // Back button in toolbar — go back to dropzone. Extracted so switching projects
 // (File ▸ Open recent, or the manager) can return to a clean landing first.
 function closeProjectToLanding() {
+  // R7: flush the pending autosave before tearing down, so the outgoing project's
+  // last edits aren't dropped when switching projects (projOpen calls us first).
+  if (currentFile && preflightData && typeof flushProjectSave === 'function') flushProjectSave();
   $results.classList.remove('active');
   document.querySelector('.app').classList.remove('has-results');
   $appFooter.classList.remove('active');
@@ -24187,19 +24220,36 @@ function projTouchCurrent() {
   if (!key) return Promise.resolve(null);
   if (typeof currentFile !== 'undefined' && currentFile && typeof preflightData !== 'undefined' && !preflightData) return Promise.resolve(null);
   var id = currentProjectRecId || key;
+  // SNAPSHOT the live state NOW — projGet is async, and a caller (closeProjectToLanding
+  // flushing on switch/close) may reset currentFile/projectTitle/mountedFolder before
+  // the .then runs, which previously captured the post-reset state (→ "Untitled").
+  var meta = projCurrentMeta();
+  var snap = {
+    folder: (typeof mountedFolder !== 'undefined') ? mountedFolder : null,
+    virtual: (typeof mountedFolderVirtual !== 'undefined') ? mountedFolderVirtual : false,
+    fileHandle: (typeof currentFileHandle !== 'undefined') ? currentFileHandle : null,
+    fileName: (typeof currentFile !== 'undefined' && currentFile) ? currentFile.name : null,
+    projKey: key
+  };
+  currentProjectRecId = id;
   return projGet(id).then(function (existing) {
     var now = Date.now();
-    var meta = projCurrentMeta();
     var rec = existing || { id: id, tags: [], notes: '', created: now, lastOpened: now };
     rec.id = id;
     rec.title = meta.title; rec.modelName = meta.modelName; rec.modelSize = meta.modelSize;
     rec.rowCount = meta.rowCount; rec.datasetCount = meta.datasetCount; rec.hasDrillholes = meta.hasDrillholes;
     rec.lastSaved = now;
     if (!rec.lastOpened) rec.lastOpened = now;
-    rec.backing = projCurrentBacking(existing);
-    currentProjectRecId = id;
+    rec.backing = projBackingFromSnapshot(snap, existing);
     return projPut(rec).then(function (r) { if (typeof projRefreshMenuCache === 'function') projRefreshMenuCache(); return r; });
   }).catch(function () { return null; });
+}
+// Backing from a sync snapshot (+ the existing record, for the preserve rule).
+function projBackingFromSnapshot(snap, existing) {
+  if (existing && existing.backing && existing.backing.kind !== 'local' && existing.backing.kind !== 'file') return existing.backing;
+  if (snap.folder && !snap.virtual) return { kind: 'folder', folderHandle: snap.folder };
+  if (snap.fileHandle && snap.fileName) return { kind: 'file', fileHandle: snap.fileHandle, modelFileName: snap.fileName };
+  return { kind: 'local', projKey: snap.projKey };
 }
 
 // Open a 'local'-backed project from its localStorage blob. Model-less restores
@@ -24351,7 +24401,9 @@ function renderProjects() {
 }
 
 function pmWire(host, all) {
-  var byId = {}; all.forEach(function (r) { byId[r.id] = r; });
+  // STATIC controls — wired ONCE per full render. NOT re-bound on each keystroke:
+  // pmRerenderRows re-renders only the rows and calls pmWireRows, so the search
+  // input keeps its single listener (re-binding here leaked one per key → freeze).
   var search = host.querySelector('#pmSearch');
   if (search) search.addEventListener('input', function () { pmState.search = search.value; pmRerenderRows(host, all); });
   var sort = host.querySelector('#pmSort');
@@ -24359,6 +24411,11 @@ function pmWire(host, all) {
   host.querySelectorAll('[data-tagf]').forEach(function (b) {
     b.addEventListener('click', function () { var t = b.getAttribute('data-tagf'); pmState.tags[t] = !pmState.tags[t]; renderProjects(); });
   });
+  pmWireRows(host, all);
+}
+// Wire ONLY the per-row handlers (re-run after a rows-only re-render).
+function pmWireRows(host, all) {
+  var byId = {}; all.forEach(function (r) { byId[r.id] = r; });
   // open: row click or Open button
   host.querySelectorAll('.pm-row').forEach(function (row) {
     row.addEventListener('click', function (e) {
@@ -24386,7 +24443,7 @@ function pmRerenderRows(host, all) {
   if (rows) rows.innerHTML = shown.length ? shown.map(pmRowHtml).join('') : '<div class="pm-empty">No projects match.</div>';
   var count = host.querySelector('.pm-count');
   if (count) count.textContent = shown.length + (shown.length !== all.length ? ' / ' + all.length : '');
-  pmWire(host, all);
+  pmWireRows(host, all);   // ONLY the rows changed — don't re-bind the static controls (listener leak)
 }
 
 function pmOpen(rec) {
