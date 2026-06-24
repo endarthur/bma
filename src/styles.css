@@ -935,6 +935,17 @@ header .logo-mark {
   -webkit-overflow-scrolling: touch;
 }
 .results-panel.active { display: block; }
+/* Cloned analysis panels carry a data-<x>-inst marker instead of a #panelX id, so
+   they DON'T inherit their singleton's `#panelX.active { display:flex }` rule — the
+   *-body's flex:1 then collapses to content height and the sidebar rail is a short
+   box (the GT/Cross-tab symptom). Give every clone the same flex-column fill. */
+.results-panel[data-stat-inst].active,
+.results-panel[data-cat-inst].active,
+.results-panel[data-sw-inst].active,
+.results-panel[data-gt-inst].active,
+.results-panel[data-statcat-inst].active,
+.results-panel[data-export-inst].active,
+.results-panel[data-xt-inst].active { display: flex; flex-direction: column; }
 .panel-inner {
   padding: 1rem 1.2rem;
   display: flex;
@@ -3584,6 +3595,7 @@ table.cat-values td.cat-pct-cell {
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
+.gt-sidebar-section:last-child { border-bottom: none; }   /* no stray divider at the rail bottom */
 .gt-sidebar-title {
   font-size: 0.65rem;
   color: var(--fg-dim);
