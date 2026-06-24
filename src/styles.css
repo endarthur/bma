@@ -3656,9 +3656,13 @@ table.cat-values td.cat-pct-cell {
 .gt-hint { color: var(--fg-dim); font-family: var(--sans); font-size: 0.85rem; padding: 2rem; text-align: center; opacity: 0.5; }
 
 /* A19 Cross-tab — layout mirrors the GT panel (sidebar + content) */
+/* make the panel a flex column (like Statistics/Aux) so the body fills its height
+   and the sidebar rail spans the whole panel (was a short box with dead space) */
+#panelCrosstab.active { display: flex; flex-direction: column; }
 .crosstab-body { display: flex; flex: 1; min-height: 0; }
 .crosstab-sidebar { width: 260px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; background: var(--bg1); }
 .crosstab-section { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.crosstab-section:last-child { border-bottom: none; }   /* no stray divider below Generate */
 .crosstab-sidebar-title { font-size: 0.65rem; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.3rem; }
 .crosstab-sidebar-note { padding: 1rem 0.8rem; color: var(--fg-dim); font-family: var(--sans); font-size: 0.78rem; line-height: 1.5; }
 .crosstab-content { flex: 1; min-width: 0; overflow: auto; padding: 1.1rem 1.3rem; }
