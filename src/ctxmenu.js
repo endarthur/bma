@@ -149,7 +149,7 @@ CTX_PROVIDERS.push(function viewProvider(e) {
   if (!row) return null;
   var id = row.getAttribute('data-surface');
   if (!id) return null;
-  var kind = String(id).split('#')[0], isClone = id.indexOf('#') >= 0;
+  var kind = String(id).split('#')[0], isInstance = id.indexOf('#') >= 0;
   var title = (typeof surfaceTitle === 'function') ? surfaceTitle(id) : id;
   var items = [{ head: true, label: title }];
   items.push({ label: 'Focus', action: function () { showPanel(id); } });
@@ -168,10 +168,10 @@ CTX_PROVIDERS.push(function viewProvider(e) {
     items.push({ label: 'Target dataset', children: kids });
   }
   items.push({ sep: true });
-  items.push({ label: isClone ? 'Delete' : 'Close', danger: true, action: function () {
+  items.push({ label: isInstance ? 'Delete' : 'Close', danger: true, action: function () {
     Promise.resolve(typeof bmaConfirm === 'function'
-      ? bmaConfirm({ title: isClone ? 'Delete view' : 'Close view', okLabel: isClone ? 'Delete' : 'Close', cancelLabel: 'Cancel',
-          html: isClone ? 'Delete this view? Its analysis config is discarded.' : 'Close this view? Re-add it any time with + New view.' })
+      ? bmaConfirm({ title: isInstance ? 'Delete view' : 'Close view', okLabel: isInstance ? 'Delete' : 'Close', cancelLabel: 'Cancel',
+          html: isInstance ? 'Delete this view? Its analysis config is discarded.' : 'Close this view? Re-add it any time with + New view.' })
       : true).then(function (ok) { if (ok && typeof wsDeleteView === 'function') wsDeleteView(id); });
   } });
   return items;

@@ -427,33 +427,34 @@ function surfaceIsOpen(id) {
   if (typeof wsRails !== 'undefined' && wsRails && typeof findTab === 'function') return !!findTab(wsRails.state, id);
   return true;   // legacy shell isn't multi-tabbed the same way — include
 }
-// Every live analysis surface (each singleton + each clone) with the dataset it
-// targets and whether it's an open tab.
+// Every live analysis surface — the default panel + each instance — with the
+// dataset it targets and whether it's an open tab. `isInstance` = a spawned view
+// instance (has a #N id) vs the default panel (the former "clone" flag).
 function surfaceList() {
   var out = [];
   surfaceDescriptors().forEach(function (d) {
     var t; try { t = d.singleton(); } catch (e) { t = 'model'; }
-    out.push({ id: d.kind, kind: d.kind, label: d.label, target: t || 'model', clone: false, open: surfaceIsOpen(d.kind) });
+    out.push({ id: d.kind, kind: d.kind, label: d.label, target: t || 'model', isInstance: false, open: surfaceIsOpen(d.kind) });
     var insts; try { insts = d.insts() || {}; } catch (e) { insts = {}; }
     Object.keys(insts).forEach(function (iid) {
       var s = insts[iid]; if (!s) return;
       var it; try { it = d.instTarget(s); } catch (e) { it = 'model'; }
-      out.push({ id: iid, kind: d.kind, label: d.label, target: it || 'model', clone: true, open: true });
+      out.push({ id: iid, kind: d.kind, label: d.label, target: it || 'model', isInstance: true, open: true });
     });
   });
   return out;
 }
-// The surfaces pointed at a dataset (live ones: open singletons + clones).
+// The surfaces pointed at a dataset (live ones: open default panels + instances).
 function surfacesTargeting(dsId) {
-  return surfaceList().filter(function (s) { return s.target === dsId && (s.clone || s.open); });
+  return surfaceList().filter(function (s) { return s.target === dsId && (s.isInstance || s.open); });
 }
 // A VIEW (user-facing term) = an analysis panel over a dataset. EVERYTHING is a
-// view (Arthur 2026-06-23): a kind's default panel is just its first view, a clone
-// is another — all equal, all listed, all nameable. So viewsForDataset lists every
-// LIVE view (an open singleton or a clone) targeting the dataset; no hidden
-// "deliberate vs scratch" distinction.
+// view (Arthur 2026-06-23): a kind's default panel is just its first view, an
+// instance is another — all equal, all listed, all nameable. So viewsForDataset
+// lists every LIVE view (an open default panel or an instance) targeting the
+// dataset; no hidden "deliberate vs scratch" distinction.
 function viewsForDataset(dsId) {
-  return surfaceList().filter(function (s) { return s.target === dsId && (s.clone || s.open); });
+  return surfaceList().filter(function (s) { return s.target === dsId && (s.isInstance || s.open); });
 }
 function viewKindFacet(kind) { var d = surfaceDescriptors().filter(function (x) { return x.kind === kind; })[0]; return d ? d.facet : 'analyzed'; }
 // How many live views target a dataset (its "dependents"). A derived dataset with

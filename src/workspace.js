@@ -480,15 +480,15 @@ function wsCreateView(kind, dsId) {
 // seeding the tab's "Duplicate" uses, factored to take any view id.
 function wsDuplicateView(id) {
   if (!wsRails) { showPanel(id); return; }
-  var kind = String(id).split('#')[0], isClone = id.indexOf('#') >= 0;
+  var kind = String(id).split('#')[0], isInstance = id.indexOf('#') >= 0;
   var root = wsViewRoot(kind, id);
   if (kind === 'swath') wsSpawnSwathInstance(root && typeof swSerializeConfig === 'function' ? swSerializeConfig(root) : null);
   else if (kind === 'statistics') wsSpawnStatisticsInstance(root && typeof statSerializeView === 'function' && typeof statStateForRoot === 'function' ? statSerializeView(statStateForRoot(root)) : null);
   else if (kind === 'gt') wsSpawnGtInstance(root && typeof gtSerializeConfig === 'function' ? gtSerializeConfig(root) : null);
-  else if (kind === 'statscat') wsSpawnStatsCatInstance(typeof statsCatInstTarget === 'function' ? statsCatInstTarget(isClone ? root : null) : 'model');
-  else if (kind === 'export') wsSpawnExportInstance(typeof exportInstTarget === 'function' ? exportInstTarget(isClone ? root : null) : 'model');
+  else if (kind === 'statscat') wsSpawnStatsCatInstance(typeof statsCatInstTarget === 'function' ? statsCatInstTarget(isInstance ? root : null) : 'model');
+  else if (kind === 'export') wsSpawnExportInstance(typeof exportInstTarget === 'function' ? exportInstTarget(isInstance ? root : null) : 'model');
   else if (kind === 'crosstab') wsSpawnCrosstabInstance(root && typeof crosstabSerializeConfig === 'function' ? crosstabSerializeConfig(root) : null);
-  else { var src = isClone ? (typeof catInstances !== 'undefined' ? catInstances[id] : null) : panelState.categories; wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false, src ? src.catTargetDsId : 'model'); }
+  else { var src = isInstance ? (typeof catInstances !== 'undefined' ? catInstances[id] : null) : panelState.categories; wsSpawnCategoriesInstance(src ? src.focusedCol : null, src ? src.chartShowAll : false, src ? src.catTargetDsId : 'model'); }
 }
 // Delete a view: a clone is destroyed (close its tab); a singleton can't be removed,
 // so "delete" means stop keeping it — clear its custom name + return it to the model.
