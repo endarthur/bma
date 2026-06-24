@@ -482,6 +482,13 @@ function reopenLocalProject(projKey) {
     if (typeof promptReselect === 'function') promptReselect(pj.file.name);
     return Promise.resolve(true);
   }
+  // Model-less → mirror openProjectById's FULL workspace setup (activate the
+  // results UI + show a panel, then applyProject). Calling applyProject alone left
+  // #results inactive, so opening a model-less project from the manager showed nothing.
+  if (typeof openProjectById === 'function') {
+    var mlId = pj.id || (projKey.indexOf('bma:proj:') === 0 ? projKey.slice(9) : projKey);
+    return Promise.resolve(openProjectById(mlId)).then(function () { return true; });
+  }
   return Promise.resolve(typeof applyProject === 'function' ? applyProject(pj) : false).then(function () { return true; });
 }
 
