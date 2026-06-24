@@ -270,7 +270,6 @@ function treeViewRows(ds) {
       '<span class="tree-surface-dot tree-surface-dot--' + esc(s.kind) + '"></span>' +
       '<span class="tree-name tree-surface-name">' + esc(title) + '</span>' +
       (custom ? '<span class="tree-surface-kind">' + esc(s.label) + '</span>' : '') +
-      (s.clone ? '<span class="tree-surface-badge">copy</span>' : '') +
       '<button class="tree-surface-edit" data-surface-edit="' + esc(s.id) + '" title="Rename this view">✎</button>' +
       (typeof viewCanDuplicate === 'function' && viewCanDuplicate(s.id) ? '<button class="tree-surface-edit tree-view-dup" data-view-dup="' + esc(s.id) + '" title="Duplicate this view">⎘</button>' : '') +
       '<button class="tree-surface-edit tree-view-del" data-view-del="' + esc(s.id) + '" title="' + (s.clone ? 'Delete this view' : 'Close this view') + '">✕</button>' +
