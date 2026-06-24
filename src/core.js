@@ -462,7 +462,9 @@ function viewKindFacet(kind) { var d = surfaceDescriptors().filter(function (x) 
 // relinking, and the reason its auto-recreate matters.
 function dsDependentViewCount(dsId) {
   if (typeof surfaceList !== 'function') return 0;
-  return surfaceList().filter(function (s) { return s.target === dsId; }).length;
+  // R14: count only LIVE views (instances + open default panels) — the same liveness
+  // filter viewsForDataset uses — so the badge can't disagree with the listed views.
+  return surfaceList().filter(function (s) { return s.target === dsId && (s.isInstance || s.open); }).length;
 }
 // One consolidated banner when view-bearing derived datasets couldn't be recreated
 // on open (source not loaded) — the per-node ⚠ badge is the detail; this is the
@@ -481,7 +483,11 @@ function dsCheckDerivedHealth() {
   if (existing) existing.remove();
   if (typeof datasets === 'undefined') return;
   var broken = datasets.filter(function (d) {
-    return d && d.derivedFrom && !d.file && !(typeof dsIsMaterialized === 'function' && dsIsMaterialized(d)) &&
+    // R16: a HEALTHY materialized dataset has its snapshot loaded (d.file set) so
+    // !d.file already excludes it — no need for a !dsIsMaterialized guard, which
+    // wrongly excluded a materialized dataset whose snapshot FAILED to restore and
+    // whose source isn't loaded (genuine silent loss). Flag it like any broken derive.
+    return d && d.derivedFrom && !d.file &&
       dsDependentViewCount(d.id) > 0 && !dsDerivedSourceReady(d);
   });
   if (!broken.length) return;

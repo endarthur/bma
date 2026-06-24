@@ -6416,7 +6416,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 94f4b90 — click to check for updates">94f4b90</div>
+<div class="build-badge" id="buildBadge" title="build d1cebc8 — click to check for updates">d1cebc8</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -9532,7 +9532,9 @@ function viewKindFacet(kind) { var d = surfaceDescriptors().filter(function (x) 
 // relinking, and the reason its auto-recreate matters.
 function dsDependentViewCount(dsId) {
   if (typeof surfaceList !== 'function') return 0;
-  return surfaceList().filter(function (s) { return s.target === dsId; }).length;
+  // R14: count only LIVE views (instances + open default panels) — the same liveness
+  // filter viewsForDataset uses — so the badge can't disagree with the listed views.
+  return surfaceList().filter(function (s) { return s.target === dsId && (s.isInstance || s.open); }).length;
 }
 // One consolidated banner when view-bearing derived datasets couldn't be recreated
 // on open (source not loaded) — the per-node ⚠ badge is the detail; this is the
@@ -9551,7 +9553,11 @@ function dsCheckDerivedHealth() {
   if (existing) existing.remove();
   if (typeof datasets === 'undefined') return;
   var broken = datasets.filter(function (d) {
-    return d && d.derivedFrom && !d.file && !(typeof dsIsMaterialized === 'function' && dsIsMaterialized(d)) &&
+    // R16: a HEALTHY materialized dataset has its snapshot loaded (d.file set) so
+    // !d.file already excludes it — no need for a !dsIsMaterialized guard, which
+    // wrongly excluded a materialized dataset whose snapshot FAILED to restore and
+    // whose source isn't loaded (genuine silent loss). Flag it like any broken derive.
+    return d && d.derivedFrom && !d.file &&
       dsDependentViewCount(d.id) > 0 && !dsDerivedSourceReady(d);
   });
   if (!broken.length) return;
@@ -20554,6 +20560,7 @@ function renameProjectPrompt() {
     if (!ok || !el) return;
     projectTitle = el.value.trim() || null;
     updateProjectTitleDisplay();
+    if (typeof projRenameCurrent === 'function') projRenameCurrent(projectTitle);   // R10: explicit rename updates the registry title
     if (typeof autoSaveProject === 'function') autoSaveProject();
   });
   setTimeout(function() { var el = document.getElementById('renameProjectInput'); if (el) { el.focus(); el.select(); } }, 40);
@@ -24106,6 +24113,7 @@ function projOpen(rec) {
     done = reopenLocalProject(rec.backing.projKey || rec.id);
   } else if (b.kind === 'file') {
     if (b.fileHandle && typeof b.fileHandle.getFile === 'function') {
+      if (b.packed) projAutoLoadPack = true;   // R17: a registry-open of a packed project is deliberate — skip the "Packed project found" confirm
       done = fsaaEnsureFileHandle(b.fileHandle).then(function (file) {
         if (!file) return false;
         return Promise.resolve(handleFile(file, b.fileHandle, b.packed)).then(function () { return true; });
@@ -24116,11 +24124,12 @@ function projOpen(rec) {
   }
   return Promise.resolve(done).then(function (r) {
     projOpening = false;
+    projAutoLoadPack = false;        // R17: one-shot — clear the skip-confirm flag
     currentProjectRecId = rec.id;   // re-assert (handleFile may have run mid-open)
     rec.lastOpened = Date.now();
     projPut(rec).catch(function () {});
     return r;
-  }, function (e) { projOpening = false; throw e; });
+  }, function (e) { projOpening = false; projAutoLoadPack = false; throw e; });
 }
 
 // Mount a non-FSAA directory handle (opfs / idb virtual folder) as the project
@@ -24259,12 +24268,29 @@ function projTouchCurrent() {
     var now = Date.now();
     var rec = existing || { id: id, tags: [], notes: '', created: now, lastOpened: now };
     rec.id = id;
-    rec.title = meta.title; rec.modelName = meta.modelName; rec.modelSize = meta.modelSize;
+    // R10: the title is REGISTRY-owned — set once at creation (import gives it a
+    // unique "(copy)" title; a fresh project gets meta.title), then changed only by
+    // an explicit rename (projRenameCurrent). A plain autosave touch must NOT re-derive
+    // it from the filename/inner projectTitle, or it clobbers the import disambiguation.
+    rec.title = (existing && existing.title) ? existing.title : meta.title;
+    rec.modelName = meta.modelName; rec.modelSize = meta.modelSize;
     rec.rowCount = meta.rowCount; rec.datasetCount = meta.datasetCount; rec.hasDrillholes = meta.hasDrillholes;
     rec.lastSaved = now;
     if (!rec.lastOpened) rec.lastOpened = now;
     rec.backing = projBackingFromSnapshot(snap, existing);
     return projPut(rec).then(function (r) { if (typeof projRefreshMenuCache === 'function') projRefreshMenuCache(); return r; });
+  }).catch(function () { return null; });
+}
+// Explicit rename of the open project's registry record (the title is otherwise
+// registry-owned and not re-derived on autosave — R10). Called by renameProject.
+function projRenameCurrent(title) {
+  var id = currentProjectRecId || ((typeof currentProjectKey === 'function') ? currentProjectKey() : null);
+  if (!id) return Promise.resolve(null);
+  var t = (title && String(title).trim()) || projCurrentMeta().title;
+  return projGet(id).then(function (existing) {
+    if (!existing) return null;   // not yet in the registry — the next touch creates it with this title
+    existing.title = t;
+    return projPut(existing).then(function (r) { if (typeof projRefreshMenuCache === 'function') projRefreshMenuCache(); return r; });
   }).catch(function () { return null; });
 }
 // Backing from a sync snapshot (+ the existing record, for the preserve rule).
@@ -38502,9 +38528,13 @@ function wsDuplicateView(id) {
 // custom name cleared. Both just close their tab; closing a default panel re-homes
 // the reusable singleton, closing a clone disposes it (onPanelDestroy).
 function wsDeleteView(id) {
-  if (id.indexOf('#') < 0 && typeof surfaceSetTitle === 'function') surfaceSetTitle(id, '');   // default view → drop its custom name
+  var isClone = id.indexOf('#') >= 0;
+  // R11: a DEFAULT panel view is only CLOSED (re-addable) — KEEP its custom name so
+  // re-adding it is genuinely lossless, matching the "Re-add it any time" confirm.
+  // R15: a CLONE is destroyed — drop its surfaceTitles entry so a dead name doesn't
+  // leak into the persisted project.
+  if (isClone && typeof surfaceTitles !== 'undefined') delete surfaceTitles[id];
   if (wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) wsRails.closeTab(id);
-  else if (id.indexOf('#') < 0 && typeof showPanel !== 'function') { /* legacy shell: nothing to close */ }
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
 
@@ -38565,6 +38595,15 @@ function wsSetDatasetTabTitle(ds) {
 // dataset-listing views. (The singleton aux uses clearAux instead — reset, not remove.)
 function wsRemoveInstance(ds) {
   if (!ds || ds.id === 'aux' || ds.id === 'model') return;
+  // R9: retarget EVERY view bound to this dataset (default panels AND clones, all
+  // kinds) back to the model before we drop it — otherwise the view keeps running
+  // against a dangling target and silently vanishes from the Data-tree Views index.
+  // (The per-kind refresh-pickers below only bounce the gt/statscat/export singletons.)
+  if (typeof surfaceList === 'function' && typeof wsSetViewTarget === 'function') {
+    surfaceList().filter(function (s) { return s.target === ds.id; }).forEach(function (s) {
+      try { wsSetViewTarget(s.kind, s.id, 'model'); } catch (e) {}
+    });
+  }
   ['_worker', '_declusWorker', '_topcutWorker', '_exportWorker'].forEach(function(k) {
     if (ds[k]) { try { ds[k].terminate(); } catch (e) {} ds[k] = null; }
   });

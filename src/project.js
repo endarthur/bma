@@ -1078,6 +1078,7 @@ function renameProjectPrompt() {
     if (!ok || !el) return;
     projectTitle = el.value.trim() || null;
     updateProjectTitleDisplay();
+    if (typeof projRenameCurrent === 'function') projRenameCurrent(projectTitle);   // R10: explicit rename updates the registry title
     if (typeof autoSaveProject === 'function') autoSaveProject();
   });
   setTimeout(function() { var el = document.getElementById('renameProjectInput'); if (el) { el.focus(); el.select(); } }, 40);

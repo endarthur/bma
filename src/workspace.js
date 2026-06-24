@@ -502,9 +502,13 @@ function wsDuplicateView(id) {
 // custom name cleared. Both just close their tab; closing a default panel re-homes
 // the reusable singleton, closing a clone disposes it (onPanelDestroy).
 function wsDeleteView(id) {
-  if (id.indexOf('#') < 0 && typeof surfaceSetTitle === 'function') surfaceSetTitle(id, '');   // default view → drop its custom name
+  var isClone = id.indexOf('#') >= 0;
+  // R11: a DEFAULT panel view is only CLOSED (re-addable) — KEEP its custom name so
+  // re-adding it is genuinely lossless, matching the "Re-add it any time" confirm.
+  // R15: a CLONE is destroyed — drop its surfaceTitles entry so a dead name doesn't
+  // leak into the persisted project.
+  if (isClone && typeof surfaceTitles !== 'undefined') delete surfaceTitles[id];
   if (wsRails && typeof findTab === 'function' && findTab(wsRails.state, id)) wsRails.closeTab(id);
-  else if (id.indexOf('#') < 0 && typeof showPanel !== 'function') { /* legacy shell: nothing to close */ }
   if (typeof autoSaveProject === 'function') autoSaveProject();
 }
 
@@ -565,6 +569,15 @@ function wsSetDatasetTabTitle(ds) {
 // dataset-listing views. (The singleton aux uses clearAux instead — reset, not remove.)
 function wsRemoveInstance(ds) {
   if (!ds || ds.id === 'aux' || ds.id === 'model') return;
+  // R9: retarget EVERY view bound to this dataset (default panels AND clones, all
+  // kinds) back to the model before we drop it — otherwise the view keeps running
+  // against a dangling target and silently vanishes from the Data-tree Views index.
+  // (The per-kind refresh-pickers below only bounce the gt/statscat/export singletons.)
+  if (typeof surfaceList === 'function' && typeof wsSetViewTarget === 'function') {
+    surfaceList().filter(function (s) { return s.target === ds.id; }).forEach(function (s) {
+      try { wsSetViewTarget(s.kind, s.id, 'model'); } catch (e) {}
+    });
+  }
   ['_worker', '_declusWorker', '_topcutWorker', '_exportWorker'].forEach(function(k) {
     if (ds[k]) { try { ds[k].terminate(); } catch (e) {} ds[k] = null; }
   });

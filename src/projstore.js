@@ -277,6 +277,7 @@ function projOpen(rec) {
     done = reopenLocalProject(rec.backing.projKey || rec.id);
   } else if (b.kind === 'file') {
     if (b.fileHandle && typeof b.fileHandle.getFile === 'function') {
+      if (b.packed) projAutoLoadPack = true;   // R17: a registry-open of a packed project is deliberate — skip the "Packed project found" confirm
       done = fsaaEnsureFileHandle(b.fileHandle).then(function (file) {
         if (!file) return false;
         return Promise.resolve(handleFile(file, b.fileHandle, b.packed)).then(function () { return true; });
@@ -287,11 +288,12 @@ function projOpen(rec) {
   }
   return Promise.resolve(done).then(function (r) {
     projOpening = false;
+    projAutoLoadPack = false;        // R17: one-shot — clear the skip-confirm flag
     currentProjectRecId = rec.id;   // re-assert (handleFile may have run mid-open)
     rec.lastOpened = Date.now();
     projPut(rec).catch(function () {});
     return r;
-  }, function (e) { projOpening = false; throw e; });
+  }, function (e) { projOpening = false; projAutoLoadPack = false; throw e; });
 }
 
 // Mount a non-FSAA directory handle (opfs / idb virtual folder) as the project
@@ -430,12 +432,29 @@ function projTouchCurrent() {
     var now = Date.now();
     var rec = existing || { id: id, tags: [], notes: '', created: now, lastOpened: now };
     rec.id = id;
-    rec.title = meta.title; rec.modelName = meta.modelName; rec.modelSize = meta.modelSize;
+    // R10: the title is REGISTRY-owned — set once at creation (import gives it a
+    // unique "(copy)" title; a fresh project gets meta.title), then changed only by
+    // an explicit rename (projRenameCurrent). A plain autosave touch must NOT re-derive
+    // it from the filename/inner projectTitle, or it clobbers the import disambiguation.
+    rec.title = (existing && existing.title) ? existing.title : meta.title;
+    rec.modelName = meta.modelName; rec.modelSize = meta.modelSize;
     rec.rowCount = meta.rowCount; rec.datasetCount = meta.datasetCount; rec.hasDrillholes = meta.hasDrillholes;
     rec.lastSaved = now;
     if (!rec.lastOpened) rec.lastOpened = now;
     rec.backing = projBackingFromSnapshot(snap, existing);
     return projPut(rec).then(function (r) { if (typeof projRefreshMenuCache === 'function') projRefreshMenuCache(); return r; });
+  }).catch(function () { return null; });
+}
+// Explicit rename of the open project's registry record (the title is otherwise
+// registry-owned and not re-derived on autosave — R10). Called by renameProject.
+function projRenameCurrent(title) {
+  var id = currentProjectRecId || ((typeof currentProjectKey === 'function') ? currentProjectKey() : null);
+  if (!id) return Promise.resolve(null);
+  var t = (title && String(title).trim()) || projCurrentMeta().title;
+  return projGet(id).then(function (existing) {
+    if (!existing) return null;   // not yet in the registry — the next touch creates it with this title
+    existing.title = t;
+    return projPut(existing).then(function (r) { if (typeof projRefreshMenuCache === 'function') projRefreshMenuCache(); return r; });
   }).catch(function () { return null; });
 }
 // Backing from a sync snapshot (+ the existing record, for the preserve rule).
