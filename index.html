@@ -265,10 +265,10 @@ header .logo-mark {
 .landing-footer a:hover { color: var(--fg-bright); }
 
 /* Recent Files */
-.recent-files, .project-list {
+.recent-files {
   margin-top: 1.5rem;
 }
-.recent-files:empty, .project-list:empty { display: none; }
+.recent-files:empty { display: none; }
 .recent-files-title {
   font-size: 0.68rem;
   color: var(--fg-dim);
@@ -5761,7 +5761,6 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <!-- C14 project manager renders here; the legacy lists stay hidden in the DOM
        (renderRecentFiles still feeds the File-menu recents cache) -->
   <div class="project-manager" id="projectManager"></div>
-  <div class="project-list" id="projectList" style="display:none"></div>
   <div class="recent-files" id="recentFiles" style="display:none"></div>
 
   <div class="example-download">
@@ -6416,7 +6415,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build 1cb4a44 — click to check for updates">1cb4a44</div>
+<div class="build-badge" id="buildBadge" title="build e13c0a2 — click to check for updates">e13c0a2</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -19641,56 +19640,9 @@ function renderRecentFiles() {
   });
 }
 
-// Model-optional projects: list the model-less projects saved in localStorage
-// (bma:proj:<id>) on the landing screen. These have no model file to drop, so
-// this is their reopen path (openProjectById); each then awaits its dataset files.
-function renderProjectList() {
-  var $pl = document.getElementById('projectList');
-  if (!$pl) return;
-  var projs = [];
-  try {
-    for (var i = 0; i < localStorage.length; i++) {
-      var k = localStorage.key(i);
-      if (!k || k.indexOf('bma:proj:') !== 0) continue;
-      try {
-        var p = JSON.parse(localStorage.getItem(k));
-        if (p && p._bma) projs.push({
-          id: p.id || k.slice(9),
-          title: p.title,
-          ts: p._ts || 0,
-          count: (p.datasets ? p.datasets.length : 0) + (p.aux && p.aux.fileName ? 1 : 0)
-        });
-      } catch (e) { /* corrupt entry — skip */ }
-    }
-  } catch (e) { $pl.innerHTML = ''; return; }
-  if (!projs.length) { $pl.innerHTML = ''; return; }
-  projs.sort(function(a, b) { return b.ts - a.ts; });
-  var html = '<div class="recent-files-title">Projects</div>';
-  for (var j = 0; j < projs.length; j++) {
-    var pr = projs[j];
-    html += '<div class="recent-item project-item" data-proj="' + esc(pr.id) + '">';
-    html += '<span class="recent-item-name">' + esc(pr.title || 'Untitled project') + '</span>';
-    html += '<span class="recent-item-size">' + pr.count + ' dataset' + (pr.count === 1 ? '' : 's') + '</span>';
-    html += '<span class="recent-item-project">project</span>';
-    html += '<span class="recent-item-time">' + timeAgo(pr.ts) + '</span>';
-    html += '<button class="recent-item-remove" data-proj="' + esc(pr.id) + '" title="Remove">✕</button>';
-    html += '</div>';
-  }
-  $pl.innerHTML = html;
-  $pl.querySelectorAll('.project-item').forEach(function(el) {
-    el.addEventListener('click', function(e) {
-      if (e.target.closest('.recent-item-remove')) return;
-      openProjectById(el.getAttribute('data-proj'));
-    });
-  });
-  $pl.querySelectorAll('.recent-item-remove').forEach(function(btn) {
-    btn.addEventListener('click', function(e) {
-      e.stopPropagation();
-      try { localStorage.removeItem('bma:proj:' + btn.getAttribute('data-proj')); } catch (ex) { /* ignore */ }
-      renderProjectList();
-    });
-  });
-}
+// (renderProjectList + #projectList removed — the pre-C14 model-less landing list
+// rendered into a permanently-hidden div, fully superseded by the C14 project
+// manager / renderProjects. openProjectById stays — it's the model-less reopen path.)
 
 function reopenRecent(key) {
   openCacheDB().then(function(db) {
@@ -21464,7 +21416,6 @@ function closeProjectToLanding() {
   if (loadedSpan) loadedSpan.remove();
   $dropzone.querySelector('.label').innerHTML = 'Drop a CSV file here, or <strong>click to browse</strong>';
   renderRecentFiles();
-  if (typeof renderProjectList === 'function') renderProjectList();
   if (typeof renderProjects === 'function') renderProjects();   // C14 manager
   currentFile = null;
   if (typeof currentFileHandle !== 'undefined') currentFileHandle = null;
@@ -37530,7 +37481,6 @@ function showCDF(colIdx) {
 
 // Load recent files (feeds the File-menu cache) + the C14 project manager on load
 renderRecentFiles();
-if (typeof renderProjectList === 'function') renderProjectList();
 if (typeof renderProjects === 'function') renderProjects();
 
 // ─── Example dataset generator ────────────────────────────────────────

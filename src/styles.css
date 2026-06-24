@@ -250,10 +250,10 @@ header .logo-mark {
 .landing-footer a:hover { color: var(--fg-bright); }
 
 /* Recent Files */
-.recent-files, .project-list {
+.recent-files {
   margin-top: 1.5rem;
 }
-.recent-files:empty, .project-list:empty { display: none; }
+.recent-files:empty { display: none; }
 .recent-files-title {
   font-size: 0.68rem;
   color: var(--fg-dim);

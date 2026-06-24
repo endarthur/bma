@@ -14,5 +14,4 @@ function showCDF(colIdx) {
 
 // Load recent files (feeds the File-menu cache) + the C14 project manager on load
 renderRecentFiles();
-if (typeof renderProjectList === 'function') renderProjectList();
 if (typeof renderProjects === 'function') renderProjects();
