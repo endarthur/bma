@@ -409,12 +409,14 @@ function formatBytes(b) {
 }
 
 function projectKey(f) { return 'bma:' + f.name + ':' + f.size; }
-// Dual-key identity: model-backed projects key on the model file (unchanged);
-// model-less projects key on their generated id ('bma:proj:<uuid>'). Returns null
-// before a project exists (nothing to save).
+// R5: project-based UUID identity. BMA is project-oriented, not file-oriented — every
+// fresh project (model-backed or not) gets its own id, so two projects on the same
+// model file are distinct (no registry collision) and re-dropping a file starts a NEW
+// project rather than implicitly resuming one (resume via the project manager). LEGACY
+// projects predating this carry id:null and stay file-keyed, so they remain openable.
 function currentProjectKey() {
-  if (currentFile) return projectKey(currentFile);
   if (currentProjectId) return 'bma:proj:' + currentProjectId;
+  if (currentFile) return projectKey(currentFile);
   return null;
 }
 
@@ -519,7 +521,7 @@ function serializeProject() {
   return {
     _bma: 1,
     _ts: Date.now(),
-    id: currentProjectId,   // model-optional: set for model-less projects, null when model-backed
+    id: currentProjectId,   // R5: every project's own UUID identity (model-backed too); null only for legacy file-keyed projects
     title: projectTitle,
     surfaceTitles: (typeof surfaceTitles !== 'undefined' && Object.keys(surfaceTitles).length) ? surfaceTitles : undefined,   // C10: user-named views
     activeTab: document.querySelector('.results-tab.active')?.dataset.tab || null,
@@ -1091,7 +1093,8 @@ if ($resultsFilename) {
 }
 
 function openPackModal() {
-  if ((!currentFile || !preflightData) && !currentProjectId) return;   // model-backed needs preflight; model-less just needs a project
+  if (!currentFile && !currentProjectId) return;   // nothing to pack
+  if (currentFile && !preflightData) return;       // model-backed needs preflight first
   var $m = document.getElementById('packModal');
   document.getElementById('packTitle').value = projectTitle || '';
   document.getElementById('packModelName').textContent = currentFile
@@ -1847,7 +1850,15 @@ async function handleFile(file, handle, skipRecents) {
   }
 
   currentFile = file;
-  currentProjectId = null;   // model-backed: identity is the file key (dual-key)
+  // R5: a FRESH drop starts a NEW project with its own UUID identity (project-based,
+  // not file-keyed). A projOpen-driven open instead keeps the restored project's id —
+  // applyProject (or the file-key restore for legacy records) sets it below.
+  if (typeof projOpening === 'undefined' || !projOpening) {
+    currentProjectId = (typeof projNewId === 'function') ? projNewId()
+      : ('p' + Date.now() + '-' + Math.random().toString(36).slice(2));
+  } else {
+    currentProjectId = null;
+  }
   // C14: keep the model's FSAA handle so reopen needs no re-pick. Guarded on
   // !skipRecents so an INNER call (packed-zip → inner model, folder-open → model)
   // doesn't null out the outer artifact's handle captured above.
@@ -1896,7 +1907,11 @@ async function handleFile(file, handle, skipRecents) {
     let project = null;
     if (pendingDroppedProject && pendingDroppedProject.file && pendingDroppedProject.file.name === file.name) {
       project = pendingDroppedProject;
-    } else {
+    } else if (typeof projOpening !== 'undefined' && projOpening) {
+      // R5: only a deliberate manager-open resumes a LEGACY file-keyed project's
+      // config; a fresh drop is a NEW project (its own UUID), never an implicit
+      // file-key resume. (Post-R5 records seed pendingDroppedProject from their own
+      // key in projOpen, so they take the branch above.)
       const saved = localStorage.getItem(projectKey(file));
       if (saved) { try { project = JSON.parse(saved); } catch (e) { /* corrupt — ignore */ } }
     }

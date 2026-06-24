@@ -513,7 +513,15 @@ function surfaceDefaultTitle(id) {
   var d = surfaceDescriptors().filter(function (x) { return x.kind === kind; })[0];
   var label = d ? d.label : kind;
   var hash = String(id).indexOf('#');
-  return hash >= 0 ? (label + ' ' + String(id).slice(hash + 1)) : label;
+  if (hash < 0) return label;
+  // A categories clone's default IS its scope title ("Categories: <focused column>")
+  // — so surfaceTitle (used by wsApplyAllViewTabTitles) AGREES with catSyncInstanceTitle
+  // and they don't fight over the tab label (the flicker R5 timing exposed).
+  if (kind === 'categories' && typeof catInstanceScopeTitle === 'function') {
+    var st = catInstanceScopeTitle(id);
+    if (st) return st;
+  }
+  return label + ' ' + String(id).slice(hash + 1);
 }
 function surfaceTitle(id) { return (surfaceTitles[id] || '').trim() || surfaceDefaultTitle(id); }
 function surfaceHasCustomTitle(id) { return !!(surfaceTitles[id] && surfaceTitles[id].trim()); }

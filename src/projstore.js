@@ -276,6 +276,12 @@ function projOpen(rec) {
   } else if (b.kind === 'local' && typeof reopenLocalProject === 'function') {
     done = reopenLocalProject(rec.backing.projKey || rec.id);
   } else if (b.kind === 'file') {
+    // R5: a model-backed project's config lives at its OWN key (rec.id, a UUID for
+    // post-R5 projects) — seed it so an FSAA-file-backed project resumes on open
+    // (a bare re-drop of the same file would otherwise be a new project). A migrated/
+    // legacy record has no localStorage[rec.id]; it falls through to handleFile's
+    // file-key restore (gated on projOpening).
+    try { var rawCfg = localStorage.getItem(rec.id); if (rawCfg && typeof pendingDroppedProject !== 'undefined') pendingDroppedProject = JSON.parse(rawCfg); } catch (e) {}
     if (b.fileHandle && typeof b.fileHandle.getFile === 'function') {
       if (b.packed) projAutoLoadPack = true;   // R17: a registry-open of a packed project is deliberate — skip the "Packed project found" confirm
       done = fsaaEnsureFileHandle(b.fileHandle).then(function (file) {

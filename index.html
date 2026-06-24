@@ -6416,7 +6416,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build d1cebc8 — click to check for updates">d1cebc8</div>
+<div class="build-badge" id="buildBadge" title="build 786cc89 — click to check for updates">786cc89</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -9583,7 +9583,15 @@ function surfaceDefaultTitle(id) {
   var d = surfaceDescriptors().filter(function (x) { return x.kind === kind; })[0];
   var label = d ? d.label : kind;
   var hash = String(id).indexOf('#');
-  return hash >= 0 ? (label + ' ' + String(id).slice(hash + 1)) : label;
+  if (hash < 0) return label;
+  // A categories clone's default IS its scope title ("Categories: <focused column>")
+  // — so surfaceTitle (used by wsApplyAllViewTabTitles) AGREES with catSyncInstanceTitle
+  // and they don't fight over the tab label (the flicker R5 timing exposed).
+  if (kind === 'categories' && typeof catInstanceScopeTitle === 'function') {
+    var st = catInstanceScopeTitle(id);
+    if (st) return st;
+  }
+  return label + ' ' + String(id).slice(hash + 1);
 }
 function surfaceTitle(id) { return (surfaceTitles[id] || '').trim() || surfaceDefaultTitle(id); }
 function surfaceHasCustomTitle(id) { return !!(surfaceTitles[id] && surfaceTitles[id].trim()); }
@@ -19891,12 +19899,14 @@ function formatBytes(b) {
 }
 
 function projectKey(f) { return 'bma:' + f.name + ':' + f.size; }
-// Dual-key identity: model-backed projects key on the model file (unchanged);
-// model-less projects key on their generated id ('bma:proj:<uuid>'). Returns null
-// before a project exists (nothing to save).
+// R5: project-based UUID identity. BMA is project-oriented, not file-oriented — every
+// fresh project (model-backed or not) gets its own id, so two projects on the same
+// model file are distinct (no registry collision) and re-dropping a file starts a NEW
+// project rather than implicitly resuming one (resume via the project manager). LEGACY
+// projects predating this carry id:null and stay file-keyed, so they remain openable.
 function currentProjectKey() {
-  if (currentFile) return projectKey(currentFile);
   if (currentProjectId) return 'bma:proj:' + currentProjectId;
+  if (currentFile) return projectKey(currentFile);
   return null;
 }
 
@@ -20001,7 +20011,7 @@ function serializeProject() {
   return {
     _bma: 1,
     _ts: Date.now(),
-    id: currentProjectId,   // model-optional: set for model-less projects, null when model-backed
+    id: currentProjectId,   // R5: every project's own UUID identity (model-backed too); null only for legacy file-keyed projects
     title: projectTitle,
     surfaceTitles: (typeof surfaceTitles !== 'undefined' && Object.keys(surfaceTitles).length) ? surfaceTitles : undefined,   // C10: user-named views
     activeTab: document.querySelector('.results-tab.active')?.dataset.tab || null,
@@ -20573,7 +20583,8 @@ if ($resultsFilename) {
 }
 
 function openPackModal() {
-  if ((!currentFile || !preflightData) && !currentProjectId) return;   // model-backed needs preflight; model-less just needs a project
+  if (!currentFile && !currentProjectId) return;   // nothing to pack
+  if (currentFile && !preflightData) return;       // model-backed needs preflight first
   var $m = document.getElementById('packModal');
   document.getElementById('packTitle').value = projectTitle || '';
   document.getElementById('packModelName').textContent = currentFile
@@ -21329,7 +21340,15 @@ async function handleFile(file, handle, skipRecents) {
   }
 
   currentFile = file;
-  currentProjectId = null;   // model-backed: identity is the file key (dual-key)
+  // R5: a FRESH drop starts a NEW project with its own UUID identity (project-based,
+  // not file-keyed). A projOpen-driven open instead keeps the restored project's id —
+  // applyProject (or the file-key restore for legacy records) sets it below.
+  if (typeof projOpening === 'undefined' || !projOpening) {
+    currentProjectId = (typeof projNewId === 'function') ? projNewId()
+      : ('p' + Date.now() + '-' + Math.random().toString(36).slice(2));
+  } else {
+    currentProjectId = null;
+  }
   // C14: keep the model's FSAA handle so reopen needs no re-pick. Guarded on
   // !skipRecents so an INNER call (packed-zip → inner model, folder-open → model)
   // doesn't null out the outer artifact's handle captured above.
@@ -21378,7 +21397,11 @@ async function handleFile(file, handle, skipRecents) {
     let project = null;
     if (pendingDroppedProject && pendingDroppedProject.file && pendingDroppedProject.file.name === file.name) {
       project = pendingDroppedProject;
-    } else {
+    } else if (typeof projOpening !== 'undefined' && projOpening) {
+      // R5: only a deliberate manager-open resumes a LEGACY file-keyed project's
+      // config; a fresh drop is a NEW project (its own UUID), never an implicit
+      // file-key resume. (Post-R5 records seed pendingDroppedProject from their own
+      // key in projOpen, so they take the branch above.)
       const saved = localStorage.getItem(projectKey(file));
       if (saved) { try { project = JSON.parse(saved); } catch (e) { /* corrupt — ignore */ } }
     }
@@ -24112,6 +24135,12 @@ function projOpen(rec) {
   } else if (b.kind === 'local' && typeof reopenLocalProject === 'function') {
     done = reopenLocalProject(rec.backing.projKey || rec.id);
   } else if (b.kind === 'file') {
+    // R5: a model-backed project's config lives at its OWN key (rec.id, a UUID for
+    // post-R5 projects) — seed it so an FSAA-file-backed project resumes on open
+    // (a bare re-drop of the same file would otherwise be a new project). A migrated/
+    // legacy record has no localStorage[rec.id]; it falls through to handleFile's
+    // file-key restore (gated on projOpening).
+    try { var rawCfg = localStorage.getItem(rec.id); if (rawCfg && typeof pendingDroppedProject !== 'undefined') pendingDroppedProject = JSON.parse(rawCfg); } catch (e) {}
     if (b.fileHandle && typeof b.fileHandle.getFile === 'function') {
       if (b.packed) projAutoLoadPack = true;   // R17: a registry-open of a packed project is deliberate — skip the "Packed project found" confirm
       done = fsaaEnsureFileHandle(b.fileHandle).then(function (file) {
@@ -36230,11 +36259,29 @@ function catRenderInstance(root) {
   }
   renderCatSidebar(root);
   renderCatMain(root);
-  // NB: the tab title is synced by the spawn flow + the column-click handler,
-  // NOT here — updateTab re-renders the strip, and calling it mid-build (while
-  // rails is still inside renderPanel) reentrantly rebuilds the panel.
+  // The scope-derived tab title is synced on a MICROTASK — updateTab re-renders the
+  // strip, and calling it mid-build (rails still inside renderPanel) would reentrantly
+  // rebuild the panel; deferring runs it after the build settles. This makes the title
+  // deterministic on RESTORE (the clone's tab+column may settle in either order), not
+  // just on spawn/column-click. (R5 timing exposed the race.)
+  if (typeof Promise !== 'undefined' && typeof catSyncInstanceTitle === 'function') {
+    var titleRoot = root;
+    Promise.resolve().then(function () { try { catSyncInstanceTitle(titleRoot); } catch (e) {} });
+  }
 }
 
+// The scope-derived title for a categories clone — "Categories: <focused column>"
+// (or the still-pending restored column name), else null. surfaceDefaultTitle reads
+// this so the surfaceTitle system and catSyncInstanceTitle produce the SAME label.
+function catInstanceScopeTitle(id) {
+  var st = (typeof catInstances !== 'undefined') ? catInstances[id] : null;
+  if (!st) return null;
+  var root = document.querySelector('[data-cat-inst="' + id + '"]');
+  var ctx = root ? catCtx(root) : null;
+  var name = (st.focusedCol != null && ctx && ctx.header) ? ctx.header[st.focusedCol]
+           : (st._pendingFocusName != null ? st._pendingFocusName : null);
+  return name ? 'Categories: ' + name : null;
+}
 // Scope-derived tab title — "Categories: <focused column>" (singleton keeps its
 // static "Categories" title).
 function catSyncInstanceTitle(root) {
@@ -36244,7 +36291,10 @@ function catSyncInstanceTitle(root) {
   var st = catInstances[instId];
   var root = document.querySelector('[data-cat-inst="' + instId + '"]');
   var ctx = catCtx(root);
-  var name = (st && st.focusedCol != null && ctx.header) ? ctx.header[st.focusedCol] : null;
+  // Prefer the resolved column; fall back to the still-pending restored name so the
+  // title is right even before the target analysis resolves it to an index (R5).
+  var name = (st && st.focusedCol != null && ctx.header) ? ctx.header[st.focusedCol]
+           : (st && st._pendingFocusName != null ? st._pendingFocusName : null);
   if (findTab(wsRails.state, instId)) wsRails.updateTab(instId, { title: name ? 'Categories: ' + name : 'Categories' });
 }
 

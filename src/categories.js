@@ -912,11 +912,29 @@ function catRenderInstance(root) {
   }
   renderCatSidebar(root);
   renderCatMain(root);
-  // NB: the tab title is synced by the spawn flow + the column-click handler,
-  // NOT here — updateTab re-renders the strip, and calling it mid-build (while
-  // rails is still inside renderPanel) reentrantly rebuilds the panel.
+  // The scope-derived tab title is synced on a MICROTASK — updateTab re-renders the
+  // strip, and calling it mid-build (rails still inside renderPanel) would reentrantly
+  // rebuild the panel; deferring runs it after the build settles. This makes the title
+  // deterministic on RESTORE (the clone's tab+column may settle in either order), not
+  // just on spawn/column-click. (R5 timing exposed the race.)
+  if (typeof Promise !== 'undefined' && typeof catSyncInstanceTitle === 'function') {
+    var titleRoot = root;
+    Promise.resolve().then(function () { try { catSyncInstanceTitle(titleRoot); } catch (e) {} });
+  }
 }
 
+// The scope-derived title for a categories clone — "Categories: <focused column>"
+// (or the still-pending restored column name), else null. surfaceDefaultTitle reads
+// this so the surfaceTitle system and catSyncInstanceTitle produce the SAME label.
+function catInstanceScopeTitle(id) {
+  var st = (typeof catInstances !== 'undefined') ? catInstances[id] : null;
+  if (!st) return null;
+  var root = document.querySelector('[data-cat-inst="' + id + '"]');
+  var ctx = root ? catCtx(root) : null;
+  var name = (st.focusedCol != null && ctx && ctx.header) ? ctx.header[st.focusedCol]
+           : (st._pendingFocusName != null ? st._pendingFocusName : null);
+  return name ? 'Categories: ' + name : null;
+}
 // Scope-derived tab title — "Categories: <focused column>" (singleton keeps its
 // static "Categories" title).
 function catSyncInstanceTitle(root) {
@@ -926,7 +944,10 @@ function catSyncInstanceTitle(root) {
   var st = catInstances[instId];
   var root = document.querySelector('[data-cat-inst="' + instId + '"]');
   var ctx = catCtx(root);
-  var name = (st && st.focusedCol != null && ctx.header) ? ctx.header[st.focusedCol] : null;
+  // Prefer the resolved column; fall back to the still-pending restored name so the
+  // title is right even before the target analysis resolves it to an index (R5).
+  var name = (st && st.focusedCol != null && ctx.header) ? ctx.header[st.focusedCol]
+           : (st && st._pendingFocusName != null ? st._pendingFocusName : null);
   if (findTab(wsRails.state, instId)) wsRails.updateTab(instId, { title: name ? 'Categories: ' + name : 'Categories' });
 }
 
