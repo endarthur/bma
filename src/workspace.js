@@ -314,6 +314,11 @@ function wsRestoreInstance(cfg, skipTab) {
     // than seeding the file-await _pendingRestore.
     if (cfg.derivedFrom && cfg.derivedFrom.set) {
       ds.derivedFrom = cfg.derivedFrom;
+      // R3: a derived dataset has no re-supplied FILE to gate its restore on, so the
+      // per-dataset config (filter/calcols/declus/top-cut/StatsCat/Export/gridMode)
+      // would be dropped. Stash the whole cfg — loadAuxFile applies it after the
+      // re-derive, before the auto-analyze, so the restored config drives the pass.
+      ds._pendingDerivedCfg = cfg;
       // C11-P2: a materialized emit loads its snapshot (dsRestoreMaterialized);
       // a linked emit re-derives from the parent set (dhReEmitAll).
       if (cfg.materialized) { ds.materialized = cfg.materialized; ds._pendingMaterialized = true; }

@@ -177,7 +177,9 @@ function setSwathTarget(id, root) {
 // the target's analysis went away.
 function swathRefreshDatasetPicker(root) {
   var S = swStateForRoot(root);
-  if (S.swathTargetDsId !== 'model' && !(dsById(S.swathTargetDsId) && dsById(S.swathTargetDsId).complete)) {
+  // Only bounce if the target is GONE from the registry (truly removed); a
+  // not-yet-analyzed target (re-deriving on reload) keeps its binding (R4).
+  if (S.swathTargetDsId !== 'model' && !dsById(S.swathTargetDsId)) {
     S.swathTargetDsId = 'model';
   }
   renderSwathDatasetPicker(root);

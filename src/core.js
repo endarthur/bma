@@ -467,13 +467,22 @@ function dsDependentViewCount(dsId) {
 // One consolidated banner when view-bearing derived datasets couldn't be recreated
 // on open (source not loaded) — the per-node ⚠ badge is the detail; this is the
 // "you should know" summary. Dismissible, mounts on body, refreshes itself.
+// Is a derived dataset's source present and able to (re-)derive it? While the
+// source is loaded but the derive is still in flight (slow restore), the derived
+// dataset has no .file yet — that's PENDING, not BROKEN (R13: don't false-alarm).
+function dsDerivedSourceReady(d) {
+  if (!d || !d.derivedFrom || !d.derivedFrom.set) return false;
+  var src = (typeof dsById === 'function') ? dsById(d.derivedFrom.set) : null;
+  if (!src) return false;
+  return !!(src.file || src.complete || src.derivedFrom);
+}
 function dsCheckDerivedHealth() {
   var existing = document.getElementById('derivedHealthBanner');
   if (existing) existing.remove();
   if (typeof datasets === 'undefined') return;
   var broken = datasets.filter(function (d) {
     return d && d.derivedFrom && !d.file && !(typeof dsIsMaterialized === 'function' && dsIsMaterialized(d)) &&
-      dsDependentViewCount(d.id) > 0;
+      dsDependentViewCount(d.id) > 0 && !dsDerivedSourceReady(d);
   });
   if (!broken.length) return;
   var views = broken.reduce(function (n, d) { return n + dsDependentViewCount(d.id); }, 0);

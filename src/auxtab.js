@@ -250,6 +250,7 @@ function runAuxAnalysis(ds, root) {
       if (typeof applyExportDsRestore === 'function') applyExportDsRestore(ds);  // G5a-3: reattach saved export columns by name
       if (typeof exportRenderAllInstances === 'function') exportRenderAllInstances();  // G5b: repaint cloned Export panels targeting this ds
       if (typeof statsCatTargetDsId !== 'undefined' && statsCatTargetDsId === ds.id && typeof renderStatsCat === 'function') renderStatsCat();
+      if (typeof dsCheckDerivedHealth === 'function') dsCheckDerivedHealth();  // R13: re-evaluate the banner as each derive settles (event-driven, not a blind timer)
       autoSaveProject();
     } else if (m.type === 'error') {
       fail(m.message);
@@ -833,6 +834,17 @@ function loadAuxFile(file, handle, zipEntryName, ds, root) {
       applyAuxRestore(savedAux, ds);
       // File-backed now — the live serialize owns it; drop the pending copy so
       // it isn't re-emitted as a phantom (loss-safe: only dropped once applied).
+      if (typeof pendingDatasetsRestore !== 'undefined' && pendingDatasetsRestore) delete pendingDatasetsRestore[ds.id];
+    }
+    // R3: a DERIVED dataset re-derives (no re-supplied file to gate on), so apply
+    // its stashed per-dataset config now — BEFORE the auto-analyze below — so the
+    // restored filter/calcols/declus/top-cut/StatsCat/Export drive the analysis
+    // pass instead of being silently dropped. No fileName gate: identity is the
+    // derivedFrom link + id, not a matching file.
+    if (ds.derivedFrom && ds._pendingDerivedCfg) {
+      var derivedCfg = ds._pendingDerivedCfg;
+      ds._pendingDerivedCfg = null;
+      applyAuxRestore(derivedCfg, ds);
       if (typeof pendingDatasetsRestore !== 'undefined' && pendingDatasetsRestore) delete pendingDatasetsRestore[ds.id];
     }
     // A10 1g-c: instance datasets seed their display prefix from the filename

@@ -6416,7 +6416,7 @@ try{var m={'default':'system','teal':'dark','blue':'dark','mocha':'dark','light'
   <button id="updateReload">Reload</button>
   <button id="updateDismiss" title="Dismiss">✕</button>
 </div>
-<div class="build-badge" id="buildBadge" title="build e80cac1 — click to check for updates">e80cac1</div>
+<div class="build-badge" id="buildBadge" title="build 94f4b90 — click to check for updates">94f4b90</div>
 
 <div class="settings-modal" id="packModal">
   <div class="settings-modal-inner pack-modal-inner">
@@ -9537,13 +9537,22 @@ function dsDependentViewCount(dsId) {
 // One consolidated banner when view-bearing derived datasets couldn't be recreated
 // on open (source not loaded) — the per-node ⚠ badge is the detail; this is the
 // "you should know" summary. Dismissible, mounts on body, refreshes itself.
+// Is a derived dataset's source present and able to (re-)derive it? While the
+// source is loaded but the derive is still in flight (slow restore), the derived
+// dataset has no .file yet — that's PENDING, not BROKEN (R13: don't false-alarm).
+function dsDerivedSourceReady(d) {
+  if (!d || !d.derivedFrom || !d.derivedFrom.set) return false;
+  var src = (typeof dsById === 'function') ? dsById(d.derivedFrom.set) : null;
+  if (!src) return false;
+  return !!(src.file || src.complete || src.derivedFrom);
+}
 function dsCheckDerivedHealth() {
   var existing = document.getElementById('derivedHealthBanner');
   if (existing) existing.remove();
   if (typeof datasets === 'undefined') return;
   var broken = datasets.filter(function (d) {
     return d && d.derivedFrom && !d.file && !(typeof dsIsMaterialized === 'function' && dsIsMaterialized(d)) &&
-      dsDependentViewCount(d.id) > 0;
+      dsDependentViewCount(d.id) > 0 && !dsDerivedSourceReady(d);
   });
   if (!broken.length) return;
   var views = broken.reduce(function (n, d) { return n + dsDependentViewCount(d.id); }, 0);
@@ -16563,6 +16572,7 @@ function runAuxAnalysis(ds, root) {
       if (typeof applyExportDsRestore === 'function') applyExportDsRestore(ds);  // G5a-3: reattach saved export columns by name
       if (typeof exportRenderAllInstances === 'function') exportRenderAllInstances();  // G5b: repaint cloned Export panels targeting this ds
       if (typeof statsCatTargetDsId !== 'undefined' && statsCatTargetDsId === ds.id && typeof renderStatsCat === 'function') renderStatsCat();
+      if (typeof dsCheckDerivedHealth === 'function') dsCheckDerivedHealth();  // R13: re-evaluate the banner as each derive settles (event-driven, not a blind timer)
       autoSaveProject();
     } else if (m.type === 'error') {
       fail(m.message);
@@ -17146,6 +17156,17 @@ function loadAuxFile(file, handle, zipEntryName, ds, root) {
       applyAuxRestore(savedAux, ds);
       // File-backed now — the live serialize owns it; drop the pending copy so
       // it isn't re-emitted as a phantom (loss-safe: only dropped once applied).
+      if (typeof pendingDatasetsRestore !== 'undefined' && pendingDatasetsRestore) delete pendingDatasetsRestore[ds.id];
+    }
+    // R3: a DERIVED dataset re-derives (no re-supplied file to gate on), so apply
+    // its stashed per-dataset config now — BEFORE the auto-analyze below — so the
+    // restored filter/calcols/declus/top-cut/StatsCat/Export drive the analysis
+    // pass instead of being silently dropped. No fileName gate: identity is the
+    // derivedFrom link + id, not a matching file.
+    if (ds.derivedFrom && ds._pendingDerivedCfg) {
+      var derivedCfg = ds._pendingDerivedCfg;
+      ds._pendingDerivedCfg = null;
+      applyAuxRestore(derivedCfg, ds);
       if (typeof pendingDatasetsRestore !== 'undefined' && pendingDatasetsRestore) delete pendingDatasetsRestore[ds.id];
     }
     // A10 1g-c: instance datasets seed their display prefix from the filename
@@ -22074,9 +22095,11 @@ function displayResults(data) {
     // C11-P1: with a folder mounted, resolve a restored project's still-pending
     // comparison-dataset + drillhole-trio files from the folder by name — no re-drop.
     if (typeof fsaaResolveProjectFiles === 'function') fsaaResolveProjectFiles();
-    // Derived-lifecycle: after re-derives settle, surface a single banner if any
-    // view-bearing derived dataset couldn't be recreated (source not loaded).
-    if (typeof dsCheckDerivedHealth === 'function') setTimeout(dsCheckDerivedHealth, 3000);
+    // Derived-lifecycle: surface a single banner if any view-bearing derived dataset
+    // can't be recreated (source not loaded). Event-driven now (R13) — the predicate
+    // suppresses datasets whose source IS present (derive pending, not broken), and
+    // each dataset-complete re-runs this, so a slow restore no longer false-alarms.
+    if (typeof dsCheckDerivedHealth === 'function') dsCheckDerivedHealth();
     pendingPanelState = restoredProject.panels || null;
     if (pendingPanelState && pendingPanelState.statistics) {
       var pst = pendingPanelState.statistics;
@@ -27568,7 +27591,9 @@ function setSwathTarget(id, root) {
 // the target's analysis went away.
 function swathRefreshDatasetPicker(root) {
   var S = swStateForRoot(root);
-  if (S.swathTargetDsId !== 'model' && !(dsById(S.swathTargetDsId) && dsById(S.swathTargetDsId).complete)) {
+  // Only bounce if the target is GONE from the registry (truly removed); a
+  // not-yet-analyzed target (re-deriving on reload) keeps its binding (R4).
+  if (S.swathTargetDsId !== 'model' && !dsById(S.swathTargetDsId)) {
     S.swathTargetDsId = 'model';
   }
   renderSwathDatasetPicker(root);
@@ -30818,7 +30843,10 @@ function setGtTarget(id, root) {
 // built once); falls back to the model if the target's analysis went away.
 function gtRefreshDatasetPicker(root) {
   var S = gtStateForRoot(root);
-  if (S.gtTargetDsId !== 'model' && !(dsById(S.gtTargetDsId) && dsById(S.gtTargetDsId).complete)) {
+  // Only bounce to model if the target is GONE from the registry (truly removed).
+  // A target that's merely un-analyzed (re-deriving on reload) keeps its binding —
+  // the dataset-complete handler re-runs this once it analyzes (R4).
+  if (S.gtTargetDsId !== 'model' && !dsById(S.gtTargetDsId)) {
     setGtTarget('model', root); return;
   }
   var sel = gtQ('gtDataset', root);
@@ -38286,6 +38314,11 @@ function wsRestoreInstance(cfg, skipTab) {
     // than seeding the file-await _pendingRestore.
     if (cfg.derivedFrom && cfg.derivedFrom.set) {
       ds.derivedFrom = cfg.derivedFrom;
+      // R3: a derived dataset has no re-supplied FILE to gate its restore on, so the
+      // per-dataset config (filter/calcols/declus/top-cut/StatsCat/Export/gridMode)
+      // would be dropped. Stash the whole cfg — loadAuxFile applies it after the
+      // re-derive, before the auto-analyze, so the restored config drives the pass.
+      ds._pendingDerivedCfg = cfg;
       // C11-P2: a materialized emit loads its snapshot (dsRestoreMaterialized);
       // a linked emit re-derives from the parent set (dhReEmitAll).
       if (cfg.materialized) { ds.materialized = cfg.materialized; ds._pendingMaterialized = true; }

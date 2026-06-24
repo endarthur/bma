@@ -336,7 +336,10 @@ function setGtTarget(id, root) {
 // built once); falls back to the model if the target's analysis went away.
 function gtRefreshDatasetPicker(root) {
   var S = gtStateForRoot(root);
-  if (S.gtTargetDsId !== 'model' && !(dsById(S.gtTargetDsId) && dsById(S.gtTargetDsId).complete)) {
+  // Only bounce to model if the target is GONE from the registry (truly removed).
+  // A target that's merely un-analyzed (re-deriving on reload) keeps its binding —
+  // the dataset-complete handler re-runs this once it analyzes (R4).
+  if (S.gtTargetDsId !== 'model' && !dsById(S.gtTargetDsId)) {
     setGtTarget('model', root); return;
   }
   var sel = gtQ('gtDataset', root);
